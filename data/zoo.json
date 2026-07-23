@@ -1,0 +1,286 @@
+{
+  "settings": {
+    "caratteristiche": [
+      "Cane",
+      "Gatto",
+      "Roditori",
+      "Uccelli",
+      "Pesci",
+      "Umido",
+      "Secco",
+      "Snack",
+      "Accessori",
+      "Igiene"
+    ],
+    "labels": [
+      "SOTTOCOSTO",
+      "NOVITÀ",
+      "ESCLUSIVA",
+      "FORMATO CONVENIENZA",
+      "PREZZO WOW"
+    ],
+    "schedeDefault": [
+      "Copertina",
+      "Cane",
+      "Gatto",
+      "Altri animali",
+      "Accessori e igiene",
+      "Retro"
+    ],
+    "istruzioniVolantino": "Testi brevi e commerciali (max 2 righe). Evidenziare il vantaggio per l'animale e il risparmio. Niente punto finale. Es: \"Croccantini ricchi di pollo fresco per cani adulti di taglia media\".",
+    "istruzioniCartello": "Testi descrittivi più completi (2-4 righe) per il cartello in punto vendita: composizione, formato, a chi è adatto. Tono informativo, frasi complete.",
+    "formatoRegole": [
+      {
+        "caratteristica": "Secco",
+        "formatId": "a4"
+      },
+      {
+        "caratteristica": "Accessori",
+        "formatId": "a5"
+      }
+    ]
+  },
+  "products": [
+    {
+      "id": "z_8001154120018",
+      "ean": "8001154120018",
+      "codice": "MF-3001",
+      "descrizione": "Crocchette Adult Pollo e Riso 3 kg",
+      "marca": "MisterPet",
+      "fornitore": "PetFood Italia",
+      "categoria": "Cane secco",
+      "prezzo": "14,90",
+      "parentId": "zp_demo_cane"
+    },
+    {
+      "id": "z_8001154120025",
+      "ean": "8001154120025",
+      "codice": "MF-3002",
+      "descrizione": "Crocchette Adult Manzo e Riso 3 kg",
+      "marca": "MisterPet",
+      "fornitore": "PetFood Italia",
+      "categoria": "Cane secco",
+      "prezzo": "14,90",
+      "parentId": "zp_demo_cane"
+    },
+    {
+      "id": "z_8001154120032",
+      "ean": "8001154120032",
+      "codice": "MF-3003",
+      "descrizione": "Crocchette Adult Agnello e Riso 12 kg",
+      "marca": "MisterPet",
+      "fornitore": "PetFood Italia",
+      "categoria": "Cane secco",
+      "prezzo": "39,90",
+      "parentId": "zp_demo_cane"
+    },
+    {
+      "id": "z_8002476009012",
+      "ean": "8002476009012",
+      "codice": "GC-101",
+      "descrizione": "Bocconcini gatto Pollo 85 g",
+      "marca": "GattoChef",
+      "fornitore": "Felini Srl",
+      "categoria": "Gatto umido",
+      "prezzo": "0,89",
+      "parentId": "zp_demo_gatto"
+    },
+    {
+      "id": "z_8002476009029",
+      "ean": "8002476009029",
+      "codice": "GC-102",
+      "descrizione": "Bocconcini gatto Tonno 85 g",
+      "marca": "GattoChef",
+      "fornitore": "Felini Srl",
+      "categoria": "Gatto umido",
+      "prezzo": "0,89",
+      "parentId": "zp_demo_gatto"
+    },
+    {
+      "id": "z_8002476009036",
+      "ean": "8002476009036",
+      "codice": "GC-103",
+      "descrizione": "Bocconcini gatto Salmone 85 g",
+      "marca": "GattoChef",
+      "fornitore": "Felini Srl",
+      "categoria": "Gatto umido",
+      "prezzo": "0,89",
+      "parentId": "zp_demo_gatto"
+    },
+    {
+      "id": "z_8004566332107",
+      "ean": "8004566332107",
+      "codice": "RB-77",
+      "descrizione": "Fieno di montagna per roditori 1 kg",
+      "marca": "RodiBio",
+      "fornitore": "Natura Piccoli Animali",
+      "categoria": "Roditori",
+      "prezzo": "4,50",
+      "parentId": "zp_1784752722217_0"
+    },
+    {
+      "id": "z_8004566332114",
+      "ean": "8004566332114",
+      "codice": "RB-78",
+      "descrizione": "Lettiera vegetale per roditori 10 l",
+      "marca": "RodiBio",
+      "fornitore": "Natura Piccoli Animali",
+      "categoria": "Roditori",
+      "prezzo": "6,90",
+      "parentId": "zp_1784752722217_1"
+    }
+  ],
+  "parents": [
+    {
+      "id": "zp_demo_cane",
+      "nome": "Crocchette MisterPet Adult",
+      "descVolantino": "Croccantini completi per cani adulti, con carne fresca e riso: gusto pollo, manzo o agnello",
+      "descCartello": "Alimento completo per cani adulti di tutte le taglie. Ricetta con carne fresca e riso, senza coloranti né conservanti aggiunti. Disponibile nei gusti pollo, manzo e agnello, nei formati da 3 kg e 12 kg.",
+      "caratteristiche": [
+        "Cane",
+        "Secco"
+      ],
+      "aiGenerated": false
+    },
+    {
+      "id": "zp_demo_gatto",
+      "nome": "Bocconcini GattoChef 85 g",
+      "descVolantino": "Teneri bocconcini in salsa per gatti adulti: pollo, tonno o salmone",
+      "descCartello": "Bocconcini in salsa per gatti adulti, preparati con ingredienti selezionati. Porzione singola da 85 g, ideale per mantenere il pasto sempre fresco. Gusti disponibili: pollo, tonno e salmone.",
+      "caratteristiche": [
+        "Gatto",
+        "Umido"
+      ],
+      "aiGenerated": false
+    },
+    {
+      "id": "zp_1784752722217_0",
+      "nome": "Fieno di montagna per roditori",
+      "descVolantino": "Fieno di montagna per roditori — RodiBio (bozza automatica: modifica il testo o imposta la chiave API per generarlo con l'AI)",
+      "descCartello": "Fieno di montagna per roditori 1 kg. Marca RodiBio. (bozza automatica: modifica il testo o imposta la chiave API per generarlo con l'AI)",
+      "caratteristiche": [
+        "Roditori"
+      ],
+      "aiGenerated": false
+    },
+    {
+      "id": "zp_1784752722217_1",
+      "nome": "Lettiera vegetale per roditori 10",
+      "descVolantino": "Lettiera vegetale per roditori 10 — RodiBio (bozza automatica: modifica il testo o imposta la chiave API per generarlo con l'AI)",
+      "descCartello": "Lettiera vegetale per roditori 10 l. Marca RodiBio. (bozza automatica: modifica il testo o imposta la chiave API per generarlo con l'AI)",
+      "caratteristiche": [
+        "Roditori"
+      ],
+      "aiGenerated": false
+    }
+  ],
+  "textOverrides": [],
+  "campaigns": [
+    {
+      "id": "zc_demo_marzo",
+      "nome": "Offerte Marzo Zoo",
+      "dal": "2026-03-01",
+      "al": "2026-03-31",
+      "attiva": true,
+      "schede": [
+        {
+          "id": "s0",
+          "nome": "Copertina"
+        },
+        {
+          "id": "s1",
+          "nome": "Cane"
+        },
+        {
+          "id": "s2",
+          "nome": "Gatto"
+        },
+        {
+          "id": "s3",
+          "nome": "Altri animali"
+        },
+        {
+          "id": "s4",
+          "nome": "Accessori e igiene"
+        },
+        {
+          "id": "s5",
+          "nome": "Retro"
+        }
+      ]
+    }
+  ],
+  "offers": [
+    {
+      "id": "zo_demo_1",
+      "campaignId": "zc_demo_marzo",
+      "ean": "8001154120018",
+      "productId": "z_8001154120018",
+      "descrizione": "Crocchette Adult Pollo e Riso 3 kg",
+      "prezzoPromo": "11,90",
+      "prezzoListino": "14,90",
+      "condizioni": "Fino a esaurimento scorte",
+      "selezionata": true,
+      "schedaId": "s1",
+      "label": "PREZZO WOW"
+    },
+    {
+      "id": "zo_demo_2",
+      "campaignId": "zc_demo_marzo",
+      "ean": "8001154120032",
+      "productId": "z_8001154120032",
+      "descrizione": "Crocchette Adult Agnello e Riso 12 kg",
+      "prezzoPromo": "32,90",
+      "prezzoListino": "39,90",
+      "condizioni": "Max 2 pezzi per cliente",
+      "selezionata": true,
+      "schedaId": "s1",
+      "label": "FORMATO CONVENIENZA",
+      "tieniVicinoA": "zo_demo_1"
+    },
+    {
+      "id": "zo_demo_3",
+      "campaignId": "zc_demo_marzo",
+      "ean": "8002476009012",
+      "productId": "z_8002476009012",
+      "descrizione": "Bocconcini gatto 85 g (tutti i gusti)",
+      "prezzoPromo": "0,69",
+      "prezzoListino": "0,89",
+      "selezionata": true,
+      "schedaId": "s2",
+      "gruppo": "Speciale gatti",
+      "gruppoDescrizione": "Un mese di coccole per i tuoi mici"
+    },
+    {
+      "id": "zo_demo_4",
+      "campaignId": "zc_demo_marzo",
+      "ean": "8004566332107",
+      "productId": "z_8004566332107",
+      "descrizione": "Fieno di montagna per roditori 1 kg",
+      "prezzoPromo": "3,50",
+      "prezzoListino": "4,50",
+      "nuovo": false
+    }
+  ],
+  "votes": [
+    {
+      "offerId": "zo_demo_1",
+      "userId": "u2",
+      "userName": "Responsabile Rosàflor",
+      "scopeLabel": "Rosàflor",
+      "tipo": "preferita",
+      "date": "2026-03-02T09:00:00.000Z"
+    },
+    {
+      "offerId": "zo_demo_4",
+      "userId": "u3",
+      "userName": "Responsabile Flover",
+      "scopeLabel": "Flover",
+      "tipo": "nontrattato",
+      "date": "2026-03-02T10:00:00.000Z"
+    }
+  ],
+  "hidden": [],
+  "pvPrices": [],
+  "suggestions": []
+}

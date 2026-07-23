@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 210 297" font-family="Avenir Next LT Pro, Segoe UI, Arial, sans-serif">
+  <!-- Cartello standard Garden Team 2026: struttura dal template InDesign -->
+  <rect width="210" height="297" fill="#ffffff"/>
+  <!-- cornice laterale e piede in verde salvia chiaro -->
+  <rect x="0" y="28" width="9" height="262" fill="#d6e4c4"/>
+  <rect x="201" y="28" width="9" height="262" fill="#d6e4c4"/>
+  <rect x="0" y="258" width="210" height="32" fill="#d6e4c4"/>
+  <!-- banda titolo e striscia inferiore -->
+  <rect x="0" y="14" width="210" height="14" fill="#a6c788"/>
+  <rect x="0" y="290" width="210" height="7" fill="#a6c788"/>
+
+  <!-- Composto da: -->
+  <text x="12" y="46.5" font-size="4.2" fill="#111">Composto da:</text>
+
+  <!-- sezione: buono a sapersi -->
+  <g stroke="#111" stroke-width="0.5">
+    <line x1="12" y1="73.5" x2="105" y2="73.5"/>
+    <line x1="12" y1="81" x2="105" y2="81"/>
+  </g>
+  <rect x="13" y="75" width="4.6" height="4.6" rx="1" fill="#9bc77d"/>
+  <text x="14" y="78.7" font-size="3.4" fill="#fff" font-weight="bold">*</text>
+  <text x="19.5" y="79.2" font-size="5" font-weight="bold" fill="#111">buono a sapersi:</text>
+
+  <!-- sezione: materiali -->
+  <g stroke="#111" stroke-width="0.5">
+    <line x1="12" y1="110.5" x2="105" y2="110.5"/>
+    <line x1="12" y1="118" x2="105" y2="118"/>
+  </g>
+  <rect x="13" y="112" width="4.6" height="4.6" rx="1" fill="#9bc77d"/>
+  <text x="14" y="115.8" font-size="3.4" fill="#fff" font-weight="bold">m</text>
+  <text x="19.5" y="116.2" font-size="5" font-weight="bold" fill="#111">materiali:</text>
+
+  <!-- sezione: colori disponibili -->
+  <g stroke="#111" stroke-width="0.5">
+    <line x1="12" y1="141.5" x2="105" y2="141.5"/>
+    <line x1="12" y1="149" x2="105" y2="149"/>
+  </g>
+  <rect x="13" y="143" width="4.6" height="4.6" rx="1" fill="#9bc77d"/>
+  <text x="14.2" y="146.8" font-size="3.4" fill="#fff" font-weight="bold">C</text>
+  <text x="19.5" y="147.2" font-size="5" font-weight="bold" fill="#111">colori disponibili:</text>
+
+  <!-- sezione: misure imballo -->
+  <g stroke="#111" stroke-width="0.5">
+    <line x1="12" y1="172.5" x2="105" y2="172.5"/>
+    <line x1="12" y1="180" x2="105" y2="180"/>
+  </g>
+  <rect x="13" y="174" width="4.6" height="4.6" rx="1" fill="#9bc77d"/>
+  <text x="13.8" y="177.8" font-size="3.2" fill="#fff" font-weight="bold">▣</text>
+  <text x="19.5" y="178.2" font-size="5" font-weight="bold" fill="#111">misure imballo:</text>
+
+  <!-- sezione: consigli utili (colonna destra) -->
+  <g stroke="#111" stroke-width="0.5">
+    <line x1="115" y1="172.5" x2="198" y2="172.5"/>
+    <line x1="115" y1="180" x2="198" y2="180"/>
+  </g>
+  <rect x="116" y="174" width="4.6" height="4.6" rx="1" fill="#9bc77d"/>
+  <text x="117" y="177.8" font-size="3.2" fill="#fff" font-weight="bold">☘</text>
+  <text x="122.5" y="178.2" font-size="5" font-weight="bold" fill="#111">consigli utili</text>
+
+  <!-- prezzo -->
+  <text x="12" y="226" font-size="9.5" font-weight="800" fill="#111">il nostro prezzo:</text>
+  <text x="68" y="248" font-size="13" font-weight="800" fill="#111">€</text>
+</svg>

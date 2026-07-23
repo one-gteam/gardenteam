@@ -1,0 +1,1861 @@
+{
+  "tenants": [
+    {
+      "id": "t1",
+      "name": "Rosàflor",
+      "color": "#c2185b",
+      "emoji": "🌹",
+      "logoUrl": "/loghi/t1.png",
+      "welcome": "Benvenuti nell'academy Rosàflor! Completate il corso sicurezza entro fine mese. 🌹",
+      "secretWord": "rosa2026",
+      "approvalEmail": "formazione@rosaflor.it"
+    },
+    {
+      "id": "t2",
+      "name": "Flover",
+      "color": "#7cb342",
+      "emoji": "🌸",
+      "logoUrl": "/loghi/t2.png"
+    },
+    {
+      "id": "t3",
+      "name": "Iperverde",
+      "color": "#2e7d32",
+      "emoji": "🌿",
+      "logoUrl": "/loghi/t3.png"
+    },
+    {
+      "id": "t4",
+      "name": "Florarici",
+      "color": "#f9a825",
+      "emoji": "🌼",
+      "logoUrl": "/loghi/t4.jpg"
+    },
+    {
+      "id": "t5",
+      "name": "Fasoli Piante",
+      "color": "#558b2f",
+      "emoji": "🌱",
+      "logoUrl": "/loghi/t5.png"
+    },
+    {
+      "id": "t6",
+      "name": "Dichio Vivai Garden",
+      "color": "#00897b",
+      "emoji": "🌵",
+      "logoUrl": "/loghi/t6.png"
+    },
+    {
+      "id": "t7",
+      "name": "BIA Home & Garden",
+      "color": "#6d4c41",
+      "emoji": "🏡",
+      "logoUrl": "/loghi/t7.png"
+    },
+    {
+      "id": "t8",
+      "name": "Il Germoglio Garden Center",
+      "color": "#9e9d24",
+      "emoji": "🌾",
+      "logoUrl": "/loghi/t8.png"
+    },
+    {
+      "id": "t9",
+      "name": "Garden Anna",
+      "color": "#d81b60",
+      "emoji": "🌷",
+      "logoUrl": "/loghi/t9.png"
+    },
+    {
+      "id": "t10",
+      "name": "Nicora Garden",
+      "color": "#43a047",
+      "emoji": "🍃"
+    },
+    {
+      "id": "t11",
+      "name": "Floridea",
+      "color": "#e64a19",
+      "emoji": "🌺",
+      "logoUrl": "/loghi/t11.png"
+    }
+  ],
+  "stores": [
+    {
+      "id": "s1",
+      "tenantId": "t1",
+      "name": "Rosàflor",
+      "city": "Bassano del Grappa (VI)"
+    },
+    {
+      "id": "s2",
+      "tenantId": "t2",
+      "name": "Flover Bussolengo",
+      "city": "Bussolengo (VR)"
+    },
+    {
+      "id": "s3",
+      "tenantId": "t2",
+      "name": "Flover Verona",
+      "city": "Verona"
+    },
+    {
+      "id": "s4",
+      "tenantId": "t3",
+      "name": "Iperverde",
+      "city": ""
+    },
+    {
+      "id": "s5",
+      "tenantId": "t4",
+      "name": "Florarici",
+      "city": ""
+    },
+    {
+      "id": "s6",
+      "tenantId": "t5",
+      "name": "Fasoli Piante",
+      "city": ""
+    },
+    {
+      "id": "s7",
+      "tenantId": "t6",
+      "name": "Dichio Vivai Garden",
+      "city": "Matera"
+    },
+    {
+      "id": "s8",
+      "tenantId": "t7",
+      "name": "BIA Home & Garden",
+      "city": ""
+    },
+    {
+      "id": "s9",
+      "tenantId": "t8",
+      "name": "Il Germoglio",
+      "city": ""
+    },
+    {
+      "id": "s10",
+      "tenantId": "t9",
+      "name": "Garden Anna",
+      "city": ""
+    },
+    {
+      "id": "s11",
+      "tenantId": "t10",
+      "name": "Nicora Garden Varese",
+      "city": "Varese"
+    },
+    {
+      "id": "s12",
+      "tenantId": "t10",
+      "name": "Nicora Garden Gazzada",
+      "city": "Gazzada Schianno (VA)"
+    },
+    {
+      "id": "s13",
+      "tenantId": "t11",
+      "name": "Floridea",
+      "city": "Nervesa della Battaglia (TV)"
+    },
+    {
+      "id": "s14",
+      "tenantId": "t2",
+      "name": "Flover Desio",
+      "city": "Desio (MB)"
+    },
+    {
+      "id": "s15",
+      "tenantId": "t2",
+      "name": "Flover Desenzano",
+      "city": "Desenzano del Garda (BS)"
+    },
+    {
+      "id": "s16",
+      "tenantId": "t2",
+      "name": "Flover Affi",
+      "city": "Affi (VR)"
+    },
+    {
+      "id": "s17",
+      "tenantId": "t2",
+      "name": "Flover Modena",
+      "city": "Modena"
+    }
+  ],
+  "departments": [
+    {
+      "id": "d1",
+      "name": "Piante & Fiori",
+      "emoji": "🌸"
+    },
+    {
+      "id": "d2",
+      "name": "Pet",
+      "emoji": "🐾"
+    },
+    {
+      "id": "d3",
+      "name": "Décor & Casa",
+      "emoji": "🕯️"
+    },
+    {
+      "id": "d4",
+      "name": "Attrezzatura & Giardinaggio",
+      "emoji": "🧰"
+    },
+    {
+      "id": "d5",
+      "name": "Casse & Accoglienza",
+      "emoji": "🛒"
+    }
+  ],
+  "users": [
+    {
+      "id": "u1",
+      "firstName": "Marco",
+      "lastName": "Consorti",
+      "email": "admin@gardenteam.biz",
+      "role": "system_admin",
+      "hireDate": "2019-12-24",
+      "points": 0,
+      "badges": [],
+      "jobTitle": "Direttore Consorzio",
+      "active": true,
+      "gender": "m"
+    },
+    {
+      "id": "u2",
+      "firstName": "Laura",
+      "lastName": "Bianchi",
+      "email": "l.bianchi@rosaflor.it",
+      "role": "group_admin",
+      "tenantId": "t1",
+      "hireDate": "2021-08-15",
+      "points": 0,
+      "badges": [],
+      "jobTitle": "HR Rosàflor",
+      "active": true,
+      "gender": "f"
+    },
+    {
+      "id": "u3",
+      "firstName": "Paolo",
+      "lastName": "Ferrari",
+      "email": "p.ferrari@rosaflor.it",
+      "role": "store_admin",
+      "tenantId": "t1",
+      "storeId": "s1",
+      "hireDate": "2022-06-11",
+      "points": 0,
+      "badges": [],
+      "jobTitle": "Direttore PV Rosàflor",
+      "active": true,
+      "gender": "m"
+    },
+    {
+      "id": "u4",
+      "firstName": "Anna",
+      "lastName": "Moretti",
+      "email": "a.moretti@rosaflor.it",
+      "role": "dept_head",
+      "tenantId": "t1",
+      "storeId": "s1",
+      "departmentId": "d1",
+      "hireDate": "2023-04-07",
+      "points": 320,
+      "badges": [
+        "primo_corso",
+        "tre_corsi"
+      ],
+      "jobTitle": "Capo reparto Piante & Fiori",
+      "active": true,
+      "groupIds": [
+        "g_1784632062370"
+      ],
+      "gender": "f"
+    },
+    {
+      "id": "u5",
+      "firstName": "Elena",
+      "lastName": "Sartori",
+      "email": "e.sartori@gardenteam.biz",
+      "role": "course_manager",
+      "hireDate": "2024-02-01",
+      "points": 0,
+      "badges": [],
+      "jobTitle": "Formatrice Consorzio",
+      "active": true,
+      "gender": "m"
+    },
+    {
+      "id": "u6",
+      "firstName": "Giulia",
+      "lastName": "Rossi",
+      "email": "g.rossi@rosaflor.it",
+      "role": "student",
+      "tenantId": "t1",
+      "storeId": "s1",
+      "departmentId": "d1",
+      "hireDate": "2026-06-25",
+      "points": 145,
+      "badges": [
+        "primo_corso"
+      ],
+      "jobTitle": "Addetta vendita (neoassunta)",
+      "active": true,
+      "gender": "f"
+    },
+    {
+      "id": "u7",
+      "firstName": "Luca",
+      "lastName": "Verdi",
+      "email": "l.verdi@rosaflor.it",
+      "role": "student",
+      "tenantId": "t1",
+      "storeId": "s1",
+      "departmentId": "d2",
+      "hireDate": "2024-08-19",
+      "points": 410,
+      "badges": [
+        "primo_corso",
+        "tre_corsi",
+        "quiz_perfetto"
+      ],
+      "jobTitle": "Addetto reparto Pet",
+      "active": true,
+      "gender": "m"
+    },
+    {
+      "id": "u8",
+      "firstName": "Sara",
+      "lastName": "Colombo",
+      "email": "s.colombo@rosaflor.it",
+      "role": "student",
+      "tenantId": "t1",
+      "storeId": "s1",
+      "departmentId": "d5",
+      "hireDate": "2025-06-15",
+      "points": 260,
+      "badges": [
+        "primo_corso"
+      ],
+      "jobTitle": "Cassiera",
+      "active": true,
+      "gender": "f"
+    },
+    {
+      "id": "u9",
+      "firstName": "Andrea",
+      "lastName": "Rigoni",
+      "email": "a.rigoni@flover.it",
+      "role": "student",
+      "tenantId": "t2",
+      "storeId": "s2",
+      "departmentId": "d4",
+      "hireDate": "2023-10-24",
+      "points": 380,
+      "badges": [
+        "primo_corso",
+        "tre_corsi"
+      ],
+      "jobTitle": "Addetto attrezzatura",
+      "active": true,
+      "gender": "m"
+    },
+    {
+      "id": "u10",
+      "firstName": "Chiara",
+      "lastName": "Dalla Valle",
+      "email": "c.dallavalle@flover.it",
+      "role": "student",
+      "tenantId": "t2",
+      "storeId": "s3",
+      "departmentId": "d1",
+      "hireDate": "2026-07-05",
+      "points": 40,
+      "badges": [],
+      "jobTitle": "Addetta vendita (neoassunta)",
+      "active": true,
+      "gender": "f"
+    },
+    {
+      "id": "u11",
+      "firstName": "Matteo",
+      "lastName": "Pavan",
+      "email": "m.pavan@nicoragarden.it",
+      "role": "student",
+      "tenantId": "t10",
+      "storeId": "s11",
+      "departmentId": "d1",
+      "hireDate": "2024-11-27",
+      "points": 300,
+      "badges": [
+        "primo_corso"
+      ],
+      "jobTitle": "Addetto vendita",
+      "active": true,
+      "gender": "m"
+    },
+    {
+      "id": "u12",
+      "firstName": "Federica",
+      "lastName": "Zanetti",
+      "email": "f.zanetti@floridea.it",
+      "role": "student",
+      "tenantId": "t11",
+      "storeId": "s13",
+      "departmentId": "d3",
+      "hireDate": "2025-08-04",
+      "points": 220,
+      "badges": [
+        "primo_corso"
+      ],
+      "jobTitle": "Addetta décor",
+      "active": true,
+      "gender": "f"
+    },
+    {
+      "id": "u13",
+      "firstName": "Davide",
+      "lastName": "Bortolami",
+      "email": "d.bortolami@nicoragarden.it",
+      "role": "student",
+      "tenantId": "t10",
+      "storeId": "s12",
+      "departmentId": "d5",
+      "hireDate": "2026-01-01",
+      "points": 180,
+      "badges": [
+        "primo_corso"
+      ],
+      "jobTitle": "Cassiere",
+      "active": true,
+      "gender": "m"
+    },
+    {
+      "id": "u14",
+      "firstName": "Silvia",
+      "lastName": "Gasparini",
+      "email": "s.gasparini@dichio.it",
+      "role": "student",
+      "tenantId": "t6",
+      "storeId": "s7",
+      "departmentId": "d1",
+      "hireDate": "2025-04-26",
+      "points": 350,
+      "badges": [
+        "primo_corso",
+        "tre_corsi"
+      ],
+      "jobTitle": "Addetta vendita",
+      "active": true,
+      "gender": "f"
+    },
+    {
+      "id": "u15",
+      "firstName": "Giorgio",
+      "lastName": "Tonin",
+      "email": "g.tonin@iperverde.it",
+      "role": "student",
+      "tenantId": "t3",
+      "storeId": "s4",
+      "departmentId": "d2",
+      "hireDate": "2026-06-20",
+      "points": 60,
+      "badges": [],
+      "jobTitle": "Addetto Pet (neoassunto)",
+      "active": true,
+      "gender": "m"
+    },
+    {
+      "id": "u_1784571603149_reg",
+      "firstName": "Martina",
+      "lastName": "Zonta",
+      "email": "m.zonta@example.com",
+      "role": "student",
+      "tenantId": "t1",
+      "storeId": "s1",
+      "departmentId": "d1",
+      "jobTitle": "Addetto vendita",
+      "hireDate": "2026-07-20",
+      "points": 10,
+      "badges": [],
+      "active": true,
+      "birthDate": "1999-04-12",
+      "taxCode": "ZNTMTN99D52A703X",
+      "passwordHash": "ad8874b8cb40a8d38acabc0aac25b0cc:047620b7f8f4d10b6933cbbb364a29ad70cd374ed28e860999e3fb44dddd7d04755998d6decc454b92195141b8d08956c43be30012fb9a32cc8dc13aec43bebd",
+      "gender": "f"
+    },
+    {
+      "id": "u_1784668806384_0",
+      "firstName": "Elisa",
+      "lastName": "Fontana",
+      "email": "e.fontana@rosaflor.it",
+      "role": "student",
+      "tenantId": "t1",
+      "storeId": "s1",
+      "departmentId": "d5",
+      "jobTitle": "Cassiera",
+      "hireDate": "2026-07-20",
+      "points": 0,
+      "badges": [],
+      "active": true,
+      "gender": "f"
+    },
+    {
+      "id": "u16",
+      "firstName": "Carla",
+      "lastName": "Stampini",
+      "email": "c.stampini@rosaflor.it",
+      "role": "store_admin",
+      "tenantId": "t1",
+      "storeId": "s1",
+      "hireDate": "2025-03-10",
+      "points": 0,
+      "badges": [],
+      "jobTitle": "Addetta ufficio (solo Stampe)",
+      "active": true,
+      "gender": "f",
+      "sites": [
+        "stampe"
+      ]
+    }
+  ],
+  "courses": [
+    {
+      "id": "c1",
+      "title": "Benvenuti in Garden Team",
+      "description": "Il corso di onboarding per tutti i nuovi collaboratori: chi siamo, i valori del consorzio, come lavoriamo nei punti vendita.",
+      "category": "Onboarding",
+      "emoji": "🚀",
+      "level": "sistema",
+      "onlyNewHires": true,
+      "mandatory": true,
+      "dueDays": 30,
+      "passScore": 70,
+      "points": 100,
+      "lessons": [
+        {
+          "id": "c1l1",
+          "title": "Il Consorzio Garden Team: chi siamo",
+          "type": "video",
+          "minutes": 8,
+          "content": "Video di benvenuto del direttore: la storia del consorzio, le 10 insegne associate e i 30 punti vendita distribuiti sul territorio. La forza di fare rete mantenendo l'identità di ogni insegna."
+        },
+        {
+          "id": "c1l2",
+          "title": "I nostri valori e lo stile di servizio",
+          "type": "slide",
+          "minutes": 10,
+          "content": "Passione per il verde, competenza, accoglienza. Il cliente al centro: come salutare, ascoltare, accompagnare all'acquisto. Il decalogo del servizio Garden Team."
+        },
+        {
+          "id": "c1l3",
+          "title": "Manuale del collaboratore",
+          "type": "pdf",
+          "minutes": 15,
+          "content": "Il manuale operativo: orari e turni, divisa e cartellino, sicurezza, procedure di base, chi contattare per ogni esigenza. Scaricalo e tienilo sempre a portata di mano."
+        },
+        {
+          "id": "c1l4",
+          "title": "La tua prima settimana",
+          "type": "testo",
+          "minutes": 5,
+          "content": "Cosa aspettarti nei primi giorni: affiancamento con il tutor, giro dei reparti, presentazione della squadra. Alla fine della prima settimana saprai orientarti in autonomia nel punto vendita."
+        }
+      ],
+      "quiz": [
+        {
+          "id": "c1q1",
+          "text": "Quanti punti vendita conta il Consorzio Garden Team?",
+          "options": [
+            "Circa 10",
+            "Circa 30",
+            "Circa 60",
+            "Più di 100"
+          ],
+          "correct": 1
+        },
+        {
+          "id": "c1q2",
+          "text": "Qual è il principio fondamentale dello stile di servizio Garden Team?",
+          "options": [
+            "Vendere il più possibile",
+            "Il cliente al centro",
+            "La velocità alle casse",
+            "Il prezzo più basso"
+          ],
+          "correct": 1
+        },
+        {
+          "id": "c1q3",
+          "text": "Cosa è previsto nella prima settimana di lavoro?",
+          "options": [
+            "Lavoro in autonomia da subito",
+            "Solo formazione in aula",
+            "Affiancamento con un tutor",
+            "Nessuna attività particolare"
+          ],
+          "correct": 2
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "title": "Sicurezza sul lavoro — Formazione base",
+      "description": "Formazione obbligatoria sulla sicurezza: rischi in negozio e nel vivaio, DPI, movimentazione carichi, emergenze.",
+      "category": "Sicurezza",
+      "emoji": "🦺",
+      "level": "sistema",
+      "mandatory": true,
+      "dueDays": 60,
+      "passScore": 80,
+      "points": 120,
+      "lessons": [
+        {
+          "id": "c2l1",
+          "title": "I rischi nel punto vendita",
+          "type": "video",
+          "minutes": 12,
+          "content": "Panoramica dei rischi tipici del garden center: scivolamenti su superfici bagnate, movimentazione vasi e sacchi, uso di attrezzature, prodotti fitosanitari."
+        },
+        {
+          "id": "c2l2",
+          "title": "DPI e movimentazione carichi",
+          "type": "video",
+          "minutes": 10,
+          "content": "Quando e come usare guanti, scarpe antinfortunistiche e schienalino. Tecniche corrette di sollevamento: piega le ginocchia, schiena dritta, carico vicino al corpo. Mai superare i limiti: usa il transpallet."
+        },
+        {
+          "id": "c2l3",
+          "title": "Piano di emergenza ed evacuazione",
+          "type": "pdf",
+          "minutes": 8,
+          "content": "Le vie di fuga, i punti di raccolta, chi sono gli addetti antincendio e primo soccorso del tuo punto vendita. Cosa fare (e non fare) in caso di allarme."
+        }
+      ],
+      "quiz": [
+        {
+          "id": "c2q1",
+          "text": "Come si solleva correttamente un sacco di terriccio pesante?",
+          "options": [
+            "Piegando la schiena in avanti",
+            "Piegando le ginocchia e tenendo la schiena dritta",
+            "Sempre in due persone",
+            "Di slancio, velocemente"
+          ],
+          "correct": 1
+        },
+        {
+          "id": "c2q2",
+          "text": "Cosa devi fare appena senti l'allarme di evacuazione?",
+          "options": [
+            "Finire di servire il cliente",
+            "Prendere gli effetti personali",
+            "Dirigerti al punto di raccolta dalle vie di fuga",
+            "Usare l'ascensore per fare prima"
+          ],
+          "correct": 2
+        },
+        {
+          "id": "c2q3",
+          "text": "Quando vanno indossati i guanti da lavoro?",
+          "options": [
+            "Solo in inverno",
+            "Quando si maneggiano piante spinose, prodotti chimici o carichi",
+            "Mai, riducono la sensibilità",
+            "Solo nel vivaio esterno"
+          ],
+          "correct": 1
+        },
+        {
+          "id": "c2q4",
+          "text": "Un pavimento bagnato nel reparto piante va…",
+          "options": [
+            "Lasciato asciugare da solo",
+            "Segnalato con l'apposito cartello e asciugato appena possibile",
+            "Ignorato, è normale",
+            "Coperto con cartone"
+          ],
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "c3",
+      "title": "Cura delle piante stagionali",
+      "description": "Riconoscere, curare e consigliare le piante di stagione: annaffiatura, esposizione, rinvaso e i consigli giusti da dare al cliente.",
+      "category": "Prodotto",
+      "emoji": "🌸",
+      "level": "sistema",
+      "departments": [
+        "d1"
+      ],
+      "mandatory": false,
+      "passScore": 70,
+      "points": 90,
+      "lessons": [
+        {
+          "id": "c3l1",
+          "title": "Le stagionali di primavera-estate",
+          "type": "video",
+          "minutes": 15,
+          "content": "Gerani, surfinie, dipladenie, basilico e aromatiche: esigenze di acqua, luce e concimazione. Come mantenerle belle in negozio e come presentarle al cliente."
+        },
+        {
+          "id": "c3l2",
+          "title": "Annaffiatura e concimazione in reparto",
+          "type": "video",
+          "minutes": 10,
+          "content": "Il giro d'acqua mattutino: quali piante prima, come controllare il terriccio, segnali di stress idrico. Concimazione settimanale e rimozione fiori appassiti."
+        },
+        {
+          "id": "c3l3",
+          "title": "I consigli al cliente",
+          "type": "testo",
+          "minutes": 8,
+          "content": "Le tre domande da fare sempre: dove va la pianta (sole/ombra, dentro/fuori)? Quanto tempo può dedicarle? Ha animali domestici? Da qui parte il consiglio giusto — e la vendita del prodotto complementare corretto (terriccio, concime, vaso)."
+        },
+        {
+          "id": "l_1784571702104",
+          "title": "Verifica di metà corso",
+          "type": "quiz",
+          "minutes": 5,
+          "content": "Rispondi alle domande per sbloccare il capitolo successivo.",
+          "questions": [
+            {
+              "id": "q_1784571710382",
+              "text": "Quale pianta è adatta al pieno sole?",
+              "options": [
+                "La felce",
+                "Il geranio",
+                "L'orchidea"
+              ],
+              "correct": 1
+            }
+          ]
+        }
+      ],
+      "quiz": [
+        {
+          "id": "c3q1",
+          "text": "Qual è il momento migliore per il giro d'acqua in reparto?",
+          "options": [
+            "A fine giornata",
+            "Al mattino presto",
+            "Nelle ore più calde",
+            "Solo quando le piante appassiscono"
+          ],
+          "correct": 1
+        },
+        {
+          "id": "c3q2",
+          "text": "Un cliente cerca una pianta per un balcone in pieno sole: cosa consigli?",
+          "options": [
+            "Un'orchidea",
+            "Una felce",
+            "Gerani o surfinie",
+            "Un ciclamino"
+          ],
+          "correct": 2
+        },
+        {
+          "id": "c3q3",
+          "text": "Perché rimuovere i fiori appassiti?",
+          "options": [
+            "Solo per estetica",
+            "Per stimolare nuove fioriture e prevenire malattie",
+            "Non serve",
+            "Per risparmiare acqua"
+          ],
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "c4",
+      "title": "Vendita assistita e accoglienza cliente",
+      "description": "Le tecniche di vendita assistita nel garden center: accoglienza, ascolto, proposta, vendita complementare e gestione delle obiezioni.",
+      "category": "Vendita",
+      "emoji": "🤝",
+      "level": "sistema",
+      "mandatory": true,
+      "dueDays": 90,
+      "passScore": 70,
+      "points": 100,
+      "lessons": [
+        {
+          "id": "c4l1",
+          "title": "L'accoglienza: i primi 10 secondi",
+          "type": "video",
+          "minutes": 9,
+          "content": "Il saluto entro pochi secondi dall'ingresso nel reparto, il contatto visivo, la disponibilità senza pressione. La differenza tra 'Posso aiutarla?' e una domanda aperta ben posta."
+        },
+        {
+          "id": "c4l2",
+          "title": "Ascolto e proposta",
+          "type": "slide",
+          "minutes": 12,
+          "content": "Capire il bisogno reale con domande aperte. Proporre massimo 2-3 alternative, spiegando i benefici e non solo le caratteristiche. Il metodo CVB: Caratteristica → Vantaggio → Beneficio."
+        },
+        {
+          "id": "c4l3",
+          "title": "Vendita complementare",
+          "type": "video",
+          "minutes": 8,
+          "content": "Ogni pianta venduta ha i suoi complementari naturali: terriccio, vaso, sottovaso, concime. Come proporli in modo utile per il cliente e non come forzatura."
+        }
+      ],
+      "quiz": [
+        {
+          "id": "c4q1",
+          "text": "Entro quanto tempo va salutato un cliente che entra nel reparto?",
+          "options": [
+            "Pochi secondi",
+            "Un minuto",
+            "Cinque minuti",
+            "Solo se chiede aiuto"
+          ],
+          "correct": 0
+        },
+        {
+          "id": "c4q2",
+          "text": "Quante alternative è meglio proporre a un cliente indeciso?",
+          "options": [
+            "Una sola",
+            "2-3",
+            "Almeno 5",
+            "Tutte quelle disponibili"
+          ],
+          "correct": 1
+        },
+        {
+          "id": "c4q3",
+          "text": "Nel metodo CVB, la 'B' sta per…",
+          "options": [
+            "Bonus",
+            "Beneficio",
+            "Budget",
+            "Bisogno"
+          ],
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "c5",
+      "title": "Standard espositivi Rosàflor",
+      "description": "Le linee guida visual dell'insegna Rosàflor: layout dei banchi, cartellonistica, cura dell'esposizione e rotazioni stagionali.",
+      "category": "Visual",
+      "emoji": "🖼️",
+      "level": "insegna",
+      "tenantId": "t1",
+      "mandatory": true,
+      "dueDays": 45,
+      "passScore": 70,
+      "points": 80,
+      "lessons": [
+        {
+          "id": "c5l1",
+          "title": "Il layout Rosàflor",
+          "type": "slide",
+          "minutes": 10,
+          "content": "La struttura standard del punto vendita Rosàflor: percorso cliente, zone promozionali, testate di gondola. Le foto-modello da replicare."
+        },
+        {
+          "id": "c5l2",
+          "title": "Cartellonistica e prezzatura",
+          "type": "pdf",
+          "minutes": 7,
+          "content": "I formati ufficiali dei cartelli prezzo e promo Rosàflor, come e dove posizionarli. Regola d'oro: ogni prodotto esposto ha sempre il suo prezzo visibile."
+        }
+      ],
+      "quiz": [
+        {
+          "id": "c5q1",
+          "text": "Qual è la regola d'oro della prezzatura Rosàflor?",
+          "options": [
+            "I prezzi si mettono solo in promozione",
+            "Ogni prodotto esposto ha sempre il prezzo visibile",
+            "Il prezzo si comunica a voce",
+            "Solo i prodotti sopra 10€ vanno prezzati"
+          ],
+          "correct": 1
+        },
+        {
+          "id": "c5q2",
+          "text": "Le testate di gondola sono dedicate a…",
+          "options": [
+            "Prodotti invenduti",
+            "Promozioni e prodotti stagionali",
+            "Materiale di magazzino",
+            "Prodotti di importazione"
+          ],
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "c6",
+      "title": "Programma fedeltà Rosàflor Card",
+      "description": "Come funziona la Rosàflor Card: iscrizione del cliente in cassa, punti, premi e promozioni riservate.",
+      "category": "Casse",
+      "emoji": "💳",
+      "level": "insegna",
+      "tenantId": "t1",
+      "departments": [
+        "d5"
+      ],
+      "mandatory": true,
+      "dueDays": 30,
+      "passScore": 80,
+      "points": 70,
+      "lessons": [
+        {
+          "id": "c6l1",
+          "title": "Iscrivere un cliente in cassa",
+          "type": "video",
+          "minutes": 6,
+          "content": "La procedura di iscrizione alla Rosàflor Card in cassa: dati necessari, consenso privacy, consegna della card. Obiettivo: proporre la card a ogni cliente non ancora iscritto."
+        },
+        {
+          "id": "c6l2",
+          "title": "Punti, soglie e premi",
+          "type": "testo",
+          "minutes": 6,
+          "content": "1€ = 1 punto. Le soglie premio: 200, 500 e 1000 punti. Le promozioni riservate ai titolari card e i punti doppi negli eventi stagionali. Come rispondere alle domande più frequenti dei clienti."
+        }
+      ],
+      "quiz": [
+        {
+          "id": "c6q1",
+          "text": "Quanto vale 1€ di spesa in punti Rosàflor Card?",
+          "options": [
+            "0,5 punti",
+            "1 punto",
+            "2 punti",
+            "10 punti"
+          ],
+          "correct": 1
+        },
+        {
+          "id": "c6q2",
+          "text": "Cosa serve per iscrivere un cliente alla card?",
+          "options": [
+            "Solo il numero di telefono",
+            "Dati anagrafici e consenso privacy",
+            "Un documento d'identità in fotocopia",
+            "Niente, è automatico"
+          ],
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "c7",
+      "title": "Procedure apertura e chiusura — Rosàflor",
+      "description": "Le procedure operative specifiche del punto vendita Rosàflor: allarme, casse, serre, impianto di irrigazione.",
+      "category": "Operations",
+      "emoji": "🔑",
+      "level": "punto_vendita",
+      "tenantId": "t1",
+      "storeId": "s1",
+      "mandatory": false,
+      "passScore": 70,
+      "points": 60,
+      "lessons": [
+        {
+          "id": "c7l1",
+          "title": "Apertura del punto vendita",
+          "type": "testo",
+          "minutes": 8,
+          "content": "Sequenza di apertura: disattivazione allarme, accensione luci e casse, controllo serre e irrigazione notturna, giro di controllo reparti prima dell'apertura al pubblico alle 8:30."
+        },
+        {
+          "id": "c7l2",
+          "title": "Chiusura del punto vendita",
+          "type": "testo",
+          "minutes": 8,
+          "content": "Sequenza di chiusura: verifica clienti in negozio e area esterna, chiusura casse, spegnimento impianti, attivazione irrigazione notturna programmata, inserimento allarme."
+        }
+      ],
+      "quiz": [
+        {
+          "id": "c7q1",
+          "text": "A che ora apre al pubblico il punto vendita?",
+          "options": [
+            "8:00",
+            "8:30",
+            "9:00",
+            "9:30"
+          ],
+          "correct": 1
+        },
+        {
+          "id": "c7q2",
+          "text": "Cosa va attivato alla chiusura serale?",
+          "options": [
+            "Le luci del vivaio",
+            "L'irrigazione notturna programmata e l'allarme",
+            "La filodiffusione",
+            "Niente di particolare"
+          ],
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "c8",
+      "title": "Alimentazione e cura del Pet",
+      "description": "Le basi dell'alimentazione di cani, gatti e piccoli animali: leggere le etichette, consigliare il prodotto giusto, normativa di reparto.",
+      "category": "Prodotto",
+      "emoji": "🐾",
+      "level": "sistema",
+      "departments": [
+        "d2"
+      ],
+      "mandatory": false,
+      "passScore": 70,
+      "points": 90,
+      "lessons": [
+        {
+          "id": "c8l1",
+          "title": "Leggere l'etichetta del pet food",
+          "type": "video",
+          "minutes": 12,
+          "content": "Ingredienti, analisi garantita, razione giornaliera: come interpretare l'etichetta e spiegarla al cliente. Differenze tra alimenti fisiologici e dietetici."
+        },
+        {
+          "id": "c8l2",
+          "title": "Il consiglio giusto per ogni età",
+          "type": "video",
+          "minutes": 10,
+          "content": "Puppy/kitten, adult, senior: le esigenze nutrizionali nelle fasi di vita. Le domande da fare al cliente: età, taglia, stile di vita, sensibilità alimentari."
+        },
+        {
+          "id": "c8l3",
+          "title": "Normativa e cartellini di reparto",
+          "type": "pdf",
+          "minutes": 6,
+          "content": "Le regole di esposizione e vendita degli alimenti per animali, la rotazione delle scadenze e il registro di reparto."
+        }
+      ],
+      "quiz": [
+        {
+          "id": "c8q1",
+          "text": "Cosa indica l''analisi garantita' sull'etichetta?",
+          "options": [
+            "Il prezzo consigliato",
+            "I valori nutrizionali minimi/massimi del prodotto",
+            "La data di scadenza",
+            "Il paese di origine"
+          ],
+          "correct": 1
+        },
+        {
+          "id": "c8q2",
+          "text": "Quali domande fare per consigliare un alimento?",
+          "options": [
+            "Solo la marca preferita",
+            "Età, taglia, stile di vita e sensibilità dell'animale",
+            "Il budget disponibile",
+            "Il colore della confezione preferito"
+          ],
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "c9",
+      "title": "Tappeti erbosi",
+      "description": "Dal corso GT Academy con il prof. Stefano Macolino (Università di Padova): specie, realizzazione, prato in rotoli, cure colturali e difesa del tappeto erboso.",
+      "category": "Prodotto",
+      "emoji": "🌱",
+      "level": "sistema",
+      "departments": [
+        "d1"
+      ],
+      "mandatory": false,
+      "passScore": 70,
+      "points": 90,
+      "coverUrl": "/uploads/cover_tappeto_erboso.png",
+      "lessons": [
+        {
+          "id": "c9l1",
+          "title": "Le specie del tappeto erboso",
+          "type": "video",
+          "minutes": 15,
+          "content": "Microterme, macroterme e miscugli: come riconoscerle e quando proporle. Le microterme (loietto, festuca, poa) per i climi del nord, le macroterme (gramigna, zoysia) per zone calde e assolate."
+        },
+        {
+          "id": "c9l2",
+          "title": "Realizzazione e prato in rotoli",
+          "type": "video",
+          "minutes": 12,
+          "content": "Come si realizza un tappeto erboso con focus sul giardino di casa: preparazione del terreno, semina, prime cure. Prato in rotoli: vantaggi e svantaggi, posa corretta delle zolle."
+        },
+        {
+          "id": "c9l3",
+          "title": "Cure colturali: taglio, irrigazione, concimazione",
+          "type": "testo",
+          "minutes": 10,
+          "content": "Le regole d'oro: mai asportare più di 1/3 della foglia a ogni taglio, irrigare in profondità ma di rado, concimare seguendo le stagioni di crescita. I consigli pratici da dare al cliente."
+        },
+        {
+          "id": "c9l4",
+          "title": "Malattie e infestanti",
+          "type": "testo",
+          "minutes": 8,
+          "content": "Riconoscere le principali malattie fungine e le infestanti del prato; prevenzione con le corrette pratiche colturali e prodotti da consigliare in negozio."
+        }
+      ],
+      "quiz": [
+        {
+          "id": "c9q1",
+          "text": "Quale tra queste è una specie microterma?",
+          "options": [
+            "Gramigna (Cynodon dactylon)",
+            "Loietto perenne (Lolium perenne)",
+            "Zoysia japonica",
+            "Paspalum"
+          ],
+          "correct": 1
+        },
+        {
+          "id": "c9q2",
+          "text": "Qual è il principale vantaggio del prato in rotoli?",
+          "options": [
+            "Costa meno della semina",
+            "Effetto immediato e meno infestanti in fase d'impianto",
+            "Non richiede irrigazione",
+            "Non va mai concimato"
+          ],
+          "correct": 1
+        },
+        {
+          "id": "c9q3",
+          "text": "Regola generale per il taglio del prato:",
+          "options": [
+            "Tagliare più corto possibile",
+            "Non asportare più di 1/3 dell'altezza della foglia",
+            "Tagliare solo d'estate",
+            "Tagliare con erba bagnata"
+          ],
+          "correct": 1
+        }
+      ]
+    }
+  ],
+  "paths": [
+    {
+      "id": "p1",
+      "title": "Onboarding Neoassunti",
+      "description": "Il percorso di ingresso per ogni nuovo collaboratore Garden Team: chi siamo, sicurezza e stile di vendita.",
+      "emoji": "🚀",
+      "courseIds": [
+        "c1",
+        "c2",
+        "c4"
+      ],
+      "level": "sistema",
+      "onlyNewHires": true
+    },
+    {
+      "id": "p2",
+      "title": "Percorso Reparto Verde",
+      "description": "Il percorso di specializzazione per gli addetti del reparto Piante & Fiori.",
+      "emoji": "🌸",
+      "courseIds": [
+        "c3",
+        "c4"
+      ],
+      "level": "sistema",
+      "departments": [
+        "d1"
+      ]
+    }
+  ],
+  "progress": [
+    {
+      "userId": "u6",
+      "courseId": "c1",
+      "completedLessons": [
+        "c1l1",
+        "c1l2",
+        "c1l3",
+        "c1l4"
+      ],
+      "quizScore": 100,
+      "quizPassed": true,
+      "completedAt": "2026-07-10T17:10:52.518Z"
+    },
+    {
+      "userId": "u6",
+      "courseId": "c2",
+      "completedLessons": [
+        "c2l1",
+        "c2l2"
+      ]
+    },
+    {
+      "userId": "u6",
+      "courseId": "c3",
+      "completedLessons": [
+        "c3l1"
+      ]
+    },
+    {
+      "userId": "u7",
+      "courseId": "c2",
+      "completedLessons": [
+        "c2l1",
+        "c2l2",
+        "c2l3"
+      ],
+      "quizScore": 100,
+      "quizPassed": true,
+      "completedAt": "2026-03-22T17:10:52.518Z"
+    },
+    {
+      "userId": "u7",
+      "courseId": "c4",
+      "completedLessons": [
+        "c4l1",
+        "c4l2",
+        "c4l3"
+      ],
+      "quizScore": 85,
+      "quizPassed": true,
+      "completedAt": "2026-04-21T17:10:52.518Z"
+    },
+    {
+      "userId": "u7",
+      "courseId": "c8",
+      "completedLessons": [
+        "c8l1",
+        "c8l2",
+        "c8l3"
+      ],
+      "quizScore": 90,
+      "quizPassed": true,
+      "completedAt": "2026-05-21T17:10:52.518Z"
+    },
+    {
+      "userId": "u7",
+      "courseId": "c5",
+      "completedLessons": [
+        "c5l1",
+        "c5l2"
+      ],
+      "quizScore": 100,
+      "quizPassed": true,
+      "completedAt": "2026-06-20T17:10:52.518Z"
+    },
+    {
+      "userId": "u8",
+      "courseId": "c2",
+      "completedLessons": [
+        "c2l1",
+        "c2l2",
+        "c2l3"
+      ],
+      "quizScore": 80,
+      "quizPassed": true,
+      "completedAt": "2026-01-01T17:10:52.518Z"
+    },
+    {
+      "userId": "u8",
+      "courseId": "c6",
+      "completedLessons": [
+        "c6l1",
+        "c6l2"
+      ],
+      "quizScore": 90,
+      "quizPassed": true,
+      "completedAt": "2026-04-11T17:10:52.518Z"
+    },
+    {
+      "userId": "u8",
+      "courseId": "c4",
+      "completedLessons": [
+        "c4l1"
+      ]
+    },
+    {
+      "userId": "u9",
+      "courseId": "c2",
+      "completedLessons": [
+        "c2l1",
+        "c2l2",
+        "c2l3"
+      ],
+      "quizScore": 85,
+      "quizPassed": true,
+      "completedAt": "2025-09-23T17:10:52.518Z"
+    },
+    {
+      "userId": "u9",
+      "courseId": "c4",
+      "completedLessons": [
+        "c4l1",
+        "c4l2",
+        "c4l3"
+      ],
+      "quizScore": 75,
+      "quizPassed": true,
+      "completedAt": "2025-11-12T17:10:52.518Z"
+    },
+    {
+      "userId": "u9",
+      "courseId": "c5",
+      "completedLessons": [
+        "c5l1",
+        "c5l2"
+      ],
+      "quizScore": 80,
+      "quizPassed": true,
+      "completedAt": "2026-04-11T17:10:52.518Z"
+    },
+    {
+      "userId": "u4",
+      "courseId": "c2",
+      "completedLessons": [
+        "c2l1",
+        "c2l2",
+        "c2l3"
+      ],
+      "quizScore": 90,
+      "quizPassed": true,
+      "completedAt": "2025-06-15T17:10:52.518Z"
+    },
+    {
+      "userId": "u4",
+      "courseId": "c3",
+      "completedLessons": [
+        "c3l1",
+        "c3l2",
+        "c3l3"
+      ],
+      "quizScore": 100,
+      "quizPassed": true,
+      "completedAt": "2026-01-01T17:10:52.518Z"
+    },
+    {
+      "userId": "u4",
+      "courseId": "c4",
+      "completedLessons": [
+        "c4l1",
+        "c4l2",
+        "c4l3"
+      ],
+      "quizScore": 85,
+      "quizPassed": true,
+      "completedAt": "2025-08-04T17:10:52.518Z"
+    },
+    {
+      "userId": "u11",
+      "courseId": "c2",
+      "completedLessons": [
+        "c2l1",
+        "c2l2",
+        "c2l3"
+      ],
+      "quizScore": 80,
+      "quizPassed": true,
+      "completedAt": "2026-02-20T17:10:52.518Z"
+    },
+    {
+      "userId": "u11",
+      "courseId": "c3",
+      "completedLessons": [
+        "c3l1",
+        "c3l2",
+        "c3l3"
+      ],
+      "quizScore": 75,
+      "quizPassed": true,
+      "completedAt": "2026-04-11T17:10:52.518Z"
+    },
+    {
+      "userId": "u12",
+      "courseId": "c2",
+      "completedLessons": [
+        "c2l1",
+        "c2l2",
+        "c2l3"
+      ],
+      "quizScore": 85,
+      "quizPassed": true,
+      "completedAt": "2026-03-22T17:10:52.518Z"
+    },
+    {
+      "userId": "u12",
+      "courseId": "c4",
+      "completedLessons": [
+        "c4l1",
+        "c4l2"
+      ]
+    },
+    {
+      "userId": "u13",
+      "courseId": "c2",
+      "completedLessons": [
+        "c2l1",
+        "c2l2",
+        "c2l3"
+      ],
+      "quizScore": 80,
+      "quizPassed": true,
+      "completedAt": "2026-05-01T17:10:52.518Z"
+    },
+    {
+      "userId": "u14",
+      "courseId": "c2",
+      "completedLessons": [
+        "c2l1",
+        "c2l2",
+        "c2l3"
+      ],
+      "quizScore": 95,
+      "quizPassed": true,
+      "completedAt": "2026-01-01T17:10:52.518Z"
+    },
+    {
+      "userId": "u14",
+      "courseId": "c3",
+      "completedLessons": [
+        "c3l1",
+        "c3l2",
+        "c3l3"
+      ],
+      "quizScore": 85,
+      "quizPassed": true,
+      "completedAt": "2026-02-20T17:10:52.518Z"
+    },
+    {
+      "userId": "u14",
+      "courseId": "c4",
+      "completedLessons": [
+        "c4l1",
+        "c4l2",
+        "c4l3"
+      ],
+      "quizScore": 80,
+      "quizPassed": true,
+      "completedAt": "2026-04-11T17:10:52.518Z"
+    },
+    {
+      "userId": "u15",
+      "courseId": "c1",
+      "completedLessons": [
+        "c1l1",
+        "c1l2"
+      ]
+    },
+    {
+      "userId": "u_1784571603149_reg",
+      "courseId": "c3",
+      "completedLessons": [
+        "l_1784571702104"
+      ]
+    }
+  ],
+  "certificates": [
+    {
+      "id": "cert1",
+      "userId": "u6",
+      "courseId": "c1",
+      "issuedAt": "2026-07-10T17:10:52.518Z"
+    },
+    {
+      "id": "cert2",
+      "userId": "u7",
+      "courseId": "c2",
+      "issuedAt": "2026-03-22T17:10:52.518Z"
+    },
+    {
+      "id": "cert3",
+      "userId": "u7",
+      "courseId": "c4",
+      "issuedAt": "2026-04-21T17:10:52.518Z"
+    },
+    {
+      "id": "cert4",
+      "userId": "u7",
+      "courseId": "c8",
+      "issuedAt": "2026-05-21T17:10:52.518Z"
+    },
+    {
+      "id": "cert5",
+      "userId": "u7",
+      "courseId": "c5",
+      "issuedAt": "2026-06-20T17:10:52.518Z"
+    },
+    {
+      "id": "cert6",
+      "userId": "u8",
+      "courseId": "c2",
+      "issuedAt": "2026-01-01T17:10:52.518Z"
+    },
+    {
+      "id": "cert7",
+      "userId": "u8",
+      "courseId": "c6",
+      "issuedAt": "2026-04-11T17:10:52.518Z"
+    },
+    {
+      "id": "cert8",
+      "userId": "u9",
+      "courseId": "c2",
+      "issuedAt": "2025-09-23T17:10:52.518Z"
+    },
+    {
+      "id": "cert9",
+      "userId": "u9",
+      "courseId": "c4",
+      "issuedAt": "2025-11-12T17:10:52.518Z"
+    },
+    {
+      "id": "cert10",
+      "userId": "u9",
+      "courseId": "c5",
+      "issuedAt": "2026-04-11T17:10:52.518Z"
+    },
+    {
+      "id": "cert11",
+      "userId": "u4",
+      "courseId": "c2",
+      "issuedAt": "2025-06-15T17:10:52.518Z"
+    },
+    {
+      "id": "cert12",
+      "userId": "u4",
+      "courseId": "c3",
+      "issuedAt": "2026-01-01T17:10:52.518Z"
+    },
+    {
+      "id": "cert13",
+      "userId": "u4",
+      "courseId": "c4",
+      "issuedAt": "2025-08-04T17:10:52.518Z"
+    },
+    {
+      "id": "cert14",
+      "userId": "u11",
+      "courseId": "c2",
+      "issuedAt": "2026-02-20T17:10:52.518Z"
+    },
+    {
+      "id": "cert15",
+      "userId": "u11",
+      "courseId": "c3",
+      "issuedAt": "2026-04-11T17:10:52.518Z"
+    },
+    {
+      "id": "cert16",
+      "userId": "u12",
+      "courseId": "c2",
+      "issuedAt": "2026-03-22T17:10:52.518Z"
+    },
+    {
+      "id": "cert17",
+      "userId": "u13",
+      "courseId": "c2",
+      "issuedAt": "2026-05-01T17:10:52.518Z"
+    },
+    {
+      "id": "cert18",
+      "userId": "u14",
+      "courseId": "c2",
+      "issuedAt": "2026-01-01T17:10:52.518Z"
+    },
+    {
+      "id": "cert19",
+      "userId": "u14",
+      "courseId": "c3",
+      "issuedAt": "2026-02-20T17:10:52.518Z"
+    },
+    {
+      "id": "cert20",
+      "userId": "u14",
+      "courseId": "c4",
+      "issuedAt": "2026-04-11T17:10:52.518Z"
+    }
+  ],
+  "feedback": [
+    {
+      "id": "f1",
+      "userId": "u7",
+      "courseId": "c8",
+      "rating": 5,
+      "comment": "Corso molto utile, finalmente so spiegare le etichette ai clienti!",
+      "date": "2026-05-26"
+    },
+    {
+      "id": "f2",
+      "userId": "u4",
+      "courseId": "c3",
+      "rating": 4,
+      "comment": "Bello, aggiungerei una parte sulle piante da interno.",
+      "date": "2026-01-11"
+    },
+    {
+      "id": "f3",
+      "userId": "u8",
+      "courseId": "c6",
+      "rating": 5,
+      "comment": "Chiaro e veloce, perfetto da fare tra un turno e l'altro.",
+      "date": "2026-04-16"
+    },
+    {
+      "id": "f4",
+      "userId": "u11",
+      "courseId": "c3",
+      "rating": 4,
+      "comment": "Video ben fatti. Utile il capitolo sui consigli al cliente.",
+      "date": "2026-04-21"
+    }
+  ],
+  "emails": [
+    {
+      "id": "e1",
+      "userId": "u6",
+      "to": "g.rossi@rosaflor.it",
+      "subject": "Benvenuta in Academy GT, Giulia!",
+      "body": "Il tuo account è attivo: trovi già assegnato il percorso Onboarding Neoassunti da completare entro 30 giorni.",
+      "type": "benvenuto",
+      "date": "2026-06-25T17:10:52.518Z",
+      "status": "inviata"
+    },
+    {
+      "id": "e2",
+      "userId": "u6",
+      "to": "g.rossi@rosaflor.it",
+      "subject": "🎉 Hai completato «Benvenuti in Garden Team»",
+      "body": "Complimenti! Il certificato è disponibile nella tua area personale.",
+      "type": "completamento",
+      "date": "2026-07-10T17:10:52.518Z",
+      "status": "inviata"
+    },
+    {
+      "id": "e3",
+      "userId": "u15",
+      "to": "g.tonin@iperverde.it",
+      "subject": "⏰ Promemoria: corsi da completare",
+      "body": "Hai 3 corsi obbligatori in attesa: Benvenuti in Garden Team, Sicurezza sul lavoro, Vendita assistita.",
+      "type": "promemoria",
+      "date": "2026-07-17T17:10:52.518Z",
+      "status": "inviata"
+    },
+    {
+      "id": "e_1784567501450_za2q6",
+      "userId": "u4",
+      "to": "a.moretti@rosaflor.it",
+      "subject": "🚨 Corsi in scadenza: completa la formazione obbligatoria",
+      "body": "Ciao Anna, ti ricordiamo i corsi obbligatori da completare: «Standard espositivi Rosàflor» (entro 03/09/2025).",
+      "type": "scadenza",
+      "date": "2026-07-20T17:11:41.450Z",
+      "status": "inviata"
+    },
+    {
+      "id": "e_1784567501450_n7x7a",
+      "userId": "u6",
+      "to": "g.rossi@rosaflor.it",
+      "subject": "⏰ Promemoria: hai 3 corsi da completare",
+      "body": "Ciao Giulia, ti ricordiamo i corsi obbligatori da completare: «Standard espositivi Rosàflor» (entro 09/08/2026), «Sicurezza sul lavoro — Formazione base» (entro 24/08/2026), «Vendita assistita e accoglienza cliente» (entro 23/09/2026).",
+      "type": "promemoria",
+      "date": "2026-07-20T17:11:41.450Z",
+      "status": "inviata"
+    },
+    {
+      "id": "e_1784567501450_4ol6j",
+      "userId": "u8",
+      "to": "s.colombo@rosaflor.it",
+      "subject": "🚨 Corsi in scadenza: completa la formazione obbligatoria",
+      "body": "Ciao Sara, ti ricordiamo i corsi obbligatori da completare: «Standard espositivi Rosàflor» (entro 03/09/2025), «Vendita assistita e accoglienza cliente» (entro 18/10/2025).",
+      "type": "scadenza",
+      "date": "2026-07-20T17:11:41.450Z",
+      "status": "inviata"
+    },
+    {
+      "id": "e_1784567501450_8h9dc",
+      "userId": "u10",
+      "to": "c.dallavalle@flover.it",
+      "subject": "⏰ Promemoria: hai 3 corsi da completare",
+      "body": "Ciao Chiara, ti ricordiamo i corsi obbligatori da completare: «Benvenuti in Garden Team» (entro 04/08/2026), «Sicurezza sul lavoro — Formazione base» (entro 03/09/2026), «Vendita assistita e accoglienza cliente» (entro 03/10/2026).",
+      "type": "promemoria",
+      "date": "2026-07-20T17:11:41.450Z",
+      "status": "inviata"
+    },
+    {
+      "id": "e_1784567501450_3ifo0",
+      "userId": "u11",
+      "to": "m.pavan@nicoragarden.it",
+      "subject": "🚨 Corsi in scadenza: completa la formazione obbligatoria",
+      "body": "Ciao Matteo, ti ricordiamo i corsi obbligatori da completare: «Vendita assistita e accoglienza cliente» (entro 18/10/2025).",
+      "type": "scadenza",
+      "date": "2026-07-20T17:11:41.450Z",
+      "status": "inviata"
+    },
+    {
+      "id": "e_1784567501450_07e78",
+      "userId": "u12",
+      "to": "f.zanetti@floridea.it",
+      "subject": "🚨 Corsi in scadenza: completa la formazione obbligatoria",
+      "body": "Ciao Federica, ti ricordiamo i corsi obbligatori da completare: «Vendita assistita e accoglienza cliente» (entro 02/11/2025).",
+      "type": "scadenza",
+      "date": "2026-07-20T17:11:41.450Z",
+      "status": "inviata"
+    },
+    {
+      "id": "e_1784567501450_fitlc",
+      "userId": "u13",
+      "to": "d.bortolami@nicoragarden.it",
+      "subject": "🚨 Corsi in scadenza: completa la formazione obbligatoria",
+      "body": "Ciao Davide, ti ricordiamo i corsi obbligatori da completare: «Vendita assistita e accoglienza cliente» (entro 01/04/2026).",
+      "type": "scadenza",
+      "date": "2026-07-20T17:11:41.450Z",
+      "status": "inviata"
+    },
+    {
+      "id": "e_1784567501451_qbfc8",
+      "userId": "u15",
+      "to": "g.tonin@iperverde.it",
+      "subject": "🚨 Corsi in scadenza: completa la formazione obbligatoria",
+      "body": "Ciao Giorgio, ti ricordiamo i corsi obbligatori da completare: «Benvenuti in Garden Team» (entro 20/07/2026), «Sicurezza sul lavoro — Formazione base» (entro 19/08/2026), «Vendita assistita e accoglienza cliente» (entro 18/09/2026).",
+      "type": "scadenza",
+      "date": "2026-07-20T17:11:41.451Z",
+      "status": "inviata"
+    },
+    {
+      "id": "e_1784571585008_reg",
+      "userId": "",
+      "to": "formazione@rosaflor.it",
+      "subject": "🔔 Nuova richiesta di registrazione: Martina Zonta",
+      "body": "Martina Zonta (m.zonta@example.com) chiede di registrarsi ad Academy GT per Rosàflor. Approva o rifiuta la richiesta dalla pagina Utenti.",
+      "type": "assegnazione",
+      "date": "2026-07-20T18:19:45.008Z",
+      "status": "inviata"
+    },
+    {
+      "id": "e_1784571603150_aq4eo",
+      "userId": "u_1784571603149_reg",
+      "to": "m.zonta@example.com",
+      "subject": "🌱 Martina, benvenuto nella squadra Garden Team!",
+      "body": "Ciao Martina, il tuo account Academy GT è attivo. Nella tua area personale trovi i corsi già assegnati in base al tuo profilo.",
+      "type": "benvenuto",
+      "date": "2026-07-20T18:20:03.150Z",
+      "status": "inviata"
+    },
+    {
+      "id": "e_1784668806385_ucupj",
+      "userId": "u_1784668806384_0",
+      "to": "e.fontana@rosaflor.it",
+      "subject": "🌱 Elisa, benvenuto in Rosaflor nella squadra Garden Team!",
+      "body": "Ciao Elisa, il tuo account Academy GT è attivo. Nella tua area personale trovi i corsi già assegnati in base al tuo profilo.",
+      "type": "benvenuto",
+      "date": "2026-07-21T21:20:06.385Z",
+      "status": "inviata"
+    },
+    {
+      "id": "e_1784668806385_vnjie",
+      "userId": "u_1784668806384_0",
+      "to": "e.fontana@rosaflor.it",
+      "subject": "📦 Elisa, ritira il tuo kit da collega!",
+      "body": "Ciao Elisa, sei stata inserita in Academy GT: passa in ufficio a ritirare divisa e cartellino.",
+      "type": "benvenuto",
+      "date": "2026-07-21T21:20:06.385Z",
+      "status": "inviata"
+    }
+  ],
+  "registrations": [
+    {
+      "id": "r_1784571585008",
+      "firstName": "Martina",
+      "lastName": "Zonta",
+      "email": "m.zonta@example.com",
+      "tenantId": "t1",
+      "storeId": "s1",
+      "departmentId": "d1",
+      "birthDate": "1999-04-12",
+      "taxCode": "ZNTMTN99D52A703X",
+      "date": "2026-07-20T18:19:45.008Z",
+      "status": "approved"
+    }
+  ],
+  "templates": [
+    {
+      "type": "benvenuto",
+      "enabled": true,
+      "subject": "🌱 {{nome}}, [benvenuto|benvenuta] nella squadra Garden Team!",
+      "body": "Ciao {{nome}}, il tuo account Academy GT è attivo. Nella tua area personale trovi i corsi già assegnati in base al tuo profilo."
+    },
+    {
+      "type": "assegnazione",
+      "enabled": true,
+      "subject": "📬 Nuovo corso assegnato: «{{corso}}»",
+      "body": "Ciao {{nome}}, ti è stato assegnato il corso «{{corso}}». Lo trovi nella tua area personale."
+    },
+    {
+      "type": "promemoria",
+      "enabled": true,
+      "subject": "⏰ Promemoria: hai corsi da completare",
+      "body": "Ciao {{nome}}, ti ricordiamo i corsi obbligatori da completare: {{elenco}}."
+    },
+    {
+      "type": "scadenza",
+      "enabled": true,
+      "subject": "🚨 Corsi in scadenza: completa la formazione obbligatoria",
+      "body": "Ciao {{nome}}, attenzione: questi corsi sono in scadenza o già scaduti: {{elenco}}. Completali al più presto."
+    },
+    {
+      "type": "completamento",
+      "enabled": true,
+      "subject": "🎉 Hai completato «{{corso}}»",
+      "body": "Ottimo lavoro {{nome}}: corso completato e {{punti}} punti guadagnati."
+    },
+    {
+      "type": "certificato",
+      "enabled": true,
+      "subject": "📜 Certificato emesso: «{{corso}}»",
+      "body": "Complimenti {{nome}}! Hai completato il corso «{{corso}}» e il certificato è disponibile nella tua area personale."
+    },
+    {
+      "type": "benvenuto",
+      "enabled": true,
+      "subject": "🌱 {{nome}}, benvenuto in Rosaflor nella squadra Garden Team!",
+      "body": "Ciao {{nome}}, il tuo account Academy GT è attivo. Nella tua area personale trovi i corsi già assegnati in base al tuo profilo.",
+      "tenantId": "t1",
+      "storeId": "s1"
+    }
+  ],
+  "settings": {
+    "portalName": "Academy GT",
+    "logoUrl": "/loghi/gardenteam.png",
+    "colorPrimary": "#00652e",
+    "colorAccent": "#8dc63f",
+    "welcome": "Dal Consorzio: è online il nuovo catalogo corsi autunno! 🍂",
+    "supportEmail": "academy@gardenteam.biz",
+    "urgentDays": 7,
+    "font": "nunito"
+  },
+  "groups": [
+    {
+      "id": "g_1784632062370",
+      "name": "Referenti sicurezza",
+      "emoji": "🦺"
+    }
+  ],
+  "customTemplates": [
+    {
+      "id": "ct_1784668785932",
+      "name": "Kit di benvenuto",
+      "trigger": "benvenuto",
+      "subject": "📦 {{nome}}, ritira il tuo kit da [collega|collega]!",
+      "body": "Ciao {{nome}}, [sei stato inserito|sei stata inserita] in Academy GT: passa in ufficio a ritirare divisa e cartellino.",
+      "enabled": true
+    }
+  ]
+}
