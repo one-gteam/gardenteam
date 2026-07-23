@@ -20,6 +20,11 @@ export const metadata: Metadata = {
   description: "La piattaforma di formazione del Consorzio Garden Team",
 };
 
+// App interamente dinamica (login via cookie, dati sempre live da Supabase):
+// niente va pre-generato in fase di build, altrimenti la build stessa dipende
+// da una chiamata di rete a Supabase riuscita in quel momento.
+export const dynamic = "force-dynamic";
+
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const { settings } = await getDb();
   // Palette derivata dai due colori del consorzio, applicata a tutto il portale
