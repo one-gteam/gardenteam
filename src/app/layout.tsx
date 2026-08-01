@@ -3,16 +3,23 @@ import { Inter, Nunito, Poppins, Quicksand } from "next/font/google";
 import { getDb } from "@/lib/db";
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"], display: "swap" });
-const nunito = Nunito({ subsets: ["latin"], display: "swap" });
-const poppins = Poppins({ subsets: ["latin"], weight: ["400", "600", "700", "800"], display: "swap" });
-const quicksand = Quicksand({ subsets: ["latin"], display: "swap" });
+/**
+ * Impostazione tipografica di My Rosaflor: Inter per il testo (denso e leggibile
+ * nelle tabelle), Poppins per i titoli (più caldo, richiama il brand).
+ * Entrambi esposti come variabili CSS e usati da globals.css.
+ */
+const interSans = Inter({ variable: "--font-app-sans", subsets: ["latin"], display: "swap" });
+const poppinsHeading = Poppins({
+  variable: "--font-app-heading", subsets: ["latin"], weight: ["600", "700"], display: "swap",
+});
 
-const FONT_CLASSES: Record<string, string> = {
-  inter: inter.className,
-  nunito: nunito.className,
-  poppins: poppins.className,
-  quicksand: quicksand.className,
+// Font alternativi selezionabili dall'amministratore per il testo del portale.
+const nunito = Nunito({ variable: "--font-alt", subsets: ["latin"], display: "swap" });
+const quicksand = Quicksand({ variable: "--font-alt", subsets: ["latin"], display: "swap" });
+
+const ALT_FONT_CLASSES: Record<string, string> = {
+  nunito: nunito.variable,
+  quicksand: quicksand.variable,
 };
 
 export const metadata: Metadata = {
@@ -38,13 +45,16 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       --green-50: color-mix(in srgb, ${settings.colorAccent} 11%, white);
     }
   `;
-  const fontClass = FONT_CLASSES[settings.font ?? "system"] ?? "";
+  // Il font scelto in Impostazioni sostituisce Inter solo per il testo: i titoli
+  // restano su Poppins, come su My Rosaflor.
+  const altFont = ALT_FONT_CLASSES[settings.font ?? ""] ?? "";
+  const fontVars = altFont ? `:root { --font-app-sans: var(--font-alt); }` : "";
   return (
-    <html lang="it">
+    <html lang="it" className={`${interSans.variable} ${poppinsHeading.variable} ${altFont}`}>
       <head>
-        <style dangerouslySetInnerHTML={{ __html: themeVars }} />
+        <style dangerouslySetInnerHTML={{ __html: themeVars + fontVars }} />
       </head>
-      <body className={fontClass}>{children}</body>
+      <body>{children}</body>
     </html>
   );
 }

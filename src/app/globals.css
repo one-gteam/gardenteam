@@ -6,11 +6,15 @@
   --green-500: #8dc63f;
   --green-100: #e6f4d5;
   --green-50: #f4faeb;
-  --ink: #1c2b21;
-  --muted: #5f7266;
-  --line: #dbe5dd;
-  --bg: #f6f8f6;
+  /* Superfici e testo allineati a My Rosaflor: avorio al posto del bianco puro,
+     bordi caldi, testo verde scurissimo. */
+  --ink: #1f2a20;
+  --muted: #6b7280;
+  --line: #e2e0d8;
+  --bg: #fdfbf7;
   --card: #ffffff;
+  --sand: #f2efe9; /* superficie neutra calda (fasce, righe alternate) */
+  --terracotta: #c97b4a; /* accento caldo Rosaflor */
   --amber: #d97706;
   --amber-bg: #fef3e2;
   --red: #c2410c;
@@ -25,10 +29,16 @@
 
 body {
   margin: 0;
-  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-family: var(--font-app-sans), "Segoe UI", system-ui, -apple-system, sans-serif;
   background: var(--bg);
   color: var(--ink);
   line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-app-heading), var(--font-app-sans), "Segoe UI", sans-serif;
+  letter-spacing: -0.01em;
 }
 
 a { color: var(--green-700); text-decoration: none; }
@@ -202,6 +212,31 @@ table.data tr:last-child td { border-bottom: none; }
   padding: 26px; display: flex; align-items: center; gap: 16px; margin-bottom: 16px;
 }
 .doc-frame .doc-icon { font-size: 40px; }
+
+/* Player video incorporato (YouTube non in elenco, Bunny, Vimeo, SharePoint, file) */
+.video-embed {
+  width: 100%; aspect-ratio: 16 / 9; border: none; border-radius: 12px;
+  background: #10190f; margin-bottom: 16px; display: block; overflow: hidden;
+}
+.video-embed iframe { width: 100%; height: 100%; border: 0; display: block; }
+
+/* PDF sfogliabile nelle lezioni fatte di soli documenti */
+.doc-embed {
+  width: 100%; height: 620px; border: 1.5px solid var(--line);
+  border-radius: 12px; margin-bottom: 16px; background: var(--sand);
+}
+
+/* Slide e materiali scaricabili sotto al contenuto della lezione */
+.materials { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 14px; }
+.materials-list { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.material-item {
+  display: flex; align-items: center; gap: 12px; padding: 11px 14px;
+  border: 1.5px solid var(--line); border-radius: 10px; background: var(--card);
+  color: var(--ink); font-size: 14px; font-weight: 600;
+}
+.material-item:hover { border-color: var(--green-500); background: var(--green-50); text-decoration: none; }
+.material-item .material-icon { font-size: 22px; }
+.material-item .material-dl { font-size: 12.5px; font-weight: 700; color: var(--green-700); white-space: nowrap; }
 
 /* ---------- Quiz ---------- */
 .quiz-q { margin-bottom: 22px; }

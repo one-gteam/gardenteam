@@ -8,7 +8,9 @@ import { getDb, saveDb } from "./db";
 import { uploadPublicFile } from "./supabase";
 import { AUTH_COOKIE, requireUser } from "./auth";
 import { expiringCourses, isCourseCompleted } from "./logic";
-import { Course, CourseLevel, DB, EmailType, LessonType, Role, SiteId, User, postLoginPath } from "./types";
+import {
+  Course, CourseLevel, DB, EmailType, Lesson, LessonAttachment, LessonType, Role, SiteId, User, postLoginPath,
+} from "./types";
 
 /** Sostituisce variabili {{...}} e declina il genere: [maschile|femminile]. */
 function renderText(s: string, user: User, vars: Record<string, string>): string {
@@ -366,6 +368,7 @@ export async function saveLesson(courseId: string, lessonId: string | null, form
   const type = String(formData.get("type") ?? "testo") as LessonType;
   const minutes = Math.max(1, Number(formData.get("minutes")) || 5);
   const content = String(formData.get("content") ?? "");
+  const videoUrl = String(formData.get("videoUrl") ?? "").trim();
 
   if (lessonId) {
     const lesson = course.lessons.find((l) => l.id === lessonId);
@@ -374,11 +377,85 @@ export async function saveLesson(courseId: string, lessonId: string | null, form
       lesson.type = type;
       lesson.minutes = minutes;
       lesson.content = content;
+      lesson.videoUrl = videoUrl || undefined;
     }
   } else {
-    course.lessons.push({ id: `l_${Date.now()}`, title, type, minutes, content });
+    const lesson: Lesson = { id: `l_${Date.now()}`, title, type, minutes, content };
+    if (videoUrl) lesson.videoUrl = videoUrl;
+    course.lessons.push(lesson);
+    // il primo allegato può arrivare già con il form di creazione
+    await attachToLesson(lesson, formData);
   }
   await saveDb(db);
+  redirect(`/admin/corsi/${courseId}?salvato=1`);
+}
+
+/* ---------- Allegati delle lezioni (slide, PDF, dispense) ---------- */
+
+const ATTACHMENT_KINDS: Record<string, LessonAttachment["kind"]> = {
+  pdf: "pdf", slide: "slide", altro: "altro",
+};
+
+/** Deduce il tipo di allegato dall'estensione, così l'utente non deve sceglierlo. */
+function attachmentKind(name: string, declared?: string): LessonAttachment["kind"] {
+  if (declared && ATTACHMENT_KINDS[declared]) return ATTACHMENT_KINDS[declared];
+  const ext = (name.split(".").pop() ?? "").toLowerCase();
+  if (ext === "pdf") return "pdf";
+  if (["ppt", "pptx", "key", "odp"].includes(ext)) return "slide";
+  return "altro";
+}
+
+/** Aggiunge alla lezione il file caricato e/o il link indicato nel form. */
+async function attachToLesson(lesson: Lesson, formData: FormData): Promise<boolean> {
+  const file = formData.get("attachment") as File | null;
+  const linkUrl = String(formData.get("attachmentUrl") ?? "").trim();
+  const declaredKind = String(formData.get("attachmentKind") ?? "");
+  const customName = String(formData.get("attachmentName") ?? "").trim();
+  lesson.attachments = lesson.attachments ?? [];
+  let added = false;
+
+  if (file && file.size > 0) {
+    const safe = file.name.toLowerCase().replace(/[^a-z0-9._-]/g, "_");
+    const url = await uploadPublicFile(
+      `materiali/${lesson.id}_${Date.now()}_${safe}`,
+      Buffer.from(await file.arrayBuffer()),
+      file.type || "application/octet-stream"
+    );
+    lesson.attachments.push({
+      id: `a_${Date.now()}`,
+      name: customName || file.name,
+      url,
+      kind: attachmentKind(file.name, declaredKind),
+      sizeKb: Math.round(file.size / 1024),
+    });
+    added = true;
+  }
+  if (linkUrl && /^https?:\/\//i.test(linkUrl)) {
+    lesson.attachments.push({
+      id: `a_${Date.now()}_l`,
+      name: customName || linkUrl.split("/").pop() || "Materiale",
+      url: linkUrl,
+      kind: attachmentKind(linkUrl, declaredKind),
+    });
+    added = true;
+  }
+  return added;
+}
+
+export async function addLessonAttachment(courseId: string, lessonId: string, formData: FormData) {
+  const { db, course } = await requireEditableCourse(courseId);
+  const lesson = course.lessons.find((l) => l.id === lessonId);
+  if (lesson && (await attachToLesson(lesson, formData))) await saveDb(db);
+  redirect(`/admin/corsi/${courseId}?salvato=1`);
+}
+
+export async function deleteLessonAttachment(courseId: string, lessonId: string, attachmentId: string) {
+  const { db, course } = await requireEditableCourse(courseId);
+  const lesson = course.lessons.find((l) => l.id === lessonId);
+  if (lesson) {
+    lesson.attachments = (lesson.attachments ?? []).filter((a) => a.id !== attachmentId);
+    await saveDb(db);
+  }
   redirect(`/admin/corsi/${courseId}?salvato=1`);
 }
 

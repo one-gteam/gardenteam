@@ -93,12 +93,28 @@ export function postLoginPath(user: User): string {
 
 export type LessonType = "video" | "slide" | "pdf" | "testo" | "quiz";
 
+/** Materiale allegato a una lezione: slide di accompagnamento, PDF, dispense. */
+export interface LessonAttachment {
+  id: string;
+  name: string;
+  url: string; // file caricato (Supabase Storage) o link esterno
+  kind: "pdf" | "slide" | "altro";
+  sizeKb?: number;
+}
+
 export interface Lesson {
   id: string;
   title: string;
   type: LessonType;
   minutes: number;
   content: string;
+  /**
+   * Link del video: YouTube (anche "non in elenco"), Bunny Stream, SharePoint/Stream
+   * o URL diretto a un file. Vuoto = nessun video ancora caricato.
+   */
+  videoUrl?: string;
+  /** Slide e PDF scaricabili: valgono sia per i video sia per le lezioni di soli documenti. */
+  attachments?: LessonAttachment[];
   questions?: QuizQuestion[]; // solo per le lezioni di tipo "quiz" (quiz intermedi)
 }
 
@@ -258,11 +274,13 @@ export interface PortalSettings {
   urgentDays?: number; // giorni prima della scadenza per l'avviso urgente (default 7)
 }
 
+/**
+ * Font del testo. I titoli sono sempre in Poppins, come su My Rosaflor:
+ * qui si sceglie solo il carattere del corpo del testo.
+ */
 export const FONT_OPTIONS: { id: string; label: string; desc: string }[] = [
-  { id: "system", label: "Segoe UI (sistema)", desc: "Il font attuale: neutro, zero caricamenti" },
-  { id: "inter", label: "Inter", desc: "Moderno e professionale, ottima leggibilità" },
+  { id: "inter", label: "Inter (come My Rosaflor)", desc: "Denso e leggibile nelle tabelle: lo stesso del gestionale" },
   { id: "nunito", label: "Nunito", desc: "Arrotondato e amichevole, adatto al mondo garden" },
-  { id: "poppins", label: "Poppins", desc: "Geometrico e contemporaneo, titoli d'impatto" },
   { id: "quicksand", label: "Quicksand", desc: "Leggero e informale, tono giovane" },
 ];
 
@@ -271,6 +289,7 @@ export const DEFAULT_SETTINGS: PortalSettings = {
   logoUrl: "/loghi/gardenteam.png",
   colorPrimary: "#00652e",
   colorAccent: "#8dc63f",
+  font: "inter",
 };
 
 export interface DB {

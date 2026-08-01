@@ -6,6 +6,7 @@ import Header from "@/components/Header";
 import { completeLesson, sendFeedback, submitLessonQuiz } from "@/lib/actions";
 import { courseCompletion, getProgress, isCourseCompleted } from "@/lib/logic";
 import { LEVEL_LABELS } from "@/lib/types";
+import { parseVideoUrl } from "@/lib/video";
 
 const TYPE_LABEL: Record<string, string> = {
   video: "🎬 Video",
@@ -14,6 +15,8 @@ const TYPE_LABEL: Record<string, string> = {
   testo: "📖 Lettura",
   quiz: "🧠 Quiz intermedio",
 };
+
+const ATTACHMENT_ICON: Record<string, string> = { pdf: "📄", slide: "🖥️", altro: "📎" };
 
 export default async function CoursePage({
   params,
@@ -43,6 +46,11 @@ export default async function CoursePage({
 
   const markDone = completeLesson.bind(null, course.id, lesson.id);
   const feedbackAction = sendFeedback.bind(null, course.id);
+
+  const video = parseVideoUrl(lesson.videoUrl);
+  const attachments = lesson.attachments ?? [];
+  // lezione di soli documenti: il primo PDF viene mostrato direttamente nella pagina
+  const inlinePdf = attachments.find((a) => a.kind === "pdf" || /\.pdf(\?|$)/i.test(a.url));
 
   return (
     <div>
@@ -97,27 +105,81 @@ export default async function CoursePage({
               <span className="pill pill-gray">{TYPE_LABEL[lesson.type]} · {lesson.minutes} min</span>
             </div>
 
-            {lesson.type === "video" && (
-              <div className="video-frame">
-                <div className="play-btn">▶</div>
-                <div style={{ fontSize: 13, opacity: 0.8 }}>Video lezione · {lesson.minutes} min (contenuto demo)</div>
+            {/* Video: YouTube (anche non in elenco), Bunny, Vimeo, SharePoint o file diretto */}
+            {video.kind === "iframe" && (
+              <div className="video-embed">
+                <iframe
+                  src={video.src}
+                  title={lesson.title}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+                  allowFullScreen
+                  loading="lazy"
+                />
               </div>
             )}
-            {(lesson.type === "pdf" || lesson.type === "slide") && (
-              <div className="doc-frame">
-                <span className="doc-icon">{lesson.type === "pdf" ? "📄" : "🖥️"}</span>
-                <div>
-                  <strong>{lesson.type === "pdf" ? "Materiale scaricabile" : "Presentazione"}</strong>
-                  <div style={{ fontSize: 13, color: "var(--muted)" }}>
-                    {lesson.type === "pdf"
-                      ? "In produzione qui sarà disponibile il PDF da scaricare."
-                      : "In produzione qui verranno sfogliate le slide del corso."}
-                  </div>
+            {video.kind === "file" && (
+              /* eslint-disable-next-line jsx-a11y/media-has-caption */
+              <video className="video-embed" src={video.src} controls preload="metadata" />
+            )}
+            {video.kind === "none" && lesson.type === "video" && (
+              <div className="video-frame">
+                <div className="play-btn">▶</div>
+                <div style={{ fontSize: 13, opacity: 0.8 }}>
+                  Il video di questa lezione non è ancora stato caricato.
                 </div>
               </div>
             )}
 
-            <p style={{ fontSize: 15, lineHeight: 1.7 }}>{lesson.content}</p>
+            {/* Lezione fatta di soli documenti: il primo PDF si sfoglia direttamente qui */}
+            {video.kind === "none" && (lesson.type === "pdf" || lesson.type === "slide") && (
+              inlinePdf ? (
+                <object className="doc-embed" data={inlinePdf.url} type="application/pdf">
+                  <div className="doc-frame">
+                    <span className="doc-icon">📄</span>
+                    <div>
+                      <strong>{inlinePdf.name}</strong>
+                      <div style={{ fontSize: 13, color: "var(--muted)" }}>
+                        Il browser non mostra il PDF qui:{" "}
+                        <a href={inlinePdf.url} target="_blank" rel="noopener noreferrer">aprilo in una nuova scheda</a>.
+                      </div>
+                    </div>
+                  </div>
+                </object>
+              ) : (
+                <div className="doc-frame">
+                  <span className="doc-icon">{lesson.type === "pdf" ? "📄" : "🖥️"}</span>
+                  <div>
+                    <strong>{lesson.type === "pdf" ? "Materiale scaricabile" : "Presentazione"}</strong>
+                    <div style={{ fontSize: 13, color: "var(--muted)" }}>
+                      Nessun documento ancora allegato a questa lezione.
+                    </div>
+                  </div>
+                </div>
+              )
+            )}
+
+            {lesson.content && <p style={{ fontSize: 15, lineHeight: 1.7 }}>{lesson.content}</p>}
+
+            {/* Slide e materiali della lezione */}
+            {attachments.length > 0 && (
+              <div className="materials">
+                <strong style={{ fontSize: 14 }}>📎 Materiali della lezione</strong>
+                <div className="materials-list">
+                  {attachments.map((a) => (
+                    <a key={a.id} className="material-item" href={a.url} target="_blank" rel="noopener noreferrer" download>
+                      <span className="material-icon">{ATTACHMENT_ICON[a.kind]}</span>
+                      <span style={{ flex: 1 }}>
+                        {a.name}
+                        {a.sizeKb !== undefined && (
+                          <span style={{ color: "var(--muted)", fontSize: 12 }}> · {a.sizeKb} KB</span>
+                        )}
+                      </span>
+                      <span className="material-dl">Scarica ↓</span>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {lesson.type === "quiz" && (
               <div>

@@ -13,6 +13,8 @@ import {
   deleteQuestion,
   saveLessonQuestion,
   deleteLessonQuestion,
+  addLessonAttachment,
+  deleteLessonAttachment,
 } from "@/lib/actions";
 import { LEVEL_LABELS } from "@/lib/types";
 
@@ -23,6 +25,8 @@ const TYPE_OPTIONS = [
   { value: "testo", label: "📖 Testo / lettura" },
   { value: "quiz", label: "🧠 Quiz intermedio" },
 ];
+
+const ATTACHMENT_ICON: Record<string, string> = { pdf: "📄", slide: "🖥️", altro: "📎" };
 
 export default async function EditCoursePage({
   params,
@@ -234,12 +238,78 @@ export default async function EditCoursePage({
                         <input type="text" name="minutes" defaultValue={String(l.minutes)} />
                       </label>
                     </div>
+                    {l.type !== "quiz" && (
+                      <label className="field">
+                        🎬 Link del video {l.type !== "video" && <span className="hint">(facoltativo)</span>}
+                        <input
+                          type="text" name="videoUrl" defaultValue={l.videoUrl ?? ""}
+                          placeholder="https://www.youtube.com/watch?v=… (anche video non in elenco)"
+                        />
+                        <span className="hint">
+                          Funzionano i video YouTube <strong>non in elenco</strong>, Bunny Stream, Vimeo,
+                          SharePoint/Stream o un link diretto a un file .mp4. Puoi anche incollare il codice
+                          «Incorpora».
+                        </span>
+                      </label>
+                    )}
                     <label className="field">
                       {l.type === "quiz" ? "Introduzione al quiz" : "Contenuto / descrizione"}
                       <textarea name="content" rows={3} defaultValue={l.content} />
                     </label>
                     <button className="btn btn-sm" type="submit">💾 Salva lezione</button>
                   </form>
+
+                  {l.type !== "quiz" && (
+                    <div style={{ marginTop: 14, borderTop: "1.5px dashed var(--line)", paddingTop: 12 }}>
+                      <strong style={{ fontSize: 14 }}>📎 Slide e materiali scaricabili ({(l.attachments ?? []).length})</strong>
+                      <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "4px 0 10px" }}>
+                        Allega le slide del video o i PDF della lezione: lo studente li trova sotto al contenuto
+                        e può scaricarli.
+                      </p>
+                      {(l.attachments ?? []).length > 0 && (
+                        <div className="table-wrap" style={{ marginBottom: 10 }}>
+                          <table className="data">
+                            <tbody>
+                              {(l.attachments ?? []).map((a) => (
+                                <tr key={a.id}>
+                                  <td style={{ width: 34 }}>{ATTACHMENT_ICON[a.kind]}</td>
+                                  <td>
+                                    <a href={a.url} target="_blank" rel="noopener noreferrer">{a.name}</a>
+                                    {a.sizeKb !== undefined && (
+                                      <span style={{ fontSize: 11.5, color: "var(--muted)" }}> · {a.sizeKb} KB</span>
+                                    )}
+                                  </td>
+                                  <td style={{ width: 60 }}>
+                                    <form action={deleteLessonAttachment.bind(null, course.id, l.id, a.id)}>
+                                      <button className="btn btn-outline btn-sm" type="submit"
+                                        style={{ color: "var(--red)", borderColor: "var(--red)" }}>🗑</button>
+                                    </form>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                      <form action={addLessonAttachment.bind(null, course.id, l.id)}
+                        style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr auto", gap: 8, alignItems: "end" }}>
+                        <label className="field" style={{ marginBottom: 0 }}>
+                          File (PDF, PowerPoint…)
+                          <input type="file" name="attachment" accept=".pdf,.ppt,.pptx,.key,.odp,.doc,.docx,.xlsx,.zip"
+                            style={{ marginTop: 4, fontSize: 12 }} />
+                        </label>
+                        <label className="field" style={{ marginBottom: 0 }}>
+                          …oppure un link
+                          <input type="text" name="attachmentUrl" placeholder="https://…" />
+                        </label>
+                        <label className="field" style={{ marginBottom: 0 }}>
+                          Nome mostrato
+                          <input type="text" name="attachmentName" placeholder="es. Slide della lezione" />
+                        </label>
+                        <button className="btn btn-sm" type="submit">➕ Allega</button>
+                      </form>
+                    </div>
+                  )}
 
                   {l.type === "quiz" && (
                     <div style={{ marginTop: 14, borderTop: "1.5px dashed var(--line)", paddingTop: 12 }}>
@@ -334,9 +404,25 @@ export default async function EditCoursePage({
                 </label>
               </div>
               <label className="field">
+                🎬 Link del video <span className="hint">(facoltativo)</span>
+                <input type="text" name="videoUrl"
+                  placeholder="https://www.youtube.com/watch?v=… (anche video non in elenco)" />
+              </label>
+              <label className="field">
                 Contenuto / descrizione
                 <textarea name="content" rows={2} placeholder="Testo della lezione o descrizione del video/materiale" />
               </label>
+              <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 10 }}>
+                <label className="field">
+                  📎 Slide o PDF <span className="hint">(facoltativo)</span>
+                  <input type="file" name="attachment" accept=".pdf,.ppt,.pptx,.key,.odp,.doc,.docx,.xlsx,.zip"
+                    style={{ marginTop: 4, fontSize: 12 }} />
+                </label>
+                <label className="field">
+                  Nome del materiale
+                  <input type="text" name="attachmentName" placeholder="es. Slide della lezione" />
+                </label>
+              </div>
               <button className="btn btn-sm" type="submit">➕ Aggiungi lezione</button>
             </form>
           </div>
