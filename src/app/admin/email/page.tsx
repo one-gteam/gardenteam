@@ -178,8 +178,9 @@ export default async function EmailPage({
             <div style={{ flex: 1, minWidth: 260 }}>
               <h3 style={{ margin: 0 }}>▶ Esegui ora il controllo promemoria</h3>
               <p style={{ fontSize: 13, color: "var(--muted)", margin: "4px 0 0" }}>
-                Simula il job notturno: analizza tutti i collaboratori attivi e genera i promemoria per i corsi
-                obbligatori non completati (max 1 email al giorno per persona).
+                Simula il job notturno: genera i promemoria per i corsi obbligatori non completati
+                (max 1 email al giorno per persona) e i promemoria dei <strong>corsi in programma</strong>
+                nei giorni impostati su ciascuna edizione.
               </p>
             </div>
             <form action={runReminders}>

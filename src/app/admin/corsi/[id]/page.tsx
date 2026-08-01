@@ -3,30 +3,12 @@ import { notFound, redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import Header from "@/components/Header";
-import {
-  updateCourse,
-  deleteCourse,
-  saveLesson,
-  deleteLesson,
-  moveLesson,
-  saveQuestion,
-  deleteQuestion,
-  saveLessonQuestion,
-  deleteLessonQuestion,
-  addLessonAttachment,
-  deleteLessonAttachment,
-} from "@/lib/actions";
+import LessonsPanel from "@/components/LessonsPanel";
+import SessionsPanel from "@/components/SessionsPanel";
+import CourseShareBar from "@/components/CourseShareBar";
+import { updateCourse, deleteCourse, saveQuestion, deleteQuestion } from "@/lib/actions";
+import { courseVisibleTo } from "@/lib/logic";
 import { LEVEL_LABELS } from "@/lib/types";
-
-const TYPE_OPTIONS = [
-  { value: "video", label: "🎬 Video" },
-  { value: "slide", label: "🖥️ Slide" },
-  { value: "pdf", label: "📄 PDF" },
-  { value: "testo", label: "📖 Testo / lettura" },
-  { value: "quiz", label: "🧠 Quiz intermedio" },
-];
-
-const ATTACHMENT_ICON: Record<string, string> = { pdf: "📄", slide: "🖥️", altro: "📎" };
 
 export default async function EditCoursePage({
   params,
@@ -71,8 +53,11 @@ export default async function EditCoursePage({
 
   const updateAction = updateCourse.bind(null, course.id);
   const deleteAction = deleteCourse.bind(null, course.id);
-  const addLessonAction = saveLesson.bind(null, course.id, null);
   const addQuestionAction = saveQuestion.bind(null, course.id, null);
+  // quante persone riceveranno la convocazione di un'edizione programmata
+  const recipients = db.users.filter(
+    (u) => u.active !== false && (u.role === "student" || u.role === "dept_head") && courseVisibleTo(course, u)
+  ).length;
 
   return (
     <div>
@@ -86,8 +71,10 @@ export default async function EditCoursePage({
           <span className="pill pill-blue">{LEVEL_LABELS[course.level]}</span>
         </div>
         <p className="subtitle" style={{ marginTop: 6 }}>
-          {course.lessons.length} lezioni · {course.quiz.length} domande quiz
+          {course.lessons.length} lezioni · {course.quiz.length} domande quiz · {recipients} destinatari
         </p>
+
+        <CourseShareBar courseId={course.id} />
 
         {creato && <div className="alert alert-green">✓ Corso creato: ora aggiungi lezioni e quiz qui sotto.</div>}
         {salvato && <div className="alert alert-green">✓ Modifiche salvate.</div>}
@@ -194,239 +181,24 @@ export default async function EditCoursePage({
         <div className="section">
           <div className="section-head">
             <h2>📚 Lezioni ({course.lessons.length})</h2>
-            <span className="hint">modifica, riordina o elimina i contenuti</span>
+            <span className="hint">apri una lezione per modificarla · le modifiche si salvano senza ricaricare</span>
           </div>
-          <div className="grid" style={{ gridTemplateColumns: "1fr" }}>
-            {course.lessons.map((l, i) => {
-              const saveAction = saveLesson.bind(null, course.id, l.id);
-              const delAction = deleteLesson.bind(null, course.id, l.id);
-              const upAction = moveLesson.bind(null, course.id, l.id, -1);
-              const downAction = moveLesson.bind(null, course.id, l.id, 1);
-              return (
-                <div className="card" key={l.id}>
-                  <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10, flexWrap: "wrap" }}>
-                    <span className="rank-pos">{i + 1}</span>
-                    <strong style={{ flex: 1 }}>{l.title}</strong>
-                    <form action={upAction}>
-                      <button className="btn btn-outline btn-sm" type="submit" disabled={i === 0} title="Sposta su">↑</button>
-                    </form>
-                    <form action={downAction}>
-                      <button className="btn btn-outline btn-sm" type="submit" disabled={i === course.lessons.length - 1} title="Sposta giù">↓</button>
-                    </form>
-                    <form action={delAction}>
-                      <button className="btn btn-outline btn-sm" type="submit" style={{ color: "var(--red)", borderColor: "var(--red)" }}>
-                        🗑 Elimina
-                      </button>
-                    </form>
-                  </div>
-                  <form action={saveAction}>
-                    <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 90px", gap: 12 }}>
-                      <label className="field">
-                        Titolo
-                        <input type="text" name="title" defaultValue={l.title} required />
-                      </label>
-                      <label className="field">
-                        Tipo
-                        <select name="type" defaultValue={l.type}>
-                          {TYPE_OPTIONS.map((t) => (
-                            <option key={t.value} value={t.value}>{t.label}</option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="field">
-                        Minuti
-                        <input type="text" name="minutes" defaultValue={String(l.minutes)} />
-                      </label>
-                    </div>
-                    {l.type !== "quiz" && (
-                      <label className="field">
-                        🎬 Link del video {l.type !== "video" && <span className="hint">(facoltativo)</span>}
-                        <input
-                          type="text" name="videoUrl" defaultValue={l.videoUrl ?? ""}
-                          placeholder="https://www.youtube.com/watch?v=… (anche video non in elenco)"
-                        />
-                        <span className="hint">
-                          Funzionano i video YouTube <strong>non in elenco</strong>, Bunny Stream, Vimeo,
-                          SharePoint/Stream o un link diretto a un file .mp4. Puoi anche incollare il codice
-                          «Incorpora».
-                        </span>
-                      </label>
-                    )}
-                    <label className="field">
-                      {l.type === "quiz" ? "Introduzione al quiz" : "Contenuto / descrizione"}
-                      <textarea name="content" rows={3} defaultValue={l.content} />
-                    </label>
-                    <button className="btn btn-sm" type="submit">💾 Salva lezione</button>
-                  </form>
-
-                  {l.type !== "quiz" && (
-                    <div style={{ marginTop: 14, borderTop: "1.5px dashed var(--line)", paddingTop: 12 }}>
-                      <strong style={{ fontSize: 14 }}>📎 Slide e materiali scaricabili ({(l.attachments ?? []).length})</strong>
-                      <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "4px 0 10px" }}>
-                        Allega le slide del video o i PDF della lezione: lo studente li trova sotto al contenuto
-                        e può scaricarli.
-                      </p>
-                      {(l.attachments ?? []).length > 0 && (
-                        <div className="table-wrap" style={{ marginBottom: 10 }}>
-                          <table className="data">
-                            <tbody>
-                              {(l.attachments ?? []).map((a) => (
-                                <tr key={a.id}>
-                                  <td style={{ width: 34 }}>{ATTACHMENT_ICON[a.kind]}</td>
-                                  <td>
-                                    <a href={a.url} target="_blank" rel="noopener noreferrer">{a.name}</a>
-                                    {a.sizeKb !== undefined && (
-                                      <span style={{ fontSize: 11.5, color: "var(--muted)" }}> · {a.sizeKb} KB</span>
-                                    )}
-                                  </td>
-                                  <td style={{ width: 60 }}>
-                                    <form action={deleteLessonAttachment.bind(null, course.id, l.id, a.id)}>
-                                      <button className="btn btn-outline btn-sm" type="submit"
-                                        style={{ color: "var(--red)", borderColor: "var(--red)" }}>🗑</button>
-                                    </form>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-                      <form action={addLessonAttachment.bind(null, course.id, l.id)}
-                        style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr auto", gap: 8, alignItems: "end" }}>
-                        <label className="field" style={{ marginBottom: 0 }}>
-                          File (PDF, PowerPoint…)
-                          <input type="file" name="attachment" accept=".pdf,.ppt,.pptx,.key,.odp,.doc,.docx,.xlsx,.zip"
-                            style={{ marginTop: 4, fontSize: 12 }} />
-                        </label>
-                        <label className="field" style={{ marginBottom: 0 }}>
-                          …oppure un link
-                          <input type="text" name="attachmentUrl" placeholder="https://…" />
-                        </label>
-                        <label className="field" style={{ marginBottom: 0 }}>
-                          Nome mostrato
-                          <input type="text" name="attachmentName" placeholder="es. Slide della lezione" />
-                        </label>
-                        <button className="btn btn-sm" type="submit">➕ Allega</button>
-                      </form>
-                    </div>
-                  )}
-
-                  {l.type === "quiz" && (
-                    <div style={{ marginTop: 14, borderTop: "1.5px dashed var(--line)", paddingTop: 12 }}>
-                      <strong style={{ fontSize: 14 }}>🧠 Domande del quiz intermedio ({(l.questions ?? []).length})</strong>
-                      <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "4px 0 10px" }}>
-                        Lo studente supera il capitolo rispondendo correttamente ad almeno il {course.passScore}% delle domande.
-                      </p>
-                      {(l.questions ?? []).map((q, qi) => {
-                        const saveLQ = saveLessonQuestion.bind(null, course.id, l.id, q.id);
-                        const delLQ = deleteLessonQuestion.bind(null, course.id, l.id, q.id);
-                        return (
-                          <div key={q.id} style={{ background: "var(--green-50)", borderRadius: 10, padding: 12, marginBottom: 10 }}>
-                            <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
-                              <span className="pill pill-gray">{qi + 1}</span>
-                              <strong style={{ flex: 1, fontSize: 13.5 }}>{q.text}</strong>
-                              <form action={delLQ}>
-                                <button className="btn btn-outline btn-sm" type="submit" style={{ color: "var(--red)", borderColor: "var(--red)" }}>🗑</button>
-                              </form>
-                            </div>
-                            <form action={saveLQ}>
-                              <label className="field">Domanda<input type="text" name="text" defaultValue={q.text} required /></label>
-                              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
-                                {[0, 1, 2, 3].map((oi) => (
-                                  <label className="field" key={oi}>
-                                    Risposta {oi + 1} {oi === q.correct && "✅"}
-                                    <input type="text" name={`opt${oi}`} defaultValue={q.options[oi] ?? ""} />
-                                  </label>
-                                ))}
-                              </div>
-                              <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
-                                <label className="field" style={{ maxWidth: 200, marginBottom: 0 }}>
-                                  Risposta corretta
-                                  <select name="correct" defaultValue={String(q.correct)}>
-                                    {q.options.map((_, oi) => <option key={oi} value={oi}>Risposta {oi + 1}</option>)}
-                                  </select>
-                                </label>
-                                <button className="btn btn-sm" type="submit">💾 Salva</button>
-                              </div>
-                            </form>
-                          </div>
-                        );
-                      })}
-                      <details style={{ marginTop: 6 }}>
-                        <summary style={{ cursor: "pointer", fontWeight: 700, fontSize: 13.5 }}>➕ Aggiungi domanda al quiz intermedio</summary>
-                        <form action={saveLessonQuestion.bind(null, course.id, l.id, null)} style={{ marginTop: 10 }}>
-                          <label className="field">Domanda<input type="text" name="text" required /></label>
-                          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
-                            {[0, 1, 2, 3].map((oi) => (
-                              <label className="field" key={oi}>
-                                Risposta {oi + 1}
-                                <input type="text" name={`opt${oi}`} placeholder={oi < 2 ? "obbligatoria" : "facoltativa"} />
-                              </label>
-                            ))}
-                          </div>
-                          <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
-                            <label className="field" style={{ maxWidth: 200, marginBottom: 0 }}>
-                              Risposta corretta
-                              <select name="correct" defaultValue="0">
-                                {[0, 1, 2, 3].map((oi) => <option key={oi} value={oi}>Risposta {oi + 1}</option>)}
-                              </select>
-                            </label>
-                            <button className="btn btn-sm" type="submit">➕ Aggiungi</button>
-                          </div>
-                        </form>
-                      </details>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="card" style={{ marginTop: 16, background: "var(--green-50)" }}>
-            <h3>➕ Aggiungi una lezione</h3>
-            <form action={addLessonAction}>
-              <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 90px", gap: 12 }}>
-                <label className="field">
-                  Titolo
-                  <input type="text" name="title" required placeholder="es. Le piante grasse" />
-                </label>
-                <label className="field">
-                  Tipo
-                  <select name="type" defaultValue="video">
-                    {TYPE_OPTIONS.map((t) => (
-                      <option key={t.value} value={t.value}>{t.label}</option>
-                    ))}
-                  </select>
-                </label>
-                <label className="field">
-                  Minuti
-                  <input type="text" name="minutes" defaultValue="10" />
-                </label>
-              </div>
-              <label className="field">
-                🎬 Link del video <span className="hint">(facoltativo)</span>
-                <input type="text" name="videoUrl"
-                  placeholder="https://www.youtube.com/watch?v=… (anche video non in elenco)" />
-              </label>
-              <label className="field">
-                Contenuto / descrizione
-                <textarea name="content" rows={2} placeholder="Testo della lezione o descrizione del video/materiale" />
-              </label>
-              <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 10 }}>
-                <label className="field">
-                  📎 Slide o PDF <span className="hint">(facoltativo)</span>
-                  <input type="file" name="attachment" accept=".pdf,.ppt,.pptx,.key,.odp,.doc,.docx,.xlsx,.zip"
-                    style={{ marginTop: 4, fontSize: 12 }} />
-                </label>
-                <label className="field">
-                  Nome del materiale
-                  <input type="text" name="attachmentName" placeholder="es. Slide della lezione" />
-                </label>
-              </div>
-              <button className="btn btn-sm" type="submit">➕ Aggiungi lezione</button>
-            </form>
-          </div>
+          <LessonsPanel courseId={course.id} lessons={course.lessons} passScore={course.passScore} />
         </div>
+
+        {/* ---------- Edizioni in programma ---------- */}
+        <div className="section">
+          <div className="section-head">
+            <h2>📅 Corso in programma ({(course.sessions ?? []).length})</h2>
+            <span className="hint">date in calendario, link Zoom e convocazioni automatiche</span>
+          </div>
+          <SessionsPanel
+            courseId={course.id}
+            sessions={course.sessions ?? []}
+            recipients={recipients}
+          />
+        </div>
+
 
         {/* ---------- Quiz ---------- */}
         <div className="section">

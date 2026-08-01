@@ -91,7 +91,17 @@ export function postLoginPath(user: User): string {
   return user.role === "student" ? "/studente" : "/admin";
 }
 
-export type LessonType = "video" | "slide" | "pdf" | "testo" | "quiz";
+/**
+ * Tipi di lezione: un video (con eventuali slide allegate), una lettura
+ * costruita su un PDF, oppure un quiz intermedio.
+ */
+export type LessonType = "video" | "pdf" | "quiz";
+
+export const LESSON_TYPES: { value: LessonType; label: string; hint: string }[] = [
+  { value: "video", label: "🎬 Video", hint: "Link YouTube/Bunny/SharePoint + slide allegate" },
+  { value: "pdf", label: "📄 Testo / lettura", hint: "Un PDF che lo studente sfoglia nella pagina" },
+  { value: "quiz", label: "🧠 Quiz intermedio", hint: "Domande a risposta multipla di fine capitolo" },
+];
 
 /** Materiale allegato a una lezione: slide di accompagnamento, PDF, dispense. */
 export interface LessonAttachment {
@@ -125,6 +135,25 @@ export interface QuizQuestion {
   correct: number;
 }
 
+/**
+ * Edizione programmata di un corso: una data in calendario (aula o Zoom) a cui
+ * i destinatari del corso vengono convocati via email.
+ */
+export interface CourseSession {
+  id: string;
+  date: string; // yyyy-mm-dd
+  time: string; // HH:mm
+  endTime?: string;
+  mode: "online" | "aula";
+  zoomUrl?: string; // link Zoom/Teams per le edizioni online
+  location?: string; // sede/aula per quelle in presenza
+  trainer?: string;
+  notes?: string;
+  reminderDays: number; // giorni prima per il promemoria automatico
+  invitedAt?: string; // convocazione già inviata (ISO)
+  reminderSentAt?: string; // promemoria già inviato (ISO)
+}
+
 export type CourseLevel = "sistema" | "insegna" | "punto_vendita";
 
 export const LEVEL_LABELS: Record<CourseLevel, string> = {
@@ -152,6 +181,7 @@ export interface Course {
   passScore: number; // percentuale
   points: number;
   coverUrl?: string; // immagine di copertina (in /uploads o URL esterno)
+  sessions?: CourseSession[]; // edizioni programmate in calendario
 }
 
 export interface LearningPath {
@@ -191,7 +221,9 @@ export interface Feedback {
   date: string;
 }
 
-export type EmailType = "benvenuto" | "assegnazione" | "promemoria" | "scadenza" | "completamento" | "certificato";
+export type EmailType =
+  | "benvenuto" | "assegnazione" | "promemoria" | "scadenza" | "completamento" | "certificato"
+  | "convocazione" | "promemoria_sessione";
 
 export const EMAIL_TYPE_LABELS: Record<EmailType, { label: string; emoji: string }> = {
   benvenuto: { label: "Benvenuto", emoji: "👋" },
@@ -200,6 +232,8 @@ export const EMAIL_TYPE_LABELS: Record<EmailType, { label: string; emoji: string
   scadenza: { label: "Corso in scadenza", emoji: "🚨" },
   completamento: { label: "Corso completato", emoji: "🎉" },
   certificato: { label: "Certificato emesso", emoji: "📜" },
+  convocazione: { label: "Convocazione a un corso in programma", emoji: "📅" },
+  promemoria_sessione: { label: "Promemoria corso in programma", emoji: "🔔" },
 };
 
 export interface EmailMessage {
@@ -245,6 +279,16 @@ export const DEFAULT_TEMPLATES: EmailTemplate[] = [
   { type: "scadenza", enabled: true, subject: "🚨 Corsi in scadenza: completa la formazione obbligatoria", body: "Ciao {{nome}}, attenzione: questi corsi sono in scadenza o già scaduti: {{elenco}}. Completali al più presto." },
   { type: "completamento", enabled: true, subject: "🎉 Hai completato «{{corso}}»", body: "Ottimo lavoro {{nome}}: corso completato e {{punti}} punti guadagnati." },
   { type: "certificato", enabled: true, subject: "📜 Certificato emesso: «{{corso}}»", body: "Complimenti {{nome}}! Hai completato il corso «{{corso}}» e il certificato è disponibile nella tua area personale." },
+  {
+    type: "convocazione", enabled: true,
+    subject: "📅 Sei [convocato|convocata] al corso «{{corso}}» del {{data}}",
+    body: "Ciao {{nome}}, sei [convocato|convocata] al corso «{{corso}}».\n\n📅 Data: {{data}}\n🕒 Orario: {{ora}}\n📍 Dove: {{dove}}\n{{link}}\n\n{{descrizione}}\n\nTi aspettiamo!",
+  },
+  {
+    type: "promemoria_sessione", enabled: true,
+    subject: "🔔 Promemoria: «{{corso}}» {{quando}}",
+    body: "Ciao {{nome}}, ti ricordiamo il corso «{{corso}}».\n\n📅 Data: {{data}}\n🕒 Orario: {{ora}}\n📍 Dove: {{dove}}\n{{link}}\n\n{{descrizione}}",
+  },
 ];
 
 export interface Registration {

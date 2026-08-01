@@ -27,6 +27,12 @@ export async function getDb(): Promise<DB> {
     if (!db.templates.some((x) => x.type === t.type && !x.tenantId)) db.templates.push({ ...t });
   }
   for (const u of db.users) if (u.active === undefined) u.active = true;
+  // le vecchie tipologie "testo" e "slide" confluiscono in "pdf" (Testo / lettura)
+  for (const c of db.courses) {
+    for (const l of c.lessons) {
+      if ((l.type as string) === "testo" || (l.type as string) === "slide") l.type = "pdf";
+    }
+  }
   return db;
 }
 

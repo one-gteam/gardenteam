@@ -238,6 +238,38 @@ table.data tr:last-child td { border-bottom: none; }
 .material-item .material-icon { font-size: 22px; }
 .material-item .material-dl { font-size: 12.5px; font-weight: 700; color: var(--green-700); white-space: nowrap; }
 
+/* ---------- Editor lezioni (admin) ---------- */
+.lesson-card { padding: 10px 12px; }
+.lesson-card-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.lesson-toggle {
+  flex: 1; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  background: none; border: none; cursor: pointer; text-align: left;
+  font-family: inherit; font-size: 14px; color: var(--ink); padding: 4px 2px;
+}
+.lesson-toggle:hover strong { color: var(--green-700); }
+.lesson-card-body { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 12px; }
+.lesson-sub { margin-top: 14px; border-top: 1.5px dashed var(--line); padding-top: 12px; }
+.quiz-edit { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; background: var(--sand); }
+.btn.danger, .btn-outline.danger { color: var(--red); border-color: var(--red); }
+.add-lesson-bar {
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  padding: 10px 12px; margin-bottom: 12px;
+  background: var(--green-50); border: 1.5px solid var(--green-100); border-radius: var(--radius);
+}
+.share-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 10px 0 16px; }
+.session-form { display: flex; flex-direction: column; gap: 2px; }
+
+/* ---------- Date in programma (vista studente) ---------- */
+.session-banner {
+  background: var(--green-50); border: 1.5px solid var(--green-500); border-radius: var(--radius);
+  padding: 14px 16px; margin-bottom: 20px;
+}
+.session-row {
+  display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+  margin-top: 8px; font-size: 14px;
+}
+.session-when { font-size: 15px; }
+
 /* ---------- Quiz ---------- */
 .quiz-q { margin-bottom: 22px; }
 .quiz-q .q-text { font-weight: 700; margin-bottom: 8px; }

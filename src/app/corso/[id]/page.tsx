@@ -47,6 +47,10 @@ export default async function CoursePage({
   const markDone = completeLesson.bind(null, course.id, lesson.id);
   const feedbackAction = sendFeedback.bind(null, course.id);
 
+  // edizioni programmate non ancora passate
+  const oggi = new Date().toISOString().slice(0, 10);
+  const nextSessions = (course.sessions ?? []).filter((s) => s.date >= oggi).slice(0, 3);
+
   const video = parseVideoUrl(lesson.videoUrl);
   const attachments = lesson.attachments ?? [];
   // lezione di soli documenti: il primo PDF viene mostrato direttamente nella pagina
@@ -74,6 +78,31 @@ export default async function CoursePage({
           </div>
           <div className="progress-label">{pct}% completato · +{course.points} punti al completamento</div>
         </div>
+
+        {/* Edizioni in calendario: le prossime date a cui si è convocati */}
+        {nextSessions.length > 0 && (
+          <div className="session-banner">
+            <strong style={{ fontSize: 14 }}>📅 {nextSessions.length > 1 ? "Prossime date in programma" : "Prossima data in programma"}</strong>
+            {nextSessions.map((s) => {
+              const [y, m, g] = s.date.split("-");
+              return (
+                <div key={s.id} className="session-row">
+                  <span className="session-when">
+                    <strong>{g}/{m}/{y}</strong> · {s.time}{s.endTime ? `–${s.endTime}` : ""}
+                  </span>
+                  <span>{s.mode === "online" ? "💻 Online" : `🏫 ${s.location || "In aula"}`}</span>
+                  {s.trainer && <span className="hint">docente: {s.trainer}</span>}
+                  {s.zoomUrl && (
+                    <a className="btn btn-sm" href={s.zoomUrl} target="_blank" rel="noopener noreferrer">
+                      🔗 Entra nella riunione
+                    </a>
+                  )}
+                  {s.notes && <span className="hint">{s.notes}</span>}
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         <div className="lesson-layout">
           <div className="card" style={{ padding: 12 }}>
@@ -131,7 +160,7 @@ export default async function CoursePage({
             )}
 
             {/* Lezione fatta di soli documenti: il primo PDF si sfoglia direttamente qui */}
-            {video.kind === "none" && (lesson.type === "pdf" || lesson.type === "slide") && (
+            {video.kind === "none" && lesson.type === "pdf" && (
               inlinePdf ? (
                 <object className="doc-embed" data={inlinePdf.url} type="application/pdf">
                   <div className="doc-frame">

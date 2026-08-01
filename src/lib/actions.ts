@@ -7,9 +7,10 @@ import { randomBytes, scryptSync, timingSafeEqual } from "crypto";
 import { getDb, saveDb } from "./db";
 import { uploadPublicFile } from "./supabase";
 import { AUTH_COOKIE, requireUser } from "./auth";
-import { expiringCourses, isCourseCompleted } from "./logic";
+import { courseVisibleTo, expiringCourses, isCourseCompleted } from "./logic";
 import {
-  Course, CourseLevel, DB, EmailType, Lesson, LessonAttachment, LessonType, Role, SiteId, User, postLoginPath,
+  Course, CourseLevel, CourseSession, DB, EmailType, Lesson, LessonAttachment, LessonType,
+  Role, SiteId, User, postLoginPath,
 } from "./types";
 
 /** Sostituisce variabili {{...}} e declina il genere: [maschile|femminile]. */
@@ -285,7 +286,7 @@ export async function createCourse(formData: FormData) {
       {
         id: `l_${Date.now()}`,
         title: "Introduzione al corso",
-        type: "testo",
+        type: "pdf",
         minutes: 5,
         content: "Contenuto in preparazione: il gestore dei corsi caricherà qui video, slide e materiali.",
       },
@@ -361,11 +362,15 @@ export async function deleteCourse(courseId: string) {
   redirect("/admin/corsi?eliminato=1");
 }
 
+/**
+ * Salva i campi della lezione. Non fa redirect: l'editor è un componente client
+ * che mostra il "salvato" senza far saltare la pagina.
+ */
 export async function saveLesson(courseId: string, lessonId: string | null, formData: FormData) {
   const { db, course } = await requireEditableCourse(courseId);
   const title = String(formData.get("title") ?? "").trim();
-  if (!title) redirect(`/admin/corsi/${courseId}`);
-  const type = String(formData.get("type") ?? "testo") as LessonType;
+  if (!title) return { ok: false as const, error: "Il titolo è obbligatorio" };
+  const type = String(formData.get("type") ?? "pdf") as LessonType;
   const minutes = Math.max(1, Number(formData.get("minutes")) || 5);
   const content = String(formData.get("content") ?? "");
   const videoUrl = String(formData.get("videoUrl") ?? "").trim();
@@ -377,17 +382,34 @@ export async function saveLesson(courseId: string, lessonId: string | null, form
       lesson.type = type;
       lesson.minutes = minutes;
       lesson.content = content;
-      lesson.videoUrl = videoUrl || undefined;
+      // il link del video ha senso solo sulle lezioni video
+      lesson.videoUrl = type === "video" && videoUrl ? videoUrl : undefined;
     }
   } else {
     const lesson: Lesson = { id: `l_${Date.now()}`, title, type, minutes, content };
-    if (videoUrl) lesson.videoUrl = videoUrl;
+    if (type === "video" && videoUrl) lesson.videoUrl = videoUrl;
     course.lessons.push(lesson);
     // il primo allegato può arrivare già con il form di creazione
     await attachToLesson(lesson, formData);
   }
   await saveDb(db);
-  redirect(`/admin/corsi/${courseId}?salvato=1`);
+  revalidatePath(`/admin/corsi/${courseId}`);
+  return { ok: true as const };
+}
+
+/** Crea una lezione vuota del tipo scelto e la aggiunge in fondo al corso. */
+export async function addLesson(courseId: string, type: LessonType) {
+  const { db, course } = await requireEditableCourse(courseId);
+  const defaults: Record<LessonType, { title: string; minutes: number }> = {
+    video: { title: "Nuova lezione video", minutes: 10 },
+    pdf: { title: "Nuova lettura", minutes: 10 },
+    quiz: { title: "Quiz del capitolo", minutes: 5 },
+  };
+  const lesson: Lesson = { id: `l_${Date.now()}`, type, content: "", ...defaults[type] };
+  course.lessons.push(lesson);
+  await saveDb(db);
+  revalidatePath(`/admin/corsi/${courseId}`);
+  return { ok: true as const, lessonId: lesson.id };
 }
 
 /* ---------- Allegati delle lezioni (slide, PDF, dispense) ---------- */
@@ -446,7 +468,8 @@ export async function addLessonAttachment(courseId: string, lessonId: string, fo
   const { db, course } = await requireEditableCourse(courseId);
   const lesson = course.lessons.find((l) => l.id === lessonId);
   if (lesson && (await attachToLesson(lesson, formData))) await saveDb(db);
-  redirect(`/admin/corsi/${courseId}?salvato=1`);
+  revalidatePath(`/admin/corsi/${courseId}`);
+  return { ok: true as const };
 }
 
 export async function deleteLessonAttachment(courseId: string, lessonId: string, attachmentId: string) {
@@ -456,7 +479,8 @@ export async function deleteLessonAttachment(courseId: string, lessonId: string,
     lesson.attachments = (lesson.attachments ?? []).filter((a) => a.id !== attachmentId);
     await saveDb(db);
   }
-  redirect(`/admin/corsi/${courseId}?salvato=1`);
+  revalidatePath(`/admin/corsi/${courseId}`);
+  return { ok: true as const };
 }
 
 export async function deleteLesson(courseId: string, lessonId: string) {
@@ -466,7 +490,8 @@ export async function deleteLesson(courseId: string, lessonId: string) {
     p.completedLessons = p.completedLessons.filter((id) => id !== lessonId);
   }
   await saveDb(db);
-  redirect(`/admin/corsi/${courseId}?salvato=1`);
+  revalidatePath(`/admin/corsi/${courseId}`);
+  return { ok: true as const };
 }
 
 export async function moveLesson(courseId: string, lessonId: string, dir: number) {
@@ -477,7 +502,8 @@ export async function moveLesson(courseId: string, lessonId: string, dir: number
     [course.lessons[i], course.lessons[j]] = [course.lessons[j], course.lessons[i]];
     await saveDb(db);
   }
-  redirect(`/admin/corsi/${courseId}`);
+  revalidatePath(`/admin/corsi/${courseId}`);
+  return { ok: true as const };
 }
 
 export async function saveQuestion(courseId: string, questionId: string | null, formData: FormData) {
@@ -509,6 +535,103 @@ export async function saveQuestion(courseId: string, questionId: string | null, 
  * Per ogni collaboratore attivo con corsi obbligatori non completati genera
  * un'email di promemoria (o di scadenza urgente se mancano meno di 7 giorni / è già scaduto).
  */
+/* ================== Corsi in programma (edizioni in calendario) ================== */
+
+/** Chi deve frequentare il corso: gli utenti attivi a cui il corso è assegnato. */
+function sessionRecipients(db: DB, course: Course): User[] {
+  return db.users.filter(
+    (u) => u.active !== false && (u.role === "student" || u.role === "dept_head") && courseVisibleTo(course, u)
+  );
+}
+
+function formatSessionVars(course: Course, s: CourseSession): Record<string, string> {
+  const [y, m, d] = s.date.split("-");
+  const dove = s.mode === "online" ? "Online" + (s.trainer ? ` · docente ${s.trainer}` : "") : (s.location || "In aula");
+  return {
+    corso: course.title,
+    descrizione: course.description ?? "",
+    data: `${d}/${m}/${y}`,
+    ora: s.endTime ? `${s.time} – ${s.endTime}` : s.time,
+    dove,
+    link: s.zoomUrl ? `🔗 Collegamento: ${s.zoomUrl}` : "",
+    docente: s.trainer ?? "",
+    note: s.notes ?? "",
+  };
+}
+
+/** Invia la convocazione (o il promemoria) a tutti i destinatari dell'edizione. */
+function sendSessionEmails(db: DB, course: Course, s: CourseSession, type: "convocazione" | "promemoria_sessione", quando = "") {
+  const vars = { ...formatSessionVars(course, s), quando };
+  let n = 0;
+  for (const u of sessionRecipients(db, course)) {
+    queueEmail(db, u, type, vars);
+    n++;
+  }
+  return n;
+}
+
+export async function saveCourseSession(courseId: string, sessionId: string | null, formData: FormData) {
+  const { db, course } = await requireEditableCourse(courseId);
+  const date = String(formData.get("date") ?? "").trim();
+  const time = String(formData.get("time") ?? "").trim();
+  if (!date || !time) return { ok: false as const, error: "Servono data e ora" };
+
+  const data = {
+    date,
+    time,
+    endTime: String(formData.get("endTime") ?? "").trim() || undefined,
+    mode: (String(formData.get("mode") ?? "online") === "aula" ? "aula" : "online") as CourseSession["mode"],
+    zoomUrl: String(formData.get("zoomUrl") ?? "").trim() || undefined,
+    location: String(formData.get("location") ?? "").trim() || undefined,
+    trainer: String(formData.get("trainer") ?? "").trim() || undefined,
+    notes: String(formData.get("notes") ?? "").trim() || undefined,
+    reminderDays: Math.max(0, Math.min(30, Number(formData.get("reminderDays")) || 3)),
+  };
+
+  course.sessions = course.sessions ?? [];
+  let session: CourseSession;
+  if (sessionId) {
+    const existing = course.sessions.find((x) => x.id === sessionId);
+    if (!existing) return { ok: false as const, error: "Edizione non trovata" };
+    Object.assign(existing, data);
+    session = existing;
+  } else {
+    session = { id: `s_${Date.now()}`, ...data };
+    course.sessions.push(session);
+  }
+  course.sessions.sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`));
+
+  // convocazione immediata, se richiesta
+  let invited = 0;
+  if (formData.get("convoca") === "on") {
+    invited = sendSessionEmails(db, course, session, "convocazione");
+    session.invitedAt = new Date().toISOString();
+  }
+  await saveDb(db);
+  revalidatePath(`/admin/corsi/${courseId}`);
+  return { ok: true as const, invited };
+}
+
+export async function deleteCourseSession(courseId: string, sessionId: string) {
+  const { db, course } = await requireEditableCourse(courseId);
+  course.sessions = (course.sessions ?? []).filter((s) => s.id !== sessionId);
+  await saveDb(db);
+  revalidatePath(`/admin/corsi/${courseId}`);
+  return { ok: true as const };
+}
+
+/** Invia (o rinvia) la convocazione per un'edizione già programmata. */
+export async function sendSessionInvites(courseId: string, sessionId: string) {
+  const { db, course } = await requireEditableCourse(courseId);
+  const s = (course.sessions ?? []).find((x) => x.id === sessionId);
+  if (!s) return { ok: false as const, invited: 0 };
+  const invited = sendSessionEmails(db, course, s, "convocazione");
+  s.invitedAt = new Date().toISOString();
+  await saveDb(db);
+  revalidatePath(`/admin/corsi/${courseId}`);
+  return { ok: true as const, invited };
+}
+
 export async function runReminders() {
   const admin = await requireUser();
   if (admin.role === "student") redirect("/studente");
@@ -531,8 +654,26 @@ export async function runReminders() {
     queueEmail(db, u, type, { elenco: list });
     sent++;
   }
+
+  // Promemoria delle edizioni in programma: partono nei giorni impostati
+  // sull'edizione e una volta sola.
+  let reminded = 0;
+  for (const course of db.courses) {
+    for (const s of course.sessions ?? []) {
+      if (s.reminderSentAt || s.date < today) continue;
+      const giorniMancanti = Math.round(
+        (new Date(`${s.date}T00:00:00`).getTime() - new Date(`${today}T00:00:00`).getTime()) / 86400000
+      );
+      if (giorniMancanti > s.reminderDays) continue;
+      const quando =
+        giorniMancanti <= 0 ? "è oggi" : giorniMancanti === 1 ? "è domani" : `tra ${giorniMancanti} giorni`;
+      reminded += sendSessionEmails(db, course, s, "promemoria_sessione", quando);
+      s.reminderSentAt = new Date().toISOString();
+    }
+  }
+
   await saveDb(db);
-  redirect(`/admin/email?promemoria=${sent}`);
+  redirect(`/admin/email?promemoria=${sent}&convocazioni=${reminded}`);
 }
 
 export async function toggleUserActive(userId: string) {
@@ -577,7 +718,8 @@ export async function saveLessonQuestion(courseId: string, lessonId: string, que
     lesson!.questions.push({ id: `q_${Date.now()}`, text, options, correct });
   }
   await saveDb(db);
-  redirect(`/admin/corsi/${courseId}?salvato=1`);
+  revalidatePath(`/admin/corsi/${courseId}`);
+  return { ok: true as const };
 }
 
 export async function deleteLessonQuestion(courseId: string, lessonId: string, questionId: string) {
@@ -585,7 +727,8 @@ export async function deleteLessonQuestion(courseId: string, lessonId: string, q
   const lesson = course.lessons.find((l) => l.id === lessonId);
   if (lesson) lesson.questions = (lesson.questions ?? []).filter((q) => q.id !== questionId);
   await saveDb(db);
-  redirect(`/admin/corsi/${courseId}?salvato=1`);
+  revalidatePath(`/admin/corsi/${courseId}`);
+  return { ok: true as const };
 }
 
 /** Consegna di un quiz intermedio da parte dello studente. */

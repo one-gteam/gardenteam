@@ -9,15 +9,12 @@ const daysAgo = (n: number) => {
 const lezVideo = (id: string, title: string, minutes: number, content: string) => ({
   id, title, type: "video" as const, minutes, content,
 });
+// Lettura: una lezione costruita su un PDF (o solo testo, finché il PDF non c'è)
 const lezTesto = (id: string, title: string, minutes: number, content: string) => ({
-  id, title, type: "testo" as const, minutes, content,
-});
-const lezPdf = (id: string, title: string, minutes: number, content: string) => ({
   id, title, type: "pdf" as const, minutes, content,
 });
-const lezSlide = (id: string, title: string, minutes: number, content: string) => ({
-  id, title, type: "slide" as const, minutes, content,
-});
+const lezPdf = lezTesto;
+const lezSlide = lezTesto;
 
 export function buildSeed(): DB {
   // Insegne reali del Consorzio Garden Team (fonte: gardenteam.biz) + Nicora Garden e Floridea
