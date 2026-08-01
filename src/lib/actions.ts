@@ -9,8 +9,8 @@ import { uploadPublicFile } from "./supabase";
 import { AUTH_COOKIE, requireUser } from "./auth";
 import { courseVisibleTo, expiringCourses, isCourseCompleted } from "./logic";
 import {
-  Course, CourseLevel, CourseSession, DB, EmailType, Lesson, LessonAttachment, LessonType,
-  Role, SiteId, User, postLoginPath,
+  Course, CourseLevel, CourseSession, DB, DEFAULT_WATCH_THRESHOLD, EmailType, Lesson, LessonAttachment,
+  LessonType, Role, SiteId, User, postLoginPath,
 } from "./types";
 
 /** Sostituisce variabili {{...}} e declina il genere: [maschile|femminile]. */
@@ -145,6 +145,68 @@ function maybeComplete(db: DB, userId: string, course: Course) {
     queueEmail(db, user, "completamento", { corso: course.title, punti: String(course.points) });
     awardBadges(db, userId);
   }
+}
+
+/**
+ * Registra quanto lo studente ha effettivamente guardato di una lezione video.
+ * Viene chiamata dal player mentre il video scorre: tiene il punto più avanzato
+ * raggiunto e i secondi realmente riprodotti (i salti in avanti non contano).
+ * Al superamento della soglia la lezione risulta completata da sola.
+ */
+export async function trackLessonView(
+  courseId: string,
+  lessonId: string,
+  data: { maxPercent: number; secondsWatched: number; durationSec?: number }
+) {
+  const user = await requireUser();
+  const db = await getDb();
+  const course = db.courses.find((c) => c.id === courseId);
+  if (!course || !course.lessons.some((l) => l.id === lessonId)) return { ok: false as const };
+
+  let prog = db.progress.find((p) => p.userId === user.id && p.courseId === courseId);
+  if (!prog) {
+    prog = { userId: user.id, courseId, completedLessons: [] };
+    db.progress.push(prog);
+  }
+  prog.views = prog.views ?? [];
+  const now = new Date().toISOString();
+  let view = prog.views.find((v) => v.lessonId === lessonId);
+  if (!view) {
+    view = { lessonId, maxPercent: 0, secondsWatched: 0, firstAt: now, lastAt: now };
+    prog.views.push(view);
+  }
+  view.maxPercent = Math.min(100, Math.max(view.maxPercent, Math.round(data.maxPercent)));
+  view.secondsWatched = Math.max(view.secondsWatched, Math.round(data.secondsWatched));
+  if (data.durationSec) view.durationSec = Math.round(data.durationSec);
+  view.lastAt = now;
+
+  /*
+   * Il completamento si basa sul tempo davvero riprodotto rispetto alla durata,
+   * non sul punto più avanzato raggiunto: così trascinare la barra fino in fondo
+   * non basta a far risultare il video visto.
+   */
+  const threshold = db.settings.watchThreshold ?? DEFAULT_WATCH_THRESHOLD;
+  const seenPercent = view.durationSec ? (view.secondsWatched / view.durationSec) * 100 : 0;
+  let justCompleted = false;
+  if (seenPercent >= threshold && !view.completedByWatch) {
+    view.completedByWatch = true;
+    if (!prog.completedLessons.includes(lessonId)) {
+      prog.completedLessons.push(lessonId);
+      const u = db.users.find((x) => x.id === user.id);
+      if (u) u.points += 10;
+      justCompleted = true;
+    }
+    maybeComplete(db, user.id, course);
+  }
+  await saveDb(db);
+  if (justCompleted) revalidatePath(`/corso/${courseId}`);
+  return {
+    ok: true as const,
+    seenPercent: Math.min(100, Math.round(seenPercent)),
+    maxPercent: view.maxPercent,
+    completed: view.completedByWatch === true,
+    justCompleted,
+  };
 }
 
 export async function completeLesson(courseId: string, lessonId: string) {
@@ -1020,6 +1082,8 @@ export async function saveAutomationSettings(formData: FormData) {
   const db = await getDb();
   const urgentDays = Number(formData.get("urgentDays"));
   if (urgentDays >= 1 && urgentDays <= 60) db.settings.urgentDays = Math.round(urgentDays);
+  const watch = Number(formData.get("watchThreshold"));
+  if (watch >= 50 && watch <= 100) db.settings.watchThreshold = Math.round(watch);
   await saveDb(db);
   redirect("/admin/email?template=1");
 }

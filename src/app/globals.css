@@ -238,6 +238,16 @@ table.data tr:last-child td { border-bottom: none; }
 .material-item .material-icon { font-size: 22px; }
 .material-item .material-dl { font-size: 12.5px; font-weight: 700; color: var(--green-700); white-space: nowrap; }
 
+/* ---------- Visione effettiva dei video ---------- */
+.watch-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: -8px 0 16px; }
+.watch-track {
+  flex: 1; min-width: 120px; height: 7px; border-radius: 99px;
+  background: var(--sand); overflow: hidden;
+}
+.watch-fill { height: 100%; background: var(--green-500); transition: width 0.4s ease; }
+.watch-fill.done { background: var(--green-700); }
+.watch-label { font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+
 /* ---------- Editor lezioni (admin) ---------- */
 .lesson-card { padding: 10px 12px; }
 .lesson-card-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }

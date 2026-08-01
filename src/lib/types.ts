@@ -196,6 +196,21 @@ export interface LearningPath {
   onlyNewHires?: boolean;
 }
 
+/**
+ * Visione effettiva di una lezione video: quanto ha davvero guardato lo studente.
+ * `secondsWatched` somma solo il tempo riprodotto realmente, quindi trascinare la
+ * barra in avanti non fa salire il conteggio.
+ */
+export interface LessonView {
+  lessonId: string;
+  maxPercent: number; // punto più avanzato raggiunto, 0-100
+  secondsWatched: number; // secondi effettivamente riprodotti
+  durationSec?: number;
+  firstAt: string;
+  lastAt: string;
+  completedByWatch?: boolean; // ha superato la soglia di visione
+}
+
 export interface Progress {
   userId: string;
   courseId: string;
@@ -203,7 +218,11 @@ export interface Progress {
   quizScore?: number;
   quizPassed?: boolean;
   completedAt?: string;
+  views?: LessonView[]; // tracciamento della visione, lezione per lezione
 }
+
+/** Percentuale di video da guardare perché la lezione risulti vista davvero. */
+export const DEFAULT_WATCH_THRESHOLD = 90;
 
 export interface Certificate {
   id: string;
@@ -316,6 +335,7 @@ export interface PortalSettings {
   supportEmail?: string;
   font?: string; // "system" | "inter" | "nunito" | "poppins" | "quicksand"
   urgentDays?: number; // giorni prima della scadenza per l'avviso urgente (default 7)
+  watchThreshold?: number; // % di video da guardare perché la lezione risulti vista (default 90)
 }
 
 /**

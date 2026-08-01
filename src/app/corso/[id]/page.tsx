@@ -5,8 +5,9 @@ import { getDb } from "@/lib/db";
 import Header from "@/components/Header";
 import { completeLesson, sendFeedback, submitLessonQuiz } from "@/lib/actions";
 import { courseCompletion, getProgress, isCourseCompleted } from "@/lib/logic";
-import { LEVEL_LABELS } from "@/lib/types";
+import { DEFAULT_WATCH_THRESHOLD, LEVEL_LABELS } from "@/lib/types";
 import { parseVideoUrl } from "@/lib/video";
+import TrackedVideo from "@/components/TrackedVideo";
 
 const TYPE_LABEL: Record<string, string> = {
   video: "🎬 Video",
@@ -52,6 +53,9 @@ export default async function CoursePage({
   const nextSessions = (course.sessions ?? []).filter((s) => s.date >= oggi).slice(0, 3);
 
   const video = parseVideoUrl(lesson.videoUrl);
+  // visione già registrata per questa lezione (percentuale e secondi effettivi)
+  const threshold = db.settings.watchThreshold ?? DEFAULT_WATCH_THRESHOLD;
+  const myView = prog?.views?.find((v) => v.lessonId === lesson.id);
   const attachments = lesson.attachments ?? [];
   // lezione di soli documenti: il primo PDF viene mostrato direttamente nella pagina
   const inlinePdf = attachments.find((a) => a.kind === "pdf" || /\.pdf(\?|$)/i.test(a.url));
@@ -134,21 +138,19 @@ export default async function CoursePage({
               <span className="pill pill-gray">{TYPE_LABEL[lesson.type]} · {lesson.minutes} min</span>
             </div>
 
-            {/* Video: YouTube (anche non in elenco), Bunny, Vimeo, SharePoint o file diretto */}
-            {video.kind === "iframe" && (
-              <div className="video-embed">
-                <iframe
-                  src={video.src}
-                  title={lesson.title}
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
-                  allowFullScreen
-                  loading="lazy"
-                />
-              </div>
-            )}
-            {video.kind === "file" && (
-              /* eslint-disable-next-line jsx-a11y/media-has-caption */
-              <video className="video-embed" src={video.src} controls preload="metadata" />
+            {/* Video: YouTube (anche non in elenco), Bunny, Vimeo, SharePoint o file diretto.
+                Su YouTube e sui file diretti la visione viene tracciata davvero. */}
+            {video.kind !== "none" && (
+              <TrackedVideo
+                key={lesson.id}
+                courseId={course.id}
+                lessonId={lesson.id}
+                title={lesson.title}
+                video={video}
+                threshold={threshold}
+                initialPercent={myView?.maxPercent ?? 0}
+                initialSeconds={myView?.secondsWatched ?? 0}
+              />
             )}
             {video.kind === "none" && lesson.type === "video" && (
               <div className="video-frame">

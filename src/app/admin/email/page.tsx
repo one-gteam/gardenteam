@@ -201,11 +201,17 @@ export default async function EmailPage({
                   Avviso urgente quando mancano meno di (giorni)
                   <input type="text" name="urgentDays" defaultValue={String(db.settings.urgentDays ?? 7)} />
                 </label>
+                <label className="field" style={{ marginBottom: 0, maxWidth: 280 }}>
+                  Video visto: lezione completata al (%)
+                  <input type="text" name="watchThreshold" defaultValue={String(db.settings.watchThreshold ?? 90)} />
+                </label>
                 <button className="btn btn-sm" type="submit">💾 Salva</button>
               </form>
               <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "10px 0 0" }}>
-                Sotto questa soglia il promemoria diventa &quot;Corso in scadenza&quot; (urgente). L&apos;attivazione
-                delle singole automazioni si gestisce con l&apos;interruttore di ogni modello qui sopra.
+                Sotto la soglia dei giorni il promemoria diventa &quot;Corso in scadenza&quot; (urgente).
+                La percentuale di visione è la quota di video da guardare perché la lezione risulti completata
+                automaticamente (vale per YouTube e per i file video caricati). L&apos;attivazione delle singole
+                automazioni si gestisce con l&apos;interruttore di ogni modello qui sopra.
               </p>
             </div>
           </div>

@@ -8,7 +8,7 @@ import SessionsPanel from "@/components/SessionsPanel";
 import CourseShareBar from "@/components/CourseShareBar";
 import { updateCourse, deleteCourse, saveQuestion, deleteQuestion } from "@/lib/actions";
 import { courseVisibleTo } from "@/lib/logic";
-import { LEVEL_LABELS } from "@/lib/types";
+import { DEFAULT_WATCH_THRESHOLD, LEVEL_LABELS } from "@/lib/types";
 
 export default async function EditCoursePage({
   params,
@@ -55,9 +55,43 @@ export default async function EditCoursePage({
   const deleteAction = deleteCourse.bind(null, course.id);
   const addQuestionAction = saveQuestion.bind(null, course.id, null);
   // quante persone riceveranno la convocazione di un'edizione programmata
-  const recipients = db.users.filter(
+  const destinatari = db.users.filter(
     (u) => u.active !== false && (u.role === "student" || u.role === "dept_head") && courseVisibleTo(course, u)
-  ).length;
+  );
+  const recipients = destinatari.length;
+
+  // Visione effettiva dei video: una riga per collaboratore che ha aperto il corso
+  const threshold = db.settings.watchThreshold ?? DEFAULT_WATCH_THRESHOLD;
+  const videoLessons = course.lessons.filter((l) => l.type === "video" && l.videoUrl);
+  // destinatari attuali + chiunque abbia già lavorato sul corso (può non essere più
+  // fra i destinatari, ad es. un corso riservato ai neoassunti)
+  const conProgresso = db.users.filter(
+    (u) => !destinatari.some((d) => d.id === u.id) &&
+      db.progress.some((p) => p.userId === u.id && p.courseId === course.id)
+  );
+  const watchRows = [...destinatari, ...conProgresso]
+    .map((u) => {
+      const prog = db.progress.find((p) => p.userId === u.id && p.courseId === course.id);
+      const cells = videoLessons.map((l) => {
+        const v = prog?.views?.find((x) => x.lessonId === l.id);
+        // quota realmente vista (tempo riprodotto / durata), non il punto raggiunto
+        const seen = v && v.durationSec ? Math.min(100, Math.round((v.secondsWatched / v.durationSec) * 100)) : null;
+        return {
+          lessonId: l.id,
+          percent: v ? (seen ?? 0) : null,
+          reached: v?.maxPercent ?? null,
+          minutes: v ? Math.round(v.secondsWatched / 60) : 0,
+          manual: prog?.completedLessons.includes(l.id) ?? false,
+        };
+      });
+      return {
+        user: u,
+        storeName: db.stores.find((s) => s.id === u.storeId)?.name ?? "",
+        cells,
+        touched: cells.some((c) => c.percent !== null || c.manual),
+      };
+    })
+    .filter((r) => r.touched);
 
   return (
     <div>
@@ -199,6 +233,63 @@ export default async function EditCoursePage({
           />
         </div>
 
+
+        {/* ---------- Chi ha visto davvero i video ---------- */}
+        {videoLessons.length > 0 && (
+          <div className="section">
+            <div className="section-head">
+              <h2>👁 Visione dei video</h2>
+              <span className="hint">
+                minuti realmente riprodotti, non il punto dove è arrivata la barra · completamento automatico
+                al {threshold}% · «man.» = segnata a mano senza guardare
+              </span>
+            </div>
+            <div className="card table-wrap">
+              <table className="data">
+                <thead>
+                  <tr>
+                    <th>Collaboratore</th>
+                    {videoLessons.map((l) => (
+                      <th key={l.id} style={{ fontSize: 12 }}>🎬 {l.title.slice(0, 28)}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {watchRows.length === 0 && (
+                    <tr><td colSpan={videoLessons.length + 1} className="empty">Nessuno ha ancora aperto i video di questo corso.</td></tr>
+                  )}
+                  {watchRows.map((row) => (
+                    <tr key={row.user.id}>
+                      <td>
+                        <strong>{row.user.firstName} {row.user.lastName}</strong>
+                        <div className="hint">{row.storeName}</div>
+                      </td>
+                      {row.cells.map((c) => (
+                        <td key={c.lessonId} style={{ minWidth: 120 }}>
+                          {c.percent === null && !c.manual ? (
+                            <span className="hint">—</span>
+                          ) : (
+                            <>
+                              <div className="watch-track" style={{ marginBottom: 3 }}>
+                                <div className={`watch-fill ${c.percent !== null && c.percent >= threshold ? "done" : ""}`}
+                                  style={{ width: `${c.percent ?? 0}%` }} />
+                              </div>
+                              <span style={{ fontSize: 12 }} title={c.reached !== null ? `arrivato fino al ${c.reached}% del video` : undefined}>
+                                {c.percent !== null ? `${c.percent}% visto` : "0%"}
+                                {c.minutes ? ` · ${c.minutes} min` : ""}
+                                {c.manual && c.percent === null && <span className="pill pill-amber" style={{ marginLeft: 4 }}>man.</span>}
+                              </span>
+                            </>
+                          )}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         {/* ---------- Quiz ---------- */}
         <div className="section">
