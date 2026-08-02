@@ -15,6 +15,7 @@ import {
   expiringCourses,
   storeLeaderboard,
   storeRanking,
+  globalLeaderboard,
   isNewHire,
   pathsForUser,
 } from "@/lib/logic";
@@ -48,6 +49,8 @@ export default async function StudentDashboard() {
 
   const leaderboard = user.storeId ? storeLeaderboard(db, user.storeId).slice(0, 5) : [];
   const ranking = storeRanking(db).slice(0, 5);
+  const gLeaderboard = globalLeaderboard(db);
+  const myRank = gLeaderboard.findIndex((u) => u.id === user.id) + 1;
 
   // Home a blocchi: l'admin di sistema decide ordine e visibilità da Organizzazione → Consorzio.
   const homeBlocks = db.settings.homeBlocks ?? DEFAULT_HOME_BLOCKS;
@@ -169,6 +172,30 @@ export default async function StudentDashboard() {
               <span className="pill pill-amber">{u.points} pt</span>
             </div>
           ))}
+        </div>
+      </div>
+    ),
+
+    classifica_generale: gLeaderboard.length > 0 && (
+      <div className="section" key="classifica_generale">
+        <div className="card">
+          <h2>🌍 Classifica generale del consorzio</h2>
+          {db.settings.leaderboardAnonymous ? (
+            <p style={{ fontSize: 14 }}>
+              Sei al <strong>{myRank}° posto</strong> su {gLeaderboard.length} collaboratori, con{" "}
+              <strong>{user.points} punti</strong>. La classifica è anonima: non sono mostrati i nomi degli altri.
+            </p>
+          ) : (
+            gLeaderboard.slice(0, 10).map((u, i) => (
+              <div key={u.id} className="rank-row">
+                <span className={`rank-pos ${i === 0 ? "gold" : ""}`}>{i + 1}</span>
+                <span style={{ flex: 1, fontWeight: u.id === user.id ? 800 : 500 }}>
+                  {u.firstName} {u.lastName} {u.id === user.id && "← tu"}
+                </span>
+                <span className="pill pill-amber">{u.points} pt</span>
+              </div>
+            ))
+          )}
         </div>
       </div>
     ),

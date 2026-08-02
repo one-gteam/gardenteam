@@ -80,6 +80,10 @@ export default async function ConsorzioPage({
               Email di supporto del consorzio
               <input type="email" name="supportEmail" defaultValue={s.supportEmail ?? ""} placeholder="es. academy@gardenteam.biz" />
             </label>
+            <label className="checkbox-row">
+              <input type="checkbox" name="leaderboardAnonymous" defaultChecked={!!s.leaderboardAnonymous} />
+              🌍 Classifica generale anonima: ognuno vede solo la propria posizione, non i nomi degli altri
+            </label>
             <button className="btn" type="submit">💾 Salva impostazioni portale</button>
           </form>
         </div>

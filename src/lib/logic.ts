@@ -92,6 +92,13 @@ export function storeLeaderboard(db: DB, storeId: string) {
     .sort((a, b) => b.points - a.points);
 }
 
+/** Classifica individuale su tutto il consorzio, a prescindere dall'insegna o dal negozio. */
+export function globalLeaderboard(db: DB) {
+  return db.users
+    .filter((u) => u.active !== false && (u.role === "student" || u.role === "dept_head"))
+    .sort((a, b) => b.points - a.points);
+}
+
 /** Classifica tra punti vendita: % media di completamento dei corsi obbligatori. */
 export function storeRanking(db: DB) {
   return db.stores

@@ -1065,6 +1065,7 @@ export async function updateSettings(formData: FormData) {
     s.colorPrimary = "#00652e";
     s.colorAccent = "#8dc63f";
   }
+  s.leaderboardAnonymous = formData.get("leaderboardAnonymous") === "on";
   await saveDb(db);
   revalidatePath("/", "layout");
   redirect("/admin/organizzazione/consorzio?salvato=1");
