@@ -65,6 +65,9 @@ export default function LessonEditor({
   const typeMeta = LESSON_TYPES.find((t) => t.value === type);
   const attachments = lesson.attachments ?? [];
   const questions = lesson.questions ?? [];
+  const videoQuestions = questions
+    .filter((q) => q.atSeconds !== undefined)
+    .sort((a, b) => (a.atSeconds ?? 0) - (b.atSeconds ?? 0));
 
   return (
     <div className="card lesson-card">
@@ -77,6 +80,7 @@ export default function LessonEditor({
           {type === "scorm" && (lesson.scorm ? <span className="pill pill-green">🎯 SCORM {lesson.scorm.version}</span> : <span className="pill pill-amber">SCORM da caricare</span>)}
           {attachments.length > 0 && <span className="pill pill-blue">📎 {attachments.length}</span>}
           {type === "quiz" && <span className="pill pill-blue">{questions.length} domande</span>}
+          {type === "video" && videoQuestions.length > 0 && <span className="pill pill-blue">❓ {videoQuestions.length}</span>}
           <span style={{ marginLeft: "auto", color: "var(--muted)" }}>{open ? "▲ chiudi" : "▼ apri"}</span>
         </button>
         <button className="btn btn-outline btn-sm" type="button" disabled={index === 0 || pending}
@@ -226,6 +230,77 @@ export default function LessonEditor({
                 </label>
                 <button className="btn btn-sm" type="submit">➕ Carica</button>
               </form>
+            </div>
+          )}
+
+          {type === "video" && (
+            <div className="lesson-sub">
+              <strong style={{ fontSize: 14 }}>❓ Domande nel video ({videoQuestions.length})</strong>
+              <p className="hint" style={{ margin: "4px 0 10px" }}>
+                Al secondo indicato il video si mette in pausa e mostra la domanda: lo studente non può
+                proseguire finché non risponde correttamente.
+              </p>
+              {videoQuestions.map((q) => (
+                <div key={q.id} className="quiz-edit">
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6 }}>
+                    <strong style={{ flex: 1, fontSize: 13 }}>Al secondo {q.atSeconds}</strong>
+                    <button className="btn btn-outline btn-sm danger" type="button" disabled={pending}
+                      onClick={() => run(() => deleteLessonQuestion(courseId, lesson.id, q.id))}>🗑</button>
+                  </div>
+                  <form action={async (fd) => { await saveLessonQuestion(courseId, lesson.id, q.id, fd); router.refresh(); }}>
+                    <label className="field">Testo<input type="text" name="text" defaultValue={q.text} required /></label>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                      {[0, 1, 2, 3].map((oi) => (
+                        <label className="field" key={oi} style={{ marginBottom: 6 }}>
+                          Risposta {oi + 1}
+                          <input type="text" name={`opt${oi}`} defaultValue={q.options[oi] ?? ""} />
+                        </label>
+                      ))}
+                    </div>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <label className="field" style={{ maxWidth: 160 }}>
+                        Risposta corretta
+                        <select name="correct" defaultValue={String(q.correct)}>
+                          {q.options.map((_, oi) => <option key={oi} value={oi}>Risposta {oi + 1}</option>)}
+                        </select>
+                      </label>
+                      <label className="field" style={{ maxWidth: 160 }}>
+                        Secondo del video
+                        <input type="text" name="atSeconds" defaultValue={String(q.atSeconds)} />
+                      </label>
+                    </div>
+                    <button className="btn btn-sm" type="submit">💾 Salva domanda</button>
+                  </form>
+                </div>
+              ))}
+              <details className="quiz-edit">
+                <summary style={{ cursor: "pointer", fontWeight: 700, fontSize: 13 }}>➕ Aggiungi domanda nel video</summary>
+                <form action={async (fd) => { await saveLessonQuestion(courseId, lesson.id, null, fd); router.refresh(); }}
+                  style={{ marginTop: 8 }}>
+                  <label className="field">Testo<input type="text" name="text" required placeholder="es. Ogni quanto si annaffia?" /></label>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                    {[0, 1, 2, 3].map((oi) => (
+                      <label className="field" key={oi} style={{ marginBottom: 6 }}>
+                        Risposta {oi + 1}
+                        <input type="text" name={`opt${oi}`} placeholder={oi < 2 ? "obbligatoria" : "facoltativa"} />
+                      </label>
+                    ))}
+                  </div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <label className="field" style={{ maxWidth: 160 }}>
+                      Risposta corretta
+                      <select name="correct" defaultValue="0">
+                        {[0, 1, 2, 3].map((oi) => <option key={oi} value={oi}>Risposta {oi + 1}</option>)}
+                      </select>
+                    </label>
+                    <label className="field" style={{ maxWidth: 160 }}>
+                      Secondo del video
+                      <input type="text" name="atSeconds" required placeholder="es. 90" />
+                    </label>
+                  </div>
+                  <button className="btn btn-sm" type="submit">➕ Aggiungi</button>
+                </form>
+              </details>
             </div>
           )}
 

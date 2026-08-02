@@ -2,12 +2,15 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { trackLessonView } from "@/lib/actions";
+import { QuizQuestion } from "@/lib/types";
 import { VideoSource } from "@/lib/video";
 
 /* Tipi minimi dell'IFrame API di YouTube, per non dipendere da @types esterni. */
 interface YTPlayer {
   getCurrentTime(): number;
   getDuration(): number;
+  pauseVideo(): void;
+  playVideo(): void;
   destroy(): void;
 }
 interface YTWindow extends Window {
@@ -53,6 +56,7 @@ export default function TrackedVideo({
   threshold,
   initialPercent,
   initialSeconds,
+  questions,
 }: {
   courseId: string;
   lessonId: string;
@@ -61,9 +65,12 @@ export default function TrackedVideo({
   threshold: number;
   initialPercent: number;
   initialSeconds: number;
+  questions?: QuizQuestion[];
 }) {
   const [percent, setPercent] = useState(initialPercent); // % effettivamente vista
   const [done, setDone] = useState(initialPercent >= threshold);
+  const [activeQuestion, setActiveQuestion] = useState<QuizQuestion | null>(null);
+  const [wrongFlash, setWrongFlash] = useState(false);
 
   const watched = useRef(initialSeconds);
   const maxPercent = useRef(initialPercent);
@@ -72,6 +79,15 @@ export default function TrackedVideo({
   const dirty = useRef(false);
   const mountRef = useRef<HTMLDivElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  // domande sovrapposte al video: mettono in pausa e bloccano finché non si risponde bene
+  const sortedQuestions = useRef(
+    (questions ?? []).filter((q) => q.atSeconds !== undefined).sort((a, b) => a.atSeconds! - b.atSeconds!)
+  );
+  const answeredIds = useRef<Set<string>>(new Set());
+  const activeQuestionId = useRef<string | null>(null);
+  const pauseFn = useRef<() => void>(() => {});
+  const resumeFn = useRef<() => void>(() => {});
 
   /** Invia al server quanto visto finora (solo se qualcosa è cambiato). */
   const flush = useCallback(async () => {
@@ -90,6 +106,16 @@ export default function TrackedVideo({
 
   /** Campionamento: chiamato ogni secondo con la posizione corrente. */
   const sample = useCallback((current: number, total: number) => {
+    if (activeQuestionId.current) return; // in pausa su una domanda: non campionare
+    // prima domanda ancora da superare il cui secondo è già stato raggiunto
+    const q = sortedQuestions.current.find((q) => current >= q.atSeconds! && !answeredIds.current.has(q.id));
+    if (q) {
+      activeQuestionId.current = q.id;
+      pauseFn.current();
+      setWrongFlash(false);
+      setActiveQuestion(q);
+      return;
+    }
     if (!total || !isFinite(total)) return;
     duration.current = total;
     const prev = lastTime.current;
@@ -106,6 +132,22 @@ export default function TrackedVideo({
     }
     // quota realmente vista: tempo riprodotto sulla durata (i salti non contano)
     setPercent(Math.min(100, Math.round((watched.current / total) * 100)));
+  }, []);
+
+  /** Risposta dello studente alla domanda in sovraimpressione. */
+  const answerQuestion = useCallback((optionIndex: number) => {
+    setActiveQuestion((q) => {
+      if (!q) return q;
+      if (optionIndex !== q.correct) {
+        setWrongFlash(true);
+        return q; // resta in pausa: deve rispondere correttamente per proseguire
+      }
+      answeredIds.current.add(q.id);
+      activeQuestionId.current = null;
+      lastTime.current = null; // riparte pulito: la pausa non deve contare come salto
+      resumeFn.current();
+      return null;
+    });
   }, []);
 
   // ---- YouTube ----
@@ -139,6 +181,8 @@ export default function TrackedVideo({
           },
         },
       });
+      pauseFn.current = () => player?.pauseVideo();
+      resumeFn.current = () => player?.playVideo();
       timer = setInterval(() => {
         if (!player) return;
         try {
@@ -167,6 +211,8 @@ export default function TrackedVideo({
     const onTime = () => sample(el.currentTime, el.duration);
     const onPause = () => { lastTime.current = null; flush(); };
     const onEnded = () => { maxPercent.current = 100; setPercent(100); dirty.current = true; flush(); };
+    pauseFn.current = () => el.pause();
+    resumeFn.current = () => el.play();
     el.addEventListener("timeupdate", onTime);
     el.addEventListener("pause", onPause);
     el.addEventListener("ended", onEnded);
@@ -195,22 +241,40 @@ export default function TrackedVideo({
 
   return (
     <div>
-      {video.kind === "file" ? (
-        /* eslint-disable-next-line jsx-a11y/media-has-caption */
-        <video ref={videoRef} className="video-embed" src={video.src} controls preload="metadata" />
-      ) : video.provider === "youtube" ? (
-        <div className="video-embed"><div ref={mountRef} /></div>
-      ) : (
-        <div className="video-embed">
-          <iframe
-            src={video.src}
-            title={title}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
-            allowFullScreen
-            loading="lazy"
-          />
-        </div>
-      )}
+      <div className="video-embed-wrap">
+        {video.kind === "file" ? (
+          /* eslint-disable-next-line jsx-a11y/media-has-caption */
+          <video ref={videoRef} className="video-embed" src={video.src} controls preload="metadata" />
+        ) : video.provider === "youtube" ? (
+          <div className="video-embed"><div ref={mountRef} /></div>
+        ) : (
+          <div className="video-embed">
+            <iframe
+              src={video.src}
+              title={title}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+              allowFullScreen
+              loading="lazy"
+            />
+          </div>
+        )}
+
+        {activeQuestion && (
+          <div className="video-question-overlay">
+            <div className="video-question-card">
+              <p className="video-question-text">❓ {activeQuestion.text}</p>
+              <div className="video-question-options">
+                {activeQuestion.options.map((opt, i) => (
+                  <button key={i} type="button" className="btn btn-outline" onClick={() => answerQuestion(i)}>
+                    {opt}
+                  </button>
+                ))}
+              </div>
+              {wrongFlash && <p className="video-question-wrong">❌ Risposta errata, riprova.</p>}
+            </div>
+          </div>
+        )}
+      </div>
 
       {trackable ? (
         <div className="watch-bar">

@@ -137,7 +137,12 @@ export interface Lesson {
   videoUrl?: string;
   /** Slide e PDF scaricabili: valgono sia per i video sia per le lezioni di soli documenti. */
   attachments?: LessonAttachment[];
-  questions?: QuizQuestion[]; // solo per le lezioni di tipo "quiz" (quiz intermedi)
+  /**
+   * Per le lezioni "quiz": domande del capitolo. Per le lezioni "video": domande
+   * sovrapposte al video (richiedono `atSeconds`) che lo mettono in pausa in quel
+   * punto e bloccano la ripresa finché non si risponde correttamente.
+   */
+  questions?: QuizQuestion[];
   scorm?: ScormPackage; // solo per le lezioni di tipo "scorm"
 }
 
@@ -146,6 +151,7 @@ export interface QuizQuestion {
   text: string;
   options: string[];
   correct: number;
+  atSeconds?: number; // solo per le domande nel video: secondo in cui compare
 }
 
 /**

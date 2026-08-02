@@ -169,6 +169,7 @@ export default async function CoursePage({
                 threshold={threshold}
                 initialPercent={myView?.maxPercent ?? 0}
                 initialSeconds={myView?.secondsWatched ?? 0}
+                questions={lesson.questions}
               />
             )}
             {video.kind === "none" && lesson.type === "video" && (

@@ -935,12 +935,14 @@ export async function saveLessonQuestion(courseId: string, lessonId: string, que
   const options = [0, 1, 2, 3].map((i) => String(formData.get(`opt${i}`) ?? "").trim()).filter(Boolean);
   if (options.length < 2) redirect(`/admin/corsi/${courseId}`);
   const correct = Math.min(Math.max(Number(formData.get("correct")) || 0, 0), options.length - 1);
+  const atSecondsRaw = formData.get("atSeconds");
+  const atSeconds = atSecondsRaw !== null && String(atSecondsRaw).trim() !== "" ? Math.max(0, Math.round(Number(atSecondsRaw))) : undefined;
   lesson!.questions = lesson!.questions ?? [];
   if (questionId) {
     const q = lesson!.questions.find((x) => x.id === questionId);
-    if (q) { q.text = text; q.options = options; q.correct = correct; }
+    if (q) { q.text = text; q.options = options; q.correct = correct; q.atSeconds = atSeconds; }
   } else {
-    lesson!.questions.push({ id: `q_${Date.now()}`, text, options, correct });
+    lesson!.questions.push({ id: `q_${Date.now()}`, text, options, correct, atSeconds });
   }
   await saveDb(db);
   revalidatePath(`/admin/corsi/${courseId}`);
