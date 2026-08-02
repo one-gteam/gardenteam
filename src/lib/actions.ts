@@ -9,8 +9,8 @@ import { uploadPublicFile } from "./supabase";
 import { AUTH_COOKIE, requireUser } from "./auth";
 import { coursesForUser, courseVisibleTo, dueDate, getProgress, hasStartedCourse, isCourseCompleted, pathsForUser } from "./logic";
 import {
-  Course, CourseLevel, CourseSession, DB, DEFAULT_REMINDER_RULES, DEFAULT_WATCH_THRESHOLD, EmailType, Lesson,
-  LessonAttachment, LessonType, ReminderRule, ReminderStage, Role, SiteId, User, postLoginPath,
+  Course, CourseLevel, CourseSession, DB, DEFAULT_HOME_BLOCKS, DEFAULT_REMINDER_RULES, DEFAULT_WATCH_THRESHOLD,
+  EmailType, Lesson, LessonAttachment, LessonType, ReminderRule, ReminderStage, Role, SiteId, User, postLoginPath,
 } from "./types";
 
 /** Sostituisce variabili {{...}} e declina il genere: [maschile|femminile]. */
@@ -1067,6 +1067,36 @@ export async function updateSettings(formData: FormData) {
   await saveDb(db);
   revalidatePath("/", "layout");
   redirect("/admin/organizzazione/consorzio?salvato=1");
+}
+
+/** Ordine e visibilità dei blocchi della home studente, configurabili senza sviluppo. */
+export async function moveHomeBlock(index: number, dir: number) {
+  const admin = await requireUser();
+  if (admin.role !== "system_admin") return { ok: false as const };
+  const db = await getDb();
+  const blocks = db.settings.homeBlocks ?? [...DEFAULT_HOME_BLOCKS];
+  const target = index + dir;
+  if (target < 0 || target >= blocks.length) return { ok: false as const };
+  [blocks[index], blocks[target]] = [blocks[target], blocks[index]];
+  db.settings.homeBlocks = blocks;
+  await saveDb(db);
+  revalidatePath("/admin/organizzazione/consorzio");
+  revalidatePath("/studente");
+  return { ok: true as const };
+}
+
+export async function toggleHomeBlock(index: number) {
+  const admin = await requireUser();
+  if (admin.role !== "system_admin") return { ok: false as const };
+  const db = await getDb();
+  const blocks = db.settings.homeBlocks ?? [...DEFAULT_HOME_BLOCKS];
+  if (!blocks[index]) return { ok: false as const };
+  blocks[index].enabled = !blocks[index].enabled;
+  db.settings.homeBlocks = blocks;
+  await saveDb(db);
+  revalidatePath("/admin/organizzazione/consorzio");
+  revalidatePath("/studente");
+  return { ok: true as const };
 }
 
 /* ================== Modifica utenti ================== */

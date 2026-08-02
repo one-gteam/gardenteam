@@ -4,7 +4,8 @@ import { getCurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import Header from "@/components/Header";
 import { updateSettings } from "@/lib/actions";
-import { FONT_OPTIONS } from "@/lib/types";
+import { DEFAULT_HOME_BLOCKS, FONT_OPTIONS } from "@/lib/types";
+import HomeBlocksPanel from "@/components/HomeBlocksPanel";
 
 export default async function ConsorzioPage({
   searchParams,
@@ -81,6 +82,19 @@ export default async function ConsorzioPage({
             </label>
             <button className="btn" type="submit">💾 Salva impostazioni portale</button>
           </form>
+        </div>
+
+        <div className="section">
+          <div className="section-head">
+            <h2>🧩 Home dello studente</h2>
+            <span className="hint">ordine e visibilità dei blocchi, per tutte le insegne</span>
+          </div>
+          <div className="card">
+            <p className="hint" style={{ margin: "0 0 12px" }}>
+              I messaggi di benvenuto restano sempre in cima. Sotto, decidi quali blocchi mostrare e in che ordine.
+            </p>
+            <HomeBlocksPanel blocks={s.homeBlocks ?? DEFAULT_HOME_BLOCKS} />
+          </div>
         </div>
 
         <div className="section">

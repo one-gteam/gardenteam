@@ -1,10 +1,11 @@
+import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import Header from "@/components/Header";
 import CourseCard from "@/components/CourseCard";
 import InsegnaLogo from "@/components/InsegnaLogo";
-import { BADGE_DEFS, userSites } from "@/lib/types";
+import { BADGE_DEFS, DEFAULT_HOME_BLOCKS, HomeBlockKind, userSites } from "@/lib/types";
 import {
   coursesForUser,
   getProgress,
@@ -48,6 +49,178 @@ export default async function StudentDashboard() {
   const leaderboard = user.storeId ? storeLeaderboard(db, user.storeId).slice(0, 5) : [];
   const ranking = storeRanking(db).slice(0, 5);
 
+  // Home a blocchi: l'admin di sistema decide ordine e visibilità da Organizzazione → Consorzio.
+  const homeBlocks = db.settings.homeBlocks ?? DEFAULT_HOME_BLOCKS;
+  const blockOrder = homeBlocks.filter((b) => b.enabled).map((b) => b.kind);
+
+  const blockContent: Record<HomeBlockKind, ReactNode> = {
+    scadenze: expiring.length > 0 && (
+      <div className="alert alert-amber" key="scadenze">
+        ⏰ <strong>Hai {expiring.length} corsi obbligatori da completare:</strong>{" "}
+        {expiring.map((e, i) => (
+          <span key={e.course.id}>
+            {i > 0 && ", "}
+            <a href={`/corso/${e.course.id}`}>{e.course.title}</a> (entro {e.due!.toLocaleDateString("it-IT")})
+          </span>
+        ))}
+      </div>
+    ),
+
+    kpi: (
+      <div className="grid grid-4" key="kpi">
+        <div className="card stat"><div className="num">{myCourses.length}</div><div className="lbl">Corsi assegnati</div></div>
+        <div className="card stat"><div className="num">{inProgressCourses.length}</div><div className="lbl">In corso</div></div>
+        <div className="card stat"><div className="num">{completedCourses.length}</div><div className="lbl">Completati</div></div>
+        <div className="card stat"><div className="num">{myCerts.length}</div><div className="lbl">Certificati</div></div>
+      </div>
+    ),
+
+    percorsi: myPaths.length > 0 && (
+      <div className="section" key="percorsi">
+        <div className="section-head">
+          <h2>🧭 I tuoi percorsi formativi</h2>
+          <span className="hint">assegnati automaticamente in base al tuo profilo</span>
+        </div>
+        <div className="grid grid-2">
+          {myPaths.map((p) => {
+            const pathCourses = p.courseIds
+              .map((id) => db.courses.find((c) => c.id === id)!)
+              .filter(Boolean);
+            const done = pathCourses.filter((c) => isCourseCompleted(c, getProgress(db, user.id, c.id))).length;
+            const pct = Math.round((done / pathCourses.length) * 100);
+            return (
+              <div key={p.id} className="card">
+                <h3>
+                  {p.emoji} {p.title}
+                </h3>
+                <p style={{ color: "var(--muted)", fontSize: 13.5, margin: "4px 0 12px" }}>{p.description}</p>
+                <div className="progress-track">
+                  <div className="progress-fill" style={{ width: `${pct}%` }} />
+                </div>
+                <div className="progress-label">
+                  {done} di {pathCourses.length} moduli completati ({pct}%)
+                </div>
+                <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 5 }}>
+                  {pathCourses.map((c, i) => {
+                    const cDone = isCourseCompleted(c, getProgress(db, user.id, c.id));
+                    return (
+                      <a key={c.id} href={`/corso/${c.id}`} className="lesson-item" style={{ padding: "6px 8px" }}>
+                        <span className={`lesson-check ${cDone ? "done" : ""}`}>{cDone ? "✓" : i + 1}</span>
+                        {c.title}
+                      </a>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    ),
+
+    corsi: (
+      <div key="corsi">
+        {sections.map((sec) => {
+          const list = myCourses.filter((c) => c.level === sec.key);
+          if (list.length === 0) return null;
+          return (
+            <div className="section" key={sec.key}>
+              <div className="section-head">
+                <h2>{sec.title}</h2>
+                <span className="hint">{sec.hint}</span>
+              </div>
+              <div className="grid grid-2">
+                {list.map((c) => (
+                  <CourseCard key={c.id} course={c} prog={getProgress(db, user.id, c.id)} due={dueDate(c, user)} />
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    ),
+
+    badge: (
+      <div className="section" key="badge">
+        <div className="card">
+          <h2>🎖️ I tuoi badge</h2>
+          <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(90px, 1fr))", gap: 10 }}>
+            {Object.entries(BADGE_DEFS).map(([key, b]) => (
+              <div key={key} className={`badge-tile ${user.badges.includes(key) ? "" : "locked"}`} title={b.desc}>
+                <span className="b-emoji">{b.emoji}</span>
+                <span>{b.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    ),
+
+    classifica_negozio: leaderboard.length > 0 && (
+      <div className="section" key="classifica_negozio">
+        <div className="card">
+          <h2>🏅 Classifica del negozio</h2>
+          {leaderboard.map((u, i) => (
+            <div key={u.id} className="rank-row">
+              <span className={`rank-pos ${i === 0 ? "gold" : ""}`}>{i + 1}</span>
+              <span style={{ flex: 1, fontWeight: u.id === user.id ? 800 : 500 }}>
+                {u.firstName} {u.lastName} {u.id === user.id && "← tu"}
+              </span>
+              <span className="pill pill-amber">{u.points} pt</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    ),
+
+    classifica_pv: (
+      <div className="section" key="classifica_pv">
+        <div className="card">
+          <h2>🏆 Sfida tra negozi</h2>
+          <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 8px" }}>
+            Classifica per completamento corsi obbligatori
+          </p>
+          {ranking.map((r, i) => (
+            <div key={r.store.id} className="rank-row">
+              <span className={`rank-pos ${i === 0 ? "gold" : ""}`}>{i + 1}</span>
+              <span style={{ flex: 1, fontWeight: r.store.id === user.storeId ? 800 : 500, display: "flex", alignItems: "center", gap: 6 }}>
+                <InsegnaLogo tenant={r.tenant} height={15} /> {r.store.name} {r.store.id === user.storeId && "← il tuo"}
+              </span>
+              <span className="pill pill-green">{r.compliance}%</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    ),
+
+    certificati: myCerts.length > 0 && (
+      <div className="section" key="certificati">
+        <div className="section-head">
+          <h2>📜 I tuoi certificati</h2>
+        </div>
+        <div className="card">
+          <table className="data">
+            <thead>
+              <tr><th>Corso</th><th>Data</th><th></th></tr>
+            </thead>
+            <tbody>
+              {myCerts.map((cert) => {
+                const c = db.courses.find((x) => x.id === cert.courseId);
+                return (
+                  <tr key={cert.id}>
+                    <td>{c?.emoji} {c?.title}</td>
+                    <td>{new Date(cert.issuedAt).toLocaleDateString("it-IT")}</td>
+                    <td><a className="btn btn-outline btn-sm" href={`/certificato/${cert.id}`}>Vedi certificato</a></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    ),
+  };
+
   return (
     <div>
       <Header user={user} active="studente" />
@@ -83,157 +256,7 @@ export default async function StudentDashboard() {
           <div className="alert alert-green">📍 <strong>{store.name}:</strong> {store.welcome}</div>
         )}
 
-        {expiring.length > 0 && (
-          <div className="alert alert-amber">
-            ⏰ <strong>Hai {expiring.length} corsi obbligatori da completare:</strong>{" "}
-            {expiring.map((e, i) => (
-              <span key={e.course.id}>
-                {i > 0 && ", "}
-                <a href={`/corso/${e.course.id}`}>{e.course.title}</a> (entro {e.due!.toLocaleDateString("it-IT")})
-              </span>
-            ))}
-          </div>
-        )}
-
-        <div className="grid grid-4">
-          <div className="card stat"><div className="num">{myCourses.length}</div><div className="lbl">Corsi assegnati</div></div>
-          <div className="card stat"><div className="num">{inProgressCourses.length}</div><div className="lbl">In corso</div></div>
-          <div className="card stat"><div className="num">{completedCourses.length}</div><div className="lbl">Completati</div></div>
-          <div className="card stat"><div className="num">{myCerts.length}</div><div className="lbl">Certificati</div></div>
-        </div>
-
-        {myPaths.length > 0 && (
-          <div className="section">
-            <div className="section-head">
-              <h2>🧭 I tuoi percorsi formativi</h2>
-              <span className="hint">assegnati automaticamente in base al tuo profilo</span>
-            </div>
-            <div className="grid grid-2">
-              {myPaths.map((p) => {
-                const pathCourses = p.courseIds
-                  .map((id) => db.courses.find((c) => c.id === id)!)
-                  .filter(Boolean);
-                const done = pathCourses.filter((c) => isCourseCompleted(c, getProgress(db, user.id, c.id))).length;
-                const pct = Math.round((done / pathCourses.length) * 100);
-                return (
-                  <div key={p.id} className="card">
-                    <h3>
-                      {p.emoji} {p.title}
-                    </h3>
-                    <p style={{ color: "var(--muted)", fontSize: 13.5, margin: "4px 0 12px" }}>{p.description}</p>
-                    <div className="progress-track">
-                      <div className="progress-fill" style={{ width: `${pct}%` }} />
-                    </div>
-                    <div className="progress-label">
-                      {done} di {pathCourses.length} moduli completati ({pct}%)
-                    </div>
-                    <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 5 }}>
-                      {pathCourses.map((c, i) => {
-                        const cDone = isCourseCompleted(c, getProgress(db, user.id, c.id));
-                        return (
-                          <a key={c.id} href={`/corso/${c.id}`} className="lesson-item" style={{ padding: "6px 8px" }}>
-                            <span className={`lesson-check ${cDone ? "done" : ""}`}>{cDone ? "✓" : i + 1}</span>
-                            {c.title}
-                          </a>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {sections.map((sec) => {
-          const list = myCourses.filter((c) => c.level === sec.key);
-          if (list.length === 0) return null;
-          return (
-            <div className="section" key={sec.key}>
-              <div className="section-head">
-                <h2>{sec.title}</h2>
-                <span className="hint">{sec.hint}</span>
-              </div>
-              <div className="grid grid-2">
-                {list.map((c) => (
-                  <CourseCard key={c.id} course={c} prog={getProgress(db, user.id, c.id)} due={dueDate(c, user)} />
-                ))}
-              </div>
-            </div>
-          );
-        })}
-
-        <div className="section grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))" }}>
-          <div className="card">
-            <h2>🎖️ I tuoi badge</h2>
-            <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(90px, 1fr))", gap: 10 }}>
-              {Object.entries(BADGE_DEFS).map(([key, b]) => (
-                <div key={key} className={`badge-tile ${user.badges.includes(key) ? "" : "locked"}`} title={b.desc}>
-                  <span className="b-emoji">{b.emoji}</span>
-                  <span>{b.label}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {leaderboard.length > 0 && (
-            <div className="card">
-              <h2>🏅 Classifica del negozio</h2>
-              {leaderboard.map((u, i) => (
-                <div key={u.id} className="rank-row">
-                  <span className={`rank-pos ${i === 0 ? "gold" : ""}`}>{i + 1}</span>
-                  <span style={{ flex: 1, fontWeight: u.id === user.id ? 800 : 500 }}>
-                    {u.firstName} {u.lastName} {u.id === user.id && "← tu"}
-                  </span>
-                  <span className="pill pill-amber">{u.points} pt</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className="card">
-            <h2>🏆 Sfida tra negozi</h2>
-            <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 8px" }}>
-              Classifica per completamento corsi obbligatori
-            </p>
-            {ranking.map((r, i) => (
-              <div key={r.store.id} className="rank-row">
-                <span className={`rank-pos ${i === 0 ? "gold" : ""}`}>{i + 1}</span>
-                <span style={{ flex: 1, fontWeight: r.store.id === user.storeId ? 800 : 500, display: "flex", alignItems: "center", gap: 6 }}>
-                  <InsegnaLogo tenant={r.tenant} height={15} /> {r.store.name} {r.store.id === user.storeId && "← il tuo"}
-                </span>
-                <span className="pill pill-green">{r.compliance}%</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {myCerts.length > 0 && (
-          <div className="section">
-            <div className="section-head">
-              <h2>📜 I tuoi certificati</h2>
-            </div>
-            <div className="card">
-              <table className="data">
-                <thead>
-                  <tr><th>Corso</th><th>Data</th><th></th></tr>
-                </thead>
-                <tbody>
-                  {myCerts.map((cert) => {
-                    const c = db.courses.find((x) => x.id === cert.courseId);
-                    return (
-                      <tr key={cert.id}>
-                        <td>{c?.emoji} {c?.title}</td>
-                        <td>{new Date(cert.issuedAt).toLocaleDateString("it-IT")}</td>
-                        <td><a className="btn btn-outline btn-sm" href={`/certificato/${cert.id}`}>Vedi certificato</a></td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
+        {blockOrder.map((kind) => blockContent[kind])}
 
         {db.settings.supportEmail && (
           <p style={{ textAlign: "center", color: "var(--muted)", fontSize: 13, marginTop: 40 }}>

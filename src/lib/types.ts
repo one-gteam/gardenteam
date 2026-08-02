@@ -388,7 +388,32 @@ export interface PortalSettings {
   urgentDays?: number; // giorni prima della scadenza per l'avviso urgente (default 7)
   watchThreshold?: number; // % di video da guardare perché la lezione risulti vista (default 90)
   reminderRules?: Partial<Record<ReminderStage, ReminderRule>>; // sovrascrive DEFAULT_REMINDER_RULES stadio per stadio
+  homeBlocks?: HomeBlockConfig[]; // ordine e visibilità dei blocchi nella home dello studente
 }
+
+/** Uno dei blocchi mostrabili nella home dello studente, in un ordine scelto dall'admin. */
+export type HomeBlockKind =
+  | "kpi" | "scadenze" | "percorsi" | "corsi" | "badge" | "classifica_negozio" | "classifica_pv" | "certificati";
+
+export const HOME_BLOCK_LABELS: Record<HomeBlockKind, string> = {
+  kpi: "📊 Riepilogo numeri (corsi assegnati, in corso, completati, certificati)",
+  scadenze: "⏰ Avviso corsi in scadenza",
+  percorsi: "🧭 I tuoi percorsi formativi",
+  corsi: "📚 Corsi assegnati (sistema / insegna / punto vendita)",
+  badge: "🎖️ Bacheca badge",
+  classifica_negozio: "🏅 Classifica del punto vendita",
+  classifica_pv: "🏆 Sfida tra punti vendita",
+  certificati: "📜 I tuoi certificati",
+};
+
+export interface HomeBlockConfig {
+  kind: HomeBlockKind;
+  enabled: boolean;
+}
+
+export const DEFAULT_HOME_BLOCKS: HomeBlockConfig[] = (
+  ["kpi", "scadenze", "percorsi", "corsi", "badge", "classifica_negozio", "classifica_pv", "certificati"] as HomeBlockKind[]
+).map((kind) => ({ kind, enabled: true }));
 
 /**
  * Font del testo. I titoli sono sempre in Poppins, come su My Rosaflor:
