@@ -23,6 +23,8 @@ export default async function QuizPage({
   if (!course || course.quiz.length === 0) notFound();
 
   const prog = getProgress(db, user.id, course.id);
+  const allLessonsDone = course.lessons.every((l) => prog?.completedLessons.includes(l.id));
+  if (course.sequential && !allLessonsDone) redirect(`/corso/${course.id}`);
   const submitAction = submitQuiz.bind(null, course.id);
   const justSubmitted = esito !== undefined;
   const score = justSubmitted ? Number(esito) : prog?.quizScore;

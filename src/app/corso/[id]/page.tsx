@@ -36,7 +36,16 @@ export default async function CoursePage({
   if (!course) notFound();
 
   const prog = getProgress(db, user.id, course.id);
-  const idx = Math.min(Math.max(Number(lezione ?? 0) || 0, 0), course.lessons.length - 1);
+  const requestedIdx = Math.min(Math.max(Number(lezione ?? 0) || 0, 0), course.lessons.length - 1);
+
+  // corso "bloccato": si accede alle lezioni in ordine, una alla volta
+  let unlockedIdx = course.lessons.length - 1;
+  if (course.sequential) {
+    unlockedIdx = course.lessons.findIndex((l) => !prog?.completedLessons.includes(l.id));
+    if (unlockedIdx === -1) unlockedIdx = course.lessons.length - 1; // tutto completato: libero
+  }
+  if (course.sequential && requestedIdx > unlockedIdx) redirect(`/corso/${course.id}?lezione=${unlockedIdx}`);
+  const idx = requestedIdx;
   const lesson = course.lessons[idx];
   const lessonDone = prog?.completedLessons.includes(lesson.id) ?? false;
   const allLessonsDone = course.lessons.every((l) => prog?.completedLessons.includes(l.id));
@@ -113,6 +122,16 @@ export default async function CoursePage({
             <h3 style={{ padding: "4px 12px" }}>Contenuti del corso</h3>
             {course.lessons.map((l, i) => {
               const done = prog?.completedLessons.includes(l.id);
+              const locked = course.sequential && i > unlockedIdx;
+              if (locked) {
+                return (
+                  <span key={l.id} className="lesson-item locked" title="Completa le lezioni precedenti per sbloccarla">
+                    <span className="lesson-check">🔒</span>
+                    <span style={{ flex: 1 }}>{l.title}</span>
+                    <span style={{ color: "var(--muted)", fontSize: 12 }}>{l.minutes}′</span>
+                  </span>
+                );
+              }
               return (
                 <Link key={l.id} href={`/corso/${course.id}?lezione=${i}`}
                   className={`lesson-item ${i === idx ? "active" : ""}`}>
@@ -122,13 +141,25 @@ export default async function CoursePage({
                 </Link>
               );
             })}
+            {course.sequential && (
+              <p className="hint" style={{ padding: "6px 12px 0" }}>🔒 Corso bloccato: completa le lezioni in ordine.</p>
+            )}
             {course.quiz.length > 0 && (
-              <Link href={`/corso/${course.id}/quiz`} className="lesson-item"
-                style={{ borderTop: "1px solid var(--line)", marginTop: 6, paddingTop: 12 }}>
-                <span className={`lesson-check ${prog?.quizPassed ? "done" : ""}`}>{prog?.quizPassed ? "✓" : "?"}</span>
-                <span style={{ flex: 1, fontWeight: 700 }}>Quiz finale</span>
-                <span className="pill pill-gray">{course.quiz.length} domande</span>
-              </Link>
+              course.sequential && !allLessonsDone ? (
+                <span className="lesson-item locked" style={{ borderTop: "1px solid var(--line)", marginTop: 6, paddingTop: 12 }}
+                  title="Completa tutte le lezioni per sbloccarlo">
+                  <span className="lesson-check">🔒</span>
+                  <span style={{ flex: 1, fontWeight: 700 }}>Quiz finale</span>
+                  <span className="pill pill-gray">{course.quiz.length} domande</span>
+                </span>
+              ) : (
+                <Link href={`/corso/${course.id}/quiz`} className="lesson-item"
+                  style={{ borderTop: "1px solid var(--line)", marginTop: 6, paddingTop: 12 }}>
+                  <span className={`lesson-check ${prog?.quizPassed ? "done" : ""}`}>{prog?.quizPassed ? "✓" : "?"}</span>
+                  <span style={{ flex: 1, fontWeight: 700 }}>Quiz finale</span>
+                  <span className="pill pill-gray">{course.quiz.length} domande</span>
+                </Link>
+              )
             )}
           </div>
 

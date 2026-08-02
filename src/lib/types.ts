@@ -195,6 +195,7 @@ export interface Course {
   onlyNewHires?: boolean; // assunti negli ultimi 90 giorni
   mandatory: boolean;
   dueDays?: number; // giorni dalla data di assegnazione/assunzione
+  sequential?: boolean; // corso "bloccato": le lezioni si sbloccano una alla volta, in ordine
   lessons: Lesson[];
   quiz: QuizQuestion[];
   passScore: number; // percentuale

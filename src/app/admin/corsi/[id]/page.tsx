@@ -183,6 +183,9 @@ export default async function EditCoursePage({
             <label className="checkbox-row">
               <input type="checkbox" name="newHires" defaultChecked={!!course.onlyNewHires} /> Riservato ai neoassunti (ultimi 90 giorni)
             </label>
+            <label className="checkbox-row">
+              <input type="checkbox" name="sequential" defaultChecked={!!course.sequential} /> 🔒 Corso bloccato: le lezioni si sbloccano una alla volta, in ordine
+            </label>
             <div style={{ borderTop: "1px solid var(--line)", paddingTop: 12, marginTop: 4 }}>
               <strong style={{ fontSize: 14 }}>🖼️ Copertina del corso</strong>
               {course.coverUrl && (

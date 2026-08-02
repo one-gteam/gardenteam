@@ -443,6 +443,7 @@ export async function updateCourse(courseId: string, formData: FormData) {
   course.groups = group ? [group] : undefined;
   course.onlyNewHires = formData.get("newHires") === "on";
   course.mandatory = formData.get("mandatory") === "on";
+  course.sequential = formData.get("sequential") === "on";
   const dueDays = Number(formData.get("dueDays"));
   course.dueDays = course.mandatory && dueDays > 0 ? dueDays : undefined;
   const passScore = Number(formData.get("passScore"));
