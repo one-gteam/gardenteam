@@ -47,6 +47,13 @@ export function getProgress(db: DB, userId: string, courseId: string): Progress 
   return db.progress.find((p) => p.userId === userId && p.courseId === courseId);
 }
 
+/** Ha aperto/toccato il corso almeno una volta (lezione completata, video visto, quiz tentato). */
+export function hasStartedCourse(db: DB, userId: string, courseId: string): boolean {
+  const p = getProgress(db, userId, courseId);
+  if (!p) return false;
+  return p.completedLessons.length > 0 || (p.views?.length ?? 0) > 0 || p.quizScore !== undefined;
+}
+
 export function courseCompletion(course: Course, prog?: Progress): number {
   if (!prog) return 0;
   const totalSteps = course.lessons.length + (course.quiz.length > 0 ? 1 : 0);

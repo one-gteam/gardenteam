@@ -19,6 +19,7 @@ export async function getDb(): Promise<DB> {
   if (!db.groups) db.groups = [];
   if (!db.customTemplates) db.customTemplates = [];
   if (!db.registrations) db.registrations = [];
+  if (!db.assignments) db.assignments = [];
   if (db.settings.urgentDays === undefined) db.settings.urgentDays = 7;
   if (!db.settings.font) db.settings.font = "system";
   if (!db.templates) db.templates = [];

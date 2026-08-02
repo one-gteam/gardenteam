@@ -7,10 +7,10 @@ import { randomBytes, scryptSync, timingSafeEqual } from "crypto";
 import { getDb, saveDb } from "./db";
 import { uploadPublicFile } from "./supabase";
 import { AUTH_COOKIE, requireUser } from "./auth";
-import { coursesForUser, courseVisibleTo, expiringCourses, isCourseCompleted, pathsForUser } from "./logic";
+import { coursesForUser, courseVisibleTo, dueDate, getProgress, hasStartedCourse, isCourseCompleted, pathsForUser } from "./logic";
 import {
-  Course, CourseLevel, CourseSession, DB, DEFAULT_WATCH_THRESHOLD, EmailType, Lesson, LessonAttachment,
-  LessonType, Role, SiteId, User, postLoginPath,
+  Course, CourseLevel, CourseSession, DB, DEFAULT_REMINDER_RULES, DEFAULT_WATCH_THRESHOLD, EmailType, Lesson,
+  LessonAttachment, LessonType, ReminderRule, ReminderStage, Role, SiteId, User, postLoginPath,
 } from "./types";
 
 /** Sostituisce variabili {{...}} e declina il genere: [maschile|femminile]. */
@@ -84,7 +84,35 @@ function notifyNewAssignments(db: DB, user: User): boolean {
   queueEmail(db, user, "assegnazione", { corso: newCourses[0]?.title ?? newPaths[0]?.title ?? "", elenco });
   user.notifiedCourseIds = [...(user.notifiedCourseIds ?? []), ...newCourses.map((c) => c.id)];
   user.notifiedPathIds = [...(user.notifiedPathIds ?? []), ...newPaths.map((p) => p.id)];
+  const today = new Date().toISOString().slice(0, 10);
+  for (const c of newCourses) {
+    if (!db.assignments.some((a) => a.userId === user.id && a.courseId === c.id)) {
+      db.assignments.push({ userId: user.id, courseId: c.id, assignedAt: today });
+    }
+  }
   return true;
+}
+
+/** Da quando risulta assegnato il più vecchio dei corsi passati (fallback: oggi, se non tracciato). */
+function earliestAssignedAt(db: DB, userId: string, courses: Course[]): string {
+  const today = new Date().toISOString().slice(0, 10);
+  return courses.reduce((min, c) => {
+    const a = db.assignments.find((x) => x.userId === userId && x.courseId === c.id)?.assignedAt ?? today;
+    return !min || a < min ? a : min;
+  }, "");
+}
+
+function reminderRuleFor(db: DB, stage: ReminderStage): ReminderRule {
+  return db.settings.reminderRules?.[stage] ?? DEFAULT_REMINDER_RULES[stage];
+}
+
+/** Rispetta attesa iniziale, intervallo minimo fra invii e numero massimo di ripetizioni dello stadio. */
+function canSendStage(db: DB, user: User, type: EmailType, rule: ReminderRule, since: string): boolean {
+  const previous = db.emails.filter((e) => e.userId === user.id && e.type === type).sort((a, b) => a.date.localeCompare(b.date));
+  if (rule.maxRepeats > 0 && previous.length >= rule.maxRepeats) return false;
+  const daysSince = (d: string) => Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
+  if (previous.length === 0) return daysSince(since) >= rule.waitDays;
+  return daysSince(previous[previous.length - 1].date) >= rule.intervalDays;
 }
 
 function hashPassword(password: string): string {
@@ -803,24 +831,53 @@ export async function runReminders() {
   const today = new Date().toISOString().slice(0, 10);
   let sent = 0;
   let assigned = 0;
+  const urgentDays = db.settings.urgentDays ?? 7;
   for (const u of db.users) {
     if (!u.active || (u.role !== "student" && u.role !== "dept_head")) continue;
     // iscrizione automatica per regola: nuovi corsi/percorsi diventati suoi da quando
     // sono stati creati o da quando è cambiato il suo profilo (reparto, insegna, PV...)
     if (notifyNewAssignments(db, u)) assigned++;
-    const missing = expiringCourses(db, u);
-    if (missing.length === 0) continue;
-    const urgentDays = db.settings.urgentDays ?? 7;
-    const urgent = missing.filter((m) => m.due!.getTime() < Date.now() + urgentDays * 86400000);
-    const type: EmailType = urgent.length > 0 ? "scadenza" : "promemoria";
-    // massimo un'email al giorno per persona
-    const alreadyToday = db.emails.some(
-      (e) => e.userId === u.id && e.date.slice(0, 10) === today && (e.type === "promemoria" || e.type === "scadenza")
+
+    const openMandatory = coursesForUser(db, u).filter(
+      (c) => c.mandatory && !isCourseCompleted(c, getProgress(db, u.id, c.id))
     );
-    if (alreadyToday) continue;
-    const list = missing.map((m) => `«${m.course.title}» (entro ${m.due!.toLocaleDateString("it-IT")})`).join(", ");
-    queueEmail(db, u, type, { elenco: list });
-    sent++;
+    if (openMandatory.length === 0) continue;
+    // ogni corso obbligatorio in carico ha una data di assegnazione, anche quelli
+    // già esistenti prima di questa funzione (assegnati oggi, per non perdere lo storico)
+    for (const c of openMandatory) {
+      if (!db.assignments.some((a) => a.userId === u.id && a.courseId === c.id)) {
+        db.assignments.push({ userId: u.id, courseId: c.id, assignedAt: today });
+      }
+    }
+
+    // 3 stadi mutuamente esclusivi, in ordine di urgenza: chi è in scadenza/scaduto
+    // non riceve anche il sollecito "non completato" o "mai iniziato" lo stesso giorno
+    const withDue = openMandatory
+      .map((c) => ({ course: c, due: dueDate(c, u) }))
+      .filter((x): x is { course: Course; due: Date } => x.due !== null);
+    const urgent = withDue.filter((x) => x.due.getTime() < Date.now() + urgentDays * 86400000).map((x) => x.course);
+    const rest = openMandatory.filter((c) => !urgent.includes(c));
+    const notStarted = rest.filter((c) => !hasStartedCourse(db, u.id, c.id));
+    const notCompleted = rest.filter((c) => hasStartedCourse(db, u.id, c.id));
+
+    const stages: { type: EmailType; stage: ReminderStage; courses: Course[] }[] = [
+      { type: "scadenza", stage: "scadenza", courses: urgent },
+      { type: "mai_iniziato", stage: "mai_iniziato", courses: notStarted },
+      { type: "promemoria", stage: "promemoria", courses: notCompleted },
+    ];
+    for (const { type, stage, courses } of stages) {
+      if (courses.length === 0) continue;
+      const rule = reminderRuleFor(db, stage);
+      if (!canSendStage(db, u, type, rule, earliestAssignedAt(db, u.id, courses))) continue;
+      const list = courses
+        .map((c) => {
+          const due = dueDate(c, u);
+          return due ? `«${c.title}» (entro ${due.toLocaleDateString("it-IT")})` : `«${c.title}»`;
+        })
+        .join(", ");
+      queueEmail(db, u, type, { elenco: list });
+      sent++;
+    }
   }
 
   // Promemoria delle edizioni in programma: partono nei giorni impostati
@@ -1191,6 +1248,22 @@ export async function saveAutomationSettings(formData: FormData) {
   if (urgentDays >= 1 && urgentDays <= 60) db.settings.urgentDays = Math.round(urgentDays);
   const watch = Number(formData.get("watchThreshold"));
   if (watch >= 50 && watch <= 100) db.settings.watchThreshold = Math.round(watch);
+
+  const stages: ReminderStage[] = ["mai_iniziato", "promemoria", "scadenza"];
+  const rules: Partial<Record<ReminderStage, ReminderRule>> = {};
+  for (const stage of stages) {
+    const waitDays = Number(formData.get(`${stage}_waitDays`));
+    const intervalDays = Number(formData.get(`${stage}_intervalDays`));
+    const maxRepeats = Number(formData.get(`${stage}_maxRepeats`));
+    const fallback = DEFAULT_REMINDER_RULES[stage];
+    rules[stage] = {
+      waitDays: waitDays >= 0 && waitDays <= 90 ? Math.round(waitDays) : fallback.waitDays,
+      intervalDays: intervalDays >= 1 && intervalDays <= 90 ? Math.round(intervalDays) : fallback.intervalDays,
+      maxRepeats: maxRepeats >= 0 && maxRepeats <= 20 ? Math.round(maxRepeats) : fallback.maxRepeats,
+    };
+  }
+  db.settings.reminderRules = rules;
+
   await saveDb(db);
   redirect("/admin/email?template=1");
 }

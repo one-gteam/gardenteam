@@ -11,12 +11,13 @@ import {
   saveAutomationSettings,
 } from "@/lib/actions";
 import { scopeUsers } from "@/lib/logic";
-import { EMAIL_TYPE_LABELS, EmailType } from "@/lib/types";
+import { DEFAULT_REMINDER_RULES, EMAIL_TYPE_LABELS, EmailType, REMINDER_STAGE_LABELS } from "@/lib/types";
 
 const AUTOMATIONS = [
   { emoji: "👋", title: "Email di benvenuto", desc: "Inviata automaticamente quando un collaboratore viene creato o importato da CSV/gestionale.", trigger: "Alla creazione dell'utente" },
   { emoji: "📬", title: "Iscrizione automatica per regola", desc: "Quando un corso obbligatorio o un percorso diventa suo (nuovo assunto, cambio reparto/insegna, nuovo corso creato), riceve una mail con l'elenco — senza bisogno di iscriverlo a mano.", trigger: "Alla creazione/modifica utente + job giornaliero" },
-  { emoji: "⏰", title: "Promemoria corsi da completare", desc: "Ricorda i corsi obbligatori non ancora completati, in base al profilo dello studente.", trigger: "Job giornaliero (cron)" },
+  { emoji: "👀", title: "Corso assegnato mai iniziato", desc: "Sollecito a chi ha un corso obbligatorio assegnato ma non lo ha mai aperto, con attesa iniziale e ripetizioni configurabili.", trigger: "Job giornaliero (cron)" },
+  { emoji: "⏰", title: "Promemoria corsi da completare", desc: "Ricorda i corsi obbligatori avviati ma non ancora completati, in base al profilo dello studente.", trigger: "Job giornaliero (cron)" },
   { emoji: "🚨", title: "Avviso corso in scadenza", desc: "Quando mancano meno di 7 giorni alla scadenza (o è già superata), il promemoria diventa urgente.", trigger: "Job giornaliero (cron)" },
   { emoji: "📅", title: "Convocazione a un corso in programma", desc: "Data, ora, link Zoom e descrizione ai destinatari di un'edizione, subito quando viene programmata.", trigger: "Alla programmazione dell'edizione" },
   { emoji: "🔔", title: "Promemoria corso in programma", desc: "Richiama l'edizione imminente ai destinatari nei giorni impostati sull'edizione.", trigger: "Job giornaliero (cron)" },
@@ -199,20 +200,54 @@ export default async function EmailPage({
               <h2>🎛️ Impostazioni automazioni</h2>
               <span className="hint">solo amministratore di sistema</span>
             </div>
-            <div className="card" style={{ maxWidth: 560 }}>
-              <form action={saveAutomationSettings} style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
-                <label className="field" style={{ marginBottom: 0, maxWidth: 280 }}>
-                  Avviso urgente quando mancano meno di (giorni)
-                  <input type="text" name="urgentDays" defaultValue={String(db.settings.urgentDays ?? 7)} />
-                </label>
-                <label className="field" style={{ marginBottom: 0, maxWidth: 280 }}>
-                  Video visto: lezione completata al (%)
-                  <input type="text" name="watchThreshold" defaultValue={String(db.settings.watchThreshold ?? 90)} />
-                </label>
-                <button className="btn btn-sm" type="submit">💾 Salva</button>
+            <div className="card" style={{ maxWidth: 720 }}>
+              <form action={saveAutomationSettings}>
+                <div style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
+                  <label className="field" style={{ marginBottom: 0, maxWidth: 280 }}>
+                    Avviso urgente quando mancano meno di (giorni)
+                    <input type="text" name="urgentDays" defaultValue={String(db.settings.urgentDays ?? 7)} />
+                  </label>
+                  <label className="field" style={{ marginBottom: 0, maxWidth: 280 }}>
+                    Video visto: lezione completata al (%)
+                    <input type="text" name="watchThreshold" defaultValue={String(db.settings.watchThreshold ?? 90)} />
+                  </label>
+                </div>
+
+                <h3 style={{ margin: "16px 0 4px", fontSize: 14 }}>Solleciti a stadi per i corsi obbligatori</h3>
+                <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 10px" }}>
+                  Uno studente riceve al massimo un&apos;email per stadio lo stesso giorno: chi è in scadenza non
+                  riceve anche il sollecito &quot;non completato&quot; per lo stesso corso.
+                </p>
+                <div style={{ overflowX: "auto" }}>
+                  <table className="data">
+                    <thead>
+                      <tr>
+                        <th>Stadio</th>
+                        <th>Attesa iniziale (giorni)</th>
+                        <th>Intervallo fra invii (giorni)</th>
+                        <th>Ripetizioni max (0 = infinite)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(["mai_iniziato", "promemoria", "scadenza"] as const).map((stage) => {
+                        const rule = db.settings.reminderRules?.[stage] ?? DEFAULT_REMINDER_RULES[stage];
+                        return (
+                          <tr key={stage}>
+                            <td>{REMINDER_STAGE_LABELS[stage]}</td>
+                            <td><input type="text" name={`${stage}_waitDays`} defaultValue={String(rule.waitDays)} style={{ width: 70 }} /></td>
+                            <td><input type="text" name={`${stage}_intervalDays`} defaultValue={String(rule.intervalDays)} style={{ width: 70 }} /></td>
+                            <td><input type="text" name={`${stage}_maxRepeats`} defaultValue={String(rule.maxRepeats)} style={{ width: 70 }} /></td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                <button className="btn btn-sm" type="submit" style={{ marginTop: 12 }}>💾 Salva</button>
               </form>
               <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "10px 0 0" }}>
-                Sotto la soglia dei giorni il promemoria diventa &quot;Corso in scadenza&quot; (urgente).
+                Sotto la soglia dei giorni il corso risulta &quot;in scadenza&quot; (urgente).
                 La percentuale di visione è la quota di video da guardare perché la lezione risulti completata
                 automaticamente (vale per YouTube e per i file video caricati). L&apos;attivazione delle singole
                 automazioni si gestisce con l&apos;interruttore di ogni modello qui sopra.

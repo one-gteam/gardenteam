@@ -256,12 +256,13 @@ export interface Feedback {
 }
 
 export type EmailType =
-  | "benvenuto" | "assegnazione" | "promemoria" | "scadenza" | "completamento" | "certificato"
+  | "benvenuto" | "assegnazione" | "mai_iniziato" | "promemoria" | "scadenza" | "completamento" | "certificato"
   | "convocazione" | "promemoria_sessione";
 
 export const EMAIL_TYPE_LABELS: Record<EmailType, { label: string; emoji: string }> = {
   benvenuto: { label: "Benvenuto", emoji: "👋" },
   assegnazione: { label: "Nuovo corso assegnato", emoji: "📬" },
+  mai_iniziato: { label: "Corso assegnato mai iniziato", emoji: "👀" },
   promemoria: { label: "Promemoria corso da completare", emoji: "⏰" },
   scadenza: { label: "Corso in scadenza", emoji: "🚨" },
   completamento: { label: "Corso completato", emoji: "🎉" },
@@ -309,6 +310,7 @@ export interface CustomTemplate {
 export const DEFAULT_TEMPLATES: EmailTemplate[] = [
   { type: "benvenuto", enabled: true, subject: "[Benvenuto|Benvenuta] in Academy GT, {{nome}}!", body: "Ciao {{nome}}, il tuo account Academy GT è attivo. Nella tua area personale trovi i corsi già assegnati in base al tuo profilo." },
   { type: "assegnazione", enabled: true, subject: "📬 Nuova formazione assegnata", body: "Ciao {{nome}}, in base al tuo profilo ti è stata assegnata questa formazione: {{elenco}}. La trovi nella tua area personale." },
+  { type: "mai_iniziato", enabled: true, subject: "👀 Non hai ancora iniziato: {{elenco}}", body: "Ciao {{nome}}, risultano assegnati ma non ancora avviati questi corsi obbligatori: {{elenco}}. Bastano pochi minuti per iniziare, li trovi nella tua area personale." },
   { type: "promemoria", enabled: true, subject: "⏰ Promemoria: hai corsi da completare", body: "Ciao {{nome}}, ti ricordiamo i corsi obbligatori da completare: {{elenco}}." },
   { type: "scadenza", enabled: true, subject: "🚨 Corsi in scadenza: completa la formazione obbligatoria", body: "Ciao {{nome}}, attenzione: questi corsi sono in scadenza o già scaduti: {{elenco}}. Completali al più presto." },
   { type: "completamento", enabled: true, subject: "🎉 Hai completato «{{corso}}»", body: "Ottimo lavoro {{nome}}: corso completato e {{punti}} punti guadagnati." },
@@ -324,6 +326,34 @@ export const DEFAULT_TEMPLATES: EmailTemplate[] = [
     body: "Ciao {{nome}}, ti ricordiamo il corso «{{corso}}».\n\n📅 Data: {{data}}\n🕒 Orario: {{ora}}\n📍 Dove: {{dove}}\n{{link}}\n\n{{descrizione}}",
   },
 ];
+
+/** Data in cui un corso obbligatorio è diventato assegnato a un utente: base per i solleciti a stadi. */
+export interface Assignment {
+  userId: string;
+  courseId: string;
+  assignedAt: string; // ISO date
+}
+
+/** Configurazione di uno stadio di sollecito: attesa iniziale, intervallo fra un invio e l'altro, ripetizioni. */
+export interface ReminderRule {
+  waitDays: number; // giorni di attesa prima del primo invio
+  intervalDays: number; // giorni minimi fra un invio e il successivo
+  maxRepeats: number; // 0 = nessun limite
+}
+
+export type ReminderStage = "mai_iniziato" | "promemoria" | "scadenza";
+
+export const REMINDER_STAGE_LABELS: Record<ReminderStage, string> = {
+  mai_iniziato: "👀 Mai iniziato",
+  promemoria: "⏰ Non completato",
+  scadenza: "🚨 In scadenza / scaduto",
+};
+
+export const DEFAULT_REMINDER_RULES: Record<ReminderStage, ReminderRule> = {
+  mai_iniziato: { waitDays: 3, intervalDays: 7, maxRepeats: 3 },
+  promemoria: { waitDays: 0, intervalDays: 7, maxRepeats: 0 },
+  scadenza: { waitDays: 0, intervalDays: 3, maxRepeats: 0 },
+};
 
 export interface Registration {
   id: string;
@@ -351,6 +381,7 @@ export interface PortalSettings {
   font?: string; // "system" | "inter" | "nunito" | "poppins" | "quicksand"
   urgentDays?: number; // giorni prima della scadenza per l'avviso urgente (default 7)
   watchThreshold?: number; // % di video da guardare perché la lezione risulti vista (default 90)
+  reminderRules?: Partial<Record<ReminderStage, ReminderRule>>; // sovrascrive DEFAULT_REMINDER_RULES stadio per stadio
 }
 
 /**
@@ -381,6 +412,7 @@ export interface DB {
   courses: Course[];
   paths: LearningPath[];
   progress: Progress[];
+  assignments: Assignment[];
   certificates: Certificate[];
   feedback: Feedback[];
   emails: EmailMessage[];

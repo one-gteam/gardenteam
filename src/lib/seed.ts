@@ -385,5 +385,5 @@ export function buildSeed(): DB {
     { id: "g2", name: "Squadra eventi Rosàflor", emoji: "🎪", tenantId: "t1" },
   ];
 
-  return { settings: { ...DEFAULT_SETTINGS }, tenants, stores, departments, groups, users, courses, paths, progress, certificates, feedback, emails, templates: [], customTemplates: [], registrations: [] };
+  return { settings: { ...DEFAULT_SETTINGS }, tenants, stores, departments, groups, users, courses, paths, progress, certificates, feedback, emails, templates: [], customTemplates: [], registrations: [], assignments: [] };
 }
