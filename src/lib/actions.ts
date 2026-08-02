@@ -466,12 +466,90 @@ export async function addLesson(courseId: string, type: LessonType) {
     video: { title: "Nuova lezione video", minutes: 10 },
     pdf: { title: "Nuova lettura", minutes: 10 },
     quiz: { title: "Quiz del capitolo", minutes: 5 },
+    scorm: { title: "Nuovo contenuto SCORM", minutes: 15 },
   };
   const lesson: Lesson = { id: `l_${Date.now()}`, type, content: "", ...defaults[type] };
   course.lessons.push(lesson);
   await saveDb(db);
   revalidatePath(`/admin/corsi/${courseId}`);
   return { ok: true as const, lessonId: lesson.id };
+}
+
+/* ---------- Contenuti SCORM ---------- */
+
+export async function uploadScormPackage(courseId: string, lessonId: string, formData: FormData) {
+  const { db, course } = await requireEditableCourse(courseId);
+  const lesson = course.lessons.find((l) => l.id === lessonId);
+  if (!lesson) return { ok: false as const, error: "Lezione non trovata" };
+  const file = formData.get("scorm") as File | null;
+  if (!file || file.size === 0) return { ok: false as const, error: "Nessun file caricato" };
+  if (file.size > 60 * 1024 * 1024) return { ok: false as const, error: "Pacchetto troppo grande (max 60 MB)" };
+
+  const { importScormPackage, removeScormPackage } = await import("./scorm");
+  const res = await importScormPackage(lessonId, file.name, Buffer.from(await file.arrayBuffer()));
+  if (!res.ok) return { ok: false as const, error: res.error };
+
+  // sostituzione: rimuovi il vecchio pacchetto per non lasciare file orfani
+  if (lesson.scorm) { try { await removeScormPackage(lesson.scorm); } catch { /* best effort */ } }
+  lesson.scorm = res.pkg;
+  lesson.type = "scorm";
+  await saveDb(db);
+  revalidatePath(`/admin/corsi/${courseId}`);
+  return { ok: true as const, version: res.pkg.version };
+}
+
+export async function removeScormLesson(courseId: string, lessonId: string) {
+  const { db, course } = await requireEditableCourse(courseId);
+  const lesson = course.lessons.find((l) => l.id === lessonId);
+  if (lesson?.scorm) {
+    const { removeScormPackage } = await import("./scorm");
+    try { await removeScormPackage(lesson.scorm); } catch { /* best effort */ }
+    delete lesson.scorm;
+    await saveDb(db);
+    revalidatePath(`/admin/corsi/${courseId}`);
+  }
+  return { ok: true as const };
+}
+
+/**
+ * Riceve dal player SCORM lo stato di avanzamento (chiamato su commit/finish).
+ * Se il contenuto si dichiara completato/superato, la lezione risulta completata.
+ */
+export async function trackScorm(
+  courseId: string,
+  lessonId: string,
+  data: { status?: string; scorePercent?: number }
+) {
+  const user = await requireUser();
+  const db = await getDb();
+  const course = db.courses.find((c) => c.id === courseId);
+  const lesson = course?.lessons.find((l) => l.id === lessonId);
+  if (!course || !lesson) return { ok: false as const };
+
+  let prog = db.progress.find((p) => p.userId === user.id && p.courseId === courseId);
+  if (!prog) { prog = { userId: user.id, courseId, completedLessons: [] }; db.progress.push(prog); }
+  prog.views = prog.views ?? [];
+  const now = new Date().toISOString();
+  let view = prog.views.find((v) => v.lessonId === lessonId);
+  if (!view) { view = { lessonId, maxPercent: 0, secondsWatched: 0, firstAt: now, lastAt: now }; prog.views.push(view); }
+  const status = (data.status ?? "").toLowerCase();
+  if (status) view.scormStatus = status;
+  if (typeof data.scorePercent === "number") view.scormScore = Math.round(data.scorePercent);
+  view.lastAt = now;
+
+  const finished = ["completed", "passed", "failed"].includes(status);
+  let justCompleted = false;
+  // "failed" registra il tentativo ma non completa; passa il quiz o rifai
+  if ((status === "completed" || status === "passed") && !prog.completedLessons.includes(lessonId)) {
+    prog.completedLessons.push(lessonId);
+    const u = db.users.find((x) => x.id === user.id);
+    if (u) u.points += 10;
+    justCompleted = true;
+    maybeComplete(db, user.id, course);
+  }
+  await saveDb(db);
+  if (justCompleted) revalidatePath(`/corso/${courseId}`);
+  return { ok: true as const, finished, justCompleted };
 }
 
 /* ---------- Allegati delle lezioni (slide, PDF, dispense) ---------- */
@@ -1086,6 +1164,91 @@ export async function saveAutomationSettings(formData: FormData) {
   if (watch >= 50 && watch <= 100) db.settings.watchThreshold = Math.round(watch);
   await saveDb(db);
   redirect("/admin/email?template=1");
+}
+
+/* ================== Percorsi formativi ================== */
+
+function canEditPath(admin: User, level: CourseLevel, tenantId?: string): boolean {
+  if (admin.role === "system_admin" || admin.role === "course_manager") return true;
+  if (admin.role === "group_admin") return level !== "sistema" && tenantId === admin.tenantId;
+  return false;
+}
+
+export async function savePath(pathId: string | null, formData: FormData) {
+  const admin = await requireUser();
+  const db = await getDb();
+  const title = String(formData.get("title") ?? "").trim();
+  if (!title) return { ok: false as const, error: "Il titolo è obbligatorio" };
+  const level = (["sistema", "insegna", "punto_vendita"].includes(String(formData.get("level")))
+    ? String(formData.get("level"))
+    : "sistema") as CourseLevel;
+  const tenantId = admin.role === "group_admin" ? admin.tenantId : (String(formData.get("tenantId") ?? "").trim() || undefined);
+  if (!canEditPath(admin, level, level === "sistema" ? undefined : tenantId)) return { ok: false as const, error: "Non autorizzato" };
+
+  const courseIds = (formData.getAll("courseIds") as string[]).filter(Boolean);
+  const departments = (formData.getAll("departments") as string[]).filter(Boolean);
+  const data = {
+    title,
+    description: String(formData.get("description") ?? "").trim(),
+    emoji: String(formData.get("emoji") ?? "").trim().slice(0, 4) || "🧭",
+    level,
+    tenantId: level === "sistema" ? undefined : tenantId,
+    courseIds,
+    departments: departments.length ? departments : undefined,
+    onlyNewHires: formData.get("onlyNewHires") === "on",
+  };
+
+  if (pathId) {
+    const p = db.paths.find((x) => x.id === pathId);
+    if (!p || !canEditPath(admin, p.level, p.tenantId)) return { ok: false as const, error: "Percorso non trovato" };
+    Object.assign(p, data);
+  } else {
+    db.paths.push({ id: `path_${Date.now()}`, ...data });
+  }
+  await saveDb(db);
+  revalidatePath("/admin/percorsi");
+  return { ok: true as const };
+}
+
+export async function deletePath(pathId: string) {
+  const admin = await requireUser();
+  const db = await getDb();
+  const p = db.paths.find((x) => x.id === pathId);
+  if (!p || !canEditPath(admin, p.level, p.tenantId)) return { ok: false as const };
+  db.paths = db.paths.filter((x) => x.id !== pathId);
+  await saveDb(db);
+  revalidatePath("/admin/percorsi");
+  return { ok: true as const };
+}
+
+/** Aggiunge/toglie un corso dal percorso (usato dai pulsanti +/− nell'editor). */
+export async function togglePathCourse(pathId: string, courseId: string) {
+  const admin = await requireUser();
+  const db = await getDb();
+  const p = db.paths.find((x) => x.id === pathId);
+  if (!p || !canEditPath(admin, p.level, p.tenantId)) return { ok: false as const };
+  p.courseIds = p.courseIds.includes(courseId)
+    ? p.courseIds.filter((id) => id !== courseId)
+    : [...p.courseIds, courseId];
+  await saveDb(db);
+  revalidatePath("/admin/percorsi");
+  return { ok: true as const };
+}
+
+/** Sposta un corso su/giù nell'ordine del percorso. */
+export async function movePathCourse(pathId: string, courseId: string, dir: number) {
+  const admin = await requireUser();
+  const db = await getDb();
+  const p = db.paths.find((x) => x.id === pathId);
+  if (!p || !canEditPath(admin, p.level, p.tenantId)) return { ok: false as const };
+  const i = p.courseIds.indexOf(courseId);
+  const j = i + (dir < 0 ? -1 : 1);
+  if (i >= 0 && j >= 0 && j < p.courseIds.length) {
+    [p.courseIds[i], p.courseIds[j]] = [p.courseIds[j], p.courseIds[i]];
+    await saveDb(db);
+    revalidatePath("/admin/percorsi");
+  }
+  return { ok: true as const };
 }
 
 /* ================== Reparti e gruppi ================== */

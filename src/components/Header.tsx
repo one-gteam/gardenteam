@@ -16,6 +16,7 @@ export default async function Header({ user, active }: { user: User; active: str
         { href: "/admin", label: "Dashboard", key: "admin" },
         { href: "/admin/utenti", label: "Utenti", key: "utenti" },
         { href: "/admin/corsi", label: "Corsi", key: "corsi" },
+        { href: "/admin/percorsi", label: "Percorsi", key: "percorsi" },
         ...(canOrg ? [{ href: "/admin/organizzazione", label: "Organizzazione", key: "organizzazione" }] : []),
         { href: "/admin/email", label: "Email", key: "email" },
         { href: "/admin/report", label: "Report", key: "report" },

@@ -8,13 +8,13 @@ import { courseCompletion, getProgress, isCourseCompleted } from "@/lib/logic";
 import { DEFAULT_WATCH_THRESHOLD, LEVEL_LABELS } from "@/lib/types";
 import { parseVideoUrl } from "@/lib/video";
 import TrackedVideo from "@/components/TrackedVideo";
+import ScormPlayer from "@/components/ScormPlayer";
 
 const TYPE_LABEL: Record<string, string> = {
   video: "🎬 Video",
-  slide: "🖥️ Slide",
-  pdf: "📄 PDF",
-  testo: "📖 Lettura",
+  pdf: "📄 Lettura",
   quiz: "🧠 Quiz intermedio",
+  scorm: "🎯 Contenuto SCORM",
 };
 
 const ATTACHMENT_ICON: Record<string, string> = { pdf: "📄", slide: "🖥️", altro: "📎" };
@@ -137,6 +137,25 @@ export default async function CoursePage({
               <h2 style={{ margin: 0 }}>{lesson.title}</h2>
               <span className="pill pill-gray">{TYPE_LABEL[lesson.type]} · {lesson.minutes} min</span>
             </div>
+
+            {/* Contenuto SCORM interattivo: il completamento lo decide il pacchetto */}
+            {lesson.type === "scorm" && (
+              lesson.scorm ? (
+                <ScormPlayer
+                  key={lesson.id}
+                  courseId={course.id}
+                  lessonId={lesson.id}
+                  pkg={lesson.scorm}
+                  learnerName={`${user.firstName} ${user.lastName}`}
+                  initialStatus={myView?.scormStatus}
+                />
+              ) : (
+                <div className="video-frame">
+                  <div className="play-btn">🎯</div>
+                  <div style={{ fontSize: 13, opacity: 0.8 }}>Il contenuto SCORM non è ancora stato caricato.</div>
+                </div>
+              )
+            )}
 
             {/* Video: YouTube (anche non in elenco), Bunny, Vimeo, SharePoint o file diretto.
                 Su YouTube e sui file diretti la visione viene tracciata davvero. */}

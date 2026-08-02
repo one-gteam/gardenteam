@@ -10,6 +10,8 @@ import {
   deleteLessonAttachment,
   saveLessonQuestion,
   deleteLessonQuestion,
+  uploadScormPackage,
+  removeScormLesson,
 } from "@/lib/actions";
 import { LESSON_TYPES, Lesson, LessonType } from "@/lib/types";
 
@@ -39,6 +41,7 @@ export default function LessonEditor({
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [error, setError] = useState("");
   const [open, setOpen] = useState(false);
+  const [scormMsg, setScormMsg] = useState("");
 
   const flash = (ok: boolean, msg = "") => {
     setStatus(ok ? "saved" : "error");
@@ -71,6 +74,7 @@ export default function LessonEditor({
           <strong>{lesson.title}</strong>
           <span className="pill pill-gray">{typeMeta?.label}</span>
           {type === "video" && lesson.videoUrl && <span className="pill pill-green">▶ video</span>}
+          {type === "scorm" && (lesson.scorm ? <span className="pill pill-green">🎯 SCORM {lesson.scorm.version}</span> : <span className="pill pill-amber">SCORM da caricare</span>)}
           {attachments.length > 0 && <span className="pill pill-blue">📎 {attachments.length}</span>}
           {type === "quiz" && <span className="pill pill-blue">{questions.length} domande</span>}
           <span style={{ marginLeft: "auto", color: "var(--muted)" }}>{open ? "▲ chiudi" : "▼ apri"}</span>
@@ -119,7 +123,10 @@ export default function LessonEditor({
             )}
 
             <label className="field">
-              {type === "quiz" ? "Introduzione al quiz" : type === "pdf" ? "Testo della lezione (facoltativo se c'è il PDF)" : "Descrizione"}
+              {type === "quiz" ? "Introduzione al quiz"
+                : type === "pdf" ? "Testo della lezione (facoltativo se c'è il PDF)"
+                : type === "scorm" ? "Introduzione al contenuto (facoltativa)"
+                : "Descrizione"}
               <textarea name="content" rows={3} defaultValue={lesson.content} />
             </label>
 
@@ -132,7 +139,43 @@ export default function LessonEditor({
             </div>
           </form>
 
-          {type !== "quiz" && (
+          {type === "scorm" && (
+            <div className="lesson-sub">
+              <strong style={{ fontSize: 14 }}>🎯 Pacchetto SCORM</strong>
+              <p className="hint" style={{ margin: "4px 0 10px" }}>
+                Carica il file .zip esportato da Articulate, iSpring, Rise, Genially, Adobe Captivate…
+                Il completamento e il punteggio vengono tracciati dal contenuto stesso.
+              </p>
+              {lesson.scorm ? (
+                <div className="scorm-info">
+                  <span className="pill pill-green">✓ SCORM {lesson.scorm.version}</span>
+                  <span style={{ flex: 1 }}>{lesson.scorm.fileName}</span>
+                  <span className="hint">avvio: {lesson.scorm.entry}</span>
+                  <button className="btn btn-outline btn-sm danger" type="button" disabled={pending}
+                    onClick={() => { if (confirm("Rimuovere il pacchetto SCORM da questa lezione?")) run(() => removeScormLesson(courseId, lesson.id)); }}>
+                    🗑 Rimuovi
+                  </button>
+                </div>
+              ) : (
+                <p className="empty">Nessun pacchetto ancora caricato.</p>
+              )}
+              <form
+                action={async (fd) => {
+                  setScormMsg("Caricamento e analisi del pacchetto…");
+                  const res = await uploadScormPackage(courseId, lesson.id, fd);
+                  setScormMsg(res.ok ? `✓ Pacchetto SCORM ${res.version} caricato.` : `⚠️ ${res.error}`);
+                  router.refresh();
+                }}
+                style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8, flexWrap: "wrap" }}
+              >
+                <input type="file" name="scorm" accept=".zip" required style={{ fontSize: 12 }} />
+                <button className="btn btn-sm" type="submit">{lesson.scorm ? "Sostituisci pacchetto" : "⬆ Carica pacchetto"}</button>
+                {scormMsg && <span className="hint">{scormMsg}</span>}
+              </form>
+            </div>
+          )}
+
+          {(type === "video" || type === "pdf") && (
             <div className="lesson-sub">
               <strong style={{ fontSize: 14 }}>
                 {type === "pdf" ? "📄 PDF della lezione" : "📎 Slide e materiali scaricabili"} ({attachments.length})

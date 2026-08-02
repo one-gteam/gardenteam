@@ -95,13 +95,23 @@ export function postLoginPath(user: User): string {
  * Tipi di lezione: un video (con eventuali slide allegate), una lettura
  * costruita su un PDF, oppure un quiz intermedio.
  */
-export type LessonType = "video" | "pdf" | "quiz";
+export type LessonType = "video" | "pdf" | "quiz" | "scorm";
 
 export const LESSON_TYPES: { value: LessonType; label: string; hint: string }[] = [
   { value: "video", label: "🎬 Video", hint: "Link YouTube/Bunny/SharePoint + slide allegate" },
   { value: "pdf", label: "📄 Testo / lettura", hint: "Un PDF che lo studente sfoglia nella pagina" },
   { value: "quiz", label: "🧠 Quiz intermedio", hint: "Domande a risposta multipla di fine capitolo" },
+  { value: "scorm", label: "🎯 Contenuto SCORM", hint: "Pacchetto interattivo (Articulate, iSpring, Rise…) con tracciamento" },
 ];
+
+/** Pacchetto SCORM caricato per una lezione: dove lanciarlo e quale versione. */
+export interface ScormPackage {
+  path: string; // prefisso di storage dei file (es. "scorm/l_123_456")
+  entry: string; // file di avvio relativo, con eventuale query (es. "index.html")
+  version: "1.2" | "2004";
+  fileName: string; // nome dello zip caricato
+  uploadedAt: string;
+}
 
 /** Materiale allegato a una lezione: slide di accompagnamento, PDF, dispense. */
 export interface LessonAttachment {
@@ -126,6 +136,7 @@ export interface Lesson {
   /** Slide e PDF scaricabili: valgono sia per i video sia per le lezioni di soli documenti. */
   attachments?: LessonAttachment[];
   questions?: QuizQuestion[]; // solo per le lezioni di tipo "quiz" (quiz intermedi)
+  scorm?: ScormPackage; // solo per le lezioni di tipo "scorm"
 }
 
 export interface QuizQuestion {
@@ -209,6 +220,8 @@ export interface LessonView {
   firstAt: string;
   lastAt: string;
   completedByWatch?: boolean; // ha superato la soglia di visione
+  scormStatus?: string; // stato riportato dal pacchetto SCORM (completed/passed/…)
+  scormScore?: number; // punteggio SCORM 0-100
 }
 
 export interface Progress {
