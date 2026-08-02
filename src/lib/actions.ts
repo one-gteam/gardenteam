@@ -7,7 +7,7 @@ import { randomBytes, scryptSync, timingSafeEqual } from "crypto";
 import { getDb, saveDb } from "./db";
 import { uploadPublicFile } from "./supabase";
 import { AUTH_COOKIE, requireUser } from "./auth";
-import { courseVisibleTo, expiringCourses, isCourseCompleted } from "./logic";
+import { coursesForUser, courseVisibleTo, expiringCourses, isCourseCompleted, pathsForUser } from "./logic";
 import {
   Course, CourseLevel, CourseSession, DB, DEFAULT_WATCH_THRESHOLD, EmailType, Lesson, LessonAttachment,
   LessonType, Role, SiteId, User, postLoginPath,
@@ -62,6 +62,29 @@ function queueEmail(db: DB, user: User, type: EmailType, vars: Record<string, st
     if (ct.tenantId && !ct.storeId && ct.tenantId !== user.tenantId) continue;
     pushEmail(db, user, type, renderText(ct.subject, user, vars), renderText(ct.body, user, vars));
   }
+}
+
+/**
+ * Iscrizione automatica per regola: appena un corso obbligatorio o un percorso
+ * diventa assegnato a un utente (nuovo assunto, cambio reparto/insegna, nuovo
+ * corso creato...) parte una mail di assegnazione, una volta sola per elemento.
+ * Ritorna true se ha inviato qualcosa (utile per contare gli invii dal chiamante).
+ */
+function notifyNewAssignments(db: DB, user: User): boolean {
+  const newCourses = coursesForUser(db, user).filter(
+    (c) => c.mandatory && !(user.notifiedCourseIds ?? []).includes(c.id)
+  );
+  const newPaths = pathsForUser(db, user).filter((p) => !(user.notifiedPathIds ?? []).includes(p.id));
+  if (newCourses.length === 0 && newPaths.length === 0) return false;
+
+  const elenco = [
+    ...newCourses.map((c) => `«${c.title}»`),
+    ...newPaths.map((p) => `percorso «${p.title}»`),
+  ].join(", ");
+  queueEmail(db, user, "assegnazione", { corso: newCourses[0]?.title ?? newPaths[0]?.title ?? "", elenco });
+  user.notifiedCourseIds = [...(user.notifiedCourseIds ?? []), ...newCourses.map((c) => c.id)];
+  user.notifiedPathIds = [...(user.notifiedPathIds ?? []), ...newPaths.map((p) => p.id)];
+  return true;
 }
 
 function hashPassword(password: string): string {
@@ -315,6 +338,7 @@ export async function importUsersCsv(formData: FormData) {
     };
     db.users.push(newUser);
     queueEmail(db, newUser, "benvenuto");
+    notifyNewAssignments(db, newUser);
     imported++;
   }
   await saveDb(db);
@@ -778,8 +802,12 @@ export async function runReminders() {
   const db = await getDb();
   const today = new Date().toISOString().slice(0, 10);
   let sent = 0;
+  let assigned = 0;
   for (const u of db.users) {
     if (!u.active || (u.role !== "student" && u.role !== "dept_head")) continue;
+    // iscrizione automatica per regola: nuovi corsi/percorsi diventati suoi da quando
+    // sono stati creati o da quando è cambiato il suo profilo (reparto, insegna, PV...)
+    if (notifyNewAssignments(db, u)) assigned++;
     const missing = expiringCourses(db, u);
     if (missing.length === 0) continue;
     const urgentDays = db.settings.urgentDays ?? 7;
@@ -813,7 +841,7 @@ export async function runReminders() {
   }
 
   await saveDb(db);
-  redirect(`/admin/email?promemoria=${sent}&convocazioni=${reminded}`);
+  redirect(`/admin/email?promemoria=${sent}&convocazioni=${reminded}&assegnazioni=${assigned}`);
 }
 
 export async function toggleUserActive(userId: string) {
@@ -1042,6 +1070,7 @@ export async function updateUser(userId: string, formData: FormData) {
   const departmentId = String(formData.get("departmentId") ?? "");
   target!.departmentId = departmentId || undefined;
 
+  notifyNewAssignments(db, target!);
   await saveDb(db);
   redirect(`/admin/utenti/${userId}?salvato=1`);
 }
@@ -1481,6 +1510,7 @@ export async function approveRegistration(regId: string, formData: FormData) {
   db.users.push(newUser);
   reg!.status = "approved";
   queueEmail(db, newUser, "benvenuto");
+  notifyNewAssignments(db, newUser);
   await saveDb(db);
   redirect("/admin/utenti?approvato=1");
 }

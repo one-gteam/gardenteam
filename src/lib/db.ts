@@ -26,6 +26,14 @@ export async function getDb(): Promise<DB> {
   for (const t of DEFAULT_TEMPLATES) {
     if (!db.templates.some((x) => x.type === t.type && !x.tenantId)) db.templates.push({ ...t });
   }
+  // il modello "assegnazione" è passato da un singolo corso a un elenco: aggiorna
+  // solo se nessun admin lo ha mai personalizzato (testo ancora identico al vecchio default)
+  const oldAssegnazione = db.templates.find((t) => t.type === "assegnazione" && !t.tenantId);
+  if (oldAssegnazione?.subject === "📬 Nuovo corso assegnato: «{{corso}}»") {
+    const fresh = DEFAULT_TEMPLATES.find((t) => t.type === "assegnazione")!;
+    oldAssegnazione.subject = fresh.subject;
+    oldAssegnazione.body = fresh.body;
+  }
   for (const u of db.users) if (u.active === undefined) u.active = true;
   // le vecchie tipologie "testo" e "slide" confluiscono in "pdf" (Testo / lettura)
   for (const c of db.courses) {

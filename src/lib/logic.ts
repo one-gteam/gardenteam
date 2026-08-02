@@ -1,4 +1,4 @@
-import { Course, DB, Progress, User } from "./types";
+import { Course, DB, LearningPath, Progress, User } from "./types";
 
 export const NEW_HIRE_DAYS = 90;
 
@@ -27,6 +27,20 @@ export function courseVisibleTo(course: Course, user: User): boolean {
 export function coursesForUser(db: DB, user: User): Course[] {
   const started = new Set(db.progress.filter((p) => p.userId === user.id).map((p) => p.courseId));
   return db.courses.filter((c) => courseVisibleTo(c, user) || started.has(c.id));
+}
+
+/** Un percorso è assegnato a un utente in base a insegna, reparto e stato neoassunto. */
+export function pathVisibleTo(path: LearningPath, user: User): boolean {
+  if (path.onlyNewHires && !isNewHire(user)) return false;
+  if (path.departments && path.departments.length > 0) {
+    if (!user.departmentId || !path.departments.includes(user.departmentId)) return false;
+  }
+  if (path.tenantId && path.tenantId !== user.tenantId) return false;
+  return true;
+}
+
+export function pathsForUser(db: DB, user: User): LearningPath[] {
+  return db.paths.filter((p) => pathVisibleTo(p, user));
 }
 
 export function getProgress(db: DB, userId: string, courseId: string): Progress | undefined {

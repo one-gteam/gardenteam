@@ -15,6 +15,7 @@ import {
   storeLeaderboard,
   storeRanking,
   isNewHire,
+  pathsForUser,
 } from "@/lib/logic";
 
 export default async function StudentDashboard() {
@@ -42,12 +43,7 @@ export default async function StudentDashboard() {
   const expiring = expiringCourses(db, user);
   const myCerts = db.certificates.filter((c) => c.userId === user.id);
 
-  const myPaths = db.paths.filter((p) => {
-    if (p.onlyNewHires && !isNewHire(user)) return false;
-    if (p.departments && (!user.departmentId || !p.departments.includes(user.departmentId))) return false;
-    if (p.tenantId && p.tenantId !== user.tenantId) return false;
-    return true;
-  });
+  const myPaths = pathsForUser(db, user);
 
   const leaderboard = user.storeId ? storeLeaderboard(db, user.storeId).slice(0, 5) : [];
   const ranking = storeRanking(db).slice(0, 5);

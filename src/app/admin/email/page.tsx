@@ -15,8 +15,11 @@ import { EMAIL_TYPE_LABELS, EmailType } from "@/lib/types";
 
 const AUTOMATIONS = [
   { emoji: "👋", title: "Email di benvenuto", desc: "Inviata automaticamente quando un collaboratore viene creato o importato da CSV/gestionale.", trigger: "Alla creazione dell'utente" },
+  { emoji: "📬", title: "Iscrizione automatica per regola", desc: "Quando un corso obbligatorio o un percorso diventa suo (nuovo assunto, cambio reparto/insegna, nuovo corso creato), riceve una mail con l'elenco — senza bisogno di iscriverlo a mano.", trigger: "Alla creazione/modifica utente + job giornaliero" },
   { emoji: "⏰", title: "Promemoria corsi da completare", desc: "Ricorda i corsi obbligatori non ancora completati, in base al profilo dello studente.", trigger: "Job giornaliero (cron)" },
   { emoji: "🚨", title: "Avviso corso in scadenza", desc: "Quando mancano meno di 7 giorni alla scadenza (o è già superata), il promemoria diventa urgente.", trigger: "Job giornaliero (cron)" },
+  { emoji: "📅", title: "Convocazione a un corso in programma", desc: "Data, ora, link Zoom e descrizione ai destinatari di un'edizione, subito quando viene programmata.", trigger: "Alla programmazione dell'edizione" },
+  { emoji: "🔔", title: "Promemoria corso in programma", desc: "Richiama l'edizione imminente ai destinatari nei giorni impostati sull'edizione.", trigger: "Job giornaliero (cron)" },
   { emoji: "🎉", title: "Corso completato", desc: "Congratulazioni e riepilogo punti al completamento di ogni corso.", trigger: "Al completamento" },
   { emoji: "📜", title: "Certificato emesso", desc: "Notifica con link al certificato quando viene rilasciato.", trigger: "All'emissione" },
 ] as const;
@@ -24,12 +27,12 @@ const AUTOMATIONS = [
 export default async function EmailPage({
   searchParams,
 }: {
-  searchParams: Promise<{ promemoria?: string; template?: string }>;
+  searchParams: Promise<{ promemoria?: string; convocazioni?: string; assegnazioni?: string; template?: string }>;
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (user.role === "student") redirect("/studente");
-  const { promemoria, template } = await searchParams;
+  const { promemoria, convocazioni, assegnazioni, template } = await searchParams;
 
   const db = await getDb();
   const userIds = new Set(scopeUsers(db, user).map((u) => u.id));
@@ -86,10 +89,10 @@ export default async function EmailPage({
         </p>
 
         {promemoria !== undefined && (
-          <div className={`alert ${Number(promemoria) > 0 ? "alert-green" : "alert-amber"}`}>
-            {Number(promemoria) > 0
-              ? `✓ Controllo eseguito: generati ${promemoria} promemoria.`
-              : "Controllo eseguito: nessun nuovo promemoria da inviare (già inviati oggi o nessun ritardo)."}
+          <div className={`alert ${Number(promemoria) + Number(convocazioni ?? 0) + Number(assegnazioni ?? 0) > 0 ? "alert-green" : "alert-amber"}`}>
+            {Number(promemoria) + Number(convocazioni ?? 0) + Number(assegnazioni ?? 0) > 0
+              ? `✓ Controllo eseguito: ${assegnazioni} nuove assegnazioni, ${promemoria} promemoria, ${convocazioni ?? 0} promemoria di edizioni in programma.`
+              : "Controllo eseguito: nessuna novità da segnalare (già inviato oggi o nessun ritardo)."}
           </div>
         )}
 
@@ -178,7 +181,8 @@ export default async function EmailPage({
             <div style={{ flex: 1, minWidth: 260 }}>
               <h3 style={{ margin: 0 }}>▶ Esegui ora il controllo promemoria</h3>
               <p style={{ fontSize: 13, color: "var(--muted)", margin: "4px 0 0" }}>
-                Simula il job notturno: genera i promemoria per i corsi obbligatori non completati
+                Simula il job notturno: notifica le <strong>nuove assegnazioni</strong> (corsi/percorsi diventati
+                suoi da profilo o appena creati), genera i promemoria per i corsi obbligatori non completati
                 (max 1 email al giorno per persona) e i promemoria dei <strong>corsi in programma</strong>
                 nei giorni impostati su ciascuna edizione.
               </p>

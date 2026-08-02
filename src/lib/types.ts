@@ -73,6 +73,8 @@ export interface User {
   groupIds?: string[]; // gruppi di appartenenza
   gender?: "m" | "f"; // per declinare i testi delle email ([benvenuto|benvenuta])
   sites?: SiteId[]; // macroaree accessibili; assente = default per ruolo
+  notifiedCourseIds?: string[]; // corsi obbligatori per cui è già partita la mail di assegnazione
+  notifiedPathIds?: string[]; // percorsi per cui è già partita la mail di assegnazione
 }
 
 export type SiteId = "academy" | "stampe";
@@ -306,7 +308,7 @@ export interface CustomTemplate {
  */
 export const DEFAULT_TEMPLATES: EmailTemplate[] = [
   { type: "benvenuto", enabled: true, subject: "[Benvenuto|Benvenuta] in Academy GT, {{nome}}!", body: "Ciao {{nome}}, il tuo account Academy GT è attivo. Nella tua area personale trovi i corsi già assegnati in base al tuo profilo." },
-  { type: "assegnazione", enabled: true, subject: "📬 Nuovo corso assegnato: «{{corso}}»", body: "Ciao {{nome}}, ti è stato assegnato il corso «{{corso}}». Lo trovi nella tua area personale." },
+  { type: "assegnazione", enabled: true, subject: "📬 Nuova formazione assegnata", body: "Ciao {{nome}}, in base al tuo profilo ti è stata assegnata questa formazione: {{elenco}}. La trovi nella tua area personale." },
   { type: "promemoria", enabled: true, subject: "⏰ Promemoria: hai corsi da completare", body: "Ciao {{nome}}, ti ricordiamo i corsi obbligatori da completare: {{elenco}}." },
   { type: "scadenza", enabled: true, subject: "🚨 Corsi in scadenza: completa la formazione obbligatoria", body: "Ciao {{nome}}, attenzione: questi corsi sono in scadenza o già scaduti: {{elenco}}. Completali al più presto." },
   { type: "completamento", enabled: true, subject: "🎉 Hai completato «{{corso}}»", body: "Ottimo lavoro {{nome}}: corso completato e {{punti}} punti guadagnati." },
