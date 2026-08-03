@@ -391,6 +391,8 @@ export interface PortalSettings {
   reminderRules?: Partial<Record<ReminderStage, ReminderRule>>; // sovrascrive DEFAULT_REMINDER_RULES stadio per stadio
   homeBlocks?: HomeBlockConfig[]; // ordine e visibilità dei blocchi nella home dello studente
   leaderboardAnonymous?: boolean; // classifica generale: se true, ognuno vede solo la propria posizione
+  ssoDefaultTenantId?: string; // insegna assegnata a chi entra via SSO da My Rosaflor
+  ssoDefaultStoreId?: string; // punto vendita assegnato a chi entra via SSO da My Rosaflor
 }
 
 /** Uno dei blocchi mostrabili nella home dello studente, in un ordine scelto dall'admin. */

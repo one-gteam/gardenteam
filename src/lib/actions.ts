@@ -115,6 +115,65 @@ function canSendStage(db: DB, user: User, type: EmailType, rule: ReminderRule, s
   return daysSince(previous[previous.length - 1].date) >= rule.intervalDays;
 }
 
+/**
+ * Login/iscrizione via SSO da My Rosaflor: se l'email non esiste ancora la
+ * crea (reparto abbinato per nome, insegna/PV di default configurati in
+ * Organizzazione → Consorzio), altrimenti fa accedere l'account esistente.
+ * La verifica del token (firma/scadenza) avviene nella route /sso, PRIMA di
+ * chiamare questa funzione: qui i dati sono già considerati fidati.
+ */
+export async function provisionSsoUser(payload: {
+  email: string;
+  nome: string;
+  cognome: string;
+  reparto?: string;
+  assunzione?: string;
+}): Promise<{ ok: true; userId: string } | { ok: false; reason: "disattivato" }> {
+  const db = await getDb();
+  const email = payload.email.toLowerCase().trim();
+  let user = db.users.find((u) => u.email.toLowerCase() === email);
+
+  if (!user) {
+    const dept = payload.reparto
+      ? db.departments.find((d) => d.name.toLowerCase() === payload.reparto!.toLowerCase())
+      : undefined;
+    // senza data di assunzione nota, un anno fa: non deve risultare "neoassunto" per errore
+    const unAnnoFa = new Date(Date.now() - 366 * 86400000).toISOString().slice(0, 10);
+    user = {
+      id: `u_sso_${Date.now()}`,
+      firstName: payload.nome || "Collaboratore",
+      lastName: payload.cognome || "",
+      email,
+      role: "student",
+      tenantId: db.settings.ssoDefaultTenantId,
+      storeId: db.settings.ssoDefaultStoreId,
+      departmentId: dept?.id,
+      jobTitle: payload.reparto,
+      hireDate: /^\d{4}-\d{2}-\d{2}$/.test(payload.assunzione ?? "") ? payload.assunzione! : unAnnoFa,
+      points: 0,
+      badges: [],
+      active: true,
+    };
+    db.users.push(user);
+    queueEmail(db, user, "benvenuto");
+    notifyNewAssignments(db, user);
+    await saveDb(db);
+  }
+
+  if (!user.active) return { ok: false, reason: "disattivato" };
+  return { ok: true, userId: user.id };
+}
+
+export async function saveSsoDefaults(formData: FormData) {
+  const admin = await requireUser();
+  if (admin.role !== "system_admin") redirect("/admin");
+  const db = await getDb();
+  db.settings.ssoDefaultTenantId = String(formData.get("ssoDefaultTenantId") ?? "") || undefined;
+  db.settings.ssoDefaultStoreId = String(formData.get("ssoDefaultStoreId") ?? "") || undefined;
+  await saveDb(db);
+  redirect("/admin/organizzazione/consorzio?salvato=1");
+}
+
 function hashPassword(password: string): string {
   const salt = randomBytes(16).toString("hex");
   return `${salt}:${scryptSync(password, salt, 64).toString("hex")}`;

@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import Header from "@/components/Header";
-import { updateSettings } from "@/lib/actions";
+import { updateSettings, saveSsoDefaults } from "@/lib/actions";
 import { DEFAULT_HOME_BLOCKS, FONT_OPTIONS } from "@/lib/types";
 import HomeBlocksPanel from "@/components/HomeBlocksPanel";
 
@@ -98,6 +98,36 @@ export default async function ConsorzioPage({
               I messaggi di benvenuto restano sempre in cima. Sotto, decidi quali blocchi mostrare e in che ordine.
             </p>
             <HomeBlocksPanel blocks={s.homeBlocks ?? DEFAULT_HOME_BLOCKS} />
+          </div>
+        </div>
+
+        <div className="section">
+          <div className="section-head">
+            <h2>🔗 Accesso da My Rosaflor (SSO)</h2>
+            <span className="hint">insegna e punto vendita per chi entra senza registrarsi a mano</span>
+          </div>
+          <div className="card">
+            <p className="hint" style={{ margin: "0 0 12px" }}>
+              Chi arriva dal link della Formazione su My Rosaflor e non ha ancora un account qui viene
+              creato al volo con questi valori (il reparto viene abbinato per nome, se coincide con uno dei vostri).
+            </p>
+            <form action={saveSsoDefaults} style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
+              <label className="field" style={{ marginBottom: 0, maxWidth: 260 }}>
+                Insegna assegnata
+                <select name="ssoDefaultTenantId" defaultValue={s.ssoDefaultTenantId ?? ""}>
+                  <option value="">— nessuna —</option>
+                  {db.tenants.map((t) => <option key={t.id} value={t.id}>{t.emoji} {t.name}</option>)}
+                </select>
+              </label>
+              <label className="field" style={{ marginBottom: 0, maxWidth: 260 }}>
+                Punto vendita assegnato
+                <select name="ssoDefaultStoreId" defaultValue={s.ssoDefaultStoreId ?? ""}>
+                  <option value="">— nessuno —</option>
+                  {db.stores.map((st) => <option key={st.id} value={st.id}>{st.name}</option>)}
+                </select>
+              </label>
+              <button className="btn btn-sm" type="submit">💾 Salva</button>
+            </form>
           </div>
         </div>
 
