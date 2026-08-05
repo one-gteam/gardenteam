@@ -1,14 +1,33 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { getCurrentUser } from "@/lib/auth";
-import { canAccessStampe, filterProducts, getStampeDb, resolveScope, effectiveValue } from "@/lib/stampe";
+import { canAccessStampe, filterProducts, getStampeDb, resolveScope, effectiveValue, PrintProduct, Scope, StampeDB } from "@/lib/stampe";
+import { DB } from "@/lib/types";
 import { getDb } from "@/lib/db";
 
 const HEADERS = [
-  "CODICE FORNITORE", "EAN", "TIPOLOGIA", "MARCA", "Titolo", "Sottotitolo", "Materiali",
+  "CODICE FORNITORE", "EAN", "TIPOLOGIA", "MARCA", "Anno collezione", "Titolo", "Sottotitolo", "Materiali",
   "Parti incluse", "Colori", "Misure imballo", "Buono a sapersi", "Consigli utili",
   "Prezzo", "Prezzo listino", "Trasporto",
 ];
+
+/**
+ * Riga di export per un prodotto. Per il Consorzio esporta la versione comune;
+ * per insegna/PV esporta i valori EFFETTIVI del proprio ambito (personalizzazioni
+ * comprese), così il file scaricato è quello che si vede nei propri cartelli.
+ */
+function rowFor(db: StampeDB, scope: Scope, p: PrintProduct, academyDb: DB): Record<string, string> {
+  const val = (fieldId: string) =>
+    scope.type === "system" ? p.fields[fieldId] ?? "" : effectiveValue(db, scope, p, fieldId, academyDb).value;
+  return {
+    "CODICE FORNITORE": p.codice, EAN: p.ean, TIPOLOGIA: p.tipologia, MARCA: p.marca,
+    "Anno collezione": p.annoCollezione ?? "",
+    Titolo: val("titolo"), Sottotitolo: val("sottotitolo"), Materiali: val("materiali"),
+    "Parti incluse": val("partiIncluse"), Colori: val("colori"), "Misure imballo": val("misure"),
+    "Buono a sapersi": val("buono"), "Consigli utili": val("consigli"),
+    Prezzo: val("prezzo"), "Prezzo listino": val("prezzoListino"), Trasporto: val("trasporto"),
+  };
+}
 
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
@@ -17,13 +36,13 @@ export async function GET(req: NextRequest) {
   const sp = Object.fromEntries(req.nextUrl.searchParams.entries());
   const db = await getStampeDb();
   const academyDb = await getDb();
+  const scope = resolveScope(user, sp.scope, academyDb);
 
   let rows: Record<string, string>[];
   let filename: string;
   let headers = HEADERS;
   if (sp.associa === "1") {
     // modello per l'associazione dei codici interni dell'insegna/PV
-    const scope = resolveScope(user, sp.scope, academyDb);
     headers = ["CODICE FORNITORE", "EAN", "MARCA", "Titolo", "CODICE INTERNO"];
     rows = db.products.map((p) => ({
       "CODICE FORNITORE": p.codice,
@@ -34,18 +53,13 @@ export async function GET(req: NextRequest) {
     }));
     filename = "associazione_codici_interni.xlsx";
   } else if (sp.catalogo === "1") {
-    rows = db.products.map((p) => ({
-      "CODICE FORNITORE": p.codice, EAN: p.ean, TIPOLOGIA: p.tipologia, MARCA: p.marca,
-      Titolo: p.fields.titolo ?? "", Sottotitolo: p.fields.sottotitolo ?? "", Materiali: p.fields.materiali ?? "",
-      "Parti incluse": p.fields.partiIncluse ?? "", Colori: p.fields.colori ?? "", "Misure imballo": p.fields.misure ?? "",
-      "Buono a sapersi": p.fields.buono ?? "", "Consigli utili": p.fields.consigli ?? "",
-      Prezzo: p.fields.prezzo ?? "", "Prezzo listino": p.fields.prezzoListino ?? "", Trasporto: p.fields.trasporto ?? "",
-    }));
+    rows = db.products.map((p) => rowFor(db, scope, p, academyDb));
     filename = "catalogo_completo_arredo.xlsx";
   } else if (sp.template === "1") {
     rows = [
       {
         "CODICE FORNITORE": "72558232", EAN: "2701725582328", TIPOLOGIA: "Lettini + Sdraio", MARCA: "Outsidehome",
+        "Anno collezione": "2026",
         Titolo: "Lettino alluminio", Sottotitolo: "Lettino prendisole in alluminio",
         Materiali: "Struttura alluminio e seduta textilene", "Parti incluse": "1 lettino 181x67xh39 cm  Portata 120 kg",
         Colori: "Antracite  Tortora", "Misure imballo": "1 box 153x72xh20 cm  Peso 6 kg",
@@ -59,13 +73,7 @@ export async function GET(req: NextRequest) {
     const products = selIds.length > 0
       ? db.products.filter((p) => selIds.includes(p.id))
       : filterProducts(db, sp);
-    rows = products.map((p) => ({
-      "CODICE FORNITORE": p.codice, EAN: p.ean, TIPOLOGIA: p.tipologia, MARCA: p.marca,
-      Titolo: p.fields.titolo ?? "", Sottotitolo: p.fields.sottotitolo ?? "", Materiali: p.fields.materiali ?? "",
-      "Parti incluse": p.fields.partiIncluse ?? "", Colori: p.fields.colori ?? "", "Misure imballo": p.fields.misure ?? "",
-      "Buono a sapersi": p.fields.buono ?? "", "Consigli utili": p.fields.consigli ?? "",
-      Prezzo: p.fields.prezzo ?? "", "Prezzo listino": p.fields.prezzoListino ?? "", Trasporto: p.fields.trasporto ?? "",
-    }));
+    rows = products.map((p) => rowFor(db, scope, p, academyDb));
     filename = `prodotti_arredo_${new Date().toISOString().slice(0, 10)}.xlsx`;
   }
 

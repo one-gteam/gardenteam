@@ -86,6 +86,21 @@ export default function StampaPicker({
         <div style={{ padding: "4px 10px", fontSize: 12.5, color: "var(--muted)", fontWeight: 700 }}>
           {products.length} prodotti — clic per selezionare, <kbd>Shift</kbd>+clic per intervalli
         </div>
+        <div style={{ display: "flex", gap: 6, padding: "0 10px 8px" }}>
+          <button
+            type="button"
+            className="btn btn-outline btn-sm"
+            title="Seleziona tutti i prodotti dell'elenco filtrato"
+            onClick={() => setSelected((prev) => [...prev, ...products.map((p) => p.id).filter((id) => !prev.includes(id))])}
+          >
+            Seleziona tutti ({products.length})
+          </button>
+          {selected.length > 0 && (
+            <button type="button" className="btn btn-outline btn-sm" onClick={() => setSelected([])}>
+              Nessuno
+            </button>
+          )}
+        </div>
         {products.map((p, i) => {
           const isSel = selected.includes(p.id);
           return (

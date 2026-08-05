@@ -14,6 +14,7 @@ import {
   cartelloValues,
   backgroundFor,
   fieldsForScope,
+  anniCollezione,
 } from "@/lib/stampe";
 
 export default async function StampaPage({
@@ -35,6 +36,7 @@ export default async function StampaPage({
   const filtered = filterProducts(db, sp);
   const tipologie = [...new Set(db.products.map((p) => p.tipologia))].sort();
   const marche = [...new Set(db.products.map((p) => p.marca))].sort();
+  const anni = anniCollezione(db);
 
   const selectedIds = (sp.sel ?? "").split(",").filter(Boolean);
   const selected = selectedIds.map((id) => db.products.find((p) => p.id === id)).filter(Boolean) as typeof db.products;
@@ -123,7 +125,7 @@ export default async function StampaPage({
         </div>
 
         <div className="card" style={{ marginBottom: 16, padding: 14 }}>
-          <form method="get" style={{ display: "grid", gridTemplateColumns: "2fr 2fr 2fr auto", gap: 10, alignItems: "end" }}>
+          <form method="get" style={{ display: "grid", gridTemplateColumns: "2fr 2fr 2fr 1fr auto", gap: 10, alignItems: "end" }}>
             <input type="hidden" name="scope" value={scopeParam} />
             <input type="hidden" name="sel" value={sp.sel ?? ""} />
             <label className="field" style={{ marginBottom: 0 }}>Cerca<input type="text" name="q" defaultValue={sp.q ?? ""} /></label>
@@ -141,6 +143,13 @@ export default async function StampaPage({
                 {marche.map((m) => <option key={m} value={m}>{m}</option>)}
               </select>
             </label>
+            <label className="field" style={{ marginBottom: 0 }}>
+              Anno collezione
+              <select name="anno" defaultValue={sp.anno ?? ""}>
+                <option value="">Tutti</option>
+                {anni.map((a) => <option key={a} value={a}>{a}</option>)}
+              </select>
+            </label>
             <button className="btn btn-sm" type="submit">Filtra</button>
           </form>
         </div>
@@ -156,7 +165,7 @@ export default async function StampaPage({
             }))}
             formats={db.formats.map((f) => ({ id: f.id, name: f.name }))}
             scopeParam={scopeParam}
-            filters={{ q: sp.q ?? "", tipologia: sp.tipologia ?? "", marca: sp.marca ?? "" }}
+            filters={{ q: sp.q ?? "", tipologia: sp.tipologia ?? "", marca: sp.marca ?? "", anno: sp.anno ?? "" }}
             initialSelected={selectedIds}
             initialFormats={Object.fromEntries(
               selectedIds.map((id) => [id, sp[`formato_${id}`] ?? globalFormatId]).filter(([, v]) => v)

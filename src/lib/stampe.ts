@@ -30,6 +30,7 @@ export interface PrintProduct {
   ean: string;
   tipologia: string;
   marca: string;
+  annoCollezione?: string; // anno di inserimento nella collezione (es. "2026")
   image: string; // percorso SharePoint/locale, collegato per codice articolo
   fields: Record<string, string>;
   variantOf?: string; // id del prodotto base per le varianti colore
@@ -365,15 +366,21 @@ export function listValues(db: StampeDB, key: "marche" | "tipologie" | "colori",
   return [...new Set([...fromProducts, ...fromLists])].filter(Boolean).sort();
 }
 
+/** Anni collezione presenti a database, dal più recente. */
+export function anniCollezione(db: StampeDB): string[] {
+  return [...new Set(db.products.map((p) => p.annoCollezione).filter(Boolean) as string[])].sort().reverse();
+}
+
 export function filterProducts(
   db: StampeDB,
-  f: { q?: string; tipologia?: string; marca?: string; prezzoMax?: string }
+  f: { q?: string; tipologia?: string; marca?: string; prezzoMax?: string; anno?: string }
 ): PrintProduct[] {
   const q = (f.q ?? "").toLowerCase();
   const max = Number(f.prezzoMax) || 0;
   return db.products.filter((p) => {
     if (f.tipologia && p.tipologia !== f.tipologia) return false;
     if (f.marca && p.marca !== f.marca) return false;
+    if (f.anno && (p.annoCollezione ?? "") !== f.anno) return false;
     if (q && !`${p.fields.titolo} ${p.fields.sottotitolo} ${p.codice}`.toLowerCase().includes(q)) return false;
     if (max > 0) {
       const prezzo = parseFloat((p.fields.prezzo ?? "").replace(",", "."));

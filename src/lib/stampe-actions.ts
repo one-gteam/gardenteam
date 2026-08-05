@@ -12,6 +12,7 @@ import {
   isConsortiumEditor,
   resolveScope,
   isStoreBlocked,
+  effectiveValue,
   ScopeType,
 } from "./stampe";
 
@@ -169,12 +170,14 @@ export async function addPrintProduct(scopeParam: string, formData: FormData) {
           (p) => p.codice.toLowerCase() === copyFromKey || `${p.fields.titolo} (${p.codice})`.toLowerCase() === copyFromKey
         )
       : undefined;
+    const anno = String(formData.get("annoCollezione") ?? "").trim();
     db.products.push({
       id,
       codice,
       ean: String(formData.get("ean") ?? "").trim(),
       tipologia: String(formData.get("tipologia") ?? "").trim() || source?.tipologia || "Varie (Tavolini, Bauli, Ecc)",
       marca: String(formData.get("marca") ?? "").trim() || source?.marca || "Garden Team",
+      annoCollezione: /^\d{4}$/.test(anno) ? anno : source?.annoCollezione,
       image: "",
       fields: { ...(source ? source.fields : {}), titolo },
     });
@@ -219,6 +222,8 @@ export async function updateProductMeta(productId: string, scopeParam: string, f
   if (tip) p!.tipologia = tip;
   const marca = String(formData.get("marca") ?? "").trim();
   if (marca) p!.marca = marca;
+  const anno = String(formData.get("annoCollezione") ?? "").trim();
+  p!.annoCollezione = /^\d{4}$/.test(anno) ? anno : undefined;
   await saveStampeDb(db);
   redirect(backUrl("/stampe/arredo/dati", scopeParam, { prodotto: productId, salvato: "1" }));
 }
@@ -335,6 +340,7 @@ const EXCEL_COLUMNS: [string, string][] = [
   ["EAN", "ean"],
   ["TIPOLOGIA", "tipologia"],
   ["MARCA", "marca"],
+  ["Anno collezione", "annoCollezione"],
   ["Titolo", "titolo"],
   ["Sottotitolo", "sottotitolo"],
   ["Materiali", "materiali"],
@@ -380,11 +386,59 @@ export async function importProductsExcel(scopeParam: string, formData: FormData
       if (fieldId === "ean") p.ean = v;
       else if (fieldId === "tipologia") p.tipologia = v;
       else if (fieldId === "marca") p.marca = v;
+      else if (fieldId === "annoCollezione") p.annoCollezione = /^\d{4}$/.test(v) ? v : p.annoCollezione;
       else p.fields[fieldId] = v;
     }
   }
   await saveStampeDb(db);
   redirect(backUrl("/stampe/arredo/dati", scopeParam, { importati: String(created + updated), nuovi: String(created) }));
+}
+
+/**
+ * Import Excel per insegna/PV: le celle compilate diventano personalizzazioni
+ * (override) del proprio ambito, senza toccare la versione del Consorzio.
+ * I prodotti si abbinano per CODICE FORNITORE; righe con codici sconosciuti
+ * vengono saltate (i prodotti nuovi li crea solo il Consorzio). Celle identiche
+ * al valore già in vigore non generano override inutili.
+ */
+export async function importOverridesExcel(scopeParam: string, formData: FormData) {
+  const user = await requireStampeUser();
+  const db = await getStampeDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  if (scope.type === "system" || isStoreBlocked(db, scope)) {
+    redirect(backUrl("/stampe/arredo/dati", scopeParam, { importati: "0" }));
+  }
+  const file = formData.get("file") as File | null;
+  if (!file || file.size === 0) redirect(backUrl("/stampe/arredo/dati", scopeParam, { importati: "0" }));
+  const XLSX = await import("xlsx");
+  const wb = XLSX.read(Buffer.from(await file!.arrayBuffer()), { type: "buffer" });
+  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[wb.SheetNames[0]], { defval: "" });
+  let touched = 0;
+  for (const row of rows) {
+    const get = (col: string) => String(row[col] ?? "").trim().replace(/\.0$/, "");
+    const codice = get("CODICE FORNITORE");
+    const product = db.products.find((p) => p.codice === codice);
+    if (!product) continue;
+    let rowTouched = false;
+    for (const [col, fieldId] of EXCEL_COLUMNS) {
+      // anagrafica (codice/ean/tipologia/marca/anno) è del Consorzio: qui solo i campi testuali
+      if (["codice", "ean", "tipologia", "marca", "annoCollezione"].includes(fieldId)) continue;
+      const v = get(col);
+      if (!v) continue;
+      const current = effectiveValue(db, scope, product, fieldId, academyDb).value;
+      if (v === current) continue;
+      const existing = db.overrides.find(
+        (o) => o.scopeType === scope.type && o.scopeId === scope.id && o.productId === product.id && o.fieldId === fieldId
+      );
+      if (existing) existing.value = v;
+      else db.overrides.push({ scopeType: scope.type, scopeId: scope.id, productId: product.id, fieldId, value: v });
+      rowTouched = true;
+    }
+    if (rowTouched) touched++;
+  }
+  await saveStampeDb(db);
+  redirect(backUrl("/stampe/arredo/dati", scopeParam, { importati: String(touched), personalizzati: "1" }));
 }
 
 /**

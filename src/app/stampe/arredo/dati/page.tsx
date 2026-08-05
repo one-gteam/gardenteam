@@ -22,6 +22,7 @@ import {
   backgroundFor,
   listValues,
   isImageField,
+  anniCollezione,
 } from "@/lib/stampe";
 import {
   toggleFieldHidden,
@@ -31,6 +32,7 @@ import {
   updateProductMeta,
   copyFieldBroadcast,
   importProductsExcel,
+  importOverridesExcel,
 } from "@/lib/stampe-actions";
 
 export default async function DatiPage({
@@ -61,6 +63,7 @@ export default async function DatiPage({
 
   const tipologie = listValues(db, "tipologie", scope, academyDb);
   const marche = listValues(db, "marche", scope, academyDb);
+  const anni = anniCollezione(db);
   const scopeFields = fieldsForScope(db, scope, academyDb);
 
   const formatId = sp.formato ?? db.formats[0]?.id;
@@ -124,14 +127,18 @@ export default async function DatiPage({
         </div>
 
         {sp.importati !== undefined && (
-          <div className="alert alert-green no-print">✓ Import Excel: {sp.importati} prodotti elaborati ({sp.nuovi ?? 0} nuovi).</div>
+          <div className="alert alert-green no-print">
+            {sp.personalizzati
+              ? `✓ Import Excel: personalizzazioni aggiornate su ${sp.importati} prodotti.`
+              : `✓ Import Excel: ${sp.importati} prodotti elaborati (${sp.nuovi ?? 0} nuovi).`}
+          </div>
         )}
         {sp.copiati !== undefined && <div className="alert alert-green no-print">✓ Campo copiato su {sp.copiati} prodotti.</div>}
         {sp.segnalato && <div className="alert alert-green no-print">✓ Segnalazione inviata al responsabile contenuti del Consorzio.</div>}
 
         {/* filtro + strumenti excel */}
         <div className="card" style={{ marginBottom: 14, padding: 14 }}>
-          <form method="get" style={{ display: "grid", gridTemplateColumns: "2fr 2fr 2fr 1fr auto auto", gap: 10, alignItems: "end" }}>
+          <form method="get" style={{ display: "grid", gridTemplateColumns: "2fr 2fr 2fr 1fr 1fr auto auto", gap: 10, alignItems: "end" }}>
             <input type="hidden" name="scope" value={scopeParam} />
             <input type="hidden" name="aperti" value={openList.join(",")} />
             <label className="field" style={{ marginBottom: 0 }}>Cerca<input type="text" name="q" defaultValue={sp.q ?? ""} placeholder="titolo o codice" /></label>
@@ -149,21 +156,37 @@ export default async function DatiPage({
                 {marche.map((m) => <option key={m} value={m}>{m}</option>)}
               </select>
             </label>
+            <label className="field" style={{ marginBottom: 0 }}>
+              Anno collezione
+              <select name="anno" defaultValue={sp.anno ?? ""}>
+                <option value="">Tutti</option>
+                {anni.map((a) => <option key={a} value={a}>{a}</option>)}
+              </select>
+            </label>
             <label className="field" style={{ marginBottom: 0 }}>Prezzo max €<input type="text" name="prezzoMax" defaultValue={sp.prezzoMax ?? ""} /></label>
             <label style={{ fontSize: 12, display: "flex", gap: 5, alignItems: "center", whiteSpace: "nowrap", marginBottom: 10 }}>
               <input type="checkbox" name="raggruppa" value="1" defaultChecked={raggruppa} /> Raggruppa varianti colore
             </label>
             <button className="btn btn-sm" type="submit">Filtra</button>
           </form>
-          {consortium && (
+          {(consortium || canEdit) && (
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 10, borderTop: "1px solid var(--line)", paddingTop: 10 }}>
               <strong style={{ fontSize: 12.5 }}>Excel:</strong>
-              <a className="btn btn-outline btn-sm" href={`/stampe/arredo/excel?${qs({})}`}>Esporta i {filtered.length} filtrati</a>
+              <a className="btn btn-outline btn-sm" href={`/stampe/arredo/excel?${qs({ scope: scopeParam })}`}>Esporta i {filtered.length} filtrati</a>
               <a className="btn btn-outline btn-sm" href="/stampe/arredo/excel?template=1">Scarica modello di esempio</a>
-              <form action={importProductsExcel.bind(null, scopeParam)} style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <form
+                action={(consortium && scope.type === "system" ? importProductsExcel : importOverridesExcel).bind(null, scopeParam)}
+                style={{ display: "flex", gap: 6, alignItems: "center" }}
+              >
                 <input type="file" name="file" accept=".xlsx,.xls" required style={{ marginTop: 0, fontSize: 12, maxWidth: 220 }} />
                 <button className="btn btn-sm" type="submit">Importa Excel</button>
               </form>
+              {!(consortium && scope.type === "system") && (
+                <span className="hint" style={{ fontSize: 11.5 }}>
+                  L&apos;import scrive le personalizzazioni di {scope.label}: i prodotti si abbinano per CODICE FORNITORE,
+                  i codici sconosciuti vengono saltati.
+                </span>
+              )}
             </div>
           )}
         </div>
@@ -210,6 +233,7 @@ export default async function DatiPage({
                     <select name="tipologia">{tipologie.map((t) => <option key={t} value={t}>{t}</option>)}</select>
                   </label>
                   <label className="field">Marca<input type="text" name="marca" list="dl-marche" /></label>
+                  <label className="field">Anno collezione<input type="text" name="annoCollezione" placeholder="es. 2026" /></label>
                   <label className="field">
                     Copia i dati da… (cerca per codice)
                     <input type="text" name="copyFrom" list="dl-prodotti" placeholder="digita per cercare" />
@@ -278,6 +302,7 @@ export default async function DatiPage({
                       <span className="pill pill-gray">{product.marca}</span>
                       <span className="pill pill-gray">Cod. {product.codice}</span>
                       {product.ean && <span className="pill pill-gray">EAN {product.ean}</span>}
+                      {product.annoCollezione && <span className="pill pill-green">Collezione {product.annoCollezione}</span>}
                       {product.variantOf && <span className="pill pill-amber">Variante colore</span>}
                     </div>
                     {consortium && (
@@ -302,6 +327,7 @@ export default async function DatiPage({
                               {tipologie.map((t) => <option key={t} value={t}>{t}</option>)}
                             </select>
                             <input type="text" name="marca" defaultValue={product.marca} list="dl-marche" style={{ marginTop: 0, width: 130 }} />
+                            <input type="text" name="annoCollezione" defaultValue={product.annoCollezione ?? ""} placeholder="Anno collezione (es. 2026)" style={{ marginTop: 0, width: 165 }} />
                             <button className="btn btn-sm" type="submit">Salva</button>
                           </form>
                         </details>
