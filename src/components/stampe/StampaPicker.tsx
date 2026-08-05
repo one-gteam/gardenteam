@@ -24,6 +24,7 @@ export default function StampaPicker({
   initialNoPrice,
   initialHidden,
   globalFormat,
+  baseUrl = "/stampe/arredo/stampa",
 }: {
   products: ProdLite[];
   formats: { id: string; name: string }[];
@@ -36,6 +37,7 @@ export default function StampaPicker({
   initialNoPrice: Record<string, boolean>;
   initialHidden: Record<string, string[]>;
   globalFormat: string;
+  baseUrl?: string; // pagina di stampa da richiamare (default: arredo)
 }) {
   const router = useRouter();
   const [selected, setSelected] = useState<string[]>(initialSelected);
@@ -72,10 +74,10 @@ export default function StampaPicker({
     }
     if (doppio) params.set("doppio", "1");
     if (print) params.set("print", "1");
-    return `/stampe/arredo/stampa?${params.toString()}`;
+    return `${baseUrl}?${params.toString()}`;
   };
 
-  const anyA5 = selected.some((id) => (rowFormat[id] ?? applyAll) === "a5");
+  const anyA5 = selected.some((id) => ["a5", "za5"].includes(rowFormat[id] ?? applyAll));
 
   const selectedProds = selected.map((id) => products.find((p) => p.id === id)).filter(Boolean) as ProdLite[];
 

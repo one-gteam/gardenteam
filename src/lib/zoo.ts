@@ -116,7 +116,16 @@ export interface ZooSuggestion {
 }
 
 /** Cella del volantino costruito: offerta, solo testo, o vuota; span = spazi uniti. */
-export interface VolCell { span: number; tipo: "offerta" | "testo" | "vuoto"; offerId?: string; testo?: string }
+export interface VolCell {
+  span: number; // spazi occupati in orizzontale
+  vspan?: number; // 2 = unita con la riga sotto
+  tipo: "offerta" | "testo" | "vuoto";
+  offerId?: string;
+  testo?: string;
+  // modifiche "solo per questo volantino": non toccano l'offerta a database
+  descrizione?: string;
+  prezzo?: string;
+}
 export interface VolRow { cols: number; cells: VolCell[] }
 export interface VolPage { id: string; titolo?: string; rows: VolRow[] }
 export interface VolantinoLayout { campaignId: string; pages: VolPage[] }
@@ -144,6 +153,7 @@ export interface ZooDB {
   pvPrices: ZooPvPrice[];
   suggestions: ZooSuggestion[];
   volantinoLayouts: VolantinoLayout[];
+  zooLayouts: ZooLayout[];
 }
 
 /* ================== Persistenza ================== */
@@ -163,11 +173,11 @@ export async function getZooDb(): Promise<ZooDB> {
   const empty: ZooDB = {
     settings: DEFAULT_SETTINGS,
     products: [], parents: [], textOverrides: [], campaigns: [], offers: [],
-    votes: [], hidden: [], pvPrices: [], suggestions: [], volantinoLayouts: [],
+    votes: [], hidden: [], pvPrices: [], suggestions: [], volantinoLayouts: [], zooLayouts: [],
   };
   const db = await readDomain<ZooDB>("zoo", empty);
   db.settings = { ...DEFAULT_SETTINGS, ...(db.settings ?? {}) };
-  for (const k of ["products", "parents", "textOverrides", "campaigns", "offers", "votes", "hidden", "pvPrices", "suggestions", "volantinoLayouts"] as const) {
+  for (const k of ["products", "parents", "textOverrides", "campaigns", "offers", "votes", "hidden", "pvPrices", "suggestions", "volantinoLayouts", "zooLayouts"] as const) {
     if (!db[k]) (db as unknown as Record<string, unknown>)[k] = [];
   }
   return db;
@@ -265,3 +275,68 @@ export function fornitoriList(db: ZooDB): string[] {
 export function marcheList(db: ZooDB): string[] {
   return Array.from(new Set(db.products.map((p) => p.marca).filter(Boolean))).sort();
 }
+
+/* ================== Cartelli Zoo: campi, formati e layout per ambito ================== */
+
+import type { PrintField, PrintFormat, LayoutItem } from "./stampe";
+
+/** Campi disponibili sul cartello di un'offerta zoo (stessa meccanica dell'Arredo). */
+export const ZOO_FIELDS: PrintField[] = [
+  { id: "descrizione", label: "Descrizione offerta", size: 22, bold: true, font: "cn" },
+  { id: "marca", label: "Marca", size: 14, bold: false },
+  { id: "prezzoPromo", label: "Prezzo promo", size: 46, bold: true, font: "cn" },
+  { id: "prezzoListino", label: "Prezzo listino (barrato)", size: 16, bold: false },
+  { id: "label", label: "Etichetta (SOTTOCOSTO, NOVITÀ…)", size: 16, bold: true, font: "cn" },
+  { id: "condizioni", label: "Condizioni", size: 11, bold: false },
+  { id: "immagine", label: "Foto prodotto", size: 12, bold: false, type: "image" },
+];
+
+export const ZOO_FORMATS: PrintFormat[] = [
+  { id: "za6", name: "A6 (scaffale)", w: 105, h: 148 },
+  { id: "za5", name: "A5", w: 148, h: 210 },
+  { id: "za4", name: "A4", w: 210, h: 297 },
+];
+
+/** Layout cartello zoo salvato per formato+ambito (Consorzio come base). */
+export interface ZooLayout {
+  id: string;
+  formatId: string;
+  scopeType: ScopeType;
+  scopeId: string;
+  items: LayoutItem[];
+}
+
+/** Layout effettivo: quello dell'ambito, altrimenti la versione del Consorzio. */
+export function effectiveZooLayout(db: ZooDB, scope: Scope, formatId: string): ZooLayout {
+  return (
+    db.zooLayouts.find((l) => l.formatId === formatId && l.scopeType === scope.type && l.scopeId === scope.id) ??
+    db.zooLayouts.find((l) => l.formatId === formatId && l.scopeType === "system") ??
+    { id: "default", formatId, scopeType: "system", scopeId: "", items: DEFAULT_ZOO_ITEMS }
+  );
+}
+
+/** Valori del cartello per un'offerta (con prezzo del PV se caricato). */
+export function zooCartelloValues(db: ZooDB, offer: ZooOffer): Record<string, string> {
+  const product = db.products.find((p) => p.id === offer.productId);
+  const parent = product?.parentId ? db.parents.find((x) => x.id === product.parentId) : undefined;
+  return {
+    descrizione: offer.descrizione,
+    marca: product?.marca ?? "",
+    prezzoPromo: offer.prezzoPromo ? `€ ${offer.prezzoPromo}` : "",
+    prezzoListino: offer.prezzoListino ? `€ ${offer.prezzoListino}` : "",
+    label: offer.label ?? "",
+    condizioni: offer.condizioni ?? "",
+    immagine: zooImageUrl(product, parent),
+  };
+}
+
+/** Layout cartello zoo di partenza, usato finché il Consorzio non ne salva uno. */
+export const DEFAULT_ZOO_ITEMS: LayoutItem[] = [
+  { fieldId: "immagine", x: 5, y: 6, w: 55, h: 38 },
+  { fieldId: "label", x: 62, y: 6, w: 34, h: 10 },
+  { fieldId: "descrizione", x: 5, y: 48, w: 90, h: 18 },
+  { fieldId: "marca", x: 5, y: 67, w: 45, h: 7 },
+  { fieldId: "prezzoListino", x: 55, y: 66, w: 40, h: 7 },
+  { fieldId: "prezzoPromo", x: 40, y: 74, w: 55, h: 18 },
+  { fieldId: "condizioni", x: 5, y: 93, w: 90, h: 5 },
+];

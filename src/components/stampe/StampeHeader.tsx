@@ -19,6 +19,7 @@ export default async function StampeHeader({ user, active, area = "arredo" }: { 
         ...(["system_admin", "course_manager", "zoo_manager"].includes(user.role)
           ? [{ href: "/stampe/zoo/crea-volantino", label: "Crea Volantino", key: "crea-volantino" }]
           : []),
+        { href: "/stampe/zoo/layout", label: "Layout", key: "layout" },
         { href: "/stampe/zoo/stampa", label: "Stampa cartelli", key: "stampa" },
         ...(isAdmin || user.role === "zoo_manager"
           ? [{ href: "/stampe/zoo/impostazioni", label: "Impostazioni", key: "impostazioni" }]

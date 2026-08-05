@@ -617,3 +617,46 @@ export async function saveVolantinoEditors(scopeParam: string, formData: FormDat
   await saveZooDb(db);
   redirect(backUrl("/stampe/zoo/crea-volantino", scopeParam, { salvato: "1" }));
 }
+
+/** Modifica rapida di un'offerta dal builder del volantino ("salva anche nel database"). */
+export async function updateZooOfferQuick(offerId: string, descrizione: string, prezzo: string) {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const allowed = isZooEditor(user) || (db.settings.volantinoEditors ?? []).includes(user.id);
+  if (!allowed) return { ok: false as const };
+  const o = db.offers.find((x) => x.id === offerId);
+  if (!o) return { ok: false as const };
+  if (descrizione.trim()) o.descrizione = descrizione.trim();
+  if (prezzo.trim()) o.prezzoPromo = prezzo.trim();
+  await saveZooDb(db);
+  return { ok: true as const };
+}
+
+/** Salva il layout cartello zoo per formato+ambito (stessa firma di saveLayout dell'Arredo). */
+export async function saveZooLayout(formatId: string, scopeParam: string, _tipologieCsv: string, itemsJson: string) {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  if (scope.type === "system" && !isZooEditor(user)) return;
+  let items: unknown;
+  try { items = JSON.parse(itemsJson); } catch { return; }
+  if (!Array.isArray(items)) return;
+  const { ZOO_FIELDS } = await import("./zoo");
+  const clean = (items as Record<string, unknown>[])
+    .filter((i) => typeof i.fieldId === "string" && (i.fieldId === "__img" ? typeof i.imageUrl === "string" : ZOO_FIELDS.some((f) => f.id === i.fieldId)))
+    .map((i) => ({
+      fieldId: i.fieldId as string,
+      x: Math.max(0, Math.min(95, Number(i.x) || 0)),
+      y: Math.max(0, Math.min(95, Number(i.y) || 0)),
+      w: Math.max(3, Math.min(100, Number(i.w) || 10)),
+      h: Math.max(2, Math.min(100, Number(i.h) || 5)),
+      ...(typeof i.color === "string" && /^#[0-9a-fA-F]{3,8}$/.test(i.color) ? { color: i.color as string } : {}),
+      ...(typeof i.imageUrl === "string" ? { imageUrl: i.imageUrl as string } : {}),
+      ...(i.sticker && typeof i.sticker === "object" ? { sticker: i.sticker as import("./stampe").StickerStyle } : {}),
+    }));
+  const existing = db.zooLayouts.find((l) => l.formatId === formatId && l.scopeType === scope.type && l.scopeId === scope.id);
+  if (existing) existing.items = clean;
+  else db.zooLayouts.push({ id: `zl_${Date.now()}`, formatId, scopeType: scope.type, scopeId: scope.id, items: clean });
+  await saveZooDb(db);
+}

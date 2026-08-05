@@ -45,11 +45,18 @@ export default async function CreaVolantinoPage({
             voti: votes.filter((v) => v.tipo === "preferita").length,
             nonTrattati: votes.filter((v) => v.tipo === "nontrattato").length,
             scheda: campaign.schede.find((s) => s.id === o.schedaId)?.nome,
+            marca: product?.marca ?? "",
+            fornitore: product?.fornitore ?? "",
+            caratts: parent?.caratteristiche ?? [],
+            label: o.label,
           };
         })
         // prima le più votate, in fondo quelle segnalate non trattate
         .sort((a, b) => b.voti - a.voti || a.nonTrattati - b.nonTrattati)
     : [];
+  const ANIMALI = ["Cane", "Gatto", "Roditori", "Uccelli", "Pesci"];
+  const carattsProdotto = db.settings.caratteristiche.filter((c) => !ANIMALI.includes(c));
+  const fmtData = (d: string) => (d ? new Date(`${d}T00:00:00`).toLocaleDateString("it-IT") : "—");
   const layout = campaign ? db.volantinoLayouts.find((l) => l.campaignId === campaign.id) : undefined;
 
   // utenti candidabili come editor extra (per il Gestore Zoo / sistema)
@@ -66,6 +73,11 @@ export default async function CreaVolantinoPage({
             <p className="subtitle" style={{ margin: "4px 0 0" }}>
               {campaign ? `${campaign.nome} — trascina le offerte sugli spazi; ogni offerta mostra i voti dei punti vendita.` : "Nessuna campagna attiva"}
             </p>
+            {campaign && (
+              <span className="pill pill-amber" style={{ marginTop: 6, display: "inline-block" }}>
+                Offerte valide dal {fmtData(campaign.dal)} al {fmtData(campaign.al)}
+              </span>
+            )}
           </div>
           {editor && (
             <details>
@@ -97,6 +109,11 @@ export default async function CreaVolantinoPage({
             offers={offers}
             initialPages={layout?.pages ?? []}
             excelHref={`/stampe/zoo/crea-volantino/excel?campagna=${campaign.id}`}
+            animali={ANIMALI}
+            caratts={carattsProdotto}
+            labels={db.settings.labels}
+            marche={[...new Set(offers.map((o) => o.marca).filter(Boolean))].sort()}
+            fornitori={[...new Set(offers.map((o) => o.fornitore).filter(Boolean))].sort()}
           />
         )}
       </div>

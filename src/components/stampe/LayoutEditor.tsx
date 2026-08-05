@@ -3,6 +3,7 @@
 import { useRef, useState, useTransition } from "react";
 import type { LayoutItem, PrintField, PrintFormat, StickerStyle } from "@/lib/stampe";
 import { saveLayout } from "@/lib/stampe-actions";
+import { saveZooLayout } from "@/lib/zoo-actions";
 import { stickerShapeStyle } from "./stickerStyle";
 
 /** Editor drag & drop del layout cartello: trascina i campi, ridimensionali dall'angolo. */
@@ -16,6 +17,7 @@ export default function LayoutEditor({
   sampleValues,
   canEdit,
   images = [],
+  area = "arredo",
 }: {
   format: PrintFormat;
   fields: PrintField[];
@@ -26,6 +28,7 @@ export default function LayoutEditor({
   sampleValues: Record<string, string>;
   canEdit: boolean;
   images?: { name: string; url: string }[];
+  area?: "arredo" | "zoo"; // dove salvare il layout (default: arredo)
 }) {
   const [items, setItems] = useState<LayoutItem[]>(initialItems);
   const [tipologie, setTipologie] = useState<string[]>(initialTipologie);
@@ -159,7 +162,7 @@ export default function LayoutEditor({
 
   const doSave = () => {
     startTransition(async () => {
-      await saveLayout(format.id, scopeParam, tipologie.join(","), JSON.stringify(items));
+      await (area === "zoo" ? saveZooLayout : saveLayout)(format.id, scopeParam, tipologie.join(","), JSON.stringify(items));
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     });
