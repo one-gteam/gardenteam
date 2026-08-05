@@ -46,7 +46,7 @@ export default async function LineeGuidaPage() {
     <div>
       <StampeHeader user={user} active="linee-guida" />
       <div className="container" style={{ maxWidth: 900 }}>
-        <h1>📏 Linee guida cartelli Arredo Giardino</h1>
+        <h1>Linee guida cartelli Arredo Giardino</h1>
         <p className="subtitle">
           Le regole del Consorzio per scrivere i dati dei prodotti: seguirle garantisce cartelli uniformi in tutti i punti vendita.
         </p>
@@ -91,7 +91,7 @@ export default async function LineeGuidaPage() {
           {db.settings.sharepointImagesUrl && (
             <p style={{ marginTop: 12 }}>
               <a className="btn btn-outline btn-sm" href={db.settings.sharepointImagesUrl} target="_blank" rel="noopener noreferrer">
-                ☁️ Apri la cartella immagini su SharePoint
+                Apri la cartella immagini su SharePoint
               </a>
             </p>
           )}

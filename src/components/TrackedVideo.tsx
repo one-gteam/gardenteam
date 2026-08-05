@@ -262,7 +262,7 @@ export default function TrackedVideo({
         {activeQuestion && (
           <div className="video-question-overlay">
             <div className="video-question-card">
-              <p className="video-question-text">❓ {activeQuestion.text}</p>
+              <p className="video-question-text">{activeQuestion.text}</p>
               <div className="video-question-options">
                 {activeQuestion.options.map((opt, i) => (
                   <button key={i} type="button" className="btn btn-outline" onClick={() => answerQuestion(i)}>
@@ -270,7 +270,7 @@ export default function TrackedVideo({
                   </button>
                 ))}
               </div>
-              {wrongFlash && <p className="video-question-wrong">❌ Risposta errata, riprova.</p>}
+              {wrongFlash && <p className="video-question-wrong">Risposta errata, riprova.</p>}
             </div>
           </div>
         )}

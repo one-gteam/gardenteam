@@ -183,23 +183,23 @@ export interface Scope {
 export function scopesForUser(user: User, academyDb: DB): Scope[] {
   if (isConsortiumEditor(user)) {
     return [
-      { type: "system" as const, id: "", label: "🏛️ Consorzio (comune a tutti)" },
-      ...academyDb.tenants.map((t) => ({ type: "tenant" as const, id: t.id, label: `${t.emoji} ${t.name}` })),
+      { type: "system" as const, id: "", label: "Consorzio (comune a tutti)" },
+      ...academyDb.tenants.map((t) => ({ type: "tenant" as const, id: t.id, label: t.name })),
     ];
   }
   if (user.role === "group_admin" && user.tenantId) {
     const tenant = academyDb.tenants.find((t) => t.id === user.tenantId)!;
     const stores = academyDb.stores.filter((s) => s.tenantId === user.tenantId);
     return [
-      { type: "tenant" as const, id: tenant.id, label: `${tenant.emoji} ${tenant.name} (tutta l'insegna)` },
-      ...stores.map((s) => ({ type: "store" as const, id: s.id, label: `📍 ${s.name}` })),
+      { type: "tenant" as const, id: tenant.id, label: `${tenant.name} (tutta l'insegna)` },
+      ...stores.map((s) => ({ type: "store" as const, id: s.id, label: s.name })),
     ];
   }
   if (user.storeId) {
     const store = academyDb.stores.find((s) => s.id === user.storeId)!;
-    return [{ type: "store" as const, id: store.id, label: `📍 ${store.name}` }];
+    return [{ type: "store" as const, id: store.id, label: store.name }];
   }
-  return [{ type: "system", id: "", label: "🏛️ Consorzio" }];
+  return [{ type: "system", id: "", label: "Consorzio" }];
 }
 
 export function resolveScope(user: User, param: string | undefined, academyDb: DB): Scope {

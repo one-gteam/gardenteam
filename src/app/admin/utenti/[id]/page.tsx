@@ -56,7 +56,7 @@ export default async function EditUserPage({
           <Link href="/admin/utenti">← Torna ai collaboratori</Link>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-          <h1 style={{ margin: 0 }}>✏️ {u.firstName} {u.lastName}</h1>
+          <h1 style={{ margin: 0 }}>{u.firstName} {u.lastName}</h1>
           {u.active !== false ? <span className="pill pill-green">Attivo</span> : <span className="pill pill-red">Cessato</span>}
           {!u.passwordHash && <span className="pill pill-amber">Account non ancora attivato</span>}
         </div>
@@ -130,10 +130,10 @@ export default async function EditUserPage({
               <input type="hidden" name="sitesForm" value="1" />
               <div style={{ display: "flex", gap: 20, marginTop: 6 }}>
                 <label className="checkbox-row" style={{ margin: 0 }}>
-                  <input type="checkbox" name="siteAcademy" defaultChecked={userSites(u).includes("academy")} /> 🎓 Academy
+                  <input type="checkbox" name="siteAcademy" defaultChecked={userSites(u).includes("academy")} /> Academy
                 </label>
                 <label className="checkbox-row" style={{ margin: 0 }}>
-                  <input type="checkbox" name="siteStampe" defaultChecked={userSites(u).includes("stampe")} /> 🖨️ Stampe
+                  <input type="checkbox" name="siteStampe" defaultChecked={userSites(u).includes("stampe")} /> Stampe
                 </label>
               </div>
               <p style={{ fontSize: 12, color: "var(--muted)", margin: "4px 0 10px" }}>
@@ -145,7 +145,7 @@ export default async function EditUserPage({
                 Dati da registrazione: {u.birthDate ? `nato/a il ${new Date(u.birthDate).toLocaleDateString("it-IT")}` : ""}{u.birthDate && u.taxCode ? " · " : ""}{u.taxCode ? `CF ${u.taxCode}` : ""}
               </p>
             )}
-            <button className="btn" type="submit">💾 Salva collaboratore</button>
+            <button className="btn" type="submit">Salva collaboratore</button>
           </form>
         </div>
 
@@ -162,7 +162,7 @@ export default async function EditUserPage({
               </div>
               <form action={toggleUserActive.bind(null, u.id)}>
                 <button className="btn btn-outline" type="submit" style={u.active !== false ? { color: "var(--red)", borderColor: "var(--red)" } : {}}>
-                  {u.active !== false ? "🔒 Disattiva accesso" : "🔓 Riattiva accesso"}
+                  {u.active !== false ? "Disattiva accesso" : "Riattiva accesso"}
                 </button>
               </form>
             </div>

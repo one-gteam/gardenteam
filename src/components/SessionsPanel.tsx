@@ -39,7 +39,7 @@ export default function SessionsPanel({
         ? res.invited > 0
           ? `✓ Edizione salvata e convocazione inviata a ${res.invited} persone.`
           : "✓ Edizione salvata."
-        : `⚠️ ${res.error}`
+        : `${res.error}`
     );
     if (res.ok) setEditing(null);
     router.refresh();
@@ -55,18 +55,18 @@ export default function SessionsPanel({
         <label className="field">
           Modalità
           <select name="mode" defaultValue={s?.mode ?? "online"}>
-            <option value="online">💻 Online (Zoom/Teams)</option>
-            <option value="aula">🏫 In aula</option>
+            <option value="online">Online (Zoom/Teams)</option>
+            <option value="aula">In aula</option>
           </select>
         </label>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr", gap: 10 }}>
         <label className="field">
-          🔗 Link Zoom / Teams
+          Link Zoom / Teams
           <input type="text" name="zoomUrl" defaultValue={s?.zoomUrl ?? ""} placeholder="https://zoom.us/j/…" />
         </label>
         <label className="field">
-          📍 Sede / aula (se in presenza)
+          Sede / aula (se in presenza)
           <input type="text" name="location" defaultValue={s?.location ?? ""} placeholder="es. Sede Rosàflor, sala corsi" />
         </label>
       </div>
@@ -82,10 +82,10 @@ export default function SessionsPanel({
       </div>
       <label className="checkbox-row">
         <input type="checkbox" name="convoca" defaultChecked={!s} />
-        📧 Invia subito la convocazione ai {recipients} destinatari del corso
+        Invia subito la convocazione ai {recipients} destinatari del corso
       </label>
       <div style={{ display: "flex", gap: 8 }}>
-        <button className="btn btn-sm" type="submit">{s ? "💾 Salva modifiche" : "📅 Programma l'edizione"}</button>
+        <button className="btn btn-sm" type="submit">{s ? "Salva modifiche" : "Programma l'edizione"}</button>
         {s && <button className="btn btn-outline btn-sm" type="button" onClick={() => setEditing(null)}>Annulla</button>}
       </div>
     </form>
@@ -110,7 +110,7 @@ export default function SessionsPanel({
                     {s.trainer && <div className="hint">docente: {s.trainer}</div>}
                   </td>
                   <td style={{ fontSize: 13 }}>
-                    {s.mode === "online" ? "💻 Online" : `🏫 ${s.location || "In aula"}`}
+                    {s.mode === "online" ? "Online" : `${s.location || "In aula"}`}
                     {s.zoomUrl && (
                       <div><a href={s.zoomUrl} target="_blank" rel="noopener noreferrer">apri il collegamento</a></div>
                     )}
@@ -128,11 +128,11 @@ export default function SessionsPanel({
                   <td style={{ whiteSpace: "nowrap" }}>
                     <button className="btn btn-outline btn-sm" type="button" disabled={pending}
                       onClick={() => run(() => sendSessionInvites(courseId, s.id))}
-                      title="Invia (o rinvia) la convocazione a tutti i destinatari">📧</button>{" "}
+                      title="Invia (o rinvia) la convocazione a tutti i destinatari">Convoca</button>{" "}
                     <button className="btn btn-outline btn-sm" type="button"
-                      onClick={() => setEditing(editing === s.id ? null : s.id)}>✏️</button>{" "}
-                    <button className="btn btn-outline btn-sm danger" type="button" disabled={pending}
-                      onClick={() => { if (confirm("Eliminare questa edizione dal calendario?")) run(() => deleteCourseSession(courseId, s.id)); }}>🗑</button>
+                      onClick={() => setEditing(editing === s.id ? null : s.id)}>Modifica</button>{" "}
+                    <button className="btn btn-outline btn-sm danger" type="button" disabled={pending} title="Elimina questa edizione"
+                      onClick={() => { if (confirm("Eliminare questa edizione dal calendario?")) run(() => deleteCourseSession(courseId, s.id)); }}>✕</button>
                   </td>
                 </tr>
               ))}
@@ -143,13 +143,13 @@ export default function SessionsPanel({
 
       {editing && sessions.find((s) => s.id === editing) && (
         <div className="card" style={{ marginBottom: 12, border: "2px solid var(--green-500)" }}>
-          <h3 style={{ marginTop: 0 }}>✏️ Modifica edizione</h3>
+          <h3 style={{ marginTop: 0 }}>Modifica edizione</h3>
           <SessionForm s={sessions.find((s) => s.id === editing)} />
         </div>
       )}
 
       <div className="card" style={{ background: "var(--green-50)" }}>
-        <h3 style={{ marginTop: 0 }}>📅 Programma una nuova edizione</h3>
+        <h3 style={{ marginTop: 0 }}>Programma una nuova edizione</h3>
         <p className="hint" style={{ marginTop: 0 }}>
           La convocazione contiene titolo, descrizione, data, ora e link del corso e parte subito;
           il promemoria automatico viene inviato nei giorni indicati prima della data.

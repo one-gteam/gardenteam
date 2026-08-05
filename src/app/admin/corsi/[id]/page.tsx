@@ -43,7 +43,7 @@ export default async function EditCoursePage({
           </div>
           <h1>{course.emoji} {course.title}</h1>
           <div className="alert alert-amber">
-            🔒 Non hai i permessi per modificare questo corso di livello <strong>{LEVEL_LABELS[course.level]}</strong>.
+            Non hai i permessi per modificare questo corso di livello <strong>{LEVEL_LABELS[course.level]}</strong>.
             {course.level === "sistema" && " I corsi di sistema sono gestiti dal consorzio."}
           </div>
         </div>
@@ -101,7 +101,7 @@ export default async function EditCoursePage({
           <Link href="/admin/corsi">← Torna al catalogo</Link>
         </div>
         <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-          <h1 style={{ margin: 0 }}>✏️ {course.emoji} {course.title}</h1>
+          <h1 style={{ margin: 0 }}>{course.emoji} {course.title}</h1>
           <span className="pill pill-blue">{LEVEL_LABELS[course.level]}</span>
         </div>
         <p className="subtitle" style={{ marginTop: 6 }}>
@@ -184,10 +184,10 @@ export default async function EditCoursePage({
               <input type="checkbox" name="newHires" defaultChecked={!!course.onlyNewHires} /> Riservato ai neoassunti (ultimi 90 giorni)
             </label>
             <label className="checkbox-row">
-              <input type="checkbox" name="sequential" defaultChecked={!!course.sequential} /> 🔒 Corso bloccato: le lezioni si sbloccano una alla volta, in ordine
+              <input type="checkbox" name="sequential" defaultChecked={!!course.sequential} /> Corso bloccato: le lezioni si sbloccano una alla volta, in ordine
             </label>
             <div style={{ borderTop: "1px solid var(--line)", paddingTop: 12, marginTop: 4 }}>
-              <strong style={{ fontSize: 14 }}>🖼️ Copertina del corso</strong>
+              <strong style={{ fontSize: 14 }}>Copertina del corso</strong>
               {course.coverUrl && (
                 <div style={{ margin: "8px 0" }}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -210,14 +210,14 @@ export default async function EditCoursePage({
                 </label>
               )}
             </div>
-            <button className="btn" type="submit">💾 Salva dati corso</button>
+            <button className="btn" type="submit">Salva dati corso</button>
           </form>
         </div>
 
         {/* ---------- Lezioni ---------- */}
         <div className="section">
           <div className="section-head">
-            <h2>📚 Lezioni ({course.lessons.length})</h2>
+            <h2>Lezioni ({course.lessons.length})</h2>
             <span className="hint">apri una lezione per modificarla · le modifiche si salvano senza ricaricare</span>
           </div>
           <LessonsPanel courseId={course.id} lessons={course.lessons} passScore={course.passScore} />
@@ -226,7 +226,7 @@ export default async function EditCoursePage({
         {/* ---------- Edizioni in programma ---------- */}
         <div className="section">
           <div className="section-head">
-            <h2>📅 Corso in programma ({(course.sessions ?? []).length})</h2>
+            <h2>Corso in programma ({(course.sessions ?? []).length})</h2>
             <span className="hint">date in calendario, link Zoom e convocazioni automatiche</span>
           </div>
           <SessionsPanel
@@ -241,7 +241,7 @@ export default async function EditCoursePage({
         {videoLessons.length > 0 && (
           <div className="section">
             <div className="section-head">
-              <h2>👁 Visione dei video</h2>
+              <h2>Visione dei video</h2>
               <span className="hint">
                 minuti realmente riprodotti, non il punto dove è arrivata la barra · completamento automatico
                 al {threshold}% · «man.» = segnata a mano senza guardare
@@ -253,7 +253,7 @@ export default async function EditCoursePage({
                   <tr>
                     <th>Collaboratore</th>
                     {videoLessons.map((l) => (
-                      <th key={l.id} style={{ fontSize: 12 }}>🎬 {l.title.slice(0, 28)}</th>
+                      <th key={l.id} style={{ fontSize: 12 }}>{l.title.slice(0, 28)}</th>
                     ))}
                   </tr>
                 </thead>
@@ -297,7 +297,7 @@ export default async function EditCoursePage({
         {/* ---------- Quiz ---------- */}
         <div className="section">
           <div className="section-head">
-            <h2>🧠 Quiz finale ({course.quiz.length} domande)</h2>
+            <h2>Quiz finale ({course.quiz.length} domande)</h2>
             <span className="hint">soglia di superamento: {course.passScore}%</span>
           </div>
           {course.quiz.length === 0 && (
@@ -316,7 +316,7 @@ export default async function EditCoursePage({
                     <strong style={{ flex: 1 }}>{q.text}</strong>
                     <form action={delQ}>
                       <button className="btn btn-outline btn-sm" type="submit" style={{ color: "var(--red)", borderColor: "var(--red)" }}>
-                        🗑 Elimina
+                        Elimina
                       </button>
                     </form>
                   </div>
@@ -328,7 +328,7 @@ export default async function EditCoursePage({
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
                       {[0, 1, 2, 3].map((oi) => (
                         <label className="field" key={oi}>
-                          Risposta {oi + 1} {oi === q.correct && "✅"}
+                          Risposta {oi + 1} {oi === q.correct && ""}
                           <input type="text" name={`opt${oi}`} defaultValue={q.options[oi] ?? ""} />
                         </label>
                       ))}
@@ -341,7 +341,7 @@ export default async function EditCoursePage({
                         ))}
                       </select>
                     </label>
-                    <button className="btn btn-sm" type="submit">💾 Salva domanda</button>
+                    <button className="btn btn-sm" type="submit">Salva domanda</button>
                   </form>
                 </div>
               );
@@ -349,7 +349,7 @@ export default async function EditCoursePage({
           </div>
 
           <div className="card" style={{ marginTop: 16, background: "var(--green-50)" }}>
-            <h3>➕ Aggiungi una domanda</h3>
+            <h3>Aggiungi una domanda</h3>
             <form action={addQuestionAction}>
               <label className="field">
                 Domanda
@@ -371,7 +371,7 @@ export default async function EditCoursePage({
                   ))}
                 </select>
               </label>
-              <button className="btn btn-sm" type="submit">➕ Aggiungi domanda</button>
+              <button className="btn btn-sm" type="submit">Aggiungi domanda</button>
             </form>
           </div>
         </div>
@@ -385,7 +385,7 @@ export default async function EditCoursePage({
             </p>
             <form action={deleteAction}>
               <button className="btn btn-sm" type="submit" style={{ background: "var(--red)" }}>
-                🗑 Elimina definitivamente questo corso
+                Elimina definitivamente questo corso
               </button>
             </form>
           </div>

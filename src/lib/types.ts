@@ -100,10 +100,10 @@ export function postLoginPath(user: User): string {
 export type LessonType = "video" | "pdf" | "quiz" | "scorm";
 
 export const LESSON_TYPES: { value: LessonType; label: string; hint: string }[] = [
-  { value: "video", label: "🎬 Video", hint: "Link YouTube/Bunny/SharePoint + slide allegate" },
-  { value: "pdf", label: "📄 Testo / lettura", hint: "Un PDF che lo studente sfoglia nella pagina" },
-  { value: "quiz", label: "🧠 Quiz intermedio", hint: "Domande a risposta multipla di fine capitolo" },
-  { value: "scorm", label: "🎯 Contenuto SCORM", hint: "Pacchetto interattivo (Articulate, iSpring, Rise…) con tracciamento" },
+  { value: "video", label: "Video", hint: "Link YouTube/Bunny/SharePoint + slide allegate" },
+  { value: "pdf", label: "Testo / lettura", hint: "Un PDF che lo studente sfoglia nella pagina" },
+  { value: "quiz", label: "Quiz intermedio", hint: "Domande a risposta multipla di fine capitolo" },
+  { value: "scorm", label: "Contenuto SCORM", hint: "Pacchetto interattivo (Articulate, iSpring, Rise…) con tracciamento" },
 ];
 
 /** Pacchetto SCORM caricato per una lezione: dove lanciarlo e quale versione. */
@@ -351,9 +351,9 @@ export interface ReminderRule {
 export type ReminderStage = "mai_iniziato" | "promemoria" | "scadenza";
 
 export const REMINDER_STAGE_LABELS: Record<ReminderStage, string> = {
-  mai_iniziato: "👀 Mai iniziato",
+  mai_iniziato: "Mai iniziato",
   promemoria: "⏰ Non completato",
-  scadenza: "🚨 In scadenza / scaduto",
+  scadenza: "In scadenza / scaduto",
 };
 
 export const DEFAULT_REMINDER_RULES: Record<ReminderStage, ReminderRule> = {
@@ -400,15 +400,15 @@ export type HomeBlockKind =
   | "kpi" | "scadenze" | "percorsi" | "corsi" | "badge" | "classifica_negozio" | "classifica_generale" | "classifica_pv" | "certificati";
 
 export const HOME_BLOCK_LABELS: Record<HomeBlockKind, string> = {
-  kpi: "📊 Riepilogo numeri (corsi assegnati, in corso, completati, certificati)",
+  kpi: "Riepilogo numeri (corsi assegnati, in corso, completati, certificati)",
   scadenze: "⏰ Avviso corsi in scadenza",
-  percorsi: "🧭 I tuoi percorsi formativi",
-  corsi: "📚 Corsi assegnati (sistema / insegna / punto vendita)",
-  badge: "🎖️ Bacheca badge",
-  classifica_negozio: "🏅 Classifica del punto vendita",
-  classifica_generale: "🌍 Classifica generale del consorzio",
-  classifica_pv: "🏆 Sfida tra punti vendita",
-  certificati: "📜 I tuoi certificati",
+  percorsi: "I tuoi percorsi formativi",
+  corsi: "Corsi assegnati (sistema / insegna / punto vendita)",
+  badge: "Bacheca badge",
+  classifica_negozio: "Classifica del punto vendita",
+  classifica_generale: "Classifica generale del consorzio",
+  classifica_pv: "Sfida tra punti vendita",
+  certificati: "I tuoi certificati",
 };
 
 export interface HomeBlockConfig {

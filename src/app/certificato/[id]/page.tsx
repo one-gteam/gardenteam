@@ -32,7 +32,7 @@ export default async function CertificatePage({ params }: { params: Promise<{ id
           <Link href="/studente">← Torna alla dashboard</Link>
         </div>
         <div className="certificate">
-          <div style={{ fontSize: 40 }}>🌿</div>
+          <div style={{ fontSize: 40 }}></div>
           <div className="cert-title">Consorzio Garden Team · Academy GT</div>
           <div style={{ marginTop: 26, fontSize: 14, color: "var(--muted)" }}>Si certifica che</div>
           <div className="cert-name">

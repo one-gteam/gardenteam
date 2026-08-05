@@ -11,13 +11,19 @@ import TrackedVideo from "@/components/TrackedVideo";
 import ScormPlayer from "@/components/ScormPlayer";
 
 const TYPE_LABEL: Record<string, string> = {
-  video: "🎬 Video",
-  pdf: "📄 Lettura",
-  quiz: "🧠 Quiz intermedio",
-  scorm: "🎯 Contenuto SCORM",
+  video: "Video",
+  pdf: "Lettura",
+  quiz: "Quiz intermedio",
+  scorm: "Contenuto SCORM",
 };
 
-const ATTACHMENT_ICON: Record<string, string> = { pdf: "📄", slide: "🖥️", altro: "📎" };
+import { FileText, Presentation, Paperclip } from "lucide-react";
+
+const ATTACHMENT_ICON: Record<string, React.ReactNode> = {
+  pdf: <FileText size={20} strokeWidth={1.6} />,
+  slide: <Presentation size={20} strokeWidth={1.6} />,
+  altro: <Paperclip size={20} strokeWidth={1.6} />,
+};
 
 export default async function CoursePage({
   params,
@@ -95,7 +101,7 @@ export default async function CoursePage({
         {/* Edizioni in calendario: le prossime date a cui si è convocati */}
         {nextSessions.length > 0 && (
           <div className="session-banner">
-            <strong style={{ fontSize: 14 }}>📅 {nextSessions.length > 1 ? "Prossime date in programma" : "Prossima data in programma"}</strong>
+            <strong style={{ fontSize: 14 }}>{nextSessions.length > 1 ? "Prossime date in programma" : "Prossima data in programma"}</strong>
             {nextSessions.map((s) => {
               const [y, m, g] = s.date.split("-");
               return (
@@ -103,11 +109,11 @@ export default async function CoursePage({
                   <span className="session-when">
                     <strong>{g}/{m}/{y}</strong> · {s.time}{s.endTime ? `–${s.endTime}` : ""}
                   </span>
-                  <span>{s.mode === "online" ? "💻 Online" : `🏫 ${s.location || "In aula"}`}</span>
+                  <span>{s.mode === "online" ? "Online" : `${s.location || "In aula"}`}</span>
                   {s.trainer && <span className="hint">docente: {s.trainer}</span>}
                   {s.zoomUrl && (
                     <a className="btn btn-sm" href={s.zoomUrl} target="_blank" rel="noopener noreferrer">
-                      🔗 Entra nella riunione
+                      Entra nella riunione
                     </a>
                   )}
                   {s.notes && <span className="hint">{s.notes}</span>}
@@ -126,7 +132,7 @@ export default async function CoursePage({
               if (locked) {
                 return (
                   <span key={l.id} className="lesson-item locked" title="Completa le lezioni precedenti per sbloccarla">
-                    <span className="lesson-check">🔒</span>
+                    <span className="lesson-check"></span>
                     <span style={{ flex: 1 }}>{l.title}</span>
                     <span style={{ color: "var(--muted)", fontSize: 12 }}>{l.minutes}′</span>
                   </span>
@@ -142,13 +148,13 @@ export default async function CoursePage({
               );
             })}
             {course.sequential && (
-              <p className="hint" style={{ padding: "6px 12px 0" }}>🔒 Corso bloccato: completa le lezioni in ordine.</p>
+              <p className="hint" style={{ padding: "6px 12px 0" }}>Corso bloccato: completa le lezioni in ordine.</p>
             )}
             {course.quiz.length > 0 && (
               course.sequential && !allLessonsDone ? (
                 <span className="lesson-item locked" style={{ borderTop: "1px solid var(--line)", marginTop: 6, paddingTop: 12 }}
                   title="Completa tutte le lezioni per sbloccarlo">
-                  <span className="lesson-check">🔒</span>
+                  <span className="lesson-check"></span>
                   <span style={{ flex: 1, fontWeight: 700 }}>Quiz finale</span>
                   <span className="pill pill-gray">{course.quiz.length} domande</span>
                 </span>
@@ -182,7 +188,7 @@ export default async function CoursePage({
                 />
               ) : (
                 <div className="video-frame">
-                  <div className="play-btn">🎯</div>
+                  <div className="play-btn"></div>
                   <div style={{ fontSize: 13, opacity: 0.8 }}>Il contenuto SCORM non è ancora stato caricato.</div>
                 </div>
               )
@@ -217,7 +223,7 @@ export default async function CoursePage({
               inlinePdf ? (
                 <object className="doc-embed" data={inlinePdf.url} type="application/pdf">
                   <div className="doc-frame">
-                    <span className="doc-icon">📄</span>
+                    <span className="doc-icon"><FileText size={36} strokeWidth={1.3} /></span>
                     <div>
                       <strong>{inlinePdf.name}</strong>
                       <div style={{ fontSize: 13, color: "var(--muted)" }}>
@@ -229,7 +235,7 @@ export default async function CoursePage({
                 </object>
               ) : (
                 <div className="doc-frame">
-                  <span className="doc-icon">{lesson.type === "pdf" ? "📄" : "🖥️"}</span>
+                  <span className="doc-icon"><FileText size={36} strokeWidth={1.3} /></span>
                   <div>
                     <strong>{lesson.type === "pdf" ? "Materiale scaricabile" : "Presentazione"}</strong>
                     <div style={{ fontSize: 13, color: "var(--muted)" }}>
@@ -245,7 +251,7 @@ export default async function CoursePage({
             {/* Slide e materiali della lezione */}
             {attachments.length > 0 && (
               <div className="materials">
-                <strong style={{ fontSize: 14 }}>📎 Materiali della lezione</strong>
+                <strong style={{ fontSize: 14 }}>Materiali della lezione</strong>
                 <div className="materials-list">
                   {attachments.map((a) => (
                     <a key={a.id} className="material-item" href={a.url} target="_blank" rel="noopener noreferrer" download>
@@ -268,8 +274,8 @@ export default async function CoursePage({
                 {quizEsito !== undefined && (
                   <div className={`alert ${Number(quizEsito) >= course.passScore ? "alert-green" : "alert-amber"}`}>
                     {Number(quizEsito) >= course.passScore
-                      ? `🎉 Quiz superato con ${quizEsito}%! Capitolo completato.`
-                      : `😕 Punteggio ${quizEsito}%: serve almeno il ${course.passScore}%. Riprova!`}
+                      ? `Quiz superato con ${quizEsito}%! Capitolo completato.`
+                      : `Punteggio ${quizEsito}%: serve almeno il ${course.passScore}%. Riprova!`}
                   </div>
                 )}
                 {lessonDone ? (
@@ -317,7 +323,7 @@ export default async function CoursePage({
 
             {completed && (
               <div className="alert alert-green" style={{ marginTop: 22 }}>
-                🎉 <strong>Corso completato!</strong> Hai guadagnato {course.points} punti.
+                <strong>Corso completato!</strong> Hai guadagnato {course.points} punti.
                 {myCert && (
                   <>
                     {" "}
@@ -334,11 +340,11 @@ export default async function CoursePage({
                   <label className="field">
                     Valutazione
                     <select name="rating" defaultValue="5">
-                      <option value="5">⭐⭐⭐⭐⭐ Eccellente</option>
-                      <option value="4">⭐⭐⭐⭐ Buono</option>
-                      <option value="3">⭐⭐⭐ Discreto</option>
-                      <option value="2">⭐⭐ Scarso</option>
-                      <option value="1">⭐ Da rifare</option>
+                      <option value="5">Eccellente</option>
+                      <option value="4">Buono</option>
+                      <option value="3">Discreto</option>
+                      <option value="2">Scarso</option>
+                      <option value="1">Da rifare</option>
                     </select>
                   </label>
                   <label className="field">

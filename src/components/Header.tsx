@@ -41,7 +41,7 @@ export default async function Header({ user, active }: { user: User; active: str
               // eslint-disable-next-line @next/next/no-img-element
               <img src={tenant.logoUrl} alt={tenant.name} className="tenant-logo" />
             ) : (
-              <span>{tenant ? tenant.emoji : "🏛️"}</span>
+              <span>{tenant ? tenant.emoji : ""}</span>
             )}
             {tenant ? ` ${tenant.name}` : " Consorzio Garden Team"}
             {store?.city ? ` · ${store.city}` : ""}

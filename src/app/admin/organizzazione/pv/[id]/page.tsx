@@ -67,20 +67,20 @@ export default async function StorePage({
             </label>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <label className="field">
-                🔑 Parola segreta per l&apos;auto-registrazione
+                Parola segreta per l&apos;auto-registrazione
                 <input type="text" name="secretWord" defaultValue={s.secretWord ?? ""} placeholder={t.secretWord ? `vuota = usa quella di insegna (${t.secretWord})` : "es. negozio2026"} />
               </label>
               <label className="field">
-                ✉️ Email che riceve le richieste di registrazione
+                Email che riceve le richieste di registrazione
                 <input type="email" name="approvalEmail" defaultValue={s.approvalEmail ?? ""} placeholder={t.approvalEmail ? `vuota = usa ${t.approvalEmail}` : "es. negozio@insegna.it"} />
               </label>
             </div>
-            <button className="btn" type="submit">💾 Salva punto vendita</button>
+            <button className="btn" type="submit">Salva punto vendita</button>
           </form>
         </div>
 
         <div className="section">
-          <div className="section-head"><h2>🔑 Utenti con privilegi ({privileged.length})</h2></div>
+          <div className="section-head"><h2>Utenti con privilegi ({privileged.length})</h2></div>
           <div className="card table-wrap">
             <table className="data">
               <thead><tr><th>Nome</th><th>Ruolo</th><th>Stato</th></tr></thead>
@@ -102,7 +102,7 @@ export default async function StorePage({
         </div>
 
         <div className="section">
-          <div className="section-head"><h2>🎓 Studenti ({students.length})</h2></div>
+          <div className="section-head"><h2>Studenti ({students.length})</h2></div>
           <div className="card table-wrap">
             <table className="data">
               <thead><tr><th>Nome</th><th>Reparto</th><th>Punti</th><th>Stato</th></tr></thead>

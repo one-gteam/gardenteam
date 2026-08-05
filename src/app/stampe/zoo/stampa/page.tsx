@@ -127,7 +127,7 @@ export default async function ZooStampaPage({
         {/* prezzi propri del PV */}
         {scope.type !== "system" && (
           <div className="card" style={{ marginBottom: 14, padding: 14 }}>
-            <strong>💶 Prezzi del tuo punto vendita</strong>
+            <strong>Prezzi del tuo punto vendita</strong>
             <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "4px 0 8px" }}>
               Carica un Excel con colonne EAN (o CODICE FORNITORE) e PREZZO: i cartelli useranno i tuoi prezzi al posto di quelli promo del Consorzio.{" "}
               <a href={`/stampe/zoo/excel?prezzi=1&scope=${scopeParam}`}>Scarica il modello con le offerte in corso</a>
@@ -164,7 +164,7 @@ export default async function ZooStampaPage({
                       ["print", "1"], ...selected.map((o) => ["sel", o.id]),
                     ] as [string, string][]).toString()}`}
                   >
-                    🖨️ Stampa {selected.length} cartelli
+                    Stampa {selected.length} cartelli
                   </a>
                 )}
               </div>
@@ -202,7 +202,7 @@ export default async function ZooStampaPage({
                                 className="btn btn-outline btn-sm" type="submit" title="Non ho in vendita questo prodotto: nascondilo"
                                 formAction={toggleZooHidden.bind(null, scopeParam, "articolo", o.ean, "/stampe/zoo/stampa")}
                               >
-                                🙈
+                                Nascondi
                               </button>
                             </td>
                           )}
@@ -235,7 +235,7 @@ export default async function ZooStampaPage({
 
         {/* proposta di correzione al Consorzio (fuori dal form di selezione) */}
         <div className="card" style={{ marginTop: 14, padding: 12 }}>
-          <strong style={{ fontSize: 13 }}>🚩 Proponi una correzione al Consorzio</strong>
+          <strong style={{ fontSize: 13 }}>Proponi una correzione al Consorzio</strong>
           <SuggestionForm scopeParam={scopeParam} offers={visible} />
         </div>
       </div>

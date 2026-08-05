@@ -141,7 +141,7 @@ export default async function StampaPage({
                 {marche.map((m) => <option key={m} value={m}>{m}</option>)}
               </select>
             </label>
-            <button className="btn btn-sm" type="submit">🔍 Filtra</button>
+            <button className="btn btn-sm" type="submit">Filtra</button>
           </form>
         </div>
 

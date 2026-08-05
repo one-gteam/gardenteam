@@ -30,7 +30,7 @@ export default async function RegisterPage({
       <div className="login-cards" style={{ maxWidth: 640 }}>
         {inviata ? (
           <div className="card" style={{ textAlign: "center" }}>
-            <div style={{ fontSize: 48 }}>📨</div>
+            <div style={{ fontSize: 48 }}></div>
             <h2>Richiesta inviata!</h2>
             <p style={{ color: "var(--muted)" }}>
               Il responsabile del tuo punto vendita riceverà la richiesta e, una volta approvata,
@@ -40,17 +40,17 @@ export default async function RegisterPage({
           </div>
         ) : (
           <div className="card">
-            <h2>📝 Registrati</h2>
+            <h2>Registrati</h2>
             <p style={{ fontSize: 14, color: "var(--muted)" }}>
               Se non sei ancora stato inserito dal tuo punto vendita, compila la richiesta. Ti servirà la{" "}
               <strong>parola segreta</strong> del tuo negozio (chiedila al responsabile): serve a evitare
               registrazioni estranee. La richiesta verrà poi approvata dal punto vendita.
             </p>
-            {errore && <div className="alert alert-amber">⚠️ {ERRORS[errore] ?? "Errore imprevisto, riprova."}</div>}
+            {errore && <div className="alert alert-amber">{ERRORS[errore] ?? "Errore imprevisto, riprova."}</div>}
             <form action={registerRequest}>
               <div style={{ background: "var(--green-50)", borderRadius: 10, padding: "12px 14px", marginBottom: 14 }}>
                 <label className="field" style={{ marginBottom: 0 }}>
-                  🔑 Parola segreta del punto vendita
+                  Parola segreta del punto vendita
                   <input type="text" name="secret" required placeholder="fornita dal tuo responsabile" />
                 </label>
               </div>

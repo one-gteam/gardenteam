@@ -30,7 +30,7 @@ export default async function ZooFotoPage({
       <div className="container">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
           <div>
-            <h1 style={{ margin: 0 }}>📷 Raccolta foto — {campaign?.nome ?? "volantino"}</h1>
+            <h1 style={{ margin: 0 }}>Raccolta foto — {campaign?.nome ?? "volantino"}</h1>
             <p className="subtitle" style={{ margin: "4px 0 0" }}>
               Foto delle {offers.length} offerte selezionate. Clic destro → &quot;Salva immagine&quot; oppure stampa/salva in PDF per il grafico.
             </p>

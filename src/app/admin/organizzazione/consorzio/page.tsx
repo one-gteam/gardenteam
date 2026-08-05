@@ -82,15 +82,15 @@ export default async function ConsorzioPage({
             </label>
             <label className="checkbox-row">
               <input type="checkbox" name="leaderboardAnonymous" defaultChecked={!!s.leaderboardAnonymous} />
-              🌍 Classifica generale anonima: ognuno vede solo la propria posizione, non i nomi degli altri
+              Classifica generale anonima: ognuno vede solo la propria posizione, non i nomi degli altri
             </label>
-            <button className="btn" type="submit">💾 Salva impostazioni portale</button>
+            <button className="btn" type="submit">Salva impostazioni portale</button>
           </form>
         </div>
 
         <div className="section">
           <div className="section-head">
-            <h2>🧩 Home dello studente</h2>
+            <h2>Home dello studente</h2>
             <span className="hint">ordine e visibilità dei blocchi, per tutte le insegne</span>
           </div>
           <div className="card">
@@ -103,7 +103,7 @@ export default async function ConsorzioPage({
 
         <div className="section">
           <div className="section-head">
-            <h2>🔗 Accesso da My Rosaflor (SSO)</h2>
+            <h2>Accesso da My Rosaflor (SSO)</h2>
             <span className="hint">insegna e punto vendita per chi entra senza registrarsi a mano</span>
           </div>
           <div className="card">
@@ -126,7 +126,7 @@ export default async function ConsorzioPage({
                   {db.stores.map((st) => <option key={st.id} value={st.id}>{st.name}</option>)}
                 </select>
               </label>
-              <button className="btn btn-sm" type="submit">💾 Salva</button>
+              <button className="btn btn-sm" type="submit">Salva</button>
             </form>
           </div>
         </div>

@@ -52,7 +52,7 @@ export default function ProductClipboard({
       </button>
       {canEdit && (
         <button type="button" className="btn btn-outline btn-sm" onClick={paste} title="Incolla i campi copiati su questo prodotto">
-          📋 Incolla qui
+          Incolla qui
         </button>
       )}
       {msg && <span style={{ fontSize: 12, color: "var(--green-700)", fontWeight: 700 }}>{msg}</span>}

@@ -53,7 +53,7 @@ export default async function ZooImpostazioniPage({
         {consortium && (
           <>
             <div className="card" style={{ padding: 14, marginBottom: 14 }}>
-              <h2 style={{ marginTop: 0 }}>🏛️ Impostazioni del Consorzio</h2>
+              <h2 style={{ marginTop: 0 }}>Impostazioni del Consorzio</h2>
               <form action={saveZooSettings.bind(null, scopeParam)} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                 <label className="field" style={{ marginBottom: 0 }}>
                   Caratteristiche prodotto (una per riga: es. umido, secco, cane, gatto…)
@@ -77,13 +77,13 @@ export default async function ZooImpostazioniPage({
                   <textarea name="istruzioniCartello" rows={4} defaultValue={db.settings.istruzioniCartello} />
                 </label>
                 <div>
-                  <button className="btn" type="submit">💾 Salva impostazioni</button>
+                  <button className="btn" type="submit">Salva impostazioni</button>
                 </div>
               </form>
             </div>
 
             <div className="card" style={{ padding: 14, marginBottom: 14 }}>
-              <h2 style={{ marginTop: 0 }}>📐 Formati consigliati per caratteristica</h2>
+              <h2 style={{ marginTop: 0 }}>Formati consigliati per caratteristica</h2>
               <p style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 0 }}>
                 Associa un formato di stampa a una caratteristica (es. Accessori → A5, Secco → A4).
               </p>
@@ -111,9 +111,9 @@ export default async function ZooImpostazioniPage({
         {/* chiave API: SOLO amministratore di sistema */}
         {user.role === "system_admin" && (
           <div className="card" style={{ padding: 14, marginBottom: 14, border: "2px solid #6d3fa7" }}>
-            <h2 style={{ marginTop: 0 }}>🔑 Chiave API Claude (solo amministratore di sistema)</h2>
+            <h2 style={{ marginTop: 0 }}>Chiave API Claude (solo amministratore di sistema)</h2>
             <p style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 0 }}>
-              Usata dal pulsante &quot;✨ Associa con AI&quot; per raggruppare gli articoli e generare le descrizioni di volantino e cartelli
+              Usata dal pulsante &quot;Associa con AI&quot; per raggruppare gli articoli e generare le descrizioni di volantino e cartelli
               secondo le istruzioni qui sopra. Stato attuale:{" "}
               {db.settings.apiKey
                 ? <span className="pill pill-green">configurata (…{db.settings.apiKey.slice(-6)})</span>
@@ -129,7 +129,7 @@ export default async function ZooImpostazioniPage({
         {/* nascondi fornitori/marchi per insegna/PV */}
         {scope.type !== "system" && (
           <div className="card" style={{ padding: 14, marginBottom: 14 }}>
-            <h2 style={{ marginTop: 0 }}>🙈 Elementi nascosti da {scope.label}</h2>
+            <h2 style={{ marginTop: 0 }}>Elementi nascosti da {scope.label}</h2>
             <p style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 0 }}>
               Fornitori, marchi e articoli che questo ambito non tratta: non compaiono nelle pagine di stampa.
               Puoi gestirli anche dalla pagina Database prodotti.

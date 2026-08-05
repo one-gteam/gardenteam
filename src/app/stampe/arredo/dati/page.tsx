@@ -102,13 +102,13 @@ export default async function DatiPage({
             <h1 style={{ margin: 0 }}>Dati prodotti — Arredo Giardino</h1>
             <p className="subtitle" style={{ margin: "4px 0 0" }}>
               {blocked
-                ? "🔒 La tua insegna ha disabilitato la personalizzazione per questo punto vendita (sola lettura)."
+                ? "La tua insegna ha disabilitato la personalizzazione per questo punto vendita (sola lettura)."
                 : consortium && scope.type === "system"
                   ? "Versione del Consorzio · salvataggio automatico attivo"
                   : `Personalizzazione di ${scope.label} · salvataggio automatico attivo`}
             </p>
           </div>
-          <span className="pill pill-green no-print" title="I campi si salvano da soli mentre scrivi">💾 Salvataggio automatico</span>
+          <span className="pill pill-green no-print" title="I campi si salvano da soli mentre scrivi">Salvataggio automatico</span>
           <form method="get" style={{ display: "flex", gap: 8, alignItems: "center" }}>
             {Object.entries(sp).map(([k, v]) => (k !== "scope" && v ? <input key={k} type="hidden" name={k} value={v} /> : null))}
             <label style={{ fontSize: 12.5, fontWeight: 700 }}>
@@ -153,16 +153,16 @@ export default async function DatiPage({
             <label style={{ fontSize: 12, display: "flex", gap: 5, alignItems: "center", whiteSpace: "nowrap", marginBottom: 10 }}>
               <input type="checkbox" name="raggruppa" value="1" defaultChecked={raggruppa} /> Raggruppa varianti colore
             </label>
-            <button className="btn btn-sm" type="submit">🔍 Filtra</button>
+            <button className="btn btn-sm" type="submit">Filtra</button>
           </form>
           {consortium && (
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 10, borderTop: "1px solid var(--line)", paddingTop: 10 }}>
               <strong style={{ fontSize: 12.5 }}>Excel:</strong>
-              <a className="btn btn-outline btn-sm" href={`/stampe/arredo/excel?${qs({})}`}>⬇ Esporta i {filtered.length} filtrati</a>
-              <a className="btn btn-outline btn-sm" href="/stampe/arredo/excel?template=1">⬇ Scarica modello di esempio</a>
+              <a className="btn btn-outline btn-sm" href={`/stampe/arredo/excel?${qs({})}`}>Esporta i {filtered.length} filtrati</a>
+              <a className="btn btn-outline btn-sm" href="/stampe/arredo/excel?template=1">Scarica modello di esempio</a>
               <form action={importProductsExcel.bind(null, scopeParam)} style={{ display: "flex", gap: 6, alignItems: "center" }}>
                 <input type="file" name="file" accept=".xlsx,.xls" required style={{ marginTop: 0, fontSize: 12, maxWidth: 220 }} />
-                <button className="btn btn-sm" type="submit">⬆ Importa Excel</button>
+                <button className="btn btn-sm" type="submit">Importa Excel</button>
               </form>
             </div>
           )}
@@ -190,7 +190,7 @@ export default async function DatiPage({
                   </div>
                   {g.items.map((p) => (
                     <a key={p.id} className={`prod-item ${activeId === p.id ? "active" : ""}`} href={`?${openHref(p.id)}`} style={{ borderBottom: "none", paddingLeft: 22 }}>
-                      <span style={{ fontSize: 12 }}>🎨 {p.fields.colori?.split("  ")[0] || "—"}</span>
+                      <span style={{ fontSize: 12 }}>{p.fields.colori?.split("  ")[0] || "—"}</span>
                       <div style={{ fontSize: 11, color: "var(--muted)" }}>{p.codice}</div>
                     </a>
                   ))}
@@ -198,7 +198,7 @@ export default async function DatiPage({
               ))}
             {consortium && (
               <details style={{ padding: 10 }}>
-                <summary style={{ cursor: "pointer", fontWeight: 700, fontSize: 13 }}>➕ Nuovo prodotto</summary>
+                <summary style={{ cursor: "pointer", fontWeight: 700, fontSize: 13 }}>Nuovo prodotto</summary>
                 <form action={addPrintProduct.bind(null, scopeParam)} style={{ marginTop: 8 }}>
                   <label className="field">Titolo<input type="text" name="titolo" required /></label>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
@@ -261,7 +261,7 @@ export default async function DatiPage({
                     />
                     {db.settings.sharepointImagesUrl && (
                       <a href={db.settings.sharepointImagesUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, textAlign: "center" }}>
-                        ☁️ Apri cartella SharePoint
+                        Apri cartella SharePoint
                       </a>
                     )}
                     <span style={{ fontSize: 10, color: "var(--muted)", textAlign: "center" }}>
@@ -283,7 +283,7 @@ export default async function DatiPage({
                     {consortium && (
                       <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
                         <details>
-                          <summary className="btn btn-outline btn-sm" style={{ display: "inline-block", cursor: "pointer" }}>🎨 Crea variante colore</summary>
+                          <summary className="btn btn-outline btn-sm" style={{ display: "inline-block", cursor: "pointer" }}>Crea variante colore</summary>
                           <form action={createColorVariant.bind(null, product.id, scopeParam)} style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
                             <input type="text" name="codice" required placeholder="Nuovo codice fornitore" style={{ marginTop: 0, width: 160 }} />
                             <input type="text" name="ean" placeholder="EAN" style={{ marginTop: 0, width: 130 }} />
@@ -295,7 +295,7 @@ export default async function DatiPage({
                           </form>
                         </details>
                         <details>
-                          <summary className="btn btn-outline btn-sm" style={{ display: "inline-block", cursor: "pointer" }}>✏️ Anagrafica</summary>
+                          <summary className="btn btn-outline btn-sm" style={{ display: "inline-block", cursor: "pointer" }}>Anagrafica</summary>
                           <form action={updateProductMeta.bind(null, product.id, scopeParam)} style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
                             <input type="text" name="ean" defaultValue={product.ean} placeholder="EAN" style={{ marginTop: 0, width: 140 }} />
                             <select name="tipologia" defaultValue={product.tipologia} style={{ marginTop: 0 }}>
@@ -327,8 +327,8 @@ export default async function DatiPage({
                           </strong>
                           {scope.type !== "system" && (
                             eff.custom
-                              ? <span className="field-version fv-custom">✏️ personalizzata</span>
-                              : <span className="field-version fv-consorzio">🏛️ Consorzio</span>
+                              ? <span className="field-version fv-custom">personalizzata</span>
+                              : <span className="field-version fv-consorzio">Consorzio</span>
                           )}
                           {consortium && scope.type === "system" && (
                             <details className="flag-details">
@@ -346,13 +346,13 @@ export default async function DatiPage({
                           {canEdit && (
                             <form action={toggle}>
                               <button className="mini-btn" type="submit" title={hidden ? "Mostra il campo" : "Nascondi il campo per questo ambito"}>
-                                {hidden ? "👁" : "🙈"}
+                                {hidden ? "Mostra" : "Nascondi"}
                               </button>
                             </form>
                           )}
                           {!consortium && (
                             <details className="flag-details">
-                              <summary title="Segnala un errore al Consorzio">🚩</summary>
+                              <summary title="Segnala un errore al Consorzio">⚑</summary>
                               <form action={report} className="flag-popover">
                                 <input type="text" name="message" required placeholder="Descrivi l'errore trovato in questo campo" />
                                 <button className="btn btn-sm" type="submit">Invia al Consorzio</button>
@@ -372,7 +372,7 @@ export default async function DatiPage({
                         />
                         {eff.custom && (
                           <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 3 }}>
-                            🏛️ Consorzio: “{base || "—"}”
+                            Consorzio: “{base || "—"}”
                           </div>
                         )}
                       </div>

@@ -96,7 +96,7 @@ export default function FieldEditor({
       <div style={{ display: "flex", flexDirection: "column", gap: 2, alignItems: "center", minWidth: 40 }}>
         <div style={{ display: "flex", gap: 2 }}>
           <button type="button" className="mini-btn" title="Copia campo" onClick={copyField}>⧉</button>
-          {canEdit && <button type="button" className="mini-btn" title="Incolla dagli appunti" onClick={pasteField}>📋</button>}
+          {canEdit && <button type="button" className="mini-btn" title="Incolla dagli appunti" onClick={pasteField}>⇩</button>}
         </div>
         <span style={{ fontSize: 10, color: state === "error" ? "var(--red)" : "var(--green-700)", minHeight: 13 }}>
           {state === "saving" ? "…" : state === "saved" ? "✓" : state === "error" ? "errore" : showVersionBadge && custom ? "pers." : ""}

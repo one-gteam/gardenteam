@@ -26,7 +26,7 @@ export default async function AdminPathsPage() {
     <div>
       <Header user={user} active="percorsi" />
       <div className="container" style={{ maxWidth: 920 }}>
-        <h1>🧭 Percorsi formativi</h1>
+        <h1>Percorsi formativi</h1>
         <p className="subtitle">
           Sequenze ordinate di corsi assegnate automaticamente in base al profilo del collaboratore.
           Lo studente le vede nella sua area con la barra di avanzamento.

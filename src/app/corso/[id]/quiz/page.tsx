@@ -38,7 +38,7 @@ export default async function QuizPage({
         <div style={{ marginBottom: 8 }}>
           <Link href={`/corso/${course.id}`}>← Torna al corso</Link>
         </div>
-        <h1>🧠 Quiz finale — {course.title}</h1>
+        <h1>Quiz finale — {course.title}</h1>
         <p className="subtitle">
           {course.quiz.length} domande · soglia di superamento {course.passScore}% · +30 punti se superato
         </p>
@@ -47,8 +47,8 @@ export default async function QuizPage({
           <div className={`alert ${passed ? "alert-green" : "alert-amber"}`}>
             {passed ? (
               <>
-                🎉 <strong>Quiz superato con {score}%!</strong>
-                {score === 100 && " Punteggio perfetto! 🏆"}
+                <strong>Quiz superato con {score}%!</strong>
+                {score === 100 && " Punteggio perfetto! "}
                 {myCert && (
                   <>
                     {" "}
@@ -59,7 +59,7 @@ export default async function QuizPage({
               </>
             ) : (
               <>
-                😕 <strong>Punteggio: {score}%.</strong> Serve almeno il {course.passScore}% — ripassa le lezioni e riprova, hai tentativi illimitati.
+                <strong>Punteggio: {score}%.</strong> Serve almeno il {course.passScore}% — ripassa le lezioni e riprova, hai tentativi illimitati.
               </>
             )}
           </div>

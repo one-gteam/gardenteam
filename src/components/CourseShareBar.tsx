@@ -22,10 +22,10 @@ export default function CourseShareBar({ courseId }: { courseId: string }) {
   return (
     <div className="share-bar">
       <button className="btn btn-outline btn-sm" type="button" onClick={copy}>
-        {copied ? "✓ Link copiato" : "🔗 Copia link per lo studente"}
+        {copied ? "✓ Link copiato" : "Copia link per lo studente"}
       </button>
       <a className="btn btn-outline btn-sm" href={path} target="_blank" rel="noopener noreferrer">
-        👁 Vista studente
+        Vista studente
       </a>
       <span className="hint">l&apos;anteprima si apre in una nuova scheda, come la vede chi segue il corso</span>
     </div>

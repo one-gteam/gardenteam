@@ -93,10 +93,10 @@ export default async function ZooVolantinoPage({
               {consortium && (
                 <>
                   <a className="btn btn-outline btn-sm" href={`/stampe/zoo/excel?volantino=1&campagna=${campaign.id}&scope=${scopeParam}`}>
-                    📤 Excel per il grafico
+                    Excel per il grafico
                   </a>
                   <a className="btn btn-outline btn-sm" href={`/stampe/zoo/foto?campagna=${campaign.id}&scope=${scopeParam}`}>
-                    📷 Raccolta foto
+                    Raccolta foto
                   </a>
                 </>
               )}
@@ -117,7 +117,7 @@ export default async function ZooVolantinoPage({
             {consortium && activeOffer && (
               <div className="card" style={{ padding: 14, marginBottom: 12, border: "2px solid #274b7a" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                  <strong>✏️ Modifica offerta per il volantino</strong>
+                  <strong>Modifica offerta per il volantino</strong>
                   <a className="btn btn-outline btn-sm" href={`/stampe/zoo/volantino?scope=${scopeParam}`}>✕ Chiudi</a>
                 </div>
                 <form action={updateOfferVolantino.bind(null, activeOffer.id, scopeParam)} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
@@ -157,7 +157,7 @@ export default async function ZooVolantinoPage({
                     </select>
                   </label>
                   <div style={{ display: "flex", alignItems: "end" }}>
-                    <button className="btn btn-sm" type="submit">💾 Salva</button>
+                    <button className="btn btn-sm" type="submit">Salva</button>
                   </div>
                 </form>
               </div>
@@ -196,12 +196,12 @@ export default async function ZooVolantinoPage({
                           <strong style={{ fontSize: 13 }}>{o.descrizione}</strong>
                           <div style={{ fontSize: 11.5, color: "var(--muted)" }}>
                             {product?.marca} · EAN {o.ean}
-                            {parent && <> · <span title="descrizione volantino del padre">📄 {effectiveParentText(db, scope, parent, "descVolantino", academyDb).value.slice(0, 60)}</span></>}
+                            {parent && <> · <span title="descrizione volantino del padre">{effectiveParentText(db, scope, parent, "descVolantino", academyDb).value.slice(0, 60)}</span></>}
                           </div>
                           <div style={{ display: "flex", gap: 4, marginTop: 3, flexWrap: "wrap" }}>
                             {o.label && <span className="pill pill-orange">{o.label}</span>}
                             {o.gruppo && <span className="pill pill-blue" title={o.gruppoDescrizione}>{o.gruppo}</span>}
-                            {o.tieniVicinoA && <span className="pill pill-gray" title="da tenere adiacente a un'altra offerta">🔗 adiacente</span>}
+                            {o.tieniVicinoA && <span className="pill pill-gray" title="da tenere adiacente a un'altra offerta">adiacente</span>}
                             {scheda && <span className="pill pill-green">{scheda.nome}</span>}
                           </div>
                         </td>
@@ -212,12 +212,12 @@ export default async function ZooVolantinoPage({
                         <td style={{ fontSize: 12 }}>
                           {pref.length > 0 && (
                             <div title={pref.map((v) => `${v.userName} (${v.scopeLabel})`).join(", ")}>
-                              👍 {pref.length}: {pref.map((v) => v.scopeLabel).slice(0, 3).join(", ")}{pref.length > 3 ? "…" : ""}
+                              {pref.length}: {pref.map((v) => v.scopeLabel).slice(0, 3).join(", ")}{pref.length > 3 ? "…" : ""}
                             </div>
                           )}
                           {non.length > 0 && (
                             <div style={{ color: "#a33" }} title={non.map((v) => `${v.userName} (${v.scopeLabel})`).join(", ")}>
-                              🚫 non trattato da {non.length}: {non.map((v) => v.scopeLabel).slice(0, 3).join(", ")}{non.length > 3 ? "…" : ""}
+                              non trattato da {non.length}: {non.map((v) => v.scopeLabel).slice(0, 3).join(", ")}{non.length > 3 ? "…" : ""}
                             </div>
                           )}
                           {votes.length === 0 && <span style={{ color: "var(--muted)" }}>—</span>}
@@ -225,12 +225,12 @@ export default async function ZooVolantinoPage({
                         <td className="no-print" style={{ whiteSpace: "nowrap" }}>
                           <form action={voteZooOffer.bind(null, o.id, "preferita", scopeParam)} style={{ display: "inline" }}>
                             <button className={`btn btn-sm ${myPref ? "" : "btn-outline"}`} type="submit" title="La proporrei nel volantino (clic di nuovo per togliere)">
-                              👍
+                              Proponi
                             </button>
                           </form>{" "}
                           <form action={voteZooOffer.bind(null, o.id, "nontrattato", scopeParam)} style={{ display: "inline" }}>
                             <button className={`btn btn-sm ${myNon ? "" : "btn-outline"}`} type="submit" title="Non ho in vendita questo prodotto (clic di nuovo per togliere)">
-                              🚫
+                              Non tratto
                             </button>
                           </form>
                         </td>
@@ -241,7 +241,7 @@ export default async function ZooVolantinoPage({
                                 {o.selezionata ? "✓ Nel volantino" : "Aggiungi"}
                               </button>
                             </form>{" "}
-                            <a className="btn btn-outline btn-sm" href={`/stampe/zoo/volantino?scope=${scopeParam}${schedaFilter ? `&scheda=${schedaFilter}` : ""}&offerta=${o.id}`}>✏️</a>
+                            <a className="btn btn-outline btn-sm" href={`/stampe/zoo/volantino?scope=${scopeParam}${schedaFilter ? `&scheda=${schedaFilter}` : ""}&offerta=${o.id}`}>Modifica</a>
                           </td>
                         )}
                       </tr>
@@ -255,7 +255,7 @@ export default async function ZooVolantinoPage({
             {consortium && openSuggestions.length > 0 && (
               <div className="section" style={{ marginTop: 16 }}>
                 <div className="section-head">
-                  <h2>🚩 Proposte di correzione dai PV ({openSuggestions.length})</h2>
+                  <h2>Proposte di correzione dai PV ({openSuggestions.length})</h2>
                 </div>
                 <div className="card table-wrap">
                   <table className="data">

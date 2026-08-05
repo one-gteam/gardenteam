@@ -92,7 +92,7 @@ export default async function ZooDatiPage({
           <div className="card" style={{ marginBottom: 14, padding: 14 }}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
               <div>
-                <strong>📥 Import Excel prodotti</strong>
+                <strong>Import Excel prodotti</strong>
                 <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "4px 0 8px" }}>
                   Colonne: EAN, CODICE FORNITORE, DESCRIZIONE, MARCA, FORNITORE, CATEGORIA, PREZZO.{" "}
                   <a href={`/stampe/zoo/excel?template=1&scope=${scopeParam}`}>Scarica il modello</a>
@@ -103,7 +103,7 @@ export default async function ZooDatiPage({
                 </form>
               </div>
               <div>
-                <strong>📷 Caricamento foto</strong>
+                <strong>Caricamento foto</strong>
                 <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "4px 0 8px" }}>
                   Puoi selezionare più foto insieme: se il nome del file contiene l&apos;EAN o il codice fornitore, l&apos;abbinamento è automatico.
                 </p>
@@ -121,8 +121,8 @@ export default async function ZooDatiPage({
           <div className="card" style={{ marginBottom: 14, padding: 14, border: "2px solid #274b7a" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
               <h2 style={{ margin: 0 }}>
-                📦 Prodotto padre: {effectiveParentText(db, scope, activeParent, "nome", academyDb).value}
-                {activeParent.aiGenerated && <span className="pill pill-blue" style={{ marginLeft: 8 }}>✨ testi AI</span>}
+                Prodotto padre: {effectiveParentText(db, scope, activeParent, "nome", academyDb).value}
+                {activeParent.aiGenerated && <span className="pill pill-blue" style={{ marginLeft: 8 }}>testi AI</span>}
               </h2>
               <a className="btn btn-outline btn-sm" href={`/stampe/zoo/dati?scope=${scopeParam}`}>✕ Chiudi</a>
             </div>
@@ -179,14 +179,14 @@ export default async function ZooDatiPage({
                   </label>
                   <div style={{ display: "flex", gap: 8 }}>
                     <button className="btn btn-sm" type="submit">
-                      💾 Salva {scope.type === "system" ? "(versione Consorzio)" : `(personalizzazione ${scope.label})`}
+                      Salva {scope.type === "system" ? "(versione Consorzio)" : `(personalizzazione ${scope.label})`}
                     </button>
                   </div>
                 </form>
                 {consortium && (
                   <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
                     <form action={rigeneraTestiAI.bind(null, activeParent.id, scopeParam)}>
-                      <button className="btn btn-outline btn-sm" type="submit">✨ Rigenera testi con AI</button>
+                      <button className="btn btn-outline btn-sm" type="submit">Rigenera testi con AI</button>
                     </form>
                     <form action={scioglieParent.bind(null, activeParent.id, scopeParam)}>
                       <button className="btn btn-outline btn-sm" type="submit">Sciogli raggruppamento</button>
@@ -207,7 +207,7 @@ export default async function ZooDatiPage({
         {/* prodotti padre esistenti */}
         {db.parents.length > 0 && !activeParent && (
           <div className="card" style={{ marginBottom: 14, padding: 14 }}>
-            <strong>📦 Prodotti padre ({db.parents.length})</strong>
+            <strong>Prodotti padre ({db.parents.length})</strong>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
               {db.parents.map((p) => (
                 <a key={p.id} className="pill pill-blue" href={`/stampe/zoo/dati?scope=${scopeParam}&padre=${p.id}`} style={{ textDecoration: "none" }}>
@@ -251,13 +251,13 @@ export default async function ZooDatiPage({
           {consortium && (
             <div style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "center" }}>
               <button className="btn btn-sm" formAction={createZooParent.bind(null, scopeParam)} type="submit">
-                📦 Crea padre dagli articoli selezionati
+                Crea padre dagli articoli selezionati
               </button>
               <button className="btn btn-sm" formAction={associaConAI.bind(null, scopeParam)} type="submit" style={{ background: "#6d3fa7" }}>
-                ✨ Associa con AI (raggruppa + genera testi)
+                Associa con AI (raggruppa + genera testi)
               </button>
               <span className="hint">
-                {db.settings.apiKey ? "chiave API Claude configurata" : "⚠️ nessuna chiave API: verrà usato il raggruppamento automatico con testi bozza"}
+                {db.settings.apiKey ? "chiave API Claude configurata" : "nessuna chiave API: verrà usato il raggruppamento automatico con testi bozza"}
               </span>
             </div>
           )}
@@ -319,7 +319,7 @@ export default async function ZooDatiPage({
                             className="btn btn-outline btn-sm" type="submit" title={hidden ? "Rendi di nuovo visibile" : "Nascondi questo articolo"}
                             formAction={toggleZooHidden.bind(null, scopeParam, "articolo", p.ean, "/stampe/zoo/dati")}
                           >
-                            {hidden ? "👁 Mostra" : "🙈"}
+                            {hidden ? "Mostra" : "Nascondi"}
                           </button>
                         </td>
                       )}
@@ -339,7 +339,7 @@ export default async function ZooDatiPage({
         {/* fornitori/marchi nascosti per questo ambito */}
         {scope.type !== "system" && (
           <div className="card" style={{ marginTop: 14, padding: 14 }}>
-            <strong>🙈 Fornitori e marchi non trattati da {scope.label}</strong>
+            <strong>Fornitori e marchi non trattati da {scope.label}</strong>
             <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "4px 0 8px" }}>
               Clicca per nascondere/mostrare: gli articoli nascosti non compariranno nelle pagine di stampa di questo ambito.
             </p>
@@ -349,7 +349,7 @@ export default async function ZooDatiPage({
                 return (
                   <form key={`f_${f}`} action={toggleZooHidden.bind(null, scopeParam, "fornitore", f, "/stampe/zoo/dati")}>
                     <button type="submit" className={`pill ${off ? "pill-gray" : "pill-green"}`} style={{ cursor: "pointer", border: "none" }}>
-                      {off ? "🙈 " : ""}Fornitore: {f}
+                      {off ? "✕ " : ""}Fornitore: {f}
                     </button>
                   </form>
                 );
@@ -359,7 +359,7 @@ export default async function ZooDatiPage({
                 return (
                   <form key={`m_${m}`} action={toggleZooHidden.bind(null, scopeParam, "marca", m, "/stampe/zoo/dati")}>
                     <button type="submit" className={`pill ${off ? "pill-gray" : "pill-blue"}`} style={{ cursor: "pointer", border: "none" }}>
-                      {off ? "🙈 " : ""}Marca: {m}
+                      {off ? "✕ " : ""}Marca: {m}
                     </button>
                   </form>
                 );

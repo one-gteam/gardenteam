@@ -83,7 +83,7 @@ export default async function ReportPage({
 
         <div className="section grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))" }}>
           <div className="card">
-            <h2>👀 Corsi più seguiti</h2>
+            <h2>Corsi più seguiti</h2>
             {mostViewed.map((s) => {
               const tot = s.completed + s.inProgress;
               const max = Math.max(...mostViewed.map((x) => x.completed + x.inProgress), 1);
@@ -100,7 +100,7 @@ export default async function ReportPage({
           </div>
 
           <div className="card">
-            <h2>⭐ Corsi più apprezzati</h2>
+            <h2>Corsi più apprezzati</h2>
             {bestRated.length === 0 && <p className="empty">Ancora nessun feedback.</p>}
             {bestRated.map((s) => (
               <div className="bar-row" key={s.course.id}>
@@ -126,7 +126,7 @@ export default async function ReportPage({
               </thead>
               <tbody>
                 {late.length === 0 && (
-                  <tr><td colSpan={3} className="empty">Nessun ritardo: tutti in regola! 🎉</td></tr>
+                  <tr><td colSpan={3} className="empty">Nessun ritardo: tutti in regola! </td></tr>
                 )}
                 {late.map(({ u, missing }) => {
                   const store = db.stores.find((s) => s.id === u.storeId);
@@ -151,7 +151,7 @@ export default async function ReportPage({
 
         <div className="section">
           <div className="section-head">
-            <h2>🏪 Dettaglio punti vendita</h2>
+            <h2>Dettaglio punti vendita</h2>
           </div>
           <div className="card table-wrap">
             <table className="data">
@@ -181,7 +181,7 @@ export default async function ReportPage({
 
         <div className="section">
           <div className="section-head">
-            <h2>🧮 Report personalizzato</h2>
+            <h2>Report personalizzato</h2>
             <span className="hint">{reportRows.length} righe</span>
           </div>
           <div className="card">
@@ -232,8 +232,8 @@ export default async function ReportPage({
               </div>
 
               <div style={{ display: "flex", gap: 10 }}>
-                <button className="btn btn-sm" type="submit">🔍 Applica</button>
-                <a className="btn btn-outline btn-sm" href={`/api/report/csv?${csvQuery.toString()}`}>⬇ Esporta CSV</a>
+                <button className="btn btn-sm" type="submit">Applica</button>
+                <a className="btn btn-outline btn-sm" href={`/api/report/csv?${csvQuery.toString()}`}>Esporta CSV</a>
               </div>
             </form>
 

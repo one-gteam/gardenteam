@@ -1,9 +1,11 @@
 import { redirect } from "next/navigation";
+import { GraduationCap, Armchair, PawPrint, Flower2, ArrowRight } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { userSites, postLoginPath } from "@/lib/types";
 import { logout } from "@/lib/actions";
 
+/** Schede delle macroaree, con fotografia di copertina in stile My Rosaflor. */
 export default async function ScegliPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
@@ -13,6 +15,31 @@ export default async function ScegliPage() {
   const { settings } = await getDb();
   const academyHome = user.role === "student" ? "/studente" : "/admin";
 
+  const aree = [
+    ...(sites.includes("academy")
+      ? [{
+          href: academyHome, foto: "/immagini/aree/formazione.jpg", icona: <GraduationCap size={18} />,
+          titolo: "Academy", desc: "Formazione del personale", attiva: true,
+        }]
+      : []),
+    ...(sites.includes("stampe")
+      ? [
+          {
+            href: "/stampe/arredo/dati", foto: "/immagini/aree/arredo.jpg", icona: <Armchair size={18} />,
+            titolo: "Cartelli Arredo", desc: "Cartelli arredo giardino", attiva: true,
+          },
+          {
+            href: "/stampe/zoo/dati", foto: "/immagini/aree/zoo.jpg", icona: <PawPrint size={18} />,
+            titolo: "Cartelli Offerte Zoo", desc: "Volantino e cartelli promo", attiva: true,
+          },
+          {
+            href: "#", foto: "/immagini/aree/piante.jpg", icona: <Flower2 size={18} />,
+            titolo: "Cartelli Piante", desc: "In preparazione", attiva: false,
+          },
+        ]
+      : []),
+  ];
+
   return (
     <div>
       <div className="login-hero" style={{ paddingBottom: 130 }}>
@@ -21,41 +48,32 @@ export default async function ScegliPage() {
           <img src={settings.logoUrl} alt="Garden Team" style={{ height: 44 }} />
           <span style={{ color: "var(--green-700)", fontWeight: 800, fontSize: 24 }}>Garden Team</span>
         </div>
-        <p>
-          Ciao {user.firstName}! Dove vuoi andare oggi?
-        </p>
+        <p>Ciao {user.firstName}! Dove vuoi andare oggi?</p>
       </div>
-      <div className="login-cards" style={{ maxWidth: 900 }}>
-        <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
-          {sites.includes("academy") && (
-            <a className="card card-link" href={academyHome} style={{ textAlign: "center", padding: 28 }}>
-              <div style={{ fontSize: 44 }}>🎓</div>
-              <h3>Academy</h3>
-              <p style={{ fontSize: 13, color: "var(--muted)" }}>Formazione del personale</p>
-              <span className="pill pill-green">Entra →</span>
-            </a>
-          )}
-          {sites.includes("stampe") && (
-            <>
-              <a className="card card-link" href="/stampe/arredo/dati" style={{ textAlign: "center", padding: 28 }}>
-                <div style={{ fontSize: 44 }}>🪑</div>
-                <h3>Stampa Cartelli Arredo</h3>
-                <p style={{ fontSize: 13, color: "var(--muted)" }}>Cartelli arredo giardino</p>
-                <span className="pill pill-green">Entra →</span>
+      <div className="login-cards" style={{ maxWidth: 1040 }}>
+        <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))" }}>
+          {aree.map((a) =>
+            a.attiva ? (
+              <a key={a.titolo} className="area-card" href={a.href}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={a.foto} alt="" className="area-photo" />
+                <span className="area-body">
+                  <span className="area-title">{a.icona} {a.titolo}</span>
+                  <span className="area-desc">{a.desc}</span>
+                  <span className="area-cta">Entra <ArrowRight size={14} /></span>
+                </span>
               </a>
-              <a className="card card-link" href="/stampe/zoo/dati" style={{ textAlign: "center", padding: 28 }}>
-                <div style={{ fontSize: 44 }}>🐾</div>
-                <h3>Stampa Cartelli Offerte Zoo</h3>
-                <p style={{ fontSize: 13, color: "var(--muted)" }}>Volantino e cartelli promo</p>
-                <span className="pill pill-green">Entra →</span>
-              </a>
-              <div className="card" style={{ textAlign: "center", padding: 28, opacity: 0.5 }}>
-                <div style={{ fontSize: 44 }}>🌸</div>
-                <h3>Stampa Cartelli Piante</h3>
-                <p style={{ fontSize: 13, color: "var(--muted)" }}>In preparazione</p>
-                <span className="pill pill-gray">Presto</span>
+            ) : (
+              <div key={a.titolo} className="area-card disabled">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={a.foto} alt="" className="area-photo" />
+                <span className="area-body">
+                  <span className="area-title">{a.icona} {a.titolo}</span>
+                  <span className="area-desc">{a.desc}</span>
+                  <span className="pill pill-gray" style={{ alignSelf: "flex-start" }}>Presto</span>
+                </span>
               </div>
-            </>
+            )
           )}
         </div>
         <div style={{ textAlign: "center", marginTop: 24 }}>

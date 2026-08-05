@@ -37,7 +37,7 @@ export default function PathsPanel({
 
   async function onSave(pathId: string | null, fd: FormData) {
     const res = await savePath(pathId, fd);
-    setMsg(res.ok ? "✓ Percorso salvato." : `⚠️ ${res.error}`);
+    setMsg(res.ok ? "✓ Percorso salvato." : `${res.error}`);
     if (res.ok) setEditing(null);
     router.refresh();
     setTimeout(() => setMsg(""), 3500);
@@ -50,7 +50,7 @@ export default function PathsPanel({
     return (
       <form action={(fd) => onSave(p?.id ?? null, fd)}>
         <div style={{ display: "grid", gridTemplateColumns: "70px 1fr", gap: 12 }}>
-          <label className="field">Emoji<input type="text" name="emoji" defaultValue={p?.emoji ?? "🧭"} maxLength={4} /></label>
+          <label className="field">Emoji<input type="text" name="emoji" defaultValue={p?.emoji ?? ""} maxLength={4} /></label>
           <label className="field">Titolo del percorso<input type="text" name="title" defaultValue={p?.title ?? ""} required placeholder="es. Onboarding neoassunti" /></label>
         </div>
         <label className="field">Descrizione<textarea name="description" rows={2} defaultValue={p?.description ?? ""} /></label>
@@ -123,7 +123,7 @@ export default function PathsPanel({
             </div>
             {notSelected.length > 0 && (
               <details>
-                <summary style={{ cursor: "pointer", fontSize: 13, fontWeight: 600 }}>➕ Aggiungi un corso</summary>
+                <summary style={{ cursor: "pointer", fontSize: 13, fontWeight: 600 }}>Aggiungi un corso</summary>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
                   {notSelected.map((c) => (
                     <button key={c.id} type="button" className="btn btn-outline btn-sm" disabled={pending}
@@ -137,7 +137,7 @@ export default function PathsPanel({
           </>
         )}
         <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-          <button className="btn btn-sm" type="submit">{p ? "💾 Salva percorso" : "➕ Crea percorso"}</button>
+          <button className="btn btn-sm" type="submit">{p ? "Salva percorso" : "Crea percorso"}</button>
           {p && <button className="btn btn-outline btn-sm" type="button" onClick={() => setEditing(null)}>Chiudi</button>}
         </div>
       </form>
@@ -162,10 +162,10 @@ export default function PathsPanel({
                 <span className="pill pill-gray">{p.courseIds.length} corsi</span>
                 <span style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
                   <button className="btn btn-outline btn-sm" type="button" onClick={() => setEditing(open ? null : p.id)}>
-                    {open ? "Chiudi" : "✏️ Modifica"}
+                    {open ? "Chiudi" : "Modifica"}
                   </button>
-                  <button className="btn btn-outline btn-sm danger" type="button" disabled={pending}
-                    onClick={() => { if (confirm(`Eliminare il percorso «${p.title}»? I corsi restano, si toglie solo il percorso.`)) run(() => deletePath(p.id)); }}>🗑</button>
+                  <button className="btn btn-outline btn-sm danger" type="button" disabled={pending} title="Elimina il percorso"
+                    onClick={() => { if (confirm(`Eliminare il percorso «${p.title}»? I corsi restano, si toglie solo il percorso.`)) run(() => deletePath(p.id)); }}>✕</button>
                 </span>
               </div>
               {open && <div style={{ marginTop: 12, borderTop: "1px solid var(--line)", paddingTop: 12 }}><PathForm p={p} /></div>}
@@ -175,7 +175,7 @@ export default function PathsPanel({
       </div>
 
       <div className="card" style={{ marginTop: 14, background: "var(--green-50)" }}>
-        <h3 style={{ marginTop: 0 }}>➕ Nuovo percorso formativo</h3>
+        <h3 style={{ marginTop: 0 }}>Nuovo percorso formativo</h3>
         <PathForm />
       </div>
     </div>

@@ -109,7 +109,7 @@ export default async function LayoutPage({
         {canEdit && (
           <div className="section grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))" }}>
             <div className="card">
-              <h3 style={{ marginTop: 0 }}>🖼️ Sfondo personalizzato per «{format.name}»</h3>
+              <h3 style={{ marginTop: 0 }}>Sfondo personalizzato per «{format.name}»</h3>
               <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 8px" }}>
                 {scope.type === "system"
                   ? "Sostituisce lo sfondo del Consorzio per questo formato."
@@ -117,7 +117,7 @@ export default async function LayoutPage({
               </p>
               <form action={uploadScopedBackground.bind(null, format.id, scopeParam)} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                 <input type="file" name="background" accept="image/*" required style={{ marginTop: 0, fontSize: 12, flex: 1, minWidth: 180 }} />
-                <button className="btn btn-sm" type="submit">⬆ Carica sfondo</button>
+                <button className="btn btn-sm" type="submit">Carica sfondo</button>
               </form>
               {scope.type !== "system" && db.scopedBackgrounds.some((b) => b.formatId === format.id && b.scopeType === scope.type && b.scopeId === scope.id) && (
                 <form action={removeScopedBackground.bind(null, format.id, scopeParam)} style={{ marginTop: 8 }}>
@@ -126,7 +126,7 @@ export default async function LayoutPage({
               )}
             </div>
             <div className="card">
-              <h3 style={{ marginTop: 0 }}>🏷️ I tuoi loghi e immagini</h3>
+              <h3 style={{ marginTop: 0 }}>I tuoi loghi e immagini</h3>
               <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 8px" }}>
                 Caricali qui e poi trascinali sul cartello dal pannello &quot;Le tue immagini&quot;.
               </p>
@@ -134,7 +134,7 @@ export default async function LayoutPage({
                 <input type="hidden" name="formatId" value={format.id} />
                 <input type="text" name="name" placeholder="Nome (es. Logo negozio)" style={{ marginTop: 0, width: 160 }} />
                 <input type="file" name="image" accept="image/*" required style={{ marginTop: 0, fontSize: 12, flex: 1, minWidth: 160 }} />
-                <button className="btn btn-sm" type="submit">⬆ Carica immagine</button>
+                <button className="btn btn-sm" type="submit">Carica immagine</button>
               </form>
             </div>
           </div>
@@ -156,7 +156,7 @@ export default async function LayoutPage({
                         <td>{l.items.length}</td>
                         <td>
                           <form action={deleteLayout.bind(null, l.id, scopeParam)}>
-                            <button className="btn btn-outline btn-sm" type="submit" style={{ color: "var(--red)", borderColor: "var(--red)" }}>🗑</button>
+                            <button className="btn btn-outline btn-sm" type="submit" style={{ color: "var(--red)", borderColor: "var(--red)" }}>Elimina</button>
                           </form>
                         </td>
                       </tr>

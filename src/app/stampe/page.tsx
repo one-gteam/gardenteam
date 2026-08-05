@@ -18,14 +18,14 @@ export default async function StampeHome() {
     <div>
       <StampeHeader user={user} active="home" />
       <div className="container">
-        <h1>🖨️ Stampe Garden Team</h1>
+        <h1>Stampe Garden Team</h1>
         <p className="subtitle">
           Cartelli con database comune del Consorzio e personalizzazioni per insegna e punto vendita.
         </p>
 
         <div className="grid grid-3">
           <a className="card card-link" href="/stampe/arredo/dati">
-            <div style={{ fontSize: 34 }}>🪑</div>
+            <div style={{ fontSize: 34 }}></div>
             <h3>Cartelli Arredo Giardino</h3>
             <p style={{ fontSize: 13, color: "var(--muted)" }}>
               {db.products.length} prodotti · {db.formats.length} formati · dati dall&apos;Excel 2026 Garden Team
@@ -33,7 +33,7 @@ export default async function StampeHome() {
             <span className="pill pill-green">Attiva</span>
           </a>
           <a className="card card-link" href="/stampe/zoo/dati">
-            <div style={{ fontSize: 34 }}>🐾</div>
+            <div style={{ fontSize: 34 }}></div>
             <h3>Cartelli Offerte ZOO</h3>
             <p style={{ fontSize: 13, color: "var(--muted)" }}>
               Database prodotti con foto, import offerte mensili, volantino con voti dei PV e cartelli promo.
@@ -41,7 +41,7 @@ export default async function StampeHome() {
             <span className="pill pill-green">Attiva</span>
           </a>
           <div className="card" style={{ opacity: 0.55 }}>
-            <div style={{ fontSize: 34 }}>🌸</div>
+            <div style={{ fontSize: 34 }}></div>
             <h3>Cartelli Piante</h3>
             <p style={{ fontSize: 13, color: "var(--muted)" }}>Prevista in una fase successiva.</p>
             <span className="pill pill-gray">In preparazione</span>
@@ -51,14 +51,14 @@ export default async function StampeHome() {
         {isConsortiumEditor(user) && (
           <div className="section">
             <div className="section-head">
-              <h2>🚩 Segnalazioni dai punti vendita ({openReports.length})</h2>
+              <h2>Segnalazioni dai punti vendita ({openReports.length})</h2>
               <span className="hint">errori nei dati segnalati da insegne e PV</span>
             </div>
             <div className="card table-wrap">
               <table className="data">
                 <thead><tr><th>Prodotto</th><th>Campo</th><th>Segnalazione</th><th>Da</th><th></th></tr></thead>
                 <tbody>
-                  {openReports.length === 0 && <tr><td colSpan={5} className="empty">Nessuna segnalazione aperta. 🎉</td></tr>}
+                  {openReports.length === 0 && <tr><td colSpan={5} className="empty">Nessuna segnalazione aperta. </td></tr>}
                   {openReports.map((r) => {
                     const p = db.products.find((x) => x.id === r.productId);
                     const f = db.fields.find((x) => x.id === r.fieldId);

@@ -21,8 +21,8 @@
   --red-bg: #feefe6;
   --blue: #1d4ed8;
   --blue-bg: #e8efff;
-  --radius: 14px;
-  --shadow: 0 1px 3px rgba(20, 40, 25, 0.08), 0 4px 16px rgba(20, 40, 25, 0.06);
+  --radius: 12px;
+  --shadow: 0 1px 2px rgba(20, 40, 25, 0.06), 0 3px 12px rgba(20, 40, 25, 0.05);
 }
 
 * { box-sizing: border-box; }
@@ -45,6 +45,11 @@ a { color: var(--green-700); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
 .container { max-width: 1360px; margin: 0 auto; padding: 24px 24px 60px; }
+
+/* L'area Stampe lavora su tabelle e cartelli: usa tutta la larghezza dello
+   schermo (con un tetto di buon senso), restando fluida sugli schermi piccoli. */
+body:has(.stampe-header) .container { max-width: min(1840px, 100%); }
+body:has(.stampe-header) .site-header-inner { max-width: min(1792px, 100%); }
 
 /* ---------- Header (due righe: brand+utente sopra, menu sotto) ---------- */
 .site-header {
@@ -343,6 +348,26 @@ table.data tr:last-child td { border-bottom: none; }
 }
 .persona-btn:hover { border-color: var(--green-500); background: var(--green-50); }
 .persona-role { font-size: 12px; color: var(--muted); }
+
+/* ---------- Schede delle macroaree (con fotografia) ---------- */
+.area-card {
+  display: flex; flex-direction: column; overflow: hidden;
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: var(--shadow); color: inherit; text-decoration: none;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.area-card:hover { transform: translateY(-3px); box-shadow: 0 6px 22px rgba(20, 40, 25, 0.13); text-decoration: none; }
+.area-card.disabled { opacity: 0.55; }
+.area-card.disabled .area-photo { filter: grayscale(0.6); }
+.area-photo { width: 100%; height: 140px; object-fit: cover; display: block; }
+.area-body { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px 16px; }
+.area-title { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 15.5px; color: var(--green-900); }
+.area-title svg { color: var(--green-600); flex-shrink: 0; }
+.area-desc { font-size: 13px; color: var(--muted); }
+.area-cta {
+  display: inline-flex; align-items: center; gap: 5px; margin-top: 8px;
+  font-size: 13px; font-weight: 700; color: var(--green-700);
+}
 
 /* ---------- Badges (gamification) ---------- */
 .badge-tile {

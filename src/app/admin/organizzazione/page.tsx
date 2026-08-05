@@ -81,7 +81,7 @@ export default async function OrgPage({
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={db.settings.logoUrl} alt={db.settings.portalName} style={{ height: 40, maxWidth: 130, objectFit: "contain" }} />
             <div style={{ flex: 1 }}>
-              <strong>🏛️ Scheda Consorzio — {db.settings.portalName}</strong>
+              <strong>Scheda Consorzio — {db.settings.portalName}</strong>
               <div style={{ fontSize: 12.5, color: "var(--muted)" }}>
                 Branding globale del portale: nome, logo, colori e messaggio per tutti gli studenti
               </div>
@@ -93,7 +93,7 @@ export default async function OrgPage({
         {(user.role === "system_admin" || user.role === "group_admin") && (
           <>
             <div className="section-head">
-              <h2>🏬 Insegne ({tenants.length})</h2>
+              <h2>Insegne ({tenants.length})</h2>
             </div>
             <div className="grid grid-3">
               {tenants.map((t) => {
@@ -117,8 +117,8 @@ export default async function OrgPage({
                     </div>
                     <div style={{ marginTop: 10, display: "flex", gap: 6, flexWrap: "wrap" }}>
                       <span className="pill" style={{ background: t.color, color: "#fff" }}>{t.color}</span>
-                      {t.secretWord ? <span className="pill pill-green">🔑 Parola segreta</span> : <span className="pill pill-gray">🔑 Nessuna parola segreta</span>}
-                      {t.approvalEmail ? <span className="pill pill-green">✉️ {t.approvalEmail}</span> : <span className="pill pill-gray">✉️ Email approvazione mancante</span>}
+                      {t.secretWord ? <span className="pill pill-green">Parola segreta</span> : <span className="pill pill-gray">Nessuna parola segreta</span>}
+                      {t.approvalEmail ? <span className="pill pill-green">{t.approvalEmail}</span> : <span className="pill pill-gray">Email approvazione mancante</span>}
                     </div>
                   </a>
                 );
@@ -129,7 +129,7 @@ export default async function OrgPage({
 
         <div className="section">
           <div className="section-head">
-            <h2>📍 Punti vendita ({stores.length})</h2>
+            <h2>Punti vendita ({stores.length})</h2>
           </div>
           <div className="grid grid-3">
             {stores.map((s) => {
@@ -144,8 +144,8 @@ export default async function OrgPage({
                     {t.name}{s.city ? ` · ${s.city}` : ""} · {staff} collaboratori
                   </div>
                   <div style={{ marginTop: 10, display: "flex", gap: 6, flexWrap: "wrap" }}>
-                    {s.secretWord ? <span className="pill pill-green">🔑 Parola segreta</span> : <span className="pill pill-gray">🔑 Usa quella di insegna</span>}
-                    {s.approvalEmail ? <span className="pill pill-green">✉️ {s.approvalEmail}</span> : <span className="pill pill-gray">✉️ Usa quella di insegna</span>}
+                    {s.secretWord ? <span className="pill pill-green">Parola segreta</span> : <span className="pill pill-gray">Usa quella di insegna</span>}
+                    {s.approvalEmail ? <span className="pill pill-green">{s.approvalEmail}</span> : <span className="pill pill-gray">Usa quella di insegna</span>}
                   </div>
                 </a>
               );
@@ -156,7 +156,7 @@ export default async function OrgPage({
         {/* ---------- Reparti ---------- */}
         <div className="section">
           <div className="section-head">
-            <h2>🏷️ Reparti ({visibleDepts.length})</h2>
+            <h2>Reparti ({visibleDepts.length})</h2>
             <span className="hint">
               {user.role === "system_admin"
                 ? "i reparti di sistema valgono per tutto il consorzio"
@@ -176,7 +176,7 @@ export default async function OrgPage({
                         <label className="field">Nome reparto<input type="text" name="name" defaultValue={d.name} required /></label>
                       </div>
                       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                        <button className="btn btn-sm" type="submit">💾 Salva</button>
+                        <button className="btn btn-sm" type="submit">Salva</button>
                         <span className="pill pill-gray">{scopeLabel(d)}</span>
                         <span className="pill pill-blue">{inUse} persone</span>
                       </div>
@@ -193,7 +193,7 @@ export default async function OrgPage({
                   {editable && (
                     <form action={deleteDepartment.bind(null, d.id)} style={{ marginTop: 8 }}>
                       <button className="btn btn-outline btn-sm" type="submit" style={{ color: "var(--red)", borderColor: "var(--red)" }}>
-                        🗑 Elimina reparto
+                        Elimina reparto
                       </button>
                     </form>
                   )}
@@ -201,10 +201,10 @@ export default async function OrgPage({
               );
             })}
             <div className="card" style={{ background: "var(--green-50)" }}>
-              <h3 style={{ marginTop: 0 }}>➕ Nuovo reparto</h3>
+              <h3 style={{ marginTop: 0 }}>Nuovo reparto</h3>
               <form action={saveDepartment.bind(null, null)}>
                 <div style={{ display: "grid", gridTemplateColumns: "60px 1fr", gap: 8 }}>
-                  <label className="field">Emoji<input type="text" name="emoji" placeholder="🏷️" maxLength={4} /></label>
+                  <label className="field">Emoji<input type="text" name="emoji" placeholder="" maxLength={4} /></label>
                   <label className="field">Nome reparto<input type="text" name="name" required placeholder="es. Vivaio esterno" /></label>
                 </div>
                 <button className="btn btn-sm" type="submit">Crea reparto</button>
@@ -219,7 +219,7 @@ export default async function OrgPage({
         {/* ---------- Gruppi ---------- */}
         <div className="section">
           <div className="section-head">
-            <h2>👥 Gruppi di persone ({visibleGroups.length})</h2>
+            <h2>Gruppi di persone ({visibleGroups.length})</h2>
             <span className="hint">gruppi trasversali ai reparti (es. referenti sicurezza) — utilizzabili come destinatari dei corsi</span>
           </div>
           <div className="grid grid-2">
@@ -234,7 +234,7 @@ export default async function OrgPage({
                       <div style={{ display: "grid", gridTemplateColumns: "60px 1fr auto", gap: 8, alignItems: "end" }}>
                         <label className="field" style={{ marginBottom: 0 }}>Emoji<input type="text" name="emoji" defaultValue={g.emoji} maxLength={4} /></label>
                         <label className="field" style={{ marginBottom: 0 }}>Nome gruppo<input type="text" name="name" defaultValue={g.name} required /></label>
-                        <button className="btn btn-sm" type="submit">💾</button>
+                        <button className="btn btn-sm" type="submit">Salva</button>
                       </div>
                     </form>
                   ) : (
@@ -271,11 +271,11 @@ export default async function OrgPage({
                             </option>
                           ))}
                         </select>
-                        <button className="btn btn-sm" type="submit">➕</button>
+                        <button className="btn btn-sm" type="submit">Aggiungi</button>
                       </form>
                       <form action={deleteGroup.bind(null, g.id)} style={{ marginTop: 8 }}>
                         <button className="btn btn-outline btn-sm" type="submit" style={{ color: "var(--red)", borderColor: "var(--red)" }}>
-                          🗑 Elimina gruppo
+                          Elimina gruppo
                         </button>
                       </form>
                     </>
@@ -284,10 +284,10 @@ export default async function OrgPage({
               );
             })}
             <div className="card" style={{ background: "var(--green-50)" }}>
-              <h3 style={{ marginTop: 0 }}>➕ Nuovo gruppo</h3>
+              <h3 style={{ marginTop: 0 }}>Nuovo gruppo</h3>
               <form action={saveGroup.bind(null, null)}>
                 <div style={{ display: "grid", gridTemplateColumns: "60px 1fr", gap: 8 }}>
-                  <label className="field">Emoji<input type="text" name="emoji" placeholder="👥" maxLength={4} /></label>
+                  <label className="field">Emoji<input type="text" name="emoji" placeholder="" maxLength={4} /></label>
                   <label className="field">Nome gruppo<input type="text" name="name" required placeholder="es. Referenti sicurezza" /></label>
                 </div>
                 <button className="btn btn-sm" type="submit">Crea gruppo</button>

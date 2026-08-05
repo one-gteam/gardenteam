@@ -15,7 +15,7 @@ import {
 } from "@/lib/actions";
 import { LESSON_TYPES, Lesson, LessonType } from "@/lib/types";
 
-const ATTACHMENT_ICON: Record<string, string> = { pdf: "📄", slide: "🖥️", altro: "📎" };
+const ATTACHMENT_LABEL: Record<string, string> = { pdf: "PDF", slide: "Slide", altro: "File" };
 
 /**
  * Editor di una lezione: cambia tipo e salva senza ricaricare la pagina.
@@ -77,19 +77,19 @@ export default function LessonEditor({
           <strong>{lesson.title}</strong>
           <span className="pill pill-gray">{typeMeta?.label}</span>
           {type === "video" && lesson.videoUrl && <span className="pill pill-green">▶ video</span>}
-          {type === "scorm" && (lesson.scorm ? <span className="pill pill-green">🎯 SCORM {lesson.scorm.version}</span> : <span className="pill pill-amber">SCORM da caricare</span>)}
-          {attachments.length > 0 && <span className="pill pill-blue">📎 {attachments.length}</span>}
+          {type === "scorm" && (lesson.scorm ? <span className="pill pill-green">SCORM {lesson.scorm.version}</span> : <span className="pill pill-amber">SCORM da caricare</span>)}
+          {attachments.length > 0 && <span className="pill pill-blue">{attachments.length}</span>}
           {type === "quiz" && <span className="pill pill-blue">{questions.length} domande</span>}
-          {type === "video" && videoQuestions.length > 0 && <span className="pill pill-blue">❓ {videoQuestions.length}</span>}
+          {type === "video" && videoQuestions.length > 0 && <span className="pill pill-blue">{videoQuestions.length}</span>}
           <span style={{ marginLeft: "auto", color: "var(--muted)" }}>{open ? "▲ chiudi" : "▼ apri"}</span>
         </button>
         <button className="btn btn-outline btn-sm" type="button" disabled={index === 0 || pending}
           onClick={() => run(() => moveLesson(courseId, lesson.id, -1))} title="Sposta su">↑</button>
         <button className="btn btn-outline btn-sm" type="button" disabled={index === total - 1 || pending}
           onClick={() => run(() => moveLesson(courseId, lesson.id, 1))} title="Sposta giù">↓</button>
-        <button className="btn btn-outline btn-sm danger" type="button" disabled={pending}
+        <button className="btn btn-outline btn-sm danger" type="button" disabled={pending} title="Elimina la lezione"
           onClick={() => { if (confirm(`Eliminare la lezione «${lesson.title}»?`)) run(() => deleteLesson(courseId, lesson.id)); }}>
-          🗑
+          ✕
         </button>
       </div>
 
@@ -116,7 +116,7 @@ export default function LessonEditor({
 
             {type === "video" && (
               <label className="field">
-                🎬 Link del video
+                Link del video
                 <input type="text" name="videoUrl" defaultValue={lesson.videoUrl ?? ""}
                   placeholder="https://www.youtube.com/watch?v=… (anche video non in elenco)" />
                 <span className="hint">
@@ -136,7 +136,7 @@ export default function LessonEditor({
 
             <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
               <button className="btn btn-sm" type="submit" disabled={status === "saving"}>
-                {status === "saving" ? "Salvataggio…" : "💾 Salva lezione"}
+                {status === "saving" ? "Salvataggio…" : "Salva lezione"}
               </button>
               {status === "saved" && <span className="pill pill-green">✓ Salvato</span>}
               {status === "error" && <span className="pill pill-red">{error || "Errore"}</span>}
@@ -145,7 +145,7 @@ export default function LessonEditor({
 
           {type === "scorm" && (
             <div className="lesson-sub">
-              <strong style={{ fontSize: 14 }}>🎯 Pacchetto SCORM</strong>
+              <strong style={{ fontSize: 14 }}>Pacchetto SCORM</strong>
               <p className="hint" style={{ margin: "4px 0 10px" }}>
                 Carica il file .zip esportato da Articulate, iSpring, Rise, Genially, Adobe Captivate…
                 Il completamento e il punteggio vengono tracciati dal contenuto stesso.
@@ -157,7 +157,7 @@ export default function LessonEditor({
                   <span className="hint">avvio: {lesson.scorm.entry}</span>
                   <button className="btn btn-outline btn-sm danger" type="button" disabled={pending}
                     onClick={() => { if (confirm("Rimuovere il pacchetto SCORM da questa lezione?")) run(() => removeScormLesson(courseId, lesson.id)); }}>
-                    🗑 Rimuovi
+                    Rimuovi
                   </button>
                 </div>
               ) : (
@@ -167,13 +167,13 @@ export default function LessonEditor({
                 action={async (fd) => {
                   setScormMsg("Caricamento e analisi del pacchetto…");
                   const res = await uploadScormPackage(courseId, lesson.id, fd);
-                  setScormMsg(res.ok ? `✓ Pacchetto SCORM ${res.version} caricato.` : `⚠️ ${res.error}`);
+                  setScormMsg(res.ok ? `✓ Pacchetto SCORM ${res.version} caricato.` : `${res.error}`);
                   router.refresh();
                 }}
                 style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8, flexWrap: "wrap" }}
               >
                 <input type="file" name="scorm" accept=".zip" required style={{ fontSize: 12 }} />
-                <button className="btn btn-sm" type="submit">{lesson.scorm ? "Sostituisci pacchetto" : "⬆ Carica pacchetto"}</button>
+                <button className="btn btn-sm" type="submit">{lesson.scorm ? "Sostituisci pacchetto" : "Carica pacchetto"}</button>
                 {scormMsg && <span className="hint">{scormMsg}</span>}
               </form>
             </div>
@@ -182,7 +182,7 @@ export default function LessonEditor({
           {(type === "video" || type === "pdf") && (
             <div className="lesson-sub">
               <strong style={{ fontSize: 14 }}>
-                {type === "pdf" ? "📄 PDF della lezione" : "📎 Slide e materiali scaricabili"} ({attachments.length})
+                {type === "pdf" ? "PDF della lezione" : "Slide e materiali scaricabili"} ({attachments.length})
               </strong>
               <p className="hint" style={{ margin: "4px 0 10px" }}>
                 {type === "pdf"
@@ -195,14 +195,14 @@ export default function LessonEditor({
                     <tbody>
                       {attachments.map((a) => (
                         <tr key={a.id}>
-                          <td style={{ width: 34 }}>{ATTACHMENT_ICON[a.kind]}</td>
+                          <td style={{ width: 52 }}><span className="pill pill-gray">{ATTACHMENT_LABEL[a.kind]}</span></td>
                           <td>
                             <a href={a.url} target="_blank" rel="noopener noreferrer">{a.name}</a>
                             {a.sizeKb !== undefined && <span className="hint"> · {a.sizeKb} KB</span>}
                           </td>
                           <td style={{ width: 56 }}>
                             <button className="btn btn-outline btn-sm danger" type="button" disabled={pending}
-                              onClick={() => run(() => deleteLessonAttachment(courseId, lesson.id, a.id))}>🗑</button>
+                              title="Elimina allegato" onClick={() => run(() => deleteLessonAttachment(courseId, lesson.id, a.id))}>✕</button>
                           </td>
                         </tr>
                       ))}
@@ -228,14 +228,14 @@ export default function LessonEditor({
                   Nome mostrato
                   <input type="text" name="attachmentName" placeholder={type === "pdf" ? "es. Dispensa sicurezza" : "es. Slide della lezione"} />
                 </label>
-                <button className="btn btn-sm" type="submit">➕ Carica</button>
+                <button className="btn btn-sm" type="submit">Carica</button>
               </form>
             </div>
           )}
 
           {type === "video" && (
             <div className="lesson-sub">
-              <strong style={{ fontSize: 14 }}>❓ Domande nel video ({videoQuestions.length})</strong>
+              <strong style={{ fontSize: 14 }}>Domande nel video ({videoQuestions.length})</strong>
               <p className="hint" style={{ margin: "4px 0 10px" }}>
                 Al secondo indicato il video si mette in pausa e mostra la domanda: lo studente non può
                 proseguire finché non risponde correttamente.
@@ -245,7 +245,7 @@ export default function LessonEditor({
                   <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6 }}>
                     <strong style={{ flex: 1, fontSize: 13 }}>Al secondo {q.atSeconds}</strong>
                     <button className="btn btn-outline btn-sm danger" type="button" disabled={pending}
-                      onClick={() => run(() => deleteLessonQuestion(courseId, lesson.id, q.id))}>🗑</button>
+                      title="Elimina domanda" onClick={() => run(() => deleteLessonQuestion(courseId, lesson.id, q.id))}>✕</button>
                   </div>
                   <form action={async (fd) => { await saveLessonQuestion(courseId, lesson.id, q.id, fd); router.refresh(); }}>
                     <label className="field">Testo<input type="text" name="text" defaultValue={q.text} required /></label>
@@ -269,12 +269,12 @@ export default function LessonEditor({
                         <input type="text" name="atSeconds" defaultValue={String(q.atSeconds)} />
                       </label>
                     </div>
-                    <button className="btn btn-sm" type="submit">💾 Salva domanda</button>
+                    <button className="btn btn-sm" type="submit">Salva domanda</button>
                   </form>
                 </div>
               ))}
               <details className="quiz-edit">
-                <summary style={{ cursor: "pointer", fontWeight: 700, fontSize: 13 }}>➕ Aggiungi domanda nel video</summary>
+                <summary style={{ cursor: "pointer", fontWeight: 700, fontSize: 13 }}>Aggiungi domanda nel video</summary>
                 <form action={async (fd) => { await saveLessonQuestion(courseId, lesson.id, null, fd); router.refresh(); }}
                   style={{ marginTop: 8 }}>
                   <label className="field">Testo<input type="text" name="text" required placeholder="es. Ogni quanto si annaffia?" /></label>
@@ -298,7 +298,7 @@ export default function LessonEditor({
                       <input type="text" name="atSeconds" required placeholder="es. 90" />
                     </label>
                   </div>
-                  <button className="btn btn-sm" type="submit">➕ Aggiungi</button>
+                  <button className="btn btn-sm" type="submit">Aggiungi</button>
                 </form>
               </details>
             </div>
@@ -306,7 +306,7 @@ export default function LessonEditor({
 
           {type === "quiz" && (
             <div className="lesson-sub">
-              <strong style={{ fontSize: 14 }}>🧠 Domande del quiz ({questions.length})</strong>
+              <strong style={{ fontSize: 14 }}>Domande del quiz ({questions.length})</strong>
               <p className="hint" style={{ margin: "4px 0 10px" }}>
                 Lo studente supera il capitolo con almeno il {passScore}% di risposte corrette.
               </p>
@@ -315,7 +315,7 @@ export default function LessonEditor({
                   <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6 }}>
                     <strong style={{ flex: 1, fontSize: 13 }}>Domanda {qi + 1}</strong>
                     <button className="btn btn-outline btn-sm danger" type="button" disabled={pending}
-                      onClick={() => run(() => deleteLessonQuestion(courseId, lesson.id, q.id))}>🗑</button>
+                      title="Elimina domanda" onClick={() => run(() => deleteLessonQuestion(courseId, lesson.id, q.id))}>✕</button>
                   </div>
                   <form action={async (fd) => { await saveLessonQuestion(courseId, lesson.id, q.id, fd); router.refresh(); }}>
                     <label className="field">Testo<input type="text" name="text" defaultValue={q.text} required /></label>
@@ -333,12 +333,12 @@ export default function LessonEditor({
                         {q.options.map((_, oi) => <option key={oi} value={oi}>Risposta {oi + 1}</option>)}
                       </select>
                     </label>
-                    <button className="btn btn-sm" type="submit">💾 Salva domanda</button>
+                    <button className="btn btn-sm" type="submit">Salva domanda</button>
                   </form>
                 </div>
               ))}
               <details className="quiz-edit">
-                <summary style={{ cursor: "pointer", fontWeight: 700, fontSize: 13 }}>➕ Aggiungi domanda</summary>
+                <summary style={{ cursor: "pointer", fontWeight: 700, fontSize: 13 }}>Aggiungi domanda</summary>
                 <form action={async (fd) => { await saveLessonQuestion(courseId, lesson.id, null, fd); router.refresh(); }}
                   style={{ marginTop: 8 }}>
                   <label className="field">Testo<input type="text" name="text" required placeholder="es. Ogni quanto si annaffia?" /></label>
@@ -356,7 +356,7 @@ export default function LessonEditor({
                       {[0, 1, 2, 3].map((oi) => <option key={oi} value={oi}>Risposta {oi + 1}</option>)}
                     </select>
                   </label>
-                  <button className="btn btn-sm" type="submit">➕ Aggiungi</button>
+                  <button className="btn btn-sm" type="submit">Aggiungi</button>
                 </form>
               </details>
             </div>

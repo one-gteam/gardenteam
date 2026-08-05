@@ -27,10 +27,10 @@ export default async function ActivatePage({
         <p>Attiva il tuo account</p>
       </div>
       <div className="login-cards" style={{ maxWidth: 560 }}>
-        {errore && <div className="alert alert-amber">⚠️ {ERRORS[errore] ?? "Errore imprevisto, riprova."}</div>}
+        {errore && <div className="alert alert-amber">{ERRORS[errore] ?? "Errore imprevisto, riprova."}</div>}
 
         <div className="card">
-          <h2>🔑 Attiva utente</h2>
+          <h2>Attiva utente</h2>
           <p style={{ fontSize: 14, color: "var(--muted)" }}>
             Il tuo punto vendita ti ha già inserito in Academy GT: inserisci la tua email di lavoro e
             scegli una password per attivare l&apos;account.

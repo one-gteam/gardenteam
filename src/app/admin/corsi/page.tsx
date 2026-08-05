@@ -74,9 +74,9 @@ export default async function AdminCoursesPage({
                       </span>
                     </td>
                     <td>{s.avgScore !== null ? `${s.avgScore}%` : "—"}</td>
-                    <td>{s.avgRating !== null ? `⭐ ${s.avgRating}` : "—"}</td>
+                    <td>{s.avgRating !== null ? `${s.avgRating}` : "—"}</td>
                     <td>
-                      <a className="btn btn-outline btn-sm" href={`/admin/corsi/${c.id}`}>✏️ Modifica</a>
+                      <a className="btn btn-outline btn-sm" href={`/admin/corsi/${c.id}`}>Modifica</a>
                     </td>
                   </tr>
                 );
@@ -87,7 +87,7 @@ export default async function AdminCoursesPage({
 
         <div className="section">
           <div className="section-head">
-            <h2>➕ Crea un nuovo corso</h2>
+            <h2>Crea un nuovo corso</h2>
           </div>
           <div className="card" style={{ maxWidth: 640 }}>
             <form action={createCourse}>

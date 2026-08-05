@@ -65,7 +65,7 @@ export default async function ZooOffertePage({
 
         {consortium && (
           <div className="card" style={{ marginBottom: 14, padding: 14 }}>
-            <strong>📥 Nuovo import offerte</strong>
+            <strong>Nuovo import offerte</strong>
             <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "4px 0 8px" }}>
               Colonne: EAN, DESCRIZIONE PROMO, PREZZO PROMO, PREZZO LISTINO, CONDIZIONI (+ MARCA/FORNITORE per i prodotti nuovi).{" "}
               <a href={`/stampe/zoo/excel?offerte=1&scope=${scopeParam}`}>Scarica il modello</a>
@@ -86,7 +86,7 @@ export default async function ZooOffertePage({
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
                 <div>
                   <h2 style={{ margin: 0 }}>
-                    🗓️ {campaign.nome} {campaign.attiva && <span className="pill pill-green">attiva</span>}
+                    {campaign.nome} {campaign.attiva && <span className="pill pill-green">attiva</span>}
                   </h2>
                   <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "4px 0 0" }}>
                     Validità: {campaign.dal || "—"} → {campaign.al || "—"} · {offers.length} offerte
@@ -114,9 +114,9 @@ export default async function ZooOffertePage({
 
             {consortium && orphans > 0 && (
               <div className="alert" style={{ background: "#f3ecfb", border: "1px solid #d9c6f2", marginBottom: 14 }}>
-                ⚠️ Ci sono <strong>{orphans} prodotti senza padre</strong> (inclusi quelli appena importati).{" "}
+                Ci sono <strong>{orphans} prodotti senza padre</strong> (inclusi quelli appena importati).{" "}
                 <form action={associaNuoviConAI.bind(null, scopeParam)} style={{ display: "inline" }}>
-                  <button className="btn btn-sm" type="submit" style={{ background: "#6d3fa7" }}>✨ Associa con AI e genera i testi</button>
+                  <button className="btn btn-sm" type="submit" style={{ background: "#6d3fa7" }}>Associa con AI e genera i testi</button>
                 </form>{" "}
                 <span className="hint">oppure raggruppali a mano nella pagina Database prodotti.</span>
               </div>

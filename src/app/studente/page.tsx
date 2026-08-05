@@ -32,9 +32,9 @@ export default async function StudentDashboard() {
   const dept = db.departments.find((d) => d.id === user.departmentId);
 
   const sections = [
-    { key: "sistema", title: "🏛️ Formazione Garden Team (sistema)", hint: "Corsi del consorzio, comuni a tutte le insegne" },
-    { key: "insegna", title: `${tenant?.emoji ?? "🏬"} Formazione ${tenant?.name ?? "di insegna"}`, hint: "Corsi della tua insegna" },
-    { key: "punto_vendita", title: `📍 Il tuo punto vendita${store ? ` — ${store.city}` : ""}`, hint: "Corsi specifici del tuo negozio" },
+    { key: "sistema", title: "Formazione Garden Team (sistema)", hint: "Corsi del consorzio, comuni a tutte le insegne" },
+    { key: "insegna", title: `${tenant?.emoji ?? ""} Formazione ${tenant?.name ?? "di insegna"}`, hint: "Corsi della tua insegna" },
+    { key: "punto_vendita", title: `Il tuo punto vendita${store ? ` — ${store.city}` : ""}`, hint: "Corsi specifici del tuo negozio" },
   ] as const;
 
   const completedCourses = myCourses.filter((c) => isCourseCompleted(c, getProgress(db, user.id, c.id)));
@@ -81,7 +81,7 @@ export default async function StudentDashboard() {
     percorsi: myPaths.length > 0 && (
       <div className="section" key="percorsi">
         <div className="section-head">
-          <h2>🧭 I tuoi percorsi formativi</h2>
+          <h2>I tuoi percorsi formativi</h2>
           <span className="hint">assegnati automaticamente in base al tuo profilo</span>
         </div>
         <div className="grid grid-2">
@@ -146,7 +146,7 @@ export default async function StudentDashboard() {
     badge: (
       <div className="section" key="badge">
         <div className="card">
-          <h2>🎖️ I tuoi badge</h2>
+          <h2>I tuoi badge</h2>
           <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(90px, 1fr))", gap: 10 }}>
             {Object.entries(BADGE_DEFS).map(([key, b]) => (
               <div key={key} className={`badge-tile ${user.badges.includes(key) ? "" : "locked"}`} title={b.desc}>
@@ -162,7 +162,7 @@ export default async function StudentDashboard() {
     classifica_negozio: leaderboard.length > 0 && (
       <div className="section" key="classifica_negozio">
         <div className="card">
-          <h2>🏅 Classifica del negozio</h2>
+          <h2>Classifica del negozio</h2>
           {leaderboard.map((u, i) => (
             <div key={u.id} className="rank-row">
               <span className={`rank-pos ${i === 0 ? "gold" : ""}`}>{i + 1}</span>
@@ -179,7 +179,7 @@ export default async function StudentDashboard() {
     classifica_generale: gLeaderboard.length > 0 && (
       <div className="section" key="classifica_generale">
         <div className="card">
-          <h2>🌍 Classifica generale del consorzio</h2>
+          <h2>Classifica generale del consorzio</h2>
           {db.settings.leaderboardAnonymous ? (
             <p style={{ fontSize: 14 }}>
               Sei al <strong>{myRank}° posto</strong> su {gLeaderboard.length} collaboratori, con{" "}
@@ -203,7 +203,7 @@ export default async function StudentDashboard() {
     classifica_pv: (
       <div className="section" key="classifica_pv">
         <div className="card">
-          <h2>🏆 Sfida tra negozi</h2>
+          <h2>Sfida tra negozi</h2>
           <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 8px" }}>
             Classifica per completamento corsi obbligatori
           </p>
@@ -223,7 +223,7 @@ export default async function StudentDashboard() {
     certificati: myCerts.length > 0 && (
       <div className="section" key="certificati">
         <div className="section-head">
-          <h2>📜 I tuoi certificati</h2>
+          <h2>I tuoi certificati</h2>
         </div>
         <div className="card">
           <table className="data">
@@ -252,11 +252,11 @@ export default async function StudentDashboard() {
     <div>
       <Header user={user} active="studente" />
       <div className="container">
-        <h1>Ciao {user.firstName} 👋</h1>
+        <h1>Ciao {user.firstName} </h1>
         <p className="subtitle">
           {user.jobTitle}
           {dept ? ` · Reparto ${dept.name}` : ""} — hai <strong>{user.points} punti</strong>
-          {isNewHire(user) && " · 🚀 percorso neoassunti attivo"}
+          {isNewHire(user) && " · percorso neoassunti attivo"}
         </p>
 
         {db.settings.welcome && (
@@ -280,7 +280,7 @@ export default async function StudentDashboard() {
           </div>
         )}
         {store?.welcome && (
-          <div className="alert alert-green">📍 <strong>{store.name}:</strong> {store.welcome}</div>
+          <div className="alert alert-green"><strong>{store.name}:</strong> {store.welcome}</div>
         )}
 
         {blockOrder.map((kind) => blockContent[kind])}

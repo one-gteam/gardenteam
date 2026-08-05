@@ -30,7 +30,7 @@ export default function LessonsPanel({
 
   const AddButtons = () => (
     <div className="add-lesson-bar">
-      <span style={{ fontWeight: 700, fontSize: 13 }}>➕ Aggiungi:</span>
+      <span style={{ fontWeight: 700, fontSize: 13 }}>Aggiungi:</span>
       {LESSON_TYPES.map((t) => (
         <button key={t.value} className="btn btn-sm" type="button" disabled={pending}
           onClick={() => add(t.value)} title={t.hint}>

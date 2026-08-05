@@ -28,13 +28,13 @@ export default async function LoginPage({
       <div className="login-cards">
         {disattivato && (
           <div className="alert alert-amber">
-            🔒 <strong>Accesso non consentito:</strong> questo account risulta cessato ed è stato disattivato.
+            <strong>Accesso non consentito:</strong> questo account risulta cessato ed è stato disattivato.
             Contatta il tuo responsabile se ritieni sia un errore.
           </div>
         )}
         {errore === "credenziali" && (
           <div className="alert alert-amber">
-            ❌ Email o password non corretti. Se non hai ancora impostato la password, usa <a href="/attiva">Attiva utente</a>.
+            Email o password non corretti. Se non hai ancora impostato la password, usa <a href="/attiva">Attiva utente</a>.
           </div>
         )}
         {attivato && (
@@ -43,7 +43,7 @@ export default async function LoginPage({
 
         <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", alignItems: "stretch" }}>
           <div className="card">
-            <h2>🔐 Accedi</h2>
+            <h2>Accedi</h2>
             <form action={loginWithPassword}>
               <label className="field">
                 Email
@@ -58,14 +58,14 @@ export default async function LoginPage({
           </div>
 
           <div className="card">
-            <h2>✨ Primo accesso?</h2>
+            <h2>Primo accesso?</h2>
             <p style={{ fontSize: 14, color: "var(--muted)" }}>
               <strong>Sei già stato inserito dal tuo punto vendita?</strong>
               <br />
               Attiva il tuo account impostando la password.
             </p>
             <a className="btn btn-outline" href="/attiva" style={{ display: "block", marginBottom: 14 }}>
-              🔑 Attiva utente
+              Attiva utente
             </a>
             <p style={{ fontSize: 14, color: "var(--muted)" }}>
               <strong>Non sei ancora stato inserito?</strong>
@@ -73,14 +73,14 @@ export default async function LoginPage({
               Registrati con la parola segreta del tuo punto vendita: la richiesta verrà approvata dal responsabile.
             </p>
             <a className="btn btn-outline" href="/registrati" style={{ display: "block" }}>
-              📝 Richiedi la registrazione
+              Richiedi la registrazione
             </a>
           </div>
         </div>
 
         <details style={{ marginTop: 26 }}>
           <summary style={{ cursor: "pointer", fontWeight: 700, color: "var(--muted)" }}>
-            🧪 Accesso rapido demo (per provare i vari ruoli senza password)
+            Accesso rapido demo (per provare i vari ruoli senza password)
           </summary>
           <div className="grid grid-2" style={{ marginTop: 14 }}>
             {personas.map((u) => {

@@ -187,7 +187,7 @@ export default function LayoutEditor({
           ))}
         </div>
         <button type="button" className="btn btn-outline btn-sm" style={{ marginTop: 10, width: "100%" }} onClick={addSticker} disabled={!canEdit}>
-          🔖 Aggiungi sticker / bollino
+          Aggiungi sticker / bollino
         </button>
         {images.length > 0 && (
           <>
@@ -195,7 +195,7 @@ export default function LayoutEditor({
             <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
               {images.map((img) => (
                 <button key={img.url} type="button" className="btn btn-outline btn-sm" style={{ textAlign: "left" }} onClick={() => addImage(img.url)} disabled={!canEdit}>
-                  🖼 {img.name}
+                  {img.name}
                 </button>
               ))}
             </div>
@@ -203,7 +203,7 @@ export default function LayoutEditor({
         )}
         {selected !== null && canEdit && (
           <button type="button" className="btn btn-sm" style={{ marginTop: 12, background: "var(--red)" }} onClick={removeSelected}>
-            🗑 Rimuovi elemento selezionato
+            Rimuovi elemento selezionato
           </button>
         )}
       </div>
@@ -294,7 +294,7 @@ export default function LayoutEditor({
       <div className="card" style={{ padding: 14 }}>
         {selItem?.sticker && canEdit && (
           <div style={{ borderBottom: "1.5px dashed var(--line)", paddingBottom: 12, marginBottom: 12 }}>
-            <h3 style={{ marginTop: 0 }}>🔖 Sticker selezionato</h3>
+            <h3 style={{ marginTop: 0 }}>Sticker selezionato</h3>
             <label className="field">
               Campo associato
               <select value={selItem.fieldId} onChange={(e) => updateSelected({ fieldId: e.target.value })}>
@@ -305,10 +305,10 @@ export default function LayoutEditor({
               <label className="field">
                 Forma
                 <select value={selItem.sticker.shape} onChange={(e) => updateSelected({ sticker: { shape: e.target.value as StickerStyle["shape"] } })}>
-                  <option value="cerchio">⚪ Cerchio</option>
-                  <option value="quadrato">⬜ Quadrato</option>
-                  <option value="stella">💥 Stella/burst</option>
-                  <option value="nastro">🎀 Nastro</option>
+                  <option value="cerchio">Cerchio</option>
+                  <option value="quadrato">Quadrato</option>
+                  <option value="stella">Stella/burst</option>
+                  <option value="nastro">Nastro</option>
                 </select>
               </label>
               <label className="field">
@@ -359,13 +359,13 @@ export default function LayoutEditor({
         {canEdit ? (
           <>
             <button type="button" className="btn" style={{ marginTop: 14, width: "100%" }} onClick={doSave} disabled={pending}>
-              {pending ? "Salvataggio…" : "💾 Salva layout"}
+              {pending ? "Salvataggio…" : "Salva layout"}
             </button>
             {saved && <p style={{ color: "var(--green-700)", fontWeight: 700, fontSize: 13, textAlign: "center", margin: "8px 0 0" }}>✓ Layout salvato</p>}
           </>
         ) : (
           <p style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 12 }}>
-            🔒 Stai vedendo il layout del Consorzio: seleziona la tua insegna/PV in alto per personalizzarlo.
+            Stai vedendo il layout del Consorzio: seleziona la tua insegna/PV in alto per personalizzarlo.
           </p>
         )}
       </div>

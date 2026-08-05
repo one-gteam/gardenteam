@@ -164,7 +164,7 @@ export default function StampaPicker({
                       <td>
                         <details className="flag-details">
                           <summary className="btn btn-outline btn-sm" style={{ opacity: 1, fontSize: 12 }} title="Nascondi campi in questo cartello">
-                            🙈 Campi{hiddenFields[p.id]?.length ? ` (${hiddenFields[p.id].length})` : ""}
+                            Campi{hiddenFields[p.id]?.length ? ` (${hiddenFields[p.id].length})` : ""}
                           </summary>
                           <div className="flag-popover" style={{ maxHeight: 240, overflowY: "auto" }}>
                             {fields.map((f) => (
@@ -204,7 +204,7 @@ export default function StampaPicker({
                 Aggiorna anteprima →
               </button>
               <button type="button" className="btn" onClick={() => router.push(buildUrl(true))}>
-                🖨️ Anteprima di stampa / Esporta PDF
+                Anteprima di stampa / Esporta PDF
               </button>
             </div>
           </>

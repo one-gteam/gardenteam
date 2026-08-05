@@ -78,20 +78,20 @@ export default async function TenantPage({
             </label>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <label className="field">
-                🔑 Parola segreta per l&apos;auto-registrazione
+                Parola segreta per l&apos;auto-registrazione
                 <input type="text" name="secretWord" defaultValue={t.secretWord ?? ""} placeholder="es. rosa2026 — da comunicare ai collaboratori" />
               </label>
               <label className="field">
-                ✉️ Email che riceve le richieste di registrazione
+                Email che riceve le richieste di registrazione
                 <input type="email" name="approvalEmail" defaultValue={t.approvalEmail ?? ""} placeholder="es. formazione@insegna.it" />
               </label>
             </div>
-            <button className="btn" type="submit">💾 Salva insegna</button>
+            <button className="btn" type="submit">Salva insegna</button>
           </form>
         </div>
 
         <div className="section">
-          <div className="section-head"><h2>📍 Punti vendita dell&apos;insegna</h2></div>
+          <div className="section-head"><h2>Punti vendita dell&apos;insegna</h2></div>
           <div className="grid grid-3">
             {stores.map((s) => (
               <a key={s.id} className="card card-link" href={`/admin/organizzazione/pv/${s.id}`}>
@@ -103,7 +103,7 @@ export default async function TenantPage({
         </div>
 
         <div className="section">
-          <div className="section-head"><h2>🔑 Utenti con privilegi ({privileged.length})</h2></div>
+          <div className="section-head"><h2>Utenti con privilegi ({privileged.length})</h2></div>
           <div className="card table-wrap">
             <table className="data">
               <thead><tr><th>Nome</th><th>Ruolo</th><th>Punto vendita</th><th>Stato</th></tr></thead>
@@ -126,7 +126,7 @@ export default async function TenantPage({
         </div>
 
         <div className="section">
-          <div className="section-head"><h2>🎓 Studenti ({students.length})</h2></div>
+          <div className="section-head"><h2>Studenti ({students.length})</h2></div>
           <div className="card table-wrap">
             <table className="data">
               <thead><tr><th>Nome</th><th>Punto vendita</th><th>Reparto</th><th>Punti</th><th>Stato</th></tr></thead>

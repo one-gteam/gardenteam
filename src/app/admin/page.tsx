@@ -51,7 +51,7 @@ export default async function AdminDashboard() {
 
         <div className="section grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))" }}>
           <div className="card">
-            <h2>🏆 Conformità per punto vendita</h2>
+            <h2>Conformità per punto vendita</h2>
             <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 12px" }}>
               % di completamento dei corsi obbligatori assegnati
             </p>
@@ -69,7 +69,7 @@ export default async function AdminDashboard() {
           </div>
 
           <div className="card">
-            <h2>📚 Completamento per corso</h2>
+            <h2>Completamento per corso</h2>
             <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 12px" }}>
               Completati sul totale degli assegnati
             </p>

@@ -14,15 +14,15 @@ import { scopeUsers } from "@/lib/logic";
 import { DEFAULT_REMINDER_RULES, EMAIL_TYPE_LABELS, EmailType, REMINDER_STAGE_LABELS } from "@/lib/types";
 
 const AUTOMATIONS = [
-  { emoji: "👋", title: "Email di benvenuto", desc: "Inviata automaticamente quando un collaboratore viene creato o importato da CSV/gestionale.", trigger: "Alla creazione dell'utente" },
-  { emoji: "📬", title: "Iscrizione automatica per regola", desc: "Quando un corso obbligatorio o un percorso diventa suo (nuovo assunto, cambio reparto/insegna, nuovo corso creato), riceve una mail con l'elenco — senza bisogno di iscriverlo a mano.", trigger: "Alla creazione/modifica utente + job giornaliero" },
-  { emoji: "👀", title: "Corso assegnato mai iniziato", desc: "Sollecito a chi ha un corso obbligatorio assegnato ma non lo ha mai aperto, con attesa iniziale e ripetizioni configurabili.", trigger: "Job giornaliero (cron)" },
+  { emoji: "", title: "Email di benvenuto", desc: "Inviata automaticamente quando un collaboratore viene creato o importato da CSV/gestionale.", trigger: "Alla creazione dell'utente" },
+  { emoji: "", title: "Iscrizione automatica per regola", desc: "Quando un corso obbligatorio o un percorso diventa suo (nuovo assunto, cambio reparto/insegna, nuovo corso creato), riceve una mail con l'elenco — senza bisogno di iscriverlo a mano.", trigger: "Alla creazione/modifica utente + job giornaliero" },
+  { emoji: "", title: "Corso assegnato mai iniziato", desc: "Sollecito a chi ha un corso obbligatorio assegnato ma non lo ha mai aperto, con attesa iniziale e ripetizioni configurabili.", trigger: "Job giornaliero (cron)" },
   { emoji: "⏰", title: "Promemoria corsi da completare", desc: "Ricorda i corsi obbligatori avviati ma non ancora completati, in base al profilo dello studente.", trigger: "Job giornaliero (cron)" },
-  { emoji: "🚨", title: "Avviso corso in scadenza", desc: "Quando mancano meno di 7 giorni alla scadenza (o è già superata), il promemoria diventa urgente.", trigger: "Job giornaliero (cron)" },
-  { emoji: "📅", title: "Convocazione a un corso in programma", desc: "Data, ora, link Zoom e descrizione ai destinatari di un'edizione, subito quando viene programmata.", trigger: "Alla programmazione dell'edizione" },
-  { emoji: "🔔", title: "Promemoria corso in programma", desc: "Richiama l'edizione imminente ai destinatari nei giorni impostati sull'edizione.", trigger: "Job giornaliero (cron)" },
-  { emoji: "🎉", title: "Corso completato", desc: "Congratulazioni e riepilogo punti al completamento di ogni corso.", trigger: "Al completamento" },
-  { emoji: "📜", title: "Certificato emesso", desc: "Notifica con link al certificato quando viene rilasciato.", trigger: "All'emissione" },
+  { emoji: "", title: "Avviso corso in scadenza", desc: "Quando mancano meno di 7 giorni alla scadenza (o è già superata), il promemoria diventa urgente.", trigger: "Job giornaliero (cron)" },
+  { emoji: "", title: "Convocazione a un corso in programma", desc: "Data, ora, link Zoom e descrizione ai destinatari di un'edizione, subito quando viene programmata.", trigger: "Alla programmazione dell'edizione" },
+  { emoji: "", title: "Promemoria corso in programma", desc: "Richiama l'edizione imminente ai destinatari nei giorni impostati sull'edizione.", trigger: "Job giornaliero (cron)" },
+  { emoji: "", title: "Corso completato", desc: "Congratulazioni e riepilogo punti al completamento di ogni corso.", trigger: "Al completamento" },
+  { emoji: "", title: "Certificato emesso", desc: "Notifica con link al certificato quando viene rilasciato.", trigger: "All'emissione" },
 ] as const;
 
 export default async function EmailPage({
@@ -100,7 +100,7 @@ export default async function EmailPage({
         {template && <div className="alert alert-green">✓ Modello email salvato.</div>}
 
         <div className="section-head" style={{ marginTop: 10 }}>
-          <h2>⚙️ Automazioni</h2>
+          <h2>Automazioni</h2>
         </div>
         <div className="grid grid-3">
           {AUTOMATIONS.map((a) => (
@@ -116,7 +116,7 @@ export default async function EmailPage({
         {canEditTemplates && (
           <div className="section">
             <div className="section-head">
-              <h2>✍️ Modelli email</h2>
+              <h2>Modelli email</h2>
               <span className="hint">
                 {isGlobalEditor
                   ? "modelli di sistema, validi per tutto il consorzio"
@@ -161,7 +161,7 @@ export default async function EmailPage({
                           L&apos;attivazione dell&apos;automazione è gestita dall&apos;amministratore di sistema.
                         </p>
                       )}
-                      <button className="btn btn-sm" type="submit">💾 Salva modello</button>
+                      <button className="btn btn-sm" type="submit">Salva modello</button>
                     </form>
                     {(isOverride || isGlobalEditor) && (
                       <form action={reset} style={{ marginTop: 8 }}>
@@ -197,7 +197,7 @@ export default async function EmailPage({
         {user.role === "system_admin" && (
           <div className="section">
             <div className="section-head">
-              <h2>🎛️ Impostazioni automazioni</h2>
+              <h2>Impostazioni automazioni</h2>
               <span className="hint">solo amministratore di sistema</span>
             </div>
             <div className="card" style={{ maxWidth: 720 }}>
@@ -244,7 +244,7 @@ export default async function EmailPage({
                   </table>
                 </div>
 
-                <button className="btn btn-sm" type="submit" style={{ marginTop: 12 }}>💾 Salva</button>
+                <button className="btn btn-sm" type="submit" style={{ marginTop: 12 }}>Salva</button>
               </form>
               <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "10px 0 0" }}>
                 Sotto la soglia dei giorni il corso risulta &quot;in scadenza&quot; (urgente).
@@ -259,7 +259,7 @@ export default async function EmailPage({
         {canEditTemplates && (
           <div className="section">
             <div className="section-head">
-              <h2>➕ Modelli aggiuntivi ({myCustomTemplates.length})</h2>
+              <h2>Modelli aggiuntivi ({myCustomTemplates.length})</h2>
               <span className="hint">
                 email extra collegate a un&apos;automazione — es. un secondo messaggio di benvenuto con le regole del negozio
               </span>
@@ -299,10 +299,10 @@ export default async function EmailPage({
                           <label className="checkbox-row">
                             <input type="checkbox" name="enabled" defaultChecked={ct.enabled} /> Modello attivo
                           </label>
-                          <button className="btn btn-sm" type="submit">💾 Salva</button>
+                          <button className="btn btn-sm" type="submit">Salva</button>
                         </form>
                         <form action={deleteCustomTemplate.bind(null, ct.id)} style={{ marginTop: 8 }}>
-                          <button className="btn btn-outline btn-sm" type="submit" style={{ color: "var(--red)", borderColor: "var(--red)" }}>🗑 Elimina</button>
+                          <button className="btn btn-outline btn-sm" type="submit" style={{ color: "var(--red)", borderColor: "var(--red)" }}>Elimina</button>
                         </form>
                       </>
                     ) : (
@@ -314,7 +314,7 @@ export default async function EmailPage({
                 );
               })}
               <div className="card" style={{ background: "var(--green-50)" }}>
-                <h3 style={{ marginTop: 0 }}>➕ Nuovo modello aggiuntivo</h3>
+                <h3 style={{ marginTop: 0 }}>Nuovo modello aggiuntivo</h3>
                 <form action={saveCustomTemplate.bind(null, null)}>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                     <label className="field">Nome<input type="text" name="name" required placeholder="es. Regole del negozio" /></label>
@@ -345,7 +345,7 @@ export default async function EmailPage({
 
         <div className="section">
           <div className="section-head">
-            <h2>📤 Registro invii ({emails.length})</h2>
+            <h2>Registro invii ({emails.length})</h2>
             <span className="hint">ultime 60 email nel tuo ambito</span>
           </div>
           <div className="card table-wrap">

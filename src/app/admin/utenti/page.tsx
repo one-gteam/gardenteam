@@ -144,7 +144,7 @@ export default async function UsersPage({
               </select>
             </label>
             <div style={{ display: "flex", gap: 8 }}>
-              <button className="btn btn-sm" type="submit">🔍 Filtra</button>
+              <button className="btn btn-sm" type="submit">Filtra</button>
               {hasFilters && <a className="btn btn-outline btn-sm" href="/admin/utenti">Azzera</a>}
             </div>
           </form>
@@ -161,7 +161,7 @@ export default async function UsersPage({
 
         {pending.length > 0 && (
           <div className="card" style={{ marginBottom: 20, borderColor: "var(--amber)" }}>
-            <h2>🔔 Richieste di registrazione in attesa ({pending.length})</h2>
+            <h2>Richieste di registrazione in attesa ({pending.length})</h2>
             <div className="table-wrap">
               <table className="data">
                 <thead>
@@ -275,7 +275,7 @@ export default async function UsersPage({
         {canImport && (
           <div className="section">
             <div className="section-head">
-              <h2>📥 Importazione massiva da CSV</h2>
+              <h2>Importazione massiva da CSV</h2>
               <span className="hint">una riga per collaboratore</span>
             </div>
             <div className="card">

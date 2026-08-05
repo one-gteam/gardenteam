@@ -31,7 +31,7 @@ export default async function StampeHeader({ user, active, area = "arredo" }: { 
       ];
 
   return (
-    <header className="site-header" style={{ background: "linear-gradient(120deg, #1a2b45, #274b7a)" }}>
+    <header className="site-header stampe-header" style={{ background: "linear-gradient(120deg, #1a2b45, #274b7a)" }}>
       <div className="site-header-inner">
         <div className="header-top">
           <Link href="/stampe" className="brand">
@@ -46,7 +46,7 @@ export default async function StampeHeader({ user, active, area = "arredo" }: { 
               // eslint-disable-next-line @next/next/no-img-element
               <img src={tenant.logoUrl} alt={tenant.name} className="tenant-logo" />
             ) : (
-              <span>{tenant ? tenant.emoji : "🏛️"}</span>
+              <span>{tenant ? tenant.emoji : ""}</span>
             )}
             {tenant ? ` ${tenant.name}` : " Consorzio Garden Team"}
           </span>
