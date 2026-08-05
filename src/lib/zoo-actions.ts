@@ -401,6 +401,25 @@ export async function voteZooOffer(offerId: string, tipo: "preferita" | "nontrat
   redirect(backUrl("/stampe/zoo/volantino", scopeParam));
 }
 
+/** Voto in blocco sulle offerte spuntate: aggiunge il voto dove manca (non toglie). */
+export async function voteZooOffersBulk(tipo: "preferita" | "nontrattato", scopeParam: string, formData: FormData) {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  const ids = (formData.getAll("zsel") as string[]).filter(Boolean);
+  for (const offerId of ids) {
+    if (db.votes.some((v) => v.offerId === offerId && v.userId === user.id && v.tipo === tipo)) continue;
+    db.votes.push({
+      offerId, userId: user.id, userName: `${user.firstName} ${user.lastName}`,
+      scopeLabel: scope.label.replace(/^[^\s]+\s/, ""), tipo,
+      date: new Date().toISOString(),
+    });
+  }
+  await saveZooDb(db);
+  redirect(backUrl("/stampe/zoo/volantino", scopeParam, { votate: String(ids.length) }));
+}
+
 export async function toggleOfferSelected(offerId: string, scopeParam: string) {
   const user = await requireZooUser();
   if (!isZooEditor(user)) redirect(backUrl("/stampe/zoo/volantino", scopeParam));

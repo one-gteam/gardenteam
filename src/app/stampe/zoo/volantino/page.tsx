@@ -5,8 +5,12 @@ import { canAccessArea, isZooEditor, scopesForUser, resolveScope } from "@/lib/s
 import { getDb } from "@/lib/db";
 import { getZooDb, activeCampaign, zooImageUrl, effectiveParentText } from "@/lib/zoo";
 import {
-  voteZooOffer, toggleOfferSelected, updateOfferVolantino, renameScheda, addScheda, resolveZooSuggestion,
+  voteZooOffer, voteZooOffersBulk, toggleOfferSelected, updateOfferVolantino, renameScheda, addScheda,
+  resolveZooSuggestion, sendZooSuggestion,
 } from "@/lib/zoo-actions";
+import ShiftChecks from "@/components/stampe/ShiftChecks";
+
+const ANIMALI = ["Cane", "Gatto", "Roditori", "Uccelli", "Pesci"];
 
 export default async function ZooVolantinoPage({
   searchParams,
@@ -28,9 +32,31 @@ export default async function ZooVolantinoPage({
   const campaign = db.campaigns.find((c) => c.id === sp.campagna) ?? activeCampaign(db);
   const allOffers = campaign ? db.offers.filter((o) => o.campaignId === campaign.id) : [];
   const schedaFilter = sp.scheda ?? "";
-  const offers = schedaFilter
+  const baseOffers = schedaFilter
     ? allOffers.filter((o) => o.selezionata && o.schedaId === schedaFilter)
     : allOffers;
+
+  // ---- filtro offerte (colonna sinistra) ----
+  const caratteristicheOf = (o: (typeof allOffers)[number]): string[] => {
+    const product = db.products.find((p) => p.id === o.productId);
+    const parent = product?.parentId ? db.parents.find((x) => x.id === product.parentId) : undefined;
+    return parent?.caratteristiche ?? [];
+  };
+  const prodOf = (o: (typeof allOffers)[number]) => db.products.find((p) => p.id === o.productId);
+  const carattsProdotto = db.settings.caratteristiche.filter((c) => !ANIMALI.includes(c));
+  const marche = [...new Set(baseOffers.map((o) => prodOf(o)?.marca).filter(Boolean) as string[])].sort();
+  const fornitori = [...new Set(baseOffers.map((o) => prodOf(o)?.fornitore).filter(Boolean) as string[])].sort();
+  // se sono già su una scheda con nome animale (es. "Cane"), il filtro parte da lì
+  const schedaNome = campaign?.schede.find((s) => s.id === schedaFilter)?.nome ?? "";
+  const animale = sp.animale ?? (ANIMALI.includes(schedaNome) ? schedaNome : "");
+  const caratt = sp.caratt ?? "";
+  const offers = baseOffers.filter((o) => {
+    if (animale && !caratteristicheOf(o).includes(animale)) return false;
+    if (caratt && !caratteristicheOf(o).includes(caratt)) return false;
+    if (sp.marca && prodOf(o)?.marca !== sp.marca) return false;
+    if (sp.fornitore && prodOf(o)?.fornitore !== sp.fornitore) return false;
+    return true;
+  });
   const activeOffer = allOffers.find((o) => o.id === sp.offerta);
   const selCount = allOffers.filter((o) => o.selezionata).length;
   const openSuggestions = db.suggestions.filter((s) => s.status === "aperta");
@@ -41,7 +67,7 @@ export default async function ZooVolantinoPage({
       <div className="container">
         <div style={{ display: "flex", gap: 14, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 12 }}>
           <div style={{ flex: 1 }}>
-            <h1 style={{ margin: 0 }}>Volantino — scelta promo</h1>
+            <h1 style={{ margin: 0 }}>Scelta Offerte</h1>
             <p className="subtitle" style={{ margin: "4px 0 0" }}>
               {campaign ? `${campaign.nome} (${campaign.dal || "—"} → ${campaign.al || "—"}) · ${selCount} offerte scelte per il volantino` : "Nessuna campagna attiva"}
               {consortium
@@ -163,10 +189,61 @@ export default async function ZooVolantinoPage({
               </div>
             )}
 
+            <div style={{ display: "grid", gridTemplateColumns: "230px 1fr", gap: 14, alignItems: "start" }}>
+            {/* filtro offerte */}
+            <div className="card" style={{ padding: 14 }}>
+              <strong style={{ fontSize: 13.5 }}>Filtro offerte</strong>
+              <form method="get" style={{ marginTop: 8 }}>
+                <input type="hidden" name="scope" value={scopeParam} />
+                {schedaFilter && <input type="hidden" name="scheda" value={schedaFilter} />}
+                <label className="field">Tipologia di animale
+                  <select name="animale" defaultValue={animale}>
+                    <option value="">Tutte</option>
+                    {ANIMALI.map((a) => <option key={a} value={a}>{a}</option>)}
+                  </select>
+                </label>
+                <label className="field">Caratteristica prodotto
+                  <select name="caratt" defaultValue={caratt}>
+                    <option value="">Tutte</option>
+                    {carattsProdotto.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </label>
+                <label className="field">Marca
+                  <select name="marca" defaultValue={sp.marca ?? ""}>
+                    <option value="">Tutte</option>
+                    {marche.map((m) => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                </label>
+                <label className="field">Fornitore
+                  <select name="fornitore" defaultValue={sp.fornitore ?? ""}>
+                    <option value="">Tutti</option>
+                    {fornitori.map((f) => <option key={f} value={f}>{f}</option>)}
+                  </select>
+                </label>
+                <button className="btn btn-sm" type="submit" style={{ width: "100%" }}>Filtra</button>
+              </form>
+              <p className="hint" style={{ marginTop: 10, fontSize: 11.5 }}>
+                {offers.length} offerte in elenco. Spunta più offerte (anche con Shift+clic) e usa i pulsanti
+                sopra la tabella per proporle o segnarle non trattate in blocco.
+              </p>
+            </div>
+
+            <div>
+            <ShiftChecks />
+            {sp.votate && <div className="alert alert-green">✓ Voto registrato su {sp.votate} offerte.</div>}
+            {/* le spunte in tabella appartengono a questo form via attributo form="bulkform" */}
+            <form id="bulkform" action={voteZooOffersBulk.bind(null, "preferita", scopeParam)}
+              style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+              <button className="btn btn-sm" type="submit">Proponi le offerte spuntate</button>
+              <button className="btn btn-outline btn-sm" formAction={voteZooOffersBulk.bind(null, "nontrattato", scopeParam)}>
+                Segna spuntate come non trattate
+              </button>
+            </form>
             <div className="card table-wrap">
               <table className="data">
                 <thead>
                   <tr>
+                    <th style={{ width: 30 }}></th>
                     <th style={{ width: 56 }}>Foto</th>
                     <th>Offerta</th>
                     <th>Prezzo</th>
@@ -176,7 +253,7 @@ export default async function ZooVolantinoPage({
                   </tr>
                 </thead>
                 <tbody>
-                  {offers.length === 0 && <tr><td colSpan={6} className="empty">Nessuna offerta {schedaFilter ? "assegnata a questa scheda" : "in campagna"}.</td></tr>}
+                  {offers.length === 0 && <tr><td colSpan={7} className="empty">Nessuna offerta {schedaFilter ? "assegnata a questa scheda" : "in campagna"}.</td></tr>}
                   {offers.map((o) => {
                     const product = db.products.find((p) => p.id === o.productId);
                     const parent = product?.parentId ? db.parents.find((x) => x.id === product.parentId) : undefined;
@@ -188,6 +265,9 @@ export default async function ZooVolantinoPage({
                     const scheda = campaign.schede.find((s) => s.id === o.schedaId);
                     return (
                       <tr key={o.id} style={o.selezionata ? { background: "#f4faf4" } : undefined}>
+                        <td>
+                          <input type="checkbox" name="zsel" value={o.id} form="bulkform" title="Spunta per proporre/segnalare in blocco (Shift+clic per intervalli)" />
+                        </td>
                         <td>
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img src={zooImageUrl(product, parent)} alt="" style={{ width: 44, height: 44, objectFit: "contain", background: "#fff", borderRadius: 6, border: "1px solid #eee" }} />
@@ -232,7 +312,16 @@ export default async function ZooVolantinoPage({
                             <button className={`btn btn-sm ${myNon ? "" : "btn-outline"}`} type="submit" title="Non ho in vendita questo prodotto (clic di nuovo per togliere)">
                               Non tratto
                             </button>
-                          </form>
+                          </form>{" "}
+                          <details className="flag-details" style={{ display: "inline-block" }}>
+                            <summary className="mini-btn" title="Segnala un errore o un'incongruenza su questa offerta">⚑</summary>
+                            <form action={sendZooSuggestion.bind(null, scopeParam)} className="flag-popover">
+                              <input type="hidden" name="offerId" value={o.id} />
+                              <input type="hidden" name="back" value="/stampe/zoo/volantino" />
+                              <input type="text" name="message" required placeholder="Descrivi l'errore o l'incongruenza" />
+                              <button className="btn btn-sm" type="submit">Invia al Consorzio</button>
+                            </form>
+                          </details>
                         </td>
                         {consortium && (
                           <td style={{ whiteSpace: "nowrap" }}>
@@ -249,6 +338,8 @@ export default async function ZooVolantinoPage({
                   })}
                 </tbody>
               </table>
+            </div>
+            </div>
             </div>
 
             {/* proposte di correzione dai PV */}
