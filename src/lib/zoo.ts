@@ -115,8 +115,15 @@ export interface ZooSuggestion {
   status: "aperta" | "risolta";
 }
 
+/** Cella del volantino costruito: offerta, solo testo, o vuota; span = spazi uniti. */
+export interface VolCell { span: number; tipo: "offerta" | "testo" | "vuoto"; offerId?: string; testo?: string }
+export interface VolRow { cols: number; cells: VolCell[] }
+export interface VolPage { id: string; titolo?: string; rows: VolRow[] }
+export interface VolantinoLayout { campaignId: string; pages: VolPage[] }
+
 export interface ZooSettings {
   caratteristiche: string[]; // umido, secco, cane, gatto, roditori...
+  volantinoEditors?: string[]; // utenti (oltre a sistema/Gestore Zoo) che possono usare Crea Volantino
   labels: string[]; // etichette assegnabili alle offerte (es. SOTTOCOSTO, NOVITÀ)
   schedeDefault: string[]; // struttura standard delle schede del volantino
   istruzioniVolantino: string; // regole di scrittura testi volantino (guida anche l'AI)
@@ -136,6 +143,7 @@ export interface ZooDB {
   hidden: ZooHidden[];
   pvPrices: ZooPvPrice[];
   suggestions: ZooSuggestion[];
+  volantinoLayouts: VolantinoLayout[];
 }
 
 /* ================== Persistenza ================== */
@@ -155,11 +163,11 @@ export async function getZooDb(): Promise<ZooDB> {
   const empty: ZooDB = {
     settings: DEFAULT_SETTINGS,
     products: [], parents: [], textOverrides: [], campaigns: [], offers: [],
-    votes: [], hidden: [], pvPrices: [], suggestions: [],
+    votes: [], hidden: [], pvPrices: [], suggestions: [], volantinoLayouts: [],
   };
   const db = await readDomain<ZooDB>("zoo", empty);
   db.settings = { ...DEFAULT_SETTINGS, ...(db.settings ?? {}) };
-  for (const k of ["products", "parents", "textOverrides", "campaigns", "offers", "votes", "hidden", "pvPrices", "suggestions"] as const) {
+  for (const k of ["products", "parents", "textOverrides", "campaigns", "offers", "votes", "hidden", "pvPrices", "suggestions", "volantinoLayouts"] as const) {
     if (!db[k]) (db as unknown as Record<string, unknown>)[k] = [];
   }
   return db;

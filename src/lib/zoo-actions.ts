@@ -584,3 +584,36 @@ export async function saveFormatoRegola(scopeParam: string, formData: FormData) 
   }
   redirect(backUrl("/stampe/zoo/impostazioni", scopeParam));
 }
+
+/* ================== Crea Volantino (builder) ================== */
+
+/** Può costruire il volantino: sistema/Gestore Zoo, oppure utenti da loro scelti. */
+export async function canBuildVolantinoCheck(): Promise<boolean> {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  return isZooEditor(user) || (db.settings.volantinoEditors ?? []).includes(user.id);
+}
+
+export async function saveVolantinoLayout(campaignId: string, pagesJson: string) {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const allowed = isZooEditor(user) || (db.settings.volantinoEditors ?? []).includes(user.id);
+  if (!allowed) return { ok: false as const };
+  let pages;
+  try { pages = JSON.parse(pagesJson); } catch { return { ok: false as const }; }
+  const existing = db.volantinoLayouts.find((l) => l.campaignId === campaignId);
+  if (existing) existing.pages = pages;
+  else db.volantinoLayouts.push({ campaignId, pages });
+  await saveZooDb(db);
+  return { ok: true as const };
+}
+
+/** Il Gestore Zoo (o sistema) sceglie chi altro può usare Crea Volantino. */
+export async function saveVolantinoEditors(scopeParam: string, formData: FormData) {
+  const user = await requireZooUser();
+  if (!isZooEditor(user)) redirect(backUrl("/stampe/zoo/crea-volantino", scopeParam));
+  const db = await getZooDb();
+  db.settings.volantinoEditors = (formData.getAll("editor") as string[]).filter(Boolean);
+  await saveZooDb(db);
+  redirect(backUrl("/stampe/zoo/crea-volantino", scopeParam, { salvato: "1" }));
+}

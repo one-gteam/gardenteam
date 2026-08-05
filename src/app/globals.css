@@ -489,6 +489,9 @@ table.data tr:last-child td { border-bottom: none; }
 
 @media print {
   .site-header, .no-print { display: none !important; }
+  /* volantino composto: una pagina del volantino per foglio */
+  .vol-page { page-break-after: always; border: none !important; box-shadow: none !important; }
+  .vol-page textarea { border: none; }
   body { background: #fff; }
   .container { max-width: none; padding: 0; }
   .cartello { border: none; box-shadow: none; }

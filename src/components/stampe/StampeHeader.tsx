@@ -16,6 +16,9 @@ export default async function StampeHeader({ user, active, area = "arredo" }: { 
         { href: "/stampe/zoo/dati", label: "Database prodotti", key: "dati" },
         { href: "/stampe/zoo/offerte", label: "Import offerte", key: "offerte" },
         { href: "/stampe/zoo/volantino", label: "Scelta Offerte", key: "volantino" },
+        ...(["system_admin", "course_manager", "zoo_manager"].includes(user.role)
+          ? [{ href: "/stampe/zoo/crea-volantino", label: "Crea Volantino", key: "crea-volantino" }]
+          : []),
         { href: "/stampe/zoo/stampa", label: "Stampa cartelli", key: "stampa" },
         ...(isAdmin || user.role === "zoo_manager"
           ? [{ href: "/stampe/zoo/impostazioni", label: "Impostazioni", key: "impostazioni" }]
