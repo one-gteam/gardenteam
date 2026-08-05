@@ -7,7 +7,7 @@ import { randomBytes, scryptSync, timingSafeEqual } from "crypto";
 import { getDb, saveDb } from "./db";
 import { uploadPublicFile } from "./supabase";
 import { AUTH_COOKIE, requireUser } from "./auth";
-import { coursesForUser, courseVisibleTo, dueDate, getProgress, hasStartedCourse, isCourseCompleted, pathsForUser } from "./logic";
+import { assignableRolesFor, canManageUsers, coursesForUser, courseVisibleTo, dueDate, getProgress, hasStartedCourse, isCourseCompleted, pathsForUser } from "./logic";
 import {
   Course, CourseLevel, CourseSession, DB, DEFAULT_HOME_BLOCKS, DEFAULT_REMINDER_RULES, DEFAULT_WATCH_THRESHOLD,
   EmailType, Lesson, LessonAttachment, LessonType, ReminderRule, ReminderStage, Role, SiteId, User, postLoginPath,
@@ -394,7 +394,7 @@ export async function importUsersCsv(formData: FormData) {
   const raw = String(formData.get("csv") ?? "").trim();
   if (!raw) redirect("/admin/utenti?import=0");
 
-  const isAdmin = ["system_admin", "group_admin", "store_admin"].includes(admin.role);
+  const isAdmin = ["system_admin", "group_admin", "store_admin"].includes(admin.role) && canManageUsers(db, admin);
   if (!isAdmin) redirect("/admin/utenti?import=0");
 
   let imported = 0;
@@ -969,7 +969,7 @@ export async function toggleUserActive(userId: string) {
   const allowed =
     admin.role === "system_admin" ||
     (admin.role === "group_admin" && target!.tenantId === admin.tenantId) ||
-    (admin.role === "store_admin" && target!.storeId === admin.storeId);
+    (admin.role === "store_admin" && target!.storeId === admin.storeId && canManageUsers(db, admin));
   if (!allowed) redirect("/admin/utenti");
   target!.active = !target!.active;
   await saveDb(db);
@@ -1160,6 +1160,69 @@ export async function toggleHomeBlock(index: number) {
   return { ok: true as const };
 }
 
+/* ================== Utenti e ruoli (pagina Ruoli, modifiche rapide) ================== */
+
+/** Il bersaglio è nel perimetro dell'admin e l'admin ha la gestione utenti attiva? */
+function canTouchUser(db: DB, admin: User, target: User): boolean {
+  if (!canManageUsers(db, admin)) return false;
+  if (target.role === "system_admin" && admin.role !== "system_admin") return false;
+  if (admin.role === "system_admin") return true;
+  if (admin.role === "group_admin") return target.tenantId === admin.tenantId;
+  if (admin.role === "store_admin") return target.storeId === admin.storeId;
+  return false;
+}
+
+export async function quickSetRole(userId: string, role: Role) {
+  const admin = await requireUser();
+  const db = await getDb();
+  const target = db.users.find((u) => u.id === userId);
+  if (!target || target.id === admin.id) return { ok: false as const, error: "Non consentito" };
+  if (!canTouchUser(db, admin, target)) return { ok: false as const, error: "Fuori dal tuo ambito" };
+  if (!assignableRolesFor(admin).includes(role)) return { ok: false as const, error: "Ruolo non assegnabile dal tuo profilo" };
+  target.role = role;
+  await saveDb(db);
+  revalidatePath("/admin/ruoli");
+  return { ok: true as const };
+}
+
+export async function quickSetSites(userId: string, sites: SiteId[]) {
+  const admin = await requireUser();
+  const db = await getDb();
+  const target = db.users.find((u) => u.id === userId);
+  if (!target) return { ok: false as const, error: "Utente non trovato" };
+  if (!canTouchUser(db, admin, target)) return { ok: false as const, error: "Fuori dal tuo ambito" };
+  target.sites = sites.length > 0 ? sites : undefined;
+  await saveDb(db);
+  revalidatePath("/admin/ruoli");
+  return { ok: true as const };
+}
+
+export async function quickToggleActive(userId: string) {
+  const admin = await requireUser();
+  const db = await getDb();
+  const target = db.users.find((u) => u.id === userId);
+  if (!target || target.id === admin.id) return { ok: false as const, error: "Non consentito" };
+  if (!canTouchUser(db, admin, target)) return { ok: false as const, error: "Fuori dal tuo ambito" };
+  target.active = !target.active;
+  await saveDb(db);
+  revalidatePath("/admin/ruoli");
+  return { ok: true as const };
+}
+
+/** L'insegna concede o revoca ai propri punti vendita la gestione dei loro utenti. */
+export async function setTenantUserDelegation(tenantId: string, allow: boolean) {
+  const admin = await requireUser();
+  const db = await getDb();
+  const tenant = db.tenants.find((t) => t.id === tenantId);
+  if (!tenant) return { ok: false as const };
+  const allowed = admin.role === "system_admin" || (admin.role === "group_admin" && admin.tenantId === tenantId);
+  if (!allowed) return { ok: false as const };
+  tenant.pvGestioneUtenti = allow;
+  await saveDb(db);
+  revalidatePath("/admin/ruoli");
+  return { ok: true as const };
+}
+
 /* ================== Modifica utenti ================== */
 
 export async function updateUser(userId: string, formData: FormData) {
@@ -1170,7 +1233,7 @@ export async function updateUser(userId: string, formData: FormData) {
   const allowed =
     admin.role === "system_admin" ||
     (admin.role === "group_admin" && target!.tenantId === admin.tenantId) ||
-    (admin.role === "store_admin" && target!.storeId === admin.storeId);
+    (admin.role === "store_admin" && target!.storeId === admin.storeId && canManageUsers(db, admin));
   if (!allowed || (target!.role === "system_admin" && admin.id !== target!.id)) redirect("/admin/utenti");
 
   const firstName = String(formData.get("firstName") ?? "").trim();
@@ -1651,7 +1714,7 @@ export async function approveRegistration(regId: string, formData: FormData) {
   const allowed =
     admin.role === "system_admin" ||
     (admin.role === "group_admin" && reg!.tenantId === admin.tenantId) ||
-    (admin.role === "store_admin" && reg!.storeId === admin.storeId);
+    (admin.role === "store_admin" && reg!.storeId === admin.storeId && canManageUsers(db, admin));
   if (!allowed) redirect("/admin/utenti");
 
   const departmentId = String(formData.get("departmentId") ?? "") || reg!.departmentId;
@@ -1689,7 +1752,7 @@ export async function rejectRegistration(regId: string) {
   const allowed =
     admin.role === "system_admin" ||
     (admin.role === "group_admin" && reg!.tenantId === admin.tenantId) ||
-    (admin.role === "store_admin" && reg!.storeId === admin.storeId);
+    (admin.role === "store_admin" && reg!.storeId === admin.storeId && canManageUsers(db, admin));
   if (!allowed) redirect("/admin/utenti");
   reg!.status = "rejected";
   await saveDb(db);

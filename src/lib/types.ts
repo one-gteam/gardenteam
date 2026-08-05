@@ -24,6 +24,11 @@ export interface Tenant {
   welcome?: string; // messaggio in evidenza per gli studenti dell'insegna
   secretWord?: string; // parola segreta per l'auto-registrazione
   approvalEmail?: string; // email che riceve le richieste di registrazione
+  /**
+   * Delega ai punti vendita la gestione dei propri utenti e ruoli.
+   * Assente = delegata (comportamento storico); false = solo l'insegna gestisce.
+   */
+  pvGestioneUtenti?: boolean;
 }
 
 export interface Store {

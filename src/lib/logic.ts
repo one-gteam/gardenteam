@@ -1,4 +1,4 @@
-import { Course, DB, LearningPath, Progress, User } from "./types";
+import { Course, DB, LearningPath, Progress, Role, User } from "./types";
 
 export const NEW_HIRE_DAYS = 90;
 
@@ -123,6 +123,28 @@ export function storeRanking(db: DB) {
       };
     })
     .sort((a, b) => b.compliance - a.compliance || b.points - a.points);
+}
+
+/** Ruoli che un amministratore può assegnare, in base al proprio. */
+export function assignableRolesFor(admin: User): Role[] {
+  if (admin.role === "system_admin")
+    return ["system_admin", "group_admin", "store_admin", "dept_head", "course_manager", "student"];
+  if (admin.role === "group_admin") return ["store_admin", "dept_head", "student"];
+  if (admin.role === "store_admin") return ["dept_head", "student"];
+  return [];
+}
+
+/**
+ * Può gestire utenti e ruoli? Sistema e insegna sempre; il punto vendita solo
+ * se la sua insegna non ha revocato la delega (Tenant.pvGestioneUtenti).
+ */
+export function canManageUsers(db: DB, admin: User): boolean {
+  if (admin.role === "system_admin" || admin.role === "group_admin") return true;
+  if (admin.role === "store_admin") {
+    const tenant = db.tenants.find((t) => t.id === admin.tenantId);
+    return tenant?.pvGestioneUtenti !== false;
+  }
+  return false;
 }
 
 /** Ambito visibile a un utente amministrativo. */
