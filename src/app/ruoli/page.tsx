@@ -1,16 +1,18 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
+import { ArrowLeft, Users } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
-import Header from "@/components/Header";
 import RolesPanel from "@/components/RolesPanel";
 import { assignableRolesFor, canManageUsers, scopeUsers } from "@/lib/logic";
-import { userSites } from "@/lib/types";
+import { ROLE_LABELS, userSites } from "@/lib/types";
+import { logout } from "@/lib/actions";
 
 /**
- * Utenti e ruoli per tutte le aree, a cascata:
+ * Gestione Ruoli: area a sé, raggiunta dalla scelta area. A cascata:
  * - il Consorzio gestisce ruoli/aree/stato per tutto il gruppo;
  * - l'insegna per i propri, e decide se delegare la stessa gestione ai suoi PV;
- * - il PV per i propri, solo se la sua insegna glielo consente (altrimenti consulta).
+ * - il PV per i propri, solo se la sua insegna glielo consente.
  */
 export default async function RuoliPage({
   searchParams,
@@ -19,11 +21,12 @@ export default async function RuoliPage({
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!["system_admin", "group_admin", "store_admin"].includes(user.role)) redirect("/admin");
-  const sp = await searchParams;
-
   const db = await getDb();
   const canManage = canManageUsers(db, user);
+  const allowed =
+    user.role === "system_admin" || user.role === "group_admin" || (user.role === "store_admin" && canManage);
+  if (!allowed) redirect("/scegli");
+  const sp = await searchParams;
   const q = (sp.q ?? "").trim().toLowerCase();
 
   const users = scopeUsers(db, user)
@@ -53,14 +56,38 @@ export default async function RuoliPage({
 
   return (
     <div>
-      <Header user={user} active="ruoli" />
+      <header className="site-header">
+        <div className="site-header-inner">
+          <div className="header-top">
+            <Link href="/scegli" className="brand">
+              <span className="brand-logo">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={db.settings.logoUrl} alt="Garden Team" />
+              </span>
+              <span className="area-name" style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                <Users size={16} /> Gestione Ruoli
+              </span>
+            </Link>
+            <Link href="/scegli" style={{ color: "#e8f3ea", fontSize: 13, display: "inline-flex", alignItems: "center", gap: 5 }}>
+              <ArrowLeft size={14} /> Cambia area
+            </Link>
+            <div className="user-chip">
+              <div className="avatar">{user.firstName[0]}{user.lastName[0]}</div>
+              <div>
+                <div style={{ fontWeight: 700 }}>{user.firstName} {user.lastName}</div>
+                <div style={{ opacity: 0.75, fontSize: 11 }}>{ROLE_LABELS[user.role]}</div>
+              </div>
+              <form action={logout}>
+                <button className="logout-btn" type="submit">Esci</button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </header>
       <div className="container" style={{ maxWidth: 1100 }}>
         <h1>Utenti e ruoli</h1>
         <p className="subtitle">
-          Chi può fare cosa, in tutte le aree (Academy e Stampe).{" "}
-          {user.role === "store_admin" && !canManage
-            ? "La tua insegna gestisce direttamente utenti e ruoli: qui puoi consultare."
-            : "Ruolo, aree e stato si modificano direttamente in tabella."}
+          Chi può fare cosa, in tutte le aree del portale. Ruolo, aree e stato si modificano direttamente in tabella.
         </p>
 
         <form method="get" style={{ display: "flex", gap: 10, alignItems: "end", marginBottom: 16, flexWrap: "wrap" }}>

@@ -4,6 +4,8 @@ export type Role =
   | "store_admin"
   | "dept_head"
   | "course_manager"
+  | "zoo_manager"
+  | "piante_manager"
   | "student";
 
 export const ROLE_LABELS: Record<Role, string> = {
@@ -12,6 +14,8 @@ export const ROLE_LABELS: Record<Role, string> = {
   store_admin: "Amministratore punto vendita",
   dept_head: "Capo reparto",
   course_manager: "Gestore corsi",
+  zoo_manager: "Gestore Offerte Zoo",
+  piante_manager: "Gestore Cartelli Piante",
   student: "Studente",
 };
 
@@ -82,19 +86,34 @@ export interface User {
   notifiedPathIds?: string[]; // percorsi per cui è già partita la mail di assegnazione
 }
 
-export type SiteId = "academy" | "stampe";
+export type SiteId = "academy" | "arredo" | "zoo" | "piante";
 
-/** Macroaree accessibili: default studenti = solo Academy, altri ruoli = entrambe. */
+export const SITE_LABELS: Record<SiteId, string> = {
+  academy: "Academy",
+  arredo: "Cartelli Arredo",
+  zoo: "Offerte Zoo",
+  piante: "Cartelli Piante",
+};
+
+/**
+ * Macroaree accessibili. Default per ruolo: studenti = solo Academy; i gestori
+ * di contenuti = Academy + la propria area; tutti gli altri = tutte e quattro.
+ */
 export function userSites(user: User): SiteId[] {
   if (user.sites && user.sites.length > 0) return user.sites;
-  return user.role === "student" ? ["academy"] : ["academy", "stampe"];
+  if (user.role === "student") return ["academy"];
+  if (user.role === "zoo_manager") return ["academy", "zoo"];
+  if (user.role === "piante_manager") return ["academy", "piante"];
+  return ["academy", "arredo", "zoo", "piante"];
 }
 
 /** Destinazione dopo il login: diretta se una sola macroarea, pagina di scelta se più di una. */
 export function postLoginPath(user: User): string {
   const sites = userSites(user);
   if (sites.length > 1) return "/scegli";
-  if (sites[0] === "stampe") return "/stampe";
+  if (sites[0] === "arredo") return "/stampe/arredo/dati";
+  if (sites[0] === "zoo") return "/stampe/zoo/dati";
+  if (sites[0] === "piante") return "/scegli"; // area in preparazione
   return user.role === "student" ? "/studente" : "/admin";
 }
 

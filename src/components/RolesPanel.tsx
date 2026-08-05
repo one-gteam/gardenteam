@@ -3,7 +3,9 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { quickSetRole, quickSetSites, quickToggleActive, setTenantUserDelegation } from "@/lib/actions";
-import { ROLE_LABELS, Role, SiteId } from "@/lib/types";
+import { ROLE_LABELS, Role, SITE_LABELS, SiteId } from "@/lib/types";
+
+const SITES: SiteId[] = ["academy", "arredo", "zoo", "piante"];
 
 interface RowUser {
   id: string;
@@ -58,22 +60,41 @@ export default function RolesPanel({
     <div>
       {deleghe.length > 0 && (
         <div className="card" style={{ marginBottom: 16 }}>
-          <h2 style={{ marginBottom: 4 }}>Delega ai punti vendita</h2>
-          <p className="hint" style={{ margin: "0 0 10px" }}>
-            Con la delega attiva, l&apos;amministratore di un punto vendita gestisce da solo utenti e ruoli del
-            proprio negozio; senza, può solo consultare e ogni modifica passa dall&apos;insegna.
+          <h2 style={{ marginBottom: 4 }}>Chi gestisce gli utenti dei punti vendita?</h2>
+          <p className="hint" style={{ margin: "0 0 12px" }}>
+            Ogni insegna sceglie tra due modalità. <strong>Anche i punti vendita</strong>: l&apos;amministratore
+            di ciascun punto vendita crea, modifica e disattiva da solo gli utenti del proprio negozio.{" "}
+            <strong>Solo l&apos;insegna</strong>: i punti vendita vedono i propri utenti in sola lettura e ogni
+            modifica passa dall&apos;amministratore di insegna. Si può cambiare in qualsiasi momento.
           </p>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {deleghe.map((t) => (
-              <label key={t.id} className="checkbox-row" style={{ margin: 0 }}>
-                <input
-                  type="checkbox"
-                  checked={t.delegata}
-                  disabled={pending}
-                  onChange={(e) => run(() => setTenantUserDelegation(t.id, e.target.checked))}
-                />
-                <strong>{t.nome}</strong> — i punti vendita gestiscono i propri utenti
-              </label>
+              <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                <strong style={{ minWidth: 160 }}>{t.nome}</strong>
+                <label style={{ display: "inline-flex", gap: 5, alignItems: "center", fontSize: 13.5 }}>
+                  <input
+                    type="radio"
+                    name={`delega_${t.id}`}
+                    checked={t.delegata}
+                    disabled={pending}
+                    onChange={() => run(() => setTenantUserDelegation(t.id, true))}
+                  />
+                  Anche i punti vendita
+                </label>
+                <label style={{ display: "inline-flex", gap: 5, alignItems: "center", fontSize: 13.5 }}>
+                  <input
+                    type="radio"
+                    name={`delega_${t.id}`}
+                    checked={!t.delegata}
+                    disabled={pending}
+                    onChange={() => run(() => setTenantUserDelegation(t.id, false))}
+                  />
+                  Solo l&apos;insegna
+                </label>
+                <span className={`pill ${t.delegata ? "pill-green" : "pill-amber"}`}>
+                  {t.delegata ? "PV autonomi" : "centralizzata"}
+                </span>
+              </div>
             ))}
           </div>
         </div>
@@ -118,15 +139,15 @@ export default function RolesPanel({
                   )}
                 </td>
                 <td style={{ whiteSpace: "nowrap" }}>
-                  {(["academy", "stampe"] as SiteId[]).map((site) => (
-                    <label key={site} style={{ fontSize: 12.5, display: "inline-flex", gap: 4, alignItems: "center", marginRight: 12 }}>
+                  {SITES.map((site) => (
+                    <label key={site} style={{ fontSize: 12.5, display: "inline-flex", gap: 4, alignItems: "center", marginRight: 10 }}>
                       <input
                         type="checkbox"
                         checked={u.sites.includes(site)}
                         disabled={!u.editabile || pending}
                         onChange={() => toggleSite(u, site)}
                       />
-                      {site === "academy" ? "Academy" : "Stampe"}
+                      {SITE_LABELS[site]}
                     </label>
                   ))}
                 </td>

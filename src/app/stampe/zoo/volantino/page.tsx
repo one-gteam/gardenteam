@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import StampeHeader from "@/components/stampe/StampeHeader";
-import { canAccessStampe, isConsortiumEditor, scopesForUser, resolveScope } from "@/lib/stampe";
+import { canAccessArea, isZooEditor, scopesForUser, resolveScope } from "@/lib/stampe";
 import { getDb } from "@/lib/db";
 import { getZooDb, activeCampaign, zooImageUrl, effectiveParentText } from "@/lib/zoo";
 import {
@@ -15,7 +15,7 @@ export default async function ZooVolantinoPage({
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!canAccessStampe(user)) redirect("/studente");
+  if (!canAccessArea(user, "zoo")) redirect("/studente");
   const sp = await searchParams;
 
   const db = await getZooDb();
@@ -23,7 +23,7 @@ export default async function ZooVolantinoPage({
   const scopes = scopesForUser(user, academyDb);
   const scope = resolveScope(user, sp.scope, academyDb);
   const scopeParam = `${scope.type}:${scope.id}`;
-  const consortium = isConsortiumEditor(user);
+  const consortium = isZooEditor(user);
 
   const campaign = db.campaigns.find((c) => c.id === sp.campagna) ?? activeCampaign(db);
   const allOffers = campaign ? db.offers.filter((o) => o.campaignId === campaign.id) : [];

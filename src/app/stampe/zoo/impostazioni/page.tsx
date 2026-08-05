@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import StampeHeader from "@/components/stampe/StampeHeader";
-import { canAccessStampe, isConsortiumEditor, scopesForUser, resolveScope } from "@/lib/stampe";
+import { canAccessArea, isZooEditor, scopesForUser, resolveScope } from "@/lib/stampe";
 import { getDb } from "@/lib/db";
 import { getZooDb, hiddenEntriesFor } from "@/lib/zoo";
 import { saveZooSettings, saveZooApiKey, saveFormatoRegola, toggleZooHidden } from "@/lib/zoo-actions";
@@ -13,7 +13,7 @@ export default async function ZooImpostazioniPage({
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!canAccessStampe(user)) redirect("/studente");
+  if (!canAccessArea(user, "zoo")) redirect("/studente");
   if (!["system_admin", "course_manager", "group_admin", "store_admin"].includes(user.role)) redirect("/stampe/zoo/dati");
   const sp = await searchParams;
 
@@ -22,7 +22,7 @@ export default async function ZooImpostazioniPage({
   const scopes = scopesForUser(user, academyDb);
   const scope = resolveScope(user, sp.scope, academyDb);
   const scopeParam = `${scope.type}:${scope.id}`;
-  const consortium = isConsortiumEditor(user);
+  const consortium = isZooEditor(user);
   const hiddenHere = hiddenEntriesFor(db, scope);
 
   return (

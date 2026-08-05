@@ -6,7 +6,7 @@ import Cartello from "@/components/stampe/Cartello";
 import StampaPicker from "@/components/stampe/StampaPicker";
 import {
   getStampeDb,
-  canAccessStampe,
+  canAccessArea,
   scopesForUser,
   resolveScope,
   effectiveLayout,
@@ -24,7 +24,7 @@ export default async function StampaPage({
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!canAccessStampe(user)) redirect("/studente");
+  if (!canAccessArea(user, "arredo")) redirect("/studente");
   const sp = await searchParams;
 
   const db = await getStampeDb();

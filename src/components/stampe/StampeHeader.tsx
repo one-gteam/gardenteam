@@ -9,16 +9,19 @@ export default async function StampeHeader({ user, active, area = "arredo" }: { 
   const settings = db.settings;
   const tenant = db.tenants.find((t) => t.id === user.tenantId);
   const isAdmin = ["system_admin", "course_manager", "group_admin", "store_admin"].includes(user.role);
+  const sites = userSites(user);
 
   const links = area === "zoo"
     ? [
         { href: "/stampe/zoo/dati", label: "Database prodotti", key: "dati" },
         { href: "/stampe/zoo/offerte", label: "Import offerte", key: "offerte" },
-        { href: "/stampe/zoo/volantino", label: "Volantino", key: "volantino" },
+        { href: "/stampe/zoo/volantino", label: "Scelta Offerte", key: "volantino" },
         { href: "/stampe/zoo/stampa", label: "Stampa cartelli", key: "stampa" },
-        ...(isAdmin ? [{ href: "/stampe/zoo/impostazioni", label: "Impostazioni", key: "impostazioni" }] : []),
-        { href: "/stampe/arredo/dati", label: "⇄ Arredo Giardino", key: "arredo" },
-        ...(userSites(user).includes("academy") ? [{ href: "/scegli", label: "⇄ Cambia area", key: "academy" }] : []),
+        ...(isAdmin || user.role === "zoo_manager"
+          ? [{ href: "/stampe/zoo/impostazioni", label: "Impostazioni", key: "impostazioni" }]
+          : []),
+        ...(sites.includes("arredo") ? [{ href: "/stampe/arredo/dati", label: "⇄ Cartelli Arredo", key: "arredo" }] : []),
+        ...(sites.length > 1 ? [{ href: "/scegli", label: "⇄ Cambia area", key: "academy" }] : []),
       ]
     : [
         { href: "/stampe/arredo/dati", label: "Dati prodotti", key: "dati" },
@@ -26,8 +29,8 @@ export default async function StampeHeader({ user, active, area = "arredo" }: { 
         { href: "/stampe/arredo/stampa", label: "Stampa cartelli", key: "stampa" },
         { href: "/stampe/arredo/linee-guida", label: "Linee guida", key: "linee-guida" },
         ...(isAdmin ? [{ href: "/stampe/impostazioni", label: "Impostazioni", key: "impostazioni" }] : []),
-        { href: "/stampe/zoo/dati", label: "⇄ Offerte ZOO", key: "zoo" },
-        ...(userSites(user).includes("academy") ? [{ href: "/scegli", label: "⇄ Cambia area", key: "academy" }] : []),
+        ...(sites.includes("zoo") ? [{ href: "/stampe/zoo/dati", label: "⇄ Offerte Zoo", key: "zoo" }] : []),
+        ...(sites.length > 1 ? [{ href: "/scegli", label: "⇄ Cambia area", key: "academy" }] : []),
       ];
 
   return (
@@ -39,7 +42,7 @@ export default async function StampeHeader({ user, active, area = "arredo" }: { 
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={settings.logoUrl} alt="Garden Team" />
             </span>
-            <span className="area-name">Stampe · {area === "zoo" ? "Cartelli Offerte ZOO" : "Cartelli Arredo Giardino"}</span>
+            <span className="area-name">Stampe · {area === "zoo" ? "Offerte Zoo" : "Cartelli Arredo Giardino"}</span>
           </Link>
           <span className="tenant-chip">
             {tenant?.logoUrl ? (

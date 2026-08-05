@@ -5,7 +5,7 @@ import StampeHeader from "@/components/stampe/StampeHeader";
 import LayoutEditor from "@/components/stampe/LayoutEditor";
 import {
   getStampeDb,
-  canAccessStampe,
+  canAccessArea,
   isConsortiumEditor,
   scopesForUser,
   resolveScope,
@@ -22,7 +22,7 @@ export default async function LayoutPage({
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!canAccessStampe(user)) redirect("/studente");
+  if (!canAccessArea(user, "arredo")) redirect("/studente");
   const sp = await searchParams;
 
   const db = await getStampeDb();

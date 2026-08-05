@@ -128,7 +128,7 @@ export function storeRanking(db: DB) {
 /** Ruoli che un amministratore può assegnare, in base al proprio. */
 export function assignableRolesFor(admin: User): Role[] {
   if (admin.role === "system_admin")
-    return ["system_admin", "group_admin", "store_admin", "dept_head", "course_manager", "student"];
+    return ["system_admin", "group_admin", "store_admin", "dept_head", "course_manager", "zoo_manager", "piante_manager", "student"];
   if (admin.role === "group_admin") return ["store_admin", "dept_head", "student"];
   if (admin.role === "store_admin") return ["dept_head", "student"];
   return [];

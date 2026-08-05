@@ -9,7 +9,7 @@ export default async function LoginPage({
 }) {
   const { disattivato, errore, attivato } = await searchParams;
   const db = await getDb();
-  const personas = ["u1", "u2", "u3", "u5", "u4", "u6", "u7", "u8", "u16"]
+  const personas = ["u1", "u2", "u3", "u5", "u17", "u18", "u4", "u6", "u7", "u8", "u16"]
     .map((id) => db.users.find((u) => u.id === id)!)
     .filter(Boolean);
 
@@ -47,7 +47,7 @@ export default async function LoginPage({
             <form action={loginWithPassword}>
               <label className="field">
                 Email
-                <input type="email" name="email" required placeholder="nome@insegna.it" />
+                <input type="text" name="email" required placeholder="nome@insegna.it" />
               </label>
               <label className="field">
                 Password

@@ -36,6 +36,12 @@ export async function getDb(): Promise<DB> {
     oldAssegnazione.body = fresh.body;
   }
   for (const u of db.users) if (u.active === undefined) u.active = true;
+  // la vecchia macroarea unica "stampe" si è divisa in arredo / zoo / piante
+  for (const u of db.users) {
+    if (u.sites?.some((s) => (s as string) === "stampe")) {
+      u.sites = [...u.sites.filter((s) => (s as string) !== "stampe"), "arredo", "zoo", "piante"];
+    }
+  }
   // le vecchie tipologie "testo" e "slide" confluiscono in "pdf" (Testo / lettura)
   for (const c of db.courses) {
     for (const l of c.lessons) {

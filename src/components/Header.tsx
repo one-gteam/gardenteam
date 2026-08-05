@@ -15,14 +15,13 @@ export default async function Header({ user, active }: { user: User; active: str
     ? [
         { href: "/admin", label: "Dashboard", key: "admin" },
         { href: "/admin/utenti", label: "Utenti", key: "utenti" },
-        ...(canOrg ? [{ href: "/admin/ruoli", label: "Ruoli", key: "ruoli" }] : []),
         { href: "/admin/corsi", label: "Corsi", key: "corsi" },
         { href: "/admin/percorsi", label: "Percorsi", key: "percorsi" },
         ...(canOrg ? [{ href: "/admin/organizzazione", label: "Organizzazione", key: "organizzazione" }] : []),
         { href: "/admin/email", label: "Email", key: "email" },
         { href: "/admin/report", label: "Report", key: "report" },
         { href: "/studente", label: "Vista studente", key: "studente" },
-        ...(userSites(user).includes("stampe") ? [{ href: "/scegli", label: "⇄ Cambia area", key: "stampe" }] : []),
+        ...(userSites(user).length > 1 ? [{ href: "/scegli", label: "⇄ Cambia area", key: "cambia" }] : []),
       ]
     : [{ href: "/studente", label: "I miei corsi", key: "studente" }];
 

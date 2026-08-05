@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import StampeHeader from "@/components/stampe/StampeHeader";
-import { getStampeDb, canAccessStampe, isConsortiumEditor, scopesForUser, resolveScope, isStoreBlocked } from "@/lib/stampe";
+import { getStampeDb, canAccessArea, isConsortiumEditor, scopesForUser, resolveScope, isStoreBlocked } from "@/lib/stampe";
 import {
   saveFormat,
   deleteFormat,
@@ -24,7 +24,7 @@ export default async function ImpostazioniPage({
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!canAccessStampe(user)) redirect("/stampe");
+  if (!canAccessArea(user, "arredo")) redirect("/stampe");
   if (!["system_admin", "course_manager", "group_admin", "store_admin"].includes(user.role)) redirect("/stampe");
   const { salvato, scope: scopeQ, codici } = await searchParams;
 

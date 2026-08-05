@@ -1250,7 +1250,9 @@ export async function updateUser(userId: string, formData: FormData) {
   if (formData.get("sitesForm") === "1") {
     const sites: SiteId[] = [];
     if (formData.get("siteAcademy") === "on") sites.push("academy");
-    if (formData.get("siteStampe") === "on") sites.push("stampe");
+    if (formData.get("siteArredo") === "on") sites.push("arredo");
+    if (formData.get("siteZoo") === "on") sites.push("zoo");
+    if (formData.get("sitePiante") === "on") sites.push("piante");
     target!.sites = sites.length > 0 ? sites : undefined;
   }
 

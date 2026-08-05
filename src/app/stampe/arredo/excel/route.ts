@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { getCurrentUser } from "@/lib/auth";
-import { canAccessStampe, filterProducts, getStampeDb, resolveScope, effectiveValue, PrintProduct, Scope, StampeDB } from "@/lib/stampe";
+import { canAccessArea, filterProducts, getStampeDb, resolveScope, effectiveValue, PrintProduct, Scope, StampeDB } from "@/lib/stampe";
 import { DB } from "@/lib/types";
 import { getDb } from "@/lib/db";
 
@@ -31,7 +31,7 @@ function rowFor(db: StampeDB, scope: Scope, p: PrintProduct, academyDb: DB): Rec
 
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
-  if (!user || !canAccessStampe(user)) return new NextResponse("Non autorizzato", { status: 403 });
+  if (!user || !canAccessArea(user, "arredo")) return new NextResponse("Non autorizzato", { status: 403 });
 
   const sp = Object.fromEntries(req.nextUrl.searchParams.entries());
   const db = await getStampeDb();

@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { requireUser } from "./auth";
 import { getDb } from "./db";
-import { canAccessStampe, isConsortiumEditor, resolveScope } from "./stampe";
+import { canAccessStampe, isZooEditor, resolveScope } from "./stampe";
 import { getZooDb, saveZooDb, ZooDB, ZooParent } from "./zoo";
 import { groupAndDescribe } from "./zoo-ai";
 import { uploadPublicFile, publicUrlFor, listStorageFiles } from "./supabase";
@@ -43,7 +43,7 @@ function priceStr(v: string): string {
 
 export async function importZooProducts(scopeParam: string, formData: FormData) {
   const user = await requireZooUser();
-  if (!isConsortiumEditor(user)) redirect("/stampe/zoo/dati");
+  if (!isZooEditor(user)) redirect("/stampe/zoo/dati");
   const file = formData.get("file") as File | null;
   if (!file || file.size === 0) redirect(backUrl("/stampe/zoo/dati", scopeParam, { importati: "0" }));
   const XLSX = await import("xlsx");
@@ -140,7 +140,7 @@ function applyGroups(
 /** Crea manualmente UN padre dagli articoli selezionati. */
 export async function createZooParent(scopeParam: string, formData: FormData) {
   const user = await requireZooUser();
-  if (!isConsortiumEditor(user)) redirect(backUrl("/stampe/zoo/dati", scopeParam));
+  if (!isZooEditor(user)) redirect(backUrl("/stampe/zoo/dati", scopeParam));
   const ids = (formData.getAll("sel") as string[]).filter(Boolean);
   const db = await getZooDb();
   const children = db.products.filter((p) => ids.includes(p.id));
@@ -162,7 +162,7 @@ export async function createZooParent(scopeParam: string, formData: FormData) {
 /** "Associa con AI": raggruppa gli articoli selezionati e genera i testi volantino/cartello. */
 export async function associaConAI(scopeParam: string, formData: FormData) {
   const user = await requireZooUser();
-  if (!isConsortiumEditor(user)) redirect(backUrl("/stampe/zoo/dati", scopeParam));
+  if (!isZooEditor(user)) redirect(backUrl("/stampe/zoo/dati", scopeParam));
   const ids = (formData.getAll("sel") as string[]).filter(Boolean);
   const db = await getZooDb();
   const selected = db.products.filter((p) => ids.includes(p.id));
@@ -178,7 +178,7 @@ export async function associaConAI(scopeParam: string, formData: FormData) {
 /** Rigenera con l'AI i testi di un padre esistente (dai suoi articoli figli). */
 export async function rigeneraTestiAI(parentId: string, scopeParam: string) {
   const user = await requireZooUser();
-  if (!isConsortiumEditor(user)) redirect(backUrl("/stampe/zoo/dati", scopeParam));
+  if (!isZooEditor(user)) redirect(backUrl("/stampe/zoo/dati", scopeParam));
   const db = await getZooDb();
   const parent = db.parents.find((p) => p.id === parentId);
   const children = db.products.filter((p) => p.parentId === parentId);
@@ -211,7 +211,7 @@ export async function saveParentTexts(parentId: string, scopeParam: string, form
     descCartello: String(formData.get("descCartello") ?? ""),
   };
   if (scope.type === "system") {
-    if (isConsortiumEditor(user)) Object.assign(parent!, fieldsIn, { aiGenerated: false });
+    if (isZooEditor(user)) Object.assign(parent!, fieldsIn, { aiGenerated: false });
   } else {
     for (const [field, value] of Object.entries(fieldsIn) as ["nome" | "descVolantino" | "descCartello", string][]) {
       const existing = db.textOverrides.find(
@@ -231,7 +231,7 @@ export async function saveParentTexts(parentId: string, scopeParam: string, form
 
 export async function setParentImage(parentId: string, scopeParam: string, formData: FormData) {
   const user = await requireZooUser();
-  if (!isConsortiumEditor(user)) redirect(backUrl("/stampe/zoo/dati", scopeParam, { padre: parentId }));
+  if (!isZooEditor(user)) redirect(backUrl("/stampe/zoo/dati", scopeParam, { padre: parentId }));
   const db = await getZooDb();
   const parent = db.parents.find((p) => p.id === parentId);
   if (!parent) redirect(backUrl("/stampe/zoo/dati", scopeParam));
@@ -251,7 +251,7 @@ export async function setParentImage(parentId: string, scopeParam: string, formD
 
 export async function toggleParentCaratteristica(parentId: string, caratteristica: string, scopeParam: string) {
   const user = await requireZooUser();
-  if (!isConsortiumEditor(user)) redirect(backUrl("/stampe/zoo/dati", scopeParam, { padre: parentId }));
+  if (!isZooEditor(user)) redirect(backUrl("/stampe/zoo/dati", scopeParam, { padre: parentId }));
   const db = await getZooDb();
   const parent = db.parents.find((p) => p.id === parentId);
   if (parent) {
@@ -265,7 +265,7 @@ export async function toggleParentCaratteristica(parentId: string, caratteristic
 
 export async function scioglieParent(parentId: string, scopeParam: string) {
   const user = await requireZooUser();
-  if (!isConsortiumEditor(user)) redirect(backUrl("/stampe/zoo/dati", scopeParam));
+  if (!isZooEditor(user)) redirect(backUrl("/stampe/zoo/dati", scopeParam));
   const db = await getZooDb();
   db.parents = db.parents.filter((p) => p.id !== parentId);
   for (const p of db.products) if (p.parentId === parentId) delete p.parentId;
@@ -294,7 +294,7 @@ export async function toggleZooHidden(scopeParam: string, kind: "fornitore" | "m
 
 export async function importZooOffers(scopeParam: string, formData: FormData) {
   const user = await requireZooUser();
-  if (!isConsortiumEditor(user)) redirect("/stampe/zoo/offerte");
+  if (!isZooEditor(user)) redirect("/stampe/zoo/offerte");
   const file = formData.get("file") as File | null;
   const nome = String(formData.get("nome") ?? "").trim() || `Offerte ${new Date().toLocaleDateString("it-IT")}`;
   const dal = String(formData.get("dal") ?? "");
@@ -352,7 +352,7 @@ export async function importZooOffers(scopeParam: string, formData: FormData) {
 
 export async function updateCampaignDates(campaignId: string, scopeParam: string, formData: FormData) {
   const user = await requireZooUser();
-  if (!isConsortiumEditor(user)) redirect(backUrl("/stampe/zoo/offerte", scopeParam));
+  if (!isZooEditor(user)) redirect(backUrl("/stampe/zoo/offerte", scopeParam));
   const db = await getZooDb();
   const c = db.campaigns.find((x) => x.id === campaignId);
   if (c) {
@@ -367,7 +367,7 @@ export async function updateCampaignDates(campaignId: string, scopeParam: string
 /** Raggruppa con l'AI tutti i prodotti NUOVI (senza padre) dell'ultima campagna. */
 export async function associaNuoviConAI(scopeParam: string) {
   const user = await requireZooUser();
-  if (!isConsortiumEditor(user)) redirect(backUrl("/stampe/zoo/offerte", scopeParam));
+  if (!isZooEditor(user)) redirect(backUrl("/stampe/zoo/offerte", scopeParam));
   const db = await getZooDb();
   const orphans = db.products.filter((p) => !p.parentId);
   if (orphans.length === 0) redirect(backUrl("/stampe/zoo/offerte", scopeParam, { padri: "0" }));
@@ -403,7 +403,7 @@ export async function voteZooOffer(offerId: string, tipo: "preferita" | "nontrat
 
 export async function toggleOfferSelected(offerId: string, scopeParam: string) {
   const user = await requireZooUser();
-  if (!isConsortiumEditor(user)) redirect(backUrl("/stampe/zoo/volantino", scopeParam));
+  if (!isZooEditor(user)) redirect(backUrl("/stampe/zoo/volantino", scopeParam));
   const db = await getZooDb();
   const o = db.offers.find((x) => x.id === offerId);
   if (o) {
@@ -416,7 +416,7 @@ export async function toggleOfferSelected(offerId: string, scopeParam: string) {
 
 export async function updateOfferVolantino(offerId: string, scopeParam: string, formData: FormData) {
   const user = await requireZooUser();
-  if (!isConsortiumEditor(user)) redirect(backUrl("/stampe/zoo/volantino", scopeParam));
+  if (!isZooEditor(user)) redirect(backUrl("/stampe/zoo/volantino", scopeParam));
   const db = await getZooDb();
   const o = db.offers.find((x) => x.id === offerId);
   if (o) {
@@ -434,7 +434,7 @@ export async function updateOfferVolantino(offerId: string, scopeParam: string, 
 
 export async function renameScheda(campaignId: string, schedaId: string, scopeParam: string, formData: FormData) {
   const user = await requireZooUser();
-  if (!isConsortiumEditor(user)) redirect(backUrl("/stampe/zoo/volantino", scopeParam));
+  if (!isZooEditor(user)) redirect(backUrl("/stampe/zoo/volantino", scopeParam));
   const db = await getZooDb();
   const c = db.campaigns.find((x) => x.id === campaignId);
   const s = c?.schede.find((x) => x.id === schedaId);
@@ -448,7 +448,7 @@ export async function renameScheda(campaignId: string, schedaId: string, scopePa
 
 export async function addScheda(campaignId: string, scopeParam: string) {
   const user = await requireZooUser();
-  if (!isConsortiumEditor(user)) redirect(backUrl("/stampe/zoo/volantino", scopeParam));
+  if (!isZooEditor(user)) redirect(backUrl("/stampe/zoo/volantino", scopeParam));
   const db = await getZooDb();
   const c = db.campaigns.find((x) => x.id === campaignId);
   if (c) {
@@ -514,7 +514,7 @@ export async function sendZooSuggestion(scopeParam: string, formData: FormData) 
 
 export async function resolveZooSuggestion(id: string) {
   const user = await requireZooUser();
-  if (!isConsortiumEditor(user)) redirect("/stampe/zoo/volantino");
+  if (!isZooEditor(user)) redirect("/stampe/zoo/volantino");
   const db = await getZooDb();
   const s = db.suggestions.find((x) => x.id === id);
   if (s) {
@@ -528,7 +528,7 @@ export async function resolveZooSuggestion(id: string) {
 
 export async function saveZooSettings(scopeParam: string, formData: FormData) {
   const user = await requireZooUser();
-  if (!isConsortiumEditor(user)) redirect(backUrl("/stampe/zoo/impostazioni", scopeParam));
+  if (!isZooEditor(user)) redirect(backUrl("/stampe/zoo/impostazioni", scopeParam));
   const db = await getZooDb();
   const list = (name: string) =>
     String(formData.get(name) ?? "").split(/\r?\n|,/).map((s) => s.trim()).filter(Boolean);
@@ -554,7 +554,7 @@ export async function saveZooApiKey(scopeParam: string, formData: FormData) {
 
 export async function saveFormatoRegola(scopeParam: string, formData: FormData) {
   const user = await requireZooUser();
-  if (!isConsortiumEditor(user)) redirect(backUrl("/stampe/zoo/impostazioni", scopeParam));
+  if (!isZooEditor(user)) redirect(backUrl("/stampe/zoo/impostazioni", scopeParam));
   const db = await getZooDb();
   const caratteristica = String(formData.get("caratteristica") ?? "");
   const formatId = String(formData.get("formatId") ?? "");

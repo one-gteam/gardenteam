@@ -7,7 +7,7 @@ import FieldEditor from "@/components/stampe/FieldEditor";
 import ProductClipboard from "@/components/stampe/ProductClipboard";
 import {
   getStampeDb,
-  canAccessStampe,
+  canAccessArea,
   isConsortiumEditor,
   scopesForUser,
   resolveScope,
@@ -42,7 +42,7 @@ export default async function DatiPage({
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!canAccessStampe(user)) redirect("/studente");
+  if (!canAccessArea(user, "arredo")) redirect("/studente");
   const sp = await searchParams;
 
   const db = await getStampeDb();

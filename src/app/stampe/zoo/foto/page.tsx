@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import StampeHeader from "@/components/stampe/StampeHeader";
-import { canAccessStampe, resolveScope } from "@/lib/stampe";
+import { canAccessArea, resolveScope } from "@/lib/stampe";
 import { getDb } from "@/lib/db";
 import { getZooDb, activeCampaign, zooImageUrl } from "@/lib/zoo";
 
@@ -13,7 +13,7 @@ export default async function ZooFotoPage({
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!canAccessStampe(user)) redirect("/studente");
+  if (!canAccessArea(user, "zoo")) redirect("/studente");
   const sp = await searchParams;
 
   const db = await getZooDb();

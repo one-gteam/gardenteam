@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { getCurrentUser } from "@/lib/auth";
-import { canAccessStampe, resolveScope } from "@/lib/stampe";
+import { canAccessArea, resolveScope } from "@/lib/stampe";
 import { getDb } from "@/lib/db";
 import { getZooDb, activeCampaign, zooImageUrl, effectiveParentText, pvPriceFor } from "@/lib/zoo";
 
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
-  if (!user || !canAccessStampe(user)) return new NextResponse("Non autorizzato", { status: 403 });
+  if (!user || !canAccessArea(user, "zoo")) return new NextResponse("Non autorizzato", { status: 403 });
 
   const sp = Object.fromEntries(req.nextUrl.searchParams.entries());
   const db = await getZooDb();

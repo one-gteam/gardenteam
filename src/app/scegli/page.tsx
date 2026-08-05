@@ -1,18 +1,26 @@
 import { redirect } from "next/navigation";
-import { GraduationCap, Armchair, PawPrint, Flower2, ArrowRight } from "lucide-react";
+import { GraduationCap, Armchair, PawPrint, Flower2, Users, ArrowRight } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { userSites, postLoginPath } from "@/lib/types";
+import { canManageUsers } from "@/lib/logic";
 import { logout } from "@/lib/actions";
 
 /** Schede delle macroaree, con fotografia di copertina in stile My Rosaflor. */
 export default async function ScegliPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  const db = await getDb();
   const sites = userSites(user);
-  if (sites.length === 1) redirect(postLoginPath(user));
 
-  const { settings } = await getDb();
+  // la Gestione Ruoli è un'area a sé: sistema e insegna sempre; PV solo se delegato
+  const showRuoli =
+    user.role === "system_admin" ||
+    user.role === "group_admin" ||
+    (user.role === "store_admin" && canManageUsers(db, user));
+
+  if (sites.length === 1 && !showRuoli) redirect(postLoginPath(user));
+
   const academyHome = user.role === "student" ? "/studente" : "/admin";
 
   const aree = [
@@ -22,23 +30,33 @@ export default async function ScegliPage() {
           titolo: "Academy", desc: "Formazione del personale", attiva: true,
         }]
       : []),
-    ...(sites.includes("stampe")
-      ? [
-          {
-            href: "/stampe/arredo/dati", foto: "/immagini/aree/arredo.jpg", icona: <Armchair size={18} />,
-            titolo: "Cartelli Arredo", desc: "Cartelli arredo giardino", attiva: true,
-          },
-          {
-            href: "/stampe/zoo/dati", foto: "/immagini/aree/zoo.jpg", icona: <PawPrint size={18} />,
-            titolo: "Cartelli Offerte Zoo", desc: "Volantino e cartelli promo", attiva: true,
-          },
-          {
-            href: "#", foto: "/immagini/aree/piante.jpg", icona: <Flower2 size={18} />,
-            titolo: "Cartelli Piante", desc: "In preparazione", attiva: false,
-          },
-        ]
+    ...(sites.includes("arredo")
+      ? [{
+          href: "/stampe/arredo/dati", foto: "/immagini/aree/arredo.jpg", icona: <Armchair size={18} />,
+          titolo: "Cartelli Arredo", desc: "Cartelli arredo giardino", attiva: true,
+        }]
+      : []),
+    ...(sites.includes("zoo")
+      ? [{
+          href: "/stampe/zoo/dati", foto: "/immagini/aree/zoo.jpg", icona: <PawPrint size={18} />,
+          titolo: "Offerte Zoo", desc: "Volantino e cartelli promo", attiva: true,
+        }]
+      : []),
+    ...(sites.includes("piante")
+      ? [{
+          href: "#", foto: "/immagini/aree/piante.jpg", icona: <Flower2 size={18} />,
+          titolo: "Cartelli Piante", desc: "In preparazione", attiva: false,
+        }]
+      : []),
+    ...(showRuoli
+      ? [{
+          href: "/ruoli", foto: "/immagini/aree/ruoli.jpg", icona: <Users size={18} />,
+          titolo: "Gestione Ruoli", desc: "Utenti, ruoli e accessi alle aree", attiva: true,
+        }]
       : []),
   ];
+
+  const { settings } = db;
 
   return (
     <div>
@@ -50,8 +68,8 @@ export default async function ScegliPage() {
         </div>
         <p>Ciao {user.firstName}! Dove vuoi andare oggi?</p>
       </div>
-      <div className="login-cards" style={{ maxWidth: 1040 }}>
-        <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))" }}>
+      <div className="login-cards" style={{ maxWidth: 1180 }}>
+        <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
           {aree.map((a) =>
             a.attiva ? (
               <a key={a.titolo} className="area-card" href={a.href}>

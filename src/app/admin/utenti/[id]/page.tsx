@@ -128,12 +128,18 @@ export default async function EditUserPage({
             <div style={{ borderTop: "1px solid var(--line)", paddingTop: 10, marginTop: 4 }}>
               <strong style={{ fontSize: 14 }}>Macroaree accessibili</strong>
               <input type="hidden" name="sitesForm" value="1" />
-              <div style={{ display: "flex", gap: 20, marginTop: 6 }}>
+              <div style={{ display: "flex", gap: 20, marginTop: 6, flexWrap: "wrap" }}>
                 <label className="checkbox-row" style={{ margin: 0 }}>
                   <input type="checkbox" name="siteAcademy" defaultChecked={userSites(u).includes("academy")} /> Academy
                 </label>
                 <label className="checkbox-row" style={{ margin: 0 }}>
-                  <input type="checkbox" name="siteStampe" defaultChecked={userSites(u).includes("stampe")} /> Stampe
+                  <input type="checkbox" name="siteArredo" defaultChecked={userSites(u).includes("arredo")} /> Cartelli Arredo
+                </label>
+                <label className="checkbox-row" style={{ margin: 0 }}>
+                  <input type="checkbox" name="siteZoo" defaultChecked={userSites(u).includes("zoo")} /> Offerte Zoo
+                </label>
+                <label className="checkbox-row" style={{ margin: 0 }}>
+                  <input type="checkbox" name="sitePiante" defaultChecked={userSites(u).includes("piante")} /> Cartelli Piante
                 </label>
               </div>
               <p style={{ fontSize: 12, color: "var(--muted)", margin: "4px 0 10px" }}>

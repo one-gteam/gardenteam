@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import StampeHeader from "@/components/stampe/StampeHeader";
 import ZooCartello, { ZooCartelloData } from "@/components/stampe/ZooCartello";
-import { canAccessStampe, isConsortiumEditor, scopesForUser, resolveScope, insegnaLogoUrl } from "@/lib/stampe";
+import { canAccessArea, isZooEditor, scopesForUser, resolveScope, insegnaLogoUrl } from "@/lib/stampe";
 import { getDb } from "@/lib/db";
 import { DB } from "@/lib/types";
 import {
@@ -43,7 +43,7 @@ export default async function ZooStampaPage({
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!canAccessStampe(user)) redirect("/studente");
+  if (!canAccessArea(user, "zoo")) redirect("/studente");
   const spRaw = await searchParams;
   const sp: Record<string, string | undefined> = {};
   for (const [k, v] of Object.entries(spRaw)) sp[k] = Array.isArray(v) ? v[v.length - 1] : v;
@@ -54,7 +54,7 @@ export default async function ZooStampaPage({
   const scopes = scopesForUser(user, academyDb);
   const scope = resolveScope(user, sp.scope, academyDb);
   const scopeParam = `${scope.type}:${scope.id}`;
-  const consortium = isConsortiumEditor(user);
+  const consortium = isZooEditor(user);
 
   const campaign = activeCampaign(db);
   const allSelected = campaign ? db.offers.filter((o) => o.campaignId === campaign.id && o.selezionata) : [];

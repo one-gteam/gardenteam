@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import StampeHeader from "@/components/stampe/StampeHeader";
-import { canAccessStampe, getStampeDb } from "@/lib/stampe";
+import { canAccessArea, getStampeDb } from "@/lib/stampe";
 
 // Contenuti dal file "linee guida.xlsx" del Consorzio (dati_arredo giardino_2025)
 const REGOLE_CAMPO: { campo: string; regola: string; esempio?: string }[] = [
@@ -39,7 +39,7 @@ const IMMAGINI = [
 export default async function LineeGuidaPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!canAccessStampe(user)) redirect("/studente");
+  if (!canAccessArea(user, "arredo")) redirect("/studente");
   const db = await getStampeDb();
 
   return (

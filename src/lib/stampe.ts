@@ -160,14 +160,30 @@ export async function saveStampeDb(db: StampeDB): Promise<void> {
 
 /* ================== Permessi e ambiti ================== */
 
-/** Chi può entrare nel sito Stampe: chi ha la macroarea "stampe" tra i suoi accessi. */
+/** Chi può entrare nel sito Stampe: chi ha almeno una delle sue tre aree. */
 export function canAccessStampe(user: User): boolean {
-  return userSites(user).includes("stampe");
+  const sites = userSites(user);
+  return sites.includes("arredo") || sites.includes("zoo") || sites.includes("piante");
 }
 
-/** Il responsabile contenuti del Consorzio modifica la versione comune. */
+/** Accesso a una specifica area del sito Stampe. */
+export function canAccessArea(user: User, area: "arredo" | "zoo" | "piante"): boolean {
+  return userSites(user).includes(area);
+}
+
+/** Il responsabile contenuti del Consorzio (area Arredo) modifica la versione comune. */
 export function isConsortiumEditor(user: User): boolean {
   return user.role === "system_admin" || user.role === "course_manager";
+}
+
+/** Chi cura i contenuti Zoo a livello di Consorzio. */
+export function isZooEditor(user: User): boolean {
+  return isConsortiumEditor(user) || user.role === "zoo_manager";
+}
+
+/** Chi curerà i contenuti Piante a livello di Consorzio (area in preparazione). */
+export function isPianteEditor(user: User): boolean {
+  return isConsortiumEditor(user) || user.role === "piante_manager";
 }
 
 export interface Scope {
@@ -182,7 +198,8 @@ export interface Scope {
  * chiamante — evitiamo di ricaricarlo qui per non moltiplicare le chiamate a Supabase.
  */
 export function scopesForUser(user: User, academyDb: DB): Scope[] {
-  if (isConsortiumEditor(user)) {
+  // i gestori di contenuti (corsi/zoo/piante) lavorano sulla versione Consorzio
+  if (isConsortiumEditor(user) || user.role === "zoo_manager" || user.role === "piante_manager") {
     return [
       { type: "system" as const, id: "", label: "Consorzio (comune a tutti)" },
       ...academyDb.tenants.map((t) => ({ type: "tenant" as const, id: t.id, label: t.name })),
