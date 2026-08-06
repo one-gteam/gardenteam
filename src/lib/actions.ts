@@ -1760,3 +1760,29 @@ export async function rejectRegistration(regId: string) {
   await saveDb(db);
   redirect("/admin/utenti?rifiutato=1");
 }
+
+/* ================== Archivio file (pulizia dello spazio) ================== */
+
+/**
+ * Elimina i file indicati dal bucket. Non si fida dell'elenco ricevuto: rifà
+ * l'analisi lato server e cancella solo ciò che risulta davvero orfano, non
+ * caricato nelle ultime 24 ore e in una cartella che il ruolo può gestire.
+ */
+export async function eliminaFileOrfani(paths: string[]) {
+  const user = await requireUser();
+  const { analizzaArchivio, cartelleGestibili, puoVedereArchivio } = await import("./storage-audit");
+  if (!puoVedereArchivio(user)) return { ok: false as const, eliminati: 0, error: "Non autorizzato" };
+  const permesse = cartelleGestibili(user);
+  const archivio = await analizzaArchivio();
+
+  const daEliminare = archivio
+    .filter((f) => paths.includes(f.path) && !f.usato && !f.recente && permesse.includes(f.cartella))
+    .map((f) => f.path);
+  if (daEliminare.length === 0) return { ok: true as const, eliminati: 0 };
+
+  const { supabase, STORAGE_BUCKET } = await import("./supabase");
+  const { error } = await supabase().storage.from(STORAGE_BUCKET).remove(daEliminare);
+  if (error) return { ok: false as const, eliminati: 0, error: error.message };
+  revalidatePath("/file");
+  return { ok: true as const, eliminati: daEliminare.length };
+}

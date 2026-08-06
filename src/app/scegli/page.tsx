@@ -1,9 +1,10 @@
 import { redirect } from "next/navigation";
-import { GraduationCap, Armchair, PawPrint, Flower2, Users, ArrowRight } from "lucide-react";
+import { GraduationCap, Armchair, PawPrint, Flower2, Users, HardDrive, ArrowRight } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { userSites, postLoginPath } from "@/lib/types";
 import { canManageUsers } from "@/lib/logic";
+import { puoVedereArchivio } from "@/lib/storage-audit";
 import { logout } from "@/lib/actions";
 
 /** Schede delle macroaree, con fotografia di copertina in stile My Rosaflor. */
@@ -19,7 +20,8 @@ export default async function ScegliPage() {
     user.role === "group_admin" ||
     (user.role === "store_admin" && canManageUsers(db, user));
 
-  if (sites.length === 1 && !showRuoli) redirect(postLoginPath(user));
+  const showArchivio = puoVedereArchivio(user);
+  if (sites.length === 1 && !showRuoli && !showArchivio) redirect(postLoginPath(user));
 
   const academyHome = user.role === "student" ? "/studente" : "/admin";
 
@@ -52,6 +54,12 @@ export default async function ScegliPage() {
       ? [{
           href: "/ruoli", foto: "/immagini/aree/ruoli.jpg", icona: <Users size={18} />,
           titolo: "Gestione Ruoli", desc: "Utenti, ruoli e accessi alle aree", attiva: true,
+        }]
+      : []),
+    ...(showArchivio
+      ? [{
+          href: "/file", foto: "/immagini/aree/archivio.jpg", icona: <HardDrive size={18} />,
+          titolo: "Archivio file", desc: "Spazio occupato e pulizia dei file non più usati", attiva: true,
         }]
       : []),
   ];
