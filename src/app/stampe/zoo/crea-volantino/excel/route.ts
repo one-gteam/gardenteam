@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { getCurrentUser } from "@/lib/auth";
 import { canAccessArea, isZooEditor } from "@/lib/stampe";
-import { getZooDb } from "@/lib/zoo";
+import { getZooDb, migraVolantinoPages } from "@/lib/zoo";
 
 /**
- * Export del volantino composto, pensato per il grafico: una riga per spazio,
- * con pagina, riga, posizione, larghezza, contenuto (offerta con EAN/prezzi
- * oppure testo libero).
+ * Export del volantino composto, pensato per il grafico: una riga per cella,
+ * con pagina, posizione (riga/colonna), estensione, sezione di appartenenza,
+ * contenuto (offerte con EAN/prezzi, testo, immagine, etichetta) e il commento
+ * lasciato da chi ha impaginato.
  */
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
@@ -20,30 +21,39 @@ export async function GET(req: NextRequest) {
   const campaignId = req.nextUrl.searchParams.get("campagna") ?? "";
   const layout = db.volantinoLayouts.find((l) => l.campaignId === campaignId);
   if (!layout) return new NextResponse("Volantino non ancora salvato", { status: 404 });
+  const pages = migraVolantinoPages(layout.pages);
 
   const rows: Record<string, string | number>[] = [];
-  layout.pages.forEach((page, pi) => {
-    page.rows.forEach((row, ri) => {
-      row.cells.forEach((cell, ci) => {
-        const offer = cell.tipo === "offerta" ? db.offers.find((o) => o.id === cell.offerId) : undefined;
-        const product = offer ? db.products.find((p) => p.id === offer.productId) : undefined;
-        rows.push({
-          Pagina: page.titolo || `Pagina ${pi + 1}`,
-          Riga: ri + 1,
-          Posizione: ci + 1,
-          "Spazi riga": row.cols,
-          "Larghezza (spazi)": cell.span,
-          Tipo: cell.tipo === "offerta" ? "Offerta" : cell.tipo === "testo" ? "Testo" : "Vuoto",
-          EAN: offer?.ean ?? "",
-          Descrizione: cell.descrizione ?? offer?.descrizione ?? "",
-          Marca: product?.marca ?? "",
-          "Prezzo promo": cell.prezzo ?? offer?.prezzoPromo ?? "",
-          "Prezzo listino": offer?.prezzoListino ?? "",
-          Label: offer?.label ?? "",
-          Testo: cell.testo ?? "",
-        });
+  pages.forEach((page, pi) => {
+    const nomePagina = page.titolo || `Pagina ${pi + 1}`;
+    for (const b of page.blocks) {
+      const offs = (b.offerIds ?? []).map((id) => db.offers.find((o) => o.id === id)).filter(Boolean);
+      if (offs.length === 0 && !b.testo && !b.imageUrl && !b.label) continue; // celle vuote: non servono al grafico
+      // sezione che contiene questa cella (per lo sfondo comune)
+      const sez = (page.sezioni ?? []).find(
+        (s) => b.r >= s.r && b.r < s.r + s.rs && b.c >= s.c && b.c < s.c + s.cs
+      );
+      const primo = offs[0];
+      rows.push({
+        Pagina: nomePagina,
+        Riga: b.r + 1,
+        Colonna: b.c + 1,
+        "Righe occupate": b.rs,
+        "Colonne occupate": b.cs,
+        Sezione: sez?.titolo ?? "",
+        "Sfondo sezione": sez?.bg ?? "",
+        "N. offerte": offs.length,
+        EAN: offs.map((o) => o!.ean).join(" / "),
+        Descrizione: b.descrizione ?? offs.map((o) => o!.descrizione).join(" / "),
+        Marca: offs.map((o) => db.products.find((p) => p.id === o!.productId)?.marca ?? "").join(" / "),
+        "Prezzo promo": b.prezzo ?? offs.map((o) => o!.prezzoPromo).join(" / "),
+        "Prezzo listino": offs.map((o) => o!.prezzoListino ?? "").join(" / "),
+        Etichetta: b.label ?? primo?.label ?? "",
+        Testo: b.testo ?? "",
+        Immagine: b.imageUrl ?? "",
+        "Commento per il grafico": b.commento ?? "",
       });
-    });
+    }
   });
 
   const ws = XLSX.utils.json_to_sheet(rows);

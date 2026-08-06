@@ -4,7 +4,7 @@ import StampeHeader from "@/components/stampe/StampeHeader";
 import VolantinoBuilder from "@/components/stampe/VolantinoBuilder";
 import { canAccessArea, isZooEditor, resolveScope, scopesForUser } from "@/lib/stampe";
 import { getDb } from "@/lib/db";
-import { getZooDb, activeCampaign, zooImageUrl } from "@/lib/zoo";
+import { getZooDb, activeCampaign, zooImageUrl, migraVolantinoPages } from "@/lib/zoo";
 import { saveVolantinoEditors } from "@/lib/zoo-actions";
 
 /**
@@ -39,6 +39,11 @@ export default async function CreaVolantinoPage({
           const product = db.products.find((p) => p.id === o.productId);
           const parent = product?.parentId ? db.parents.find((x) => x.id === product.parentId) : undefined;
           const votes = db.votes.filter((v) => v.offerId === o.id);
+          // articoli racchiusi dall'offerta: i "fratelli" con lo stesso padre
+          const articoli = (parent
+            ? db.products.filter((p) => p.parentId === parent.id)
+            : product ? [product] : []
+          ).map((p) => ({ ean: p.ean, descrizione: p.descrizione, marca: p.marca }));
           return {
             id: o.id, descrizione: o.descrizione, prezzo: o.prezzoPromo, prezzoListino: o.prezzoListino,
             foto: zooImageUrl(product, parent),
@@ -49,6 +54,7 @@ export default async function CreaVolantinoPage({
             fornitore: product?.fornitore ?? "",
             caratts: parent?.caratteristiche ?? [],
             label: o.label,
+            articoli,
           };
         })
         // prima le più votate, in fondo quelle segnalate non trattate
@@ -107,7 +113,7 @@ export default async function CreaVolantinoPage({
           <VolantinoBuilder
             campaignId={campaign.id}
             offers={offers}
-            initialPages={layout?.pages ?? []}
+            initialPages={layout ? migraVolantinoPages(layout.pages) : []}
             excelHref={`/stampe/zoo/crea-volantino/excel?campagna=${campaign.id}`}
             animali={ANIMALI}
             caratts={carattsProdotto}

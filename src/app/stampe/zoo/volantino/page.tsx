@@ -284,6 +284,28 @@ export default async function ZooVolantinoPage({
                             {o.tieniVicinoA && <span className="pill pill-gray" title="da tenere adiacente a un'altra offerta">adiacente</span>}
                             {scheda && <span className="pill pill-green">{scheda.nome}</span>}
                           </div>
+                          {/* articoli racchiusi dall'offerta: i gusti/formati raggruppati sotto lo stesso padre */}
+                          {(() => {
+                            const articoli = parent
+                              ? db.products.filter((p) => p.parentId === parent.id)
+                              : product ? [product] : [];
+                            if (articoli.length === 0) return null;
+                            return (
+                              <details style={{ marginTop: 4 }}>
+                                <summary style={{ cursor: "pointer", fontSize: 11.5, color: "var(--green-700)", fontWeight: 600 }}>
+                                  Vedi i {articoli.length} articoli inclusi
+                                </summary>
+                                <ul style={{ margin: "4px 0 0", paddingLeft: 18, fontSize: 11.5, color: "var(--muted)" }}>
+                                  {articoli.map((a) => (
+                                    <li key={a.ean}>
+                                      {a.descrizione}
+                                      <span style={{ opacity: 0.75 }}> · EAN {a.ean}{a.codice ? ` · cod. ${a.codice}` : ""}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </details>
+                            );
+                          })()}
                         </td>
                         <td>
                           <strong>€ {o.prezzoPromo}</strong>

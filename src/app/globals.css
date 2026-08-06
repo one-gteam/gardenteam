@@ -487,10 +487,67 @@ table.data tr:last-child td { border-bottom: none; }
 
 .print-sheet { page-break-after: always; display: flex; flex-wrap: wrap; gap: 0; }
 
+/* ---------- Crea Volantino ---------- */
+.vol-filtro { padding: 14px; position: sticky; top: 12px; }
+.vol-filtro h3 { font-size: 14px; }
+.vol-filtro-grid { display: flex; flex-direction: column; gap: 2px; }
+.vol-filtro .field { margin-bottom: 6px; font-size: 12px; }
+.vol-off {
+  border: 1px solid var(--line); border-radius: 8px; background: #fff;
+  padding: 6px 8px; margin-bottom: 6px; cursor: grab;
+}
+.vol-off:hover { border-color: var(--green-500); }
+
+.vol-riga { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 18px; align-items: flex-start; }
+.vol-page-wrap { width: 320px; max-width: 100%; }
+.vol-page-tools { display: flex; gap: 5px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
+/* proporzione A4 verticale */
+.vol-page {
+  display: grid; gap: 4px; aspect-ratio: 210 / 297; padding: 6px;
+  background: #fff; border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow);
+}
+.vol-cell {
+  position: relative; border-radius: 6px; padding: 4px; overflow: hidden; min-width: 0;
+  display: flex; flex-direction: column; justify-content: center; z-index: 1;
+}
+.vol-cell:hover .vol-tools { opacity: 1; }
+.vol-tools {
+  position: absolute; top: 2px; right: 2px; display: flex; gap: 1px; flex-wrap: wrap;
+  opacity: 0; transition: opacity 0.12s; max-width: 90%; justify-content: flex-end;
+}
+.vol-tools .mini-btn { padding: 0 3px; font-size: 10px; background: rgba(255, 255, 255, 0.9); }
+.vol-hint { text-align: center; color: var(--muted); font-size: 10px; }
+.vol-testo { font-size: 10.5px; font-weight: 600; text-align: center; text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8); }
+.vol-label {
+  position: absolute; top: 3px; left: 3px; background: var(--terracotta); color: #fff;
+  font-size: 8.5px; font-weight: 800; padding: 1px 5px; border-radius: 99px; z-index: 2;
+}
+.vol-nota {
+  position: absolute; bottom: 2px; left: 3px; font-size: 8px; font-weight: 700;
+  background: var(--amber-bg); color: var(--amber); padding: 0 4px; border-radius: 99px;
+}
+.vol-editor {
+  position: absolute; inset: 0; background: #fff; border: 2px solid var(--green-600); border-radius: 6px;
+  padding: 6px; overflow-y: auto; z-index: 6; font-size: 11px; text-align: left;
+}
+.vol-editor .field { font-size: 10.5px; }
+.vol-editor input, .vol-editor select, .vol-editor textarea { font-size: 11px; padding: 3px 6px; }
+.vol-sezione { border-radius: 8px; position: relative; z-index: 0; }
+.vol-sezione-head {
+  position: absolute; top: 2px; left: 2px; display: flex; gap: 2px; align-items: center; z-index: 4;
+}
+.vol-sezione-head input[type="text"], .vol-sezione-head input:not([type]) { width: 78px; font-size: 10px; padding: 1px 4px; margin-top: 0; }
+.vol-sezione-head input[type="color"] { width: 22px; height: 20px; padding: 0; margin-top: 0; }
+.vol-sezione-titolo {
+  position: absolute; bottom: 3px; left: 6px; font-weight: 800; font-size: 11px; color: var(--green-900);
+}
+
 @media print {
   .site-header, .no-print { display: none !important; }
   /* volantino composto: una pagina del volantino per foglio */
-  .vol-page { page-break-after: always; border: none !important; box-shadow: none !important; }
+  .vol-page-wrap { width: 100%; page-break-after: always; }
+  .vol-riga { display: block; }
+  .vol-page { border: none !important; box-shadow: none !important; }
   .vol-page textarea { border: none; }
   body { background: #fff; }
   .container { max-width: none; padding: 0; }

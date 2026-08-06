@@ -115,20 +115,78 @@ export interface ZooSuggestion {
   status: "aperta" | "risolta";
 }
 
-/** Cella del volantino costruito: offerta, solo testo, o vuota; span = spazi uniti. */
-export interface VolCell {
-  span: number; // spazi occupati in orizzontale
-  vspan?: number; // 2 = unita con la riga sotto
-  tipo: "offerta" | "testo" | "vuoto";
-  offerId?: string;
+/**
+ * Blocco del volantino: occupa una o più celle della griglia della pagina.
+ * La posizione è esplicita (riga/colonna + estensione), così unire, spostare
+ * e copiare sono operazioni dirette e non dipendono dall'ordine nell'elenco.
+ * I contenuti convivono: un blocco può avere sfondo immagine, testo sopra,
+ * una o più offerte, un'etichetta e un commento per il grafico.
+ */
+export interface VolBlock {
+  id: string;
+  r: number; // riga 0-based
+  c: number; // colonna 0-based
+  rs: number; // righe occupate
+  cs: number; // colonne occupate
+  offerIds?: string[]; // una o più offerte nella stessa cella
   testo?: string;
-  // modifiche "solo per questo volantino": non toccano l'offerta a database
+  imageUrl?: string;
+  label?: string; // etichetta grafica (SOTTOCOSTO, NOVITÀ…)
+  commento?: string; // nota per chi impagina, non stampata
+  // modifiche "solo per questo volantino" sulla prima offerta: non toccano il database
   descrizione?: string;
   prezzo?: string;
 }
-export interface VolRow { cols: number; cells: VolCell[] }
-export interface VolPage { id: string; titolo?: string; rows: VolRow[] }
+
+/** Sezione: sfondo + titolo su un'area della pagina; le offerte restano posizionabili sopra. */
+export interface VolSection {
+  id: string;
+  r: number; c: number; rs: number; cs: number;
+  titolo?: string;
+  bg: string; // colore di sfondo
+}
+
+export interface VolPage {
+  id: string;
+  titolo?: string;
+  cols: number;
+  rows: number;
+  blocks: VolBlock[];
+  sezioni?: VolSection[];
+}
 export interface VolantinoLayout { campaignId: string; pages: VolPage[] }
+
+/* --- vecchio formato a righe/celle, conservato solo per la migrazione --- */
+interface OldCell { span?: number; vspan?: number; tipo?: string; offerId?: string; testo?: string; descrizione?: string; prezzo?: string }
+interface OldRow { cols?: number; cells?: OldCell[] }
+interface OldPage { id?: string; titolo?: string; rows?: (OldRow | unknown)[] }
+
+/** Converte i volantini salvati col vecchio modello righe/celle nella griglia a blocchi. */
+export function migraVolantinoPages(pages: unknown[]): VolPage[] {
+  return (pages as OldPage[]).map((p, pi) => {
+    if (Array.isArray((p as unknown as VolPage).blocks)) return p as unknown as VolPage; // già nuovo formato
+    const oldRows = (p.rows ?? []) as OldRow[];
+    const cols = Math.max(1, ...oldRows.map((r) => r.cols ?? 3));
+    const blocks: VolBlock[] = [];
+    oldRows.forEach((row, ri) => {
+      const unit = cols / (row.cols ?? cols);
+      let c = 0;
+      (row.cells ?? []).forEach((cell, ci) => {
+        const cs = Math.round(unit * (cell.span ?? 1));
+        blocks.push({
+          id: `vb_${pi}_${ri}_${ci}`,
+          r: ri, c, rs: cell.vspan === 2 ? 2 : 1, cs: Math.max(1, cs),
+          ...(cell.offerId ? { offerIds: [cell.offerId] } : {}),
+          ...(cell.testo ? { testo: cell.testo } : {}),
+          ...(cell.descrizione ? { descrizione: cell.descrizione } : {}),
+          ...(cell.prezzo ? { prezzo: cell.prezzo } : {}),
+        });
+        c += Math.max(1, cs);
+      });
+    });
+    return { id: p.id ?? `vp_${pi}`, titolo: p.titolo, cols, rows: Math.max(1, oldRows.length), blocks, sezioni: [] };
+  });
+}
 
 export interface ZooSettings {
   caratteristiche: string[]; // umido, secco, cane, gatto, roditori...

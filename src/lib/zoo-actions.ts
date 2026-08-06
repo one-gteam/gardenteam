@@ -660,3 +660,15 @@ export async function saveZooLayout(formatId: string, scopeParam: string, _tipol
   else db.zooLayouts.push({ id: `zl_${Date.now()}`, formatId, scopeType: scope.type, scopeId: scope.id, items: clean });
   await saveZooDb(db);
 }
+
+/** Immagine caricata in una cella del volantino (sfondo o elemento grafico). */
+export async function uploadVolantinoImage(formData: FormData) {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  if (!(isZooEditor(user) || (db.settings.volantinoEditors ?? []).includes(user.id))) return { ok: false as const };
+  const file = formData.get("image") as File | null;
+  if (!file || file.size === 0 || !file.type.startsWith("image/")) return { ok: false as const };
+  const clean = file.name.toLowerCase().replace(/[^a-z0-9._-]/g, "_");
+  const url = await uploadPublicFile(`volantino/${Date.now()}_${clean}`, Buffer.from(await file.arrayBuffer()), file.type);
+  return { ok: true as const, url };
+}
