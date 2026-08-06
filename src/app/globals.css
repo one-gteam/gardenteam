@@ -163,7 +163,7 @@ table.data td a:hover strong { color: var(--green-700); }
 .btn-sm { padding: 6px 12px; font-size: 13px; border-radius: 8px; }
 
 label.field { display: block; font-size: 13px; font-weight: 600; margin-bottom: 12px; }
-input[type="text"], input[type="email"], select, textarea {
+input[type="text"], input[type="email"], input[type="number"], input[type="date"], input[type="color"], select, textarea {
   width: 100%; padding: 9px 12px; margin-top: 4px;
   border: 1.5px solid var(--line); border-radius: 9px; font-size: 14px; font-family: inherit;
   background: #fff;
@@ -495,13 +495,13 @@ table.data tr:last-child td { border-bottom: none; }
 @media (max-width: 1400px) { .vol-layout { grid-template-columns: 270px minmax(0, 1fr) 290px; gap: 12px; } }
 @media (max-width: 1100px) { .vol-layout { grid-template-columns: 1fr; } }
 
-/* intestazione della pagina: resta visibile scorrendo */
+/* intestazione della pagina: una riga sola, resta visibile scorrendo */
 .vol-head {
   position: sticky; top: 0; z-index: 30; background: var(--bg);
-  padding: 10px 0 8px; border-bottom: 1px solid var(--line);
+  padding: 8px 0 6px; border-bottom: 1px solid var(--line);
 }
-.vol-head h1 { font-size: 21px; }
-.vol-head .subtitle { font-size: 12.5px; }
+.vol-head h1 { font-size: 18px; margin: 0; }
+.vol-head .subtitle { font-size: 12.5px; margin: 0; }
 
 .vol-filtro {
   position: sticky; top: calc(var(--vol-top2, 120px) + 8px); max-height: calc(100vh - var(--vol-top2, 120px) - 20px); overflow-y: auto;
@@ -521,25 +521,26 @@ table.data tr:last-child td { border-bottom: none; }
 }
 .vol-off:hover { border-color: var(--green-500); box-shadow: var(--shadow); }
 
+/* schede pagina e pulsanti azione condividono un'unica riga fissa, per non
+   impilare tre barre una sopra l'altra */
 .vol-toolbar {
-  position: sticky; top: var(--vol-top1, 0px); z-index: 20; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
-  background: var(--bg); padding: 8px 0;
+  position: sticky; top: var(--vol-top1, 0px); z-index: 20;
+  display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap;
+  background: var(--bg); padding: 8px 0; border-bottom: 1px solid var(--line); margin-bottom: 14px;
 }
-.vol-tabs {
-  position: sticky; top: var(--vol-top2, 60px); z-index: 20; display: flex; gap: 6px; flex-wrap: wrap;
-  background: var(--bg); padding-bottom: 10px; border-bottom: 1px solid var(--line); margin-bottom: 14px;
-}
+.vol-tabs { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; }
 .vol-tab {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 1px; cursor: pointer;
-  border: 1px solid var(--line); border-radius: 10px 10px 0 0; background: #fff;
-  padding: 6px 12px; font-size: 12.5px; font-weight: 700; color: var(--muted);
+  display: flex; align-items: baseline; gap: 5px; cursor: pointer;
+  border: 1px solid var(--line); border-radius: 8px; background: #fff;
+  padding: 5px 10px; font-size: 12px; font-weight: 700; color: var(--muted); white-space: nowrap;
 }
 .vol-tab:hover { border-color: var(--green-500); }
 .vol-tab.attiva { background: var(--green-100); border-color: var(--green-500); color: var(--green-900); }
 .vol-tab-nome { font-size: 10.5px; font-weight: 500; opacity: 0.8; }
+.vol-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 
 .vol-spread { display: flex; gap: 18px; align-items: flex-start; justify-content: center; flex-wrap: wrap; }
-.vol-page-wrap { width: 340px; max-width: 100%; }
+.vol-page-wrap { width: 430px; max-width: 100%; }
 .vol-page-tools { display: flex; gap: 5px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
 .vol-numero {
   background: var(--green-700); color: #fff; font-weight: 800; font-size: 11px;

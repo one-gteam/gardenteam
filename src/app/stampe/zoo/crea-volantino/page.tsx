@@ -73,15 +73,13 @@ export default async function CreaVolantinoPage({
     <div>
       <div className="no-print"><StampeHeader user={user} active="crea-volantino" area="zoo" /></div>
       <div className="container">
-        <div className="no-print vol-head" style={{ display: "flex", gap: 14, alignItems: "flex-end", flexWrap: "wrap" }}>
-          <div style={{ flex: 1 }}>
-            <h1 style={{ margin: 0 }}>Crea Volantino</h1>
-            <p className="subtitle" style={{ margin: "4px 0 0" }}>
-              {campaign ? `${campaign.nome} — trascina le offerte sugli spazi; ogni offerta mostra i voti dei punti vendita.` : "Nessuna campagna attiva"}
-            </p>
+        <div className="no-print vol-head" style={{ display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap", flex: 1, minWidth: 0 }}>
+            <h1>Crea Volantino</h1>
+            <span className="subtitle">{campaign ? campaign.nome : "Nessuna campagna attiva"}</span>
             {campaign && (
-              <span className="pill pill-amber" style={{ marginTop: 6, display: "inline-block" }}>
-                Offerte valide dal {fmtData(campaign.dal)} al {fmtData(campaign.al)}
+              <span className="pill pill-amber">
+                Valide dal {fmtData(campaign.dal)} al {fmtData(campaign.al)}
               </span>
             )}
           </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Save, FileDown, Sheet, Plus } from "lucide-react";
 import { saveVolantinoLayout, updateZooOfferQuick, uploadVolantinoImage } from "@/lib/zoo-actions";
 import type { VolPage, VolBlock, VolSection } from "@/lib/zoo";
 
@@ -438,25 +439,34 @@ export default function VolantinoBuilder({
       {/* ---------- centro: barra strumenti, schede, pagine ---------- */}
       <div>
         <div className="vol-toolbar no-print">
-          <button className="btn btn-sm" onClick={() => salva()}>Salva volantino</button>
-          <button className="btn btn-outline btn-sm" onClick={() => window.print()}>Esporta PDF</button>
-          <a className="btn btn-outline btn-sm" href={excelHref}>Excel per il grafico</a>
-          <button className="btn btn-outline btn-sm" onClick={() => upd((ps) => [...ps, pagina("")])}>+ Pagina</button>
-          <span className={`pill ${stato === "errore" ? "pill-red" : "pill-green"}`} style={{ opacity: stato ? 1 : 0.4 }}>
-            {stato === "salvo" ? "Salvataggio…" : stato === "salvato" ? "Salvato" : stato === "errore" ? "Errore" : "Salvataggio automatico"}
-          </span>
-          {clip && <span className="pill pill-amber">Cella copiata</span>}
-        </div>
-
-        <div className="vol-tabs no-print">
-          {spreads.map((g, i) => (
-            <button key={i} type="button" className={`vol-tab${i === spread ? " attiva" : ""}`} onClick={() => { setSpread(i); setSel(null); }}>
-              {etichettaSpread(g)}
-              {g.map((pi) => pages[pi]?.titolo).filter(Boolean).length > 0 && (
-                <span className="vol-tab-nome">{[...new Set(g.map((pi) => pages[pi]?.titolo).filter(Boolean))].join(" · ")}</span>
-              )}
+          <div className="vol-tabs">
+            {spreads.map((g, i) => (
+              <button key={i} type="button" className={`vol-tab${i === spread ? " attiva" : ""}`} onClick={() => { setSpread(i); setSel(null); }}>
+                {etichettaSpread(g)}
+                {g.map((pi) => pages[pi]?.titolo).filter(Boolean).length > 0 && (
+                  <span className="vol-tab-nome">{[...new Set(g.map((pi) => pages[pi]?.titolo).filter(Boolean))].join(" · ")}</span>
+                )}
+              </button>
+            ))}
+          </div>
+          <div className="vol-actions">
+            <span className={`pill ${stato === "errore" ? "pill-red" : "pill-green"}`} style={{ opacity: stato ? 1 : 0.4 }}>
+              {stato === "salvo" ? "Salvataggio…" : stato === "salvato" ? "Salvato" : stato === "errore" ? "Errore" : "Salvataggio automatico"}
+            </span>
+            {clip && <span className="pill pill-amber">Cella copiata</span>}
+            <button className="btn btn-sm" title="Salva volantino" aria-label="Salva volantino" onClick={() => salva()}>
+              <Save size={14} style={{ verticalAlign: -2, marginRight: 5 }} />Salva
             </button>
-          ))}
+            <button className="btn btn-outline btn-sm" title="Esporta PDF" aria-label="Esporta PDF" onClick={() => window.print()}>
+              <FileDown size={14} style={{ verticalAlign: -2 }} />
+            </button>
+            <a className="btn btn-outline btn-sm" title="Excel per il grafico" aria-label="Excel per il grafico" href={excelHref}>
+              <Sheet size={14} style={{ verticalAlign: -2 }} />
+            </a>
+            <button className="btn btn-outline btn-sm" title="Aggiungi pagina" aria-label="Aggiungi pagina" onClick={() => upd((ps) => [...ps, pagina("")])}>
+              <Plus size={14} style={{ verticalAlign: -2 }} />
+            </button>
+          </div>
         </div>
 
         {avviso && <div className="alert alert-amber no-print">{avviso}</div>}
