@@ -148,7 +148,8 @@ export interface VolSection {
 
 export interface VolPage {
   id: string;
-  titolo?: string;
+  titolo?: string; // nome libero: il numero di pagina è calcolato dalla posizione
+  note?: string; // indicazioni per chi impagina, valide per tutta la pagina
   cols: number;
   rows: number;
   blocks: VolBlock[];
@@ -163,8 +164,13 @@ interface OldPage { id?: string; titolo?: string; rows?: (OldRow | unknown)[] }
 
 /** Converte i volantini salvati col vecchio modello righe/celle nella griglia a blocchi. */
 export function migraVolantinoPages(pages: unknown[]): VolPage[] {
+  // il numero di pagina ora è automatico: togliamo il " — pag. N" dai vecchi titoli
+  const pulisci = (t?: string) => (t ? t.replace(/\s*[—-]\s*pag\.?\s*\d+\s*$/i, "") : t);
   return (pages as OldPage[]).map((p, pi) => {
-    if (Array.isArray((p as unknown as VolPage).blocks)) return p as unknown as VolPage; // già nuovo formato
+    if (Array.isArray((p as unknown as VolPage).blocks)) {
+      const np = p as unknown as VolPage;
+      return { ...np, titolo: pulisci(np.titolo) }; // già nuovo formato
+    }
     const oldRows = (p.rows ?? []) as OldRow[];
     const cols = Math.max(1, ...oldRows.map((r) => r.cols ?? 3));
     const blocks: VolBlock[] = [];
@@ -184,7 +190,7 @@ export function migraVolantinoPages(pages: unknown[]): VolPage[] {
         c += Math.max(1, cs);
       });
     });
-    return { id: p.id ?? `vp_${pi}`, titolo: p.titolo, cols, rows: Math.max(1, oldRows.length), blocks, sezioni: [] };
+    return { id: p.id ?? `vp_${pi}`, titolo: pulisci(p.titolo), cols, rows: Math.max(1, oldRows.length), blocks, sezioni: [] };
   });
 }
 
