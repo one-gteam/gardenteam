@@ -6,11 +6,18 @@ import { saveVolantinoLayout, updateZooOfferQuick, uploadVolantinoImage } from "
 import type { VolPage, VolBlock, VolSection } from "@/lib/zoo";
 
 export interface ArtLite { ean: string; descrizione: string; marca: string }
+/**
+ * Voce della lista di sinistra: un PRODOTTO PADRE (che raccoglie le offerte dei
+ * suoi gusti/formati) oppure una singola offerta senza padre. `articoli` elenca
+ * i prodotti contenuti, apribile dalla lista per sapere cosa c'è dentro.
+ */
 export interface OffLite {
   id: string; descrizione: string; prezzo: string; prezzoListino?: string; foto: string;
   voti: number; nonTrattati: number; scheda?: string;
   marca: string; fornitore: string; caratts: string[]; label?: string;
-  articoli: ArtLite[]; // articoli (gusti/formati) racchiusi dall'offerta
+  padre?: string; // nome del prodotto padre, se la voce ne rappresenta uno
+  offerIds?: string[]; // offerte racchiuse dalla voce (assente = solo `id`)
+  articoli: ArtLite[]; // articoli (gusti/formati) racchiusi dalla voce
 }
 
 const uid = (p: string) => `${p}_${Math.random().toString(36).slice(2, 9)}`;
@@ -411,9 +418,12 @@ export default function VolantinoBuilder({
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={o.foto} alt="" style={{ width: 32, height: 32, objectFit: "contain" }} />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 11.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.descrizione}</div>
+                  <div style={{ fontSize: 11.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {o.padre ?? o.descrizione}
+                  </div>
                   <div style={{ fontSize: 10.5, color: "var(--muted)", display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
                     € {o.prezzo}
+                    {o.padre && <span className="pill pill-blue">padre · {o.articoli.length} art.</span>}
                     {o.voti > 0 && <span className="pill pill-green">{o.voti} voti</span>}
                     {o.nonTrattati > 0 && <span className="pill pill-red">{o.nonTrattati} n.t.</span>}
                     {o.label && <span className="pill pill-blue">{o.label}</span>}
@@ -423,8 +433,15 @@ export default function VolantinoBuilder({
               {o.articoli.length > 0 && (
                 <button type="button" className="mini-btn" style={{ marginTop: 4 }}
                   onClick={() => setDettaglio(dettaglio === o.id ? null : o.id)}>
-                  {dettaglio === o.id ? "Nascondi articoli" : `Vedi i ${o.articoli.length} articoli`}
+                  {dettaglio === o.id
+                    ? "Nascondi articoli"
+                    : o.padre ? `Vedi i ${o.articoli.length} articoli contenuti` : "Vedi l'articolo"}
                 </button>
+              )}
+              {dettaglio === o.id && o.padre && (
+                <div style={{ fontSize: 10.5, color: "var(--muted)", marginTop: 4 }}>
+                  Testo a volantino: <em>{o.descrizione}</em>
+                </div>
               )}
               {dettaglio === o.id && (
                 <ul style={{ margin: "4px 0 0", paddingLeft: 16, fontSize: 10.5, color: "var(--muted)" }}>

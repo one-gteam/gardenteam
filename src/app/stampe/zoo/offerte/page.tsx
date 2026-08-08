@@ -3,9 +3,26 @@ import { getCurrentUser } from "@/lib/auth";
 import StampeHeader from "@/components/stampe/StampeHeader";
 import { canAccessArea, isZooEditor, scopesForUser, resolveScope } from "@/lib/stampe";
 import { getDb } from "@/lib/db";
-import { getZooDb, activeCampaign, zooImageUrl, effectiveParentText } from "@/lib/zoo";
-import { importZooOffers, updateCampaignDates, associaNuoviConAI } from "@/lib/zoo-actions";
+import { listStorageFiles } from "@/lib/supabase";
+import {
+  getZooDb, zooImageUrl, effectiveParentText, campagnaInLavorazione, campagnaInCorso, campaignStato,
+  type ZooProduct,
+} from "@/lib/zoo";
+import {
+  importZooOffers, updateCampaignDates, associaNuoviConAI, uploadZooPhotos, associateZooPhoto,
+  createZooParent, associaConAI, rigeneraTestiAI, saveParentTexts, setParentImage,
+  toggleParentCaratteristica, scioglieParent, chiudiVolantino, riapriVolantino, nuovoVolantino,
+} from "@/lib/zoo-actions";
 
+/** Le azioni su foto e padri tornano qui (le stesse servono a "Database prodotti"). */
+const BACK = "/stampe/zoo/offerte";
+
+/**
+ * Import offerte: la pagina di partenza del volantino IN LAVORAZIONE. Qui dentro
+ * si fa tutto quello che serve a quel volantino — caricare l'Excel, caricare le
+ * foto, raggruppare gli articoli in prodotti padre (a mano o con l'AI) e scrivere
+ * i testi — senza dover passare dal database prodotti generale.
+ */
 export default async function ZooOffertePage({
   searchParams,
 }: {
@@ -23,9 +40,45 @@ export default async function ZooOffertePage({
   const scopeParam = `${scope.type}:${scope.id}`;
   const consortium = isZooEditor(user);
 
-  const campaign = db.campaigns.find((c) => c.id === sp.campagna) ?? activeCampaign(db);
+  const campaign = campagnaInLavorazione(db);
+  const inCorso = campagnaInCorso(db);
   const offers = campaign ? db.offers.filter((o) => o.campaignId === campaign.id) : [];
-  const orphans = db.products.filter((p) => !p.parentId).length;
+
+  // articoli di QUESTO volantino: è su questi che si lavora, non su tutto il database
+  // (senza ripetizioni: più offerte possono puntare allo stesso articolo)
+  const offerProducts = [
+    ...new Map(
+      offers
+        .map((o) => db.products.find((p) => p.id === o.productId))
+        .filter((p): p is ZooProduct => Boolean(p))
+        .map((p) => [p.id, p])
+    ).values(),
+  ];
+  const senzaPadre = offerProducts.filter((p) => !p.parentId);
+
+  // padri usati da questo volantino, con i loro articoli
+  const parentIds = [...new Set(offerProducts.map((p) => p.parentId).filter(Boolean) as string[])];
+  const parents = parentIds.map((id) => db.parents.find((p) => p.id === id)!).filter(Boolean);
+
+  const activeParent = db.parents.find((p) => p.id === sp.padre);
+  const parentChildren = activeParent ? db.products.filter((p) => p.parentId === activeParent.id) : [];
+
+  // foto già caricate ma non ancora abbinate ad alcun articolo
+  const usedPhotos = new Set(db.products.map((p) => (p.image ?? "").split("/").pop()));
+  const availablePhotos = (await listStorageFiles("zoo-foto")).filter(
+    (f) => /\.(jpg|jpeg|png|webp)$/i.test(f) && !usedPhotos.has(f)
+  );
+
+  const fmt = (d?: string) => (d ? new Date(`${d}T00:00:00`).toLocaleDateString("it-IT") : "—");
+  const q = (sp.q ?? "").toLowerCase();
+  const visibili = offers.filter((o) => {
+    if (sp.senzapadre === "1") {
+      const prod = db.products.find((p) => p.id === o.productId);
+      if (prod?.parentId) return false;
+    }
+    if (q && !`${o.descrizione} ${o.ean}`.toLowerCase().includes(q)) return false;
+    return true;
+  });
 
   return (
     <div>
@@ -33,9 +86,10 @@ export default async function ZooOffertePage({
       <div className="container">
         <div style={{ display: "flex", gap: 14, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 12 }}>
           <div style={{ flex: 1 }}>
-            <h1 style={{ margin: 0 }}>Importazione offerte mensili — ZOO</h1>
+            <h1 style={{ margin: 0 }}>Import offerte — volantino in lavorazione</h1>
             <p className="subtitle" style={{ margin: "4px 0 0" }}>
-              L&apos;Excel delle promo viene confrontato con il database per EAN: dati e foto già presenti vengono riutilizzati, i prodotti nuovi entrano nel database.
+              L&apos;Excel delle promo viene confrontato con il database per EAN: dati e foto già presenti vengono
+              riutilizzati, i prodotti nuovi entrano nel database.
             </p>
           </div>
           <form method="get" style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -62,122 +116,372 @@ export default async function ZooOffertePage({
             {sp.aierr && <span style={{ color: "#a33" }}> Nota AI: {sp.aierr}</span>}
           </div>
         )}
-
-        {consortium && (
-          <div className="card" style={{ marginBottom: 14, padding: 14 }}>
-            <strong>Nuovo import offerte</strong>
-            <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "4px 0 8px" }}>
-              Colonne: EAN, DESCRIZIONE PROMO, PREZZO PROMO, PREZZO LISTINO, CONDIZIONI (+ MARCA/FORNITORE per i prodotti nuovi).{" "}
-              <a href={`/stampe/zoo/excel?offerte=1&scope=${scopeParam}`}>Scarica il modello</a>
-            </p>
-            <form action={importZooOffers.bind(null, scopeParam)} style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 2fr auto", gap: 10, alignItems: "end" }}>
-              <label className="field" style={{ marginBottom: 0 }}>Nome campagna<input type="text" name="nome" placeholder="es. Offerte Marzo" /></label>
-              <label className="field" style={{ marginBottom: 0 }}>Valida dal<input type="date" name="dal" required /></label>
-              <label className="field" style={{ marginBottom: 0 }}>al<input type="date" name="al" required /></label>
-              <label className="field" style={{ marginBottom: 0 }}>File Excel<input type="file" name="file" accept=".xlsx,.xls,.csv" required /></label>
-              <button className="btn" type="submit">Importa offerte</button>
-            </form>
+        {sp.foto !== undefined && (
+          <div className="alert alert-green">✓ {sp.foto} foto caricate, {sp.abbinate} abbinate in automatico per EAN/codice.</div>
+        )}
+        {sp.chiuso && (
+          <div className="alert alert-green">
+            ✓ Volantino chiuso. Le offerte restano stampabili in Stampa cartelli finché sono in corso; quando sarai
+            pronto apri il volantino successivo qui sotto.
+          </div>
+        )}
+        {sp.nuovo && <div className="alert alert-green">✓ Nuovo volantino aperto: le pagine ripartono pulite.</div>}
+        {sp.riaperto && <div className="alert alert-green">✓ Volantino riaperto: puoi modificarlo di nuovo.</div>}
+        {sp.errore === "giaaperto" && (
+          <div className="alert alert-amber">
+            C&apos;è già un volantino in lavorazione: chiudilo prima di aprirne un altro.
           </div>
         )}
 
-        {campaign ? (
-          <>
-            <div className="card" style={{ marginBottom: 14, padding: 14 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
-                <div>
-                  <h2 style={{ margin: 0 }}>
-                    {campaign.nome} {campaign.attiva && <span className="pill pill-green">attiva</span>}
-                  </h2>
-                  <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "4px 0 0" }}>
-                    Validità: {campaign.dal || "—"} → {campaign.al || "—"} · {offers.length} offerte
-                  </p>
-                </div>
-                {db.campaigns.length > 1 && (
-                  <form method="get" style={{ display: "flex", gap: 8 }}>
-                    <input type="hidden" name="scope" value={scopeParam} />
-                    <select name="campagna" defaultValue={campaign.id}>
-                      {db.campaigns.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
-                    </select>
-                    <button className="btn btn-sm" type="submit">Vedi</button>
+        {/* ---------- stato del volantino: chiudi / apri il successivo ---------- */}
+        {consortium && (
+          <div className="card" style={{ marginBottom: 14, padding: 14 }}>
+            <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+              {campaign ? (
+                <>
+                  <span className="pill pill-blue">in lavorazione</span>
+                  <strong>{campaign.nome}</strong>
+                  <span style={{ fontSize: 12.5, color: "var(--muted)" }}>
+                    {fmt(campaign.dal)} → {fmt(campaign.al)} · {offers.length} offerte
+                  </span>
+                  <form action={chiudiVolantino.bind(null, campaign.id, scopeParam)} style={{ marginLeft: "auto" }}>
+                    <button className="btn btn-sm" type="submit" title="Il lavoro è finito: le offerte partono e si stampano i cartelli">
+                      Chiudi volantino
+                    </button>
                   </form>
-                )}
-              </div>
-              {consortium && (
-                <form action={updateCampaignDates.bind(null, campaign.id, scopeParam)} style={{ display: "flex", gap: 8, alignItems: "end", marginTop: 10 }}>
-                  <label className="field" style={{ marginBottom: 0 }}>Nome<input type="text" name="nome" defaultValue={campaign.nome} /></label>
-                  <label className="field" style={{ marginBottom: 0 }}>Dal<input type="date" name="dal" defaultValue={campaign.dal} /></label>
-                  <label className="field" style={{ marginBottom: 0 }}>Al<input type="date" name="al" defaultValue={campaign.al} /></label>
-                  <button className="btn btn-outline btn-sm" type="submit">Aggiorna date</button>
-                </form>
+                </>
+              ) : (
+                <>
+                  <span className="pill pill-gray">nessun volantino in lavorazione</span>
+                  {inCorso && (
+                    <span style={{ fontSize: 12.5, color: "var(--muted)" }}>
+                      In corso: <strong>{inCorso.nome}</strong> ({fmt(inCorso.dal)} → {fmt(inCorso.al)})
+                    </span>
+                  )}
+                </>
               )}
             </div>
 
-            {consortium && orphans > 0 && (
-              <div className="alert" style={{ background: "#f3ecfb", border: "1px solid #d9c6f2", marginBottom: 14 }}>
-                Ci sono <strong>{orphans} prodotti senza padre</strong> (inclusi quelli appena importati).{" "}
-                <form action={associaNuoviConAI.bind(null, scopeParam)} style={{ display: "inline" }}>
-                  <button className="btn btn-sm" type="submit" style={{ background: "#6d3fa7" }}>Associa con AI e genera i testi</button>
-                </form>{" "}
-                <span className="hint">oppure raggruppali a mano nella pagina Database prodotti.</span>
+            {/* apertura del volantino successivo: archivia quello chiuso e riparte pulito */}
+            {!campaign && (
+              <details style={{ marginTop: 12 }} open>
+                <summary style={{ cursor: "pointer", fontWeight: 700 }}>Nuovo volantino</summary>
+                <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "6px 0 8px" }}>
+                  {inCorso
+                    ? <>Il volantino <strong>{inCorso.nome}</strong> verrà archiviato: le sue offerte escono da queste pagine (restano recuperabili da Archivio volantini) e si riparte da pagine pulite.</>
+                    : "Apre il primo volantino: poi carica l'Excel delle offerte qui sotto."}
+                </p>
+                <form action={nuovoVolantino.bind(null, scopeParam)} style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr auto", gap: 10, alignItems: "end" }}>
+                  <label className="field" style={{ marginBottom: 0 }}>
+                    Nome<input type="text" name="nome" placeholder="es. Offerte Ottobre" />
+                  </label>
+                  <label className="field" style={{ marginBottom: 0 }}>Valido dal<input type="date" name="dal" /></label>
+                  <label className="field" style={{ marginBottom: 0 }}>al<input type="date" name="al" /></label>
+                  <button className="btn" type="submit">Apri nuovo volantino</button>
+                  {inCorso && (
+                    <label style={{ fontSize: 12.5, gridColumn: "1 / -1" }}>
+                      <input type="checkbox" name="ereditaSchema" value="1" defaultChecked />{" "}
+                      Riparti dall&apos;impaginazione del volantino precedente (senza le sue offerte)
+                    </label>
+                  )}
+                </form>
+              </details>
+            )}
+
+            {/* rimettere in lavorazione l'ultimo chiuso, per correzioni */}
+            {!campaign && inCorso && campaignStato(inCorso) === "chiusa" && (
+              <form action={riapriVolantino.bind(null, inCorso.id, scopeParam)} style={{ marginTop: 8 }}>
+                <button className="btn btn-outline btn-sm" type="submit">
+                  Riapri &quot;{inCorso.nome}&quot; per correggerlo
+                </button>
+              </form>
+            )}
+          </div>
+        )}
+
+        {/* ---------- import Excel + caricamento foto ---------- */}
+        {consortium && campaign && (
+          <div className="card" style={{ marginBottom: 14, padding: 14 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+              <div>
+                <strong>Carica l&apos;Excel delle offerte</strong>
+                <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "4px 0 8px" }}>
+                  Colonne: EAN, DESCRIZIONE PROMO, PREZZO PROMO, PREZZO LISTINO, CONDIZIONI (+ MARCA/FORNITORE per i
+                  prodotti nuovi). Puoi caricare più file sullo stesso volantino.{" "}
+                  <a href={`/stampe/zoo/excel?offerte=1&scope=${scopeParam}`}>Scarica il modello</a>
+                </p>
+                <form action={importZooOffers.bind(null, scopeParam)} style={{ display: "grid", gap: 8 }}>
+                  <input type="file" name="file" accept=".xlsx,.xls,.csv" required />
+                  <label style={{ fontSize: 12.5 }}>
+                    <input type="checkbox" name="sostituisci" value="1" /> sostituisci le offerte già caricate
+                  </label>
+                  <button className="btn btn-sm" type="submit">Importa offerte</button>
+                </form>
+              </div>
+              <div>
+                <strong>Caricamento foto</strong>
+                <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "4px 0 8px" }}>
+                  Puoi selezionare più foto insieme: se il nome del file contiene l&apos;EAN o il codice fornitore,
+                  l&apos;abbinamento è automatico. Ogni articolo ha la sua foto; nel padre si sceglie quella di riferimento.
+                </p>
+                <form action={uploadZooPhotos.bind(null, BACK, scopeParam)} style={{ display: "grid", gap: 8 }}>
+                  <input type="file" name="foto" accept="image/*" multiple required />
+                  <button className="btn btn-sm" type="submit">Carica foto</button>
+                </form>
+                {availablePhotos.length > 0 && (
+                  <p className="hint" style={{ marginTop: 6 }}>
+                    {availablePhotos.length} foto caricate non ancora abbinate: le abbini dalla tabella qui sotto.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {campaign && consortium && (
+          <form action={updateCampaignDates.bind(null, campaign.id, scopeParam)} style={{ display: "flex", gap: 8, alignItems: "end", marginBottom: 14 }}>
+            <label className="field" style={{ marginBottom: 0 }}>Nome<input type="text" name="nome" defaultValue={campaign.nome} /></label>
+            <label className="field" style={{ marginBottom: 0 }}>Dal<input type="date" name="dal" defaultValue={campaign.dal} /></label>
+            <label className="field" style={{ marginBottom: 0 }}>Al<input type="date" name="al" defaultValue={campaign.al} /></label>
+            <button className="btn btn-outline btn-sm" type="submit">Aggiorna date</button>
+          </form>
+        )}
+
+        {!campaign ? (
+          <div className="card" style={{ padding: 24, textAlign: "center", color: "var(--muted)" }}>
+            Nessun volantino in lavorazione: aprine uno qui sopra per ricominciare da pagine pulite.
+          </div>
+        ) : (
+          <>
+            {/* ---------- editor del prodotto padre selezionato ---------- */}
+            {activeParent && (
+              <div className="card" style={{ marginBottom: 14, padding: 14, border: "2px solid #274b7a" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <h2 style={{ margin: 0 }}>
+                    Prodotto padre: {effectiveParentText(db, scope, activeParent, "nome", academyDb).value}
+                    {activeParent.aiGenerated && <span className="pill pill-blue" style={{ marginLeft: 8 }}>testi AI</span>}
+                  </h2>
+                  <a className="btn btn-outline btn-sm" href={`${BACK}?scope=${scopeParam}`}>✕ Chiudi</a>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: 16 }}>
+                  <div>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={zooImageUrl(undefined, activeParent) === "/immagini/mancante.jpg" && parentChildren[0]
+                        ? zooImageUrl(parentChildren[0])
+                        : zooImageUrl(undefined, activeParent)}
+                      alt=""
+                      style={{ width: "100%", borderRadius: 8, background: "#fff", border: "1px solid #e4e4e4" }}
+                    />
+                    {consortium && (
+                      <>
+                        <form action={setParentImage.bind(null, BACK, activeParent.id, scopeParam)} style={{ marginTop: 8, display: "grid", gap: 6 }}>
+                          <select name="fromChild" style={{ fontSize: 12 }}>
+                            <option value="">Immagine di riferimento: scegli da un articolo…</option>
+                            {parentChildren.filter((c) => c.image).map((c) => (
+                              <option key={c.id} value={c.id}>{c.descrizione.slice(0, 45)}</option>
+                            ))}
+                          </select>
+                          <button className="btn btn-outline btn-sm" type="submit">Usa questa</button>
+                        </form>
+                        <form action={setParentImage.bind(null, BACK, activeParent.id, scopeParam)} style={{ marginTop: 6, display: "grid", gap: 6 }}>
+                          <input type="file" name="file" accept="image/*" style={{ fontSize: 12 }} />
+                          <button className="btn btn-outline btn-sm" type="submit">Carica nuova immagine</button>
+                        </form>
+                      </>
+                    )}
+                    <div style={{ marginTop: 10 }}>
+                      <strong style={{ fontSize: 12.5 }}>Caratteristiche</strong>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 4 }}>
+                        {db.settings.caratteristiche.map((c) => {
+                          const on = activeParent.caratteristiche.includes(c);
+                          return consortium ? (
+                            <form key={c} action={toggleParentCaratteristica.bind(null, BACK, activeParent.id, c, scopeParam)}>
+                              <button type="submit" className={`pill ${on ? "pill-green" : "pill-gray"}`} style={{ cursor: "pointer", border: "none" }}>
+                                {on ? "✓ " : ""}{c}
+                              </button>
+                            </form>
+                          ) : on ? <span key={c} className="pill pill-green">{c}</span> : null;
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <form action={saveParentTexts.bind(null, BACK, activeParent.id, scopeParam)} style={{ display: "grid", gap: 10 }}>
+                      <label className="field" style={{ marginBottom: 0 }}>
+                        Nome prodotto padre
+                        <input type="text" name="nome" defaultValue={effectiveParentText(db, scope, activeParent, "nome", academyDb).value} />
+                      </label>
+                      <label className="field" style={{ marginBottom: 0 }}>
+                        Descrizione per il VOLANTINO{" "}
+                        {effectiveParentText(db, scope, activeParent, "descVolantino", academyDb).custom && <span className="pill pill-orange">personalizzata</span>}
+                        <textarea name="descVolantino" rows={2} defaultValue={effectiveParentText(db, scope, activeParent, "descVolantino", academyDb).value} />
+                      </label>
+                      <label className="field" style={{ marginBottom: 0 }}>
+                        Descrizione per il CARTELLO{" "}
+                        {effectiveParentText(db, scope, activeParent, "descCartello", academyDb).custom && <span className="pill pill-orange">personalizzata</span>}
+                        <textarea name="descCartello" rows={3} defaultValue={effectiveParentText(db, scope, activeParent, "descCartello", academyDb).value} />
+                      </label>
+                      <button className="btn btn-sm" type="submit">
+                        Salva {scope.type === "system" ? "(versione Consorzio)" : `(personalizzazione ${scope.label})`}
+                      </button>
+                    </form>
+                    {consortium && (
+                      <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                        <form action={rigeneraTestiAI.bind(null, BACK, activeParent.id, scopeParam)}>
+                          <button className="btn btn-outline btn-sm" type="submit">Rigenera testi con AI</button>
+                        </form>
+                        <form action={scioglieParent.bind(null, BACK, activeParent.id, scopeParam)}>
+                          <button className="btn btn-outline btn-sm" type="submit">Sciogli raggruppamento</button>
+                        </form>
+                      </div>
+                    )}
+                    <div style={{ marginTop: 12 }}>
+                      <strong style={{ fontSize: 12.5 }}>Articoli del padre ({parentChildren.length})</strong>
+                      <ul style={{ margin: "4px 0 0", paddingLeft: 18, fontSize: 12.5 }}>
+                        {parentChildren.map((c) => <li key={c.id}>{c.descrizione} — EAN {c.ean}</li>)}
+                      </ul>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 
-            <div className="card table-wrap">
-              <table className="data">
-                <thead>
-                  <tr>
-                    <th style={{ width: 56 }}>Foto</th>
-                    <th>Offerta</th>
-                    <th>EAN</th>
-                    <th>Prezzo promo</th>
-                    <th>Listino</th>
-                    <th>Prodotto nel DB</th>
-                    <th>Padre</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {offers.length === 0 && <tr><td colSpan={7} className="empty">Nessuna offerta in questa campagna.</td></tr>}
-                  {offers.map((o) => {
-                    const product = db.products.find((p) => p.id === o.productId);
-                    const parent = product?.parentId ? db.parents.find((x) => x.id === product.parentId) : undefined;
-                    return (
-                      <tr key={o.id}>
-                        <td>
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={zooImageUrl(product, parent)} alt="" style={{ width: 44, height: 44, objectFit: "contain", background: "#fff", borderRadius: 6, border: "1px solid #eee" }} />
-                        </td>
-                        <td>
-                          <strong style={{ fontSize: 13 }}>{o.descrizione}</strong>
-                          {o.condizioni && <div style={{ fontSize: 11.5, color: "var(--muted)" }}>{o.condizioni}</div>}
-                        </td>
-                        <td style={{ fontSize: 12 }}>{o.ean}</td>
-                        <td><strong>€ {o.prezzoPromo}</strong></td>
-                        <td style={{ fontSize: 12.5 }}>{o.prezzoListino ? `€ ${o.prezzoListino}` : "—"}</td>
-                        <td>
-                          {o.nuovo
-                            ? <span className="pill pill-orange">nuovo → aggiunto al DB</span>
-                            : <span className="pill pill-green">già presente</span>}
-                        </td>
-                        <td>
-                          {parent ? (
-                            <a className="pill pill-blue" href={`/stampe/zoo/dati?scope=${scopeParam}&padre=${parent.id}`} style={{ textDecoration: "none" }}>
-                              {effectiveParentText(db, scope, parent, "nome", academyDb).value.slice(0, 24)}
-                            </a>
-                          ) : (
-                            <span className="pill pill-gray">da raggruppare</span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+            {/* ---------- padri di questo volantino ---------- */}
+            {parents.length > 0 && !activeParent && (
+              <div className="card" style={{ marginBottom: 14, padding: 14 }}>
+                <strong>Prodotti padre di questo volantino ({parents.length})</strong>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+                  {parents.map((p) => (
+                    <a key={p.id} className="pill pill-blue" href={`${BACK}?scope=${scopeParam}&padre=${p.id}`} style={{ textDecoration: "none" }}>
+                      {effectiveParentText(db, scope, p, "nome", academyDb).value}{" "}
+                      ({db.products.filter((x) => x.parentId === p.id).length})
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ---------- raggruppamento: a mano o con l'AI ---------- */}
+            {consortium && senzaPadre.length > 0 && (
+              <div className="alert" style={{ background: "#f3ecfb", border: "1px solid #d9c6f2", marginBottom: 14 }}>
+                <strong>{senzaPadre.length} articoli di questo volantino non hanno un prodotto padre.</strong>{" "}
+                Raggruppali per avere una sola voce a volantino con un solo testo (es. le scatolette nei vari gusti).{" "}
+                <form action={associaNuoviConAI.bind(null, scopeParam)} style={{ display: "inline" }}>
+                  <button className="btn btn-sm" type="submit" style={{ background: "#6d3fa7" }}>
+                    Associa tutti con l&apos;AI e genera i testi
+                  </button>
+                </form>{" "}
+                <span className="hint">
+                  oppure spunta gli articoli nella tabella e usa i pulsanti qui sotto. Non tutti gli articoli hanno
+                  bisogno di un padre: quelli unici si lasciano così come sono.
+                </span>
+              </div>
+            )}
+
+            {/* filtri */}
+            <div className="card" style={{ marginBottom: 14, padding: 14 }}>
+              <form method="get" style={{ display: "grid", gridTemplateColumns: "2fr auto auto", gap: 10, alignItems: "end" }}>
+                <input type="hidden" name="scope" value={scopeParam} />
+                <label className="field" style={{ marginBottom: 0 }}>
+                  Cerca<input type="text" name="q" defaultValue={sp.q ?? ""} placeholder="descrizione o EAN" />
+                </label>
+                <label style={{ fontSize: 12.5 }}>
+                  <input type="checkbox" name="senzapadre" value="1" defaultChecked={sp.senzapadre === "1"} /> solo senza padre
+                </label>
+                <button className="btn btn-sm" type="submit">Filtra</button>
+              </form>
             </div>
+
+            {/* ---------- tabella offerte del volantino ---------- */}
+            <form>
+              <input type="hidden" name="scope" value={scopeParam} />
+              {consortium && (
+                <div style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <button className="btn btn-sm" formAction={createZooParent.bind(null, BACK, scopeParam)} type="submit">
+                    Crea padre dagli articoli selezionati
+                  </button>
+                  <button className="btn btn-sm" formAction={associaConAI.bind(null, BACK, scopeParam)} type="submit" style={{ background: "#6d3fa7" }}>
+                    Associa i selezionati con AI (raggruppa + genera testi)
+                  </button>
+                  <span className="hint">
+                    {db.settings.apiKey
+                      ? "chiave API Claude configurata"
+                      : "nessuna chiave API: verrà usato il raggruppamento automatico con testi bozza"}
+                  </span>
+                </div>
+              )}
+              <div className="card table-wrap">
+                <table className="data">
+                  <thead>
+                    <tr>
+                      {consortium && <th style={{ width: 30 }}></th>}
+                      <th style={{ width: 56 }}>Foto</th>
+                      <th>Offerta</th>
+                      <th>EAN</th>
+                      <th>Prezzo promo</th>
+                      <th>Listino</th>
+                      <th>Padre</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibili.length === 0 && (
+                      <tr><td colSpan={7} className="empty">Nessuna offerta: carica l&apos;Excel delle promo qui sopra.</td></tr>
+                    )}
+                    {visibili.map((o) => {
+                      const product = db.products.find((p) => p.id === o.productId);
+                      const parent = product?.parentId ? db.parents.find((x) => x.id === product.parentId) : undefined;
+                      return (
+                        <tr key={o.id}>
+                          {consortium && (
+                            <td>{product && <input type="checkbox" name="sel" value={product.id} />}</td>
+                          )}
+                          <td>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={zooImageUrl(product, parent)} alt="" style={{ width: 44, height: 44, objectFit: "contain", background: "#fff", borderRadius: 6, border: "1px solid #eee" }} />
+                          </td>
+                          <td>
+                            <strong style={{ fontSize: 13 }}>{o.descrizione}</strong>
+                            {o.condizioni && <div style={{ fontSize: 11.5, color: "var(--muted)" }}>{o.condizioni}</div>}
+                            {o.nuovo && <span className="pill pill-orange" style={{ marginTop: 2 }}>nuovo nel database</span>}
+                            {product && !product.image && availablePhotos.length > 0 && consortium && (
+                              <details style={{ fontSize: 11.5, marginTop: 2 }}>
+                                <summary style={{ cursor: "pointer", color: "#274b7a" }}>abbina una foto…</summary>
+                                <div style={{ display: "flex", gap: 4, marginTop: 4 }}>
+                                  <select name="fileName" form={`ph_${product.id}`} style={{ fontSize: 11.5 }} defaultValue="">
+                                    <option value="" disabled>scegli file</option>
+                                    {availablePhotos.map((f) => <option key={f} value={f}>{f}</option>)}
+                                  </select>
+                                  <button className="btn btn-outline btn-sm" type="submit" form={`ph_${product.id}`}>OK</button>
+                                </div>
+                              </details>
+                            )}
+                          </td>
+                          <td style={{ fontSize: 12 }}>{o.ean}</td>
+                          <td><strong>€ {o.prezzoPromo}</strong></td>
+                          <td style={{ fontSize: 12.5 }}>{o.prezzoListino ? `€ ${o.prezzoListino}` : "—"}</td>
+                          <td>
+                            {parent ? (
+                              <a className="pill pill-blue" href={`${BACK}?scope=${scopeParam}&padre=${parent.id}`} style={{ textDecoration: "none" }}>
+                                {effectiveParentText(db, scope, parent, "nome", academyDb).value.slice(0, 24)}
+                              </a>
+                            ) : (
+                              <span className="pill pill-gray">senza padre</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </form>
+
+            {/* form esterni (via attributo form=) per l'abbinamento manuale delle foto */}
+            {consortium && offerProducts.filter((p) => !p.image).map((p) => (
+              <form key={p.id} id={`ph_${p.id}`} action={associateZooPhoto.bind(null, BACK, scopeParam, p.id)} />
+            ))}
           </>
-        ) : (
-          <div className="card" style={{ padding: 24, textAlign: "center", color: "var(--muted)" }}>
-            Nessuna campagna importata: carica il primo Excel delle offerte mensili qui sopra.
-          </div>
         )}
       </div>
     </div>

@@ -6,7 +6,8 @@ import Cartello from "@/components/stampe/Cartello";
 import StampaPicker from "@/components/stampe/StampaPicker";
 import { canAccessArea, scopesForUser, resolveScope } from "@/lib/stampe";
 import {
-  getZooDb, activeCampaign, effectiveZooLayout, zooCartelloValues, pvPriceFor, isZooHidden,
+  getZooDb, effectiveZooLayout, zooCartelloValues, pvPriceFor, isZooHidden,
+  campagneStampabili, campagnaInCorso, campagnaInLavorazione, campaignStato,
   ZOO_FIELDS, ZOO_FORMATS,
 } from "@/lib/zoo";
 
@@ -27,8 +28,20 @@ export default async function ZooStampaPage({
   const scope = resolveScope(user, sp.scope, academyDb);
   const scopeParam = `${scope.type}:${scope.id}`;
 
-  const campaign = db.campaigns.find((c) => c.id === sp.campagna) ?? activeCampaign(db);
+  /*
+   * Si stampano i cartelli di due periodi promozionali: quello IN CORSO a scaffale
+   * e quello IN PREPARAZIONE (i cartelli si stampano prima che le offerte partano).
+   * Di default si apre quello in corso, che è il caso di tutti i giorni.
+   */
+  const stampabili = campagneStampabili(db);
+  const campaign =
+    stampabili.find((c) => c.id === sp.campagna) ?? campagnaInCorso(db) ?? campagnaInLavorazione(db);
   const allOffers = campaign ? db.offers.filter((o) => o.campaignId === campaign.id) : [];
+  const etichettaPeriodo = (c: (typeof stampabili)[number]) => {
+    const p = campaignStato(c) === "lavorazione" ? "in preparazione" : "in corso";
+    const d = (x: string) => (x ? new Date(`${x}T00:00:00`).toLocaleDateString("it-IT") : "—");
+    return `${c.nome} (${p}: ${d(c.dal)} → ${d(c.al)})`;
+  };
   const q = (sp.q ?? "").toLowerCase();
   const visible = allOffers.filter((o) => {
     const product = db.products.find((p) => p.id === o.productId);
@@ -104,10 +117,25 @@ export default async function ZooStampaPage({
           <div style={{ flex: 1 }}>
             <h1 style={{ margin: 0 }}>Stampa cartelli</h1>
             <p className="subtitle" style={{ margin: "4px 0 0" }}>
-              {campaign ? `${campaign.nome} · versione dati e layout di: ` : "Nessuna campagna attiva · ambito: "}
+              {campaign ? `${campaign.nome} · versione dati e layout di: ` : "Nessun volantino da stampare · ambito: "}
               <strong>{scope.label}</strong>
             </p>
           </div>
+          {/* periodo promozionale: quello in corso a scaffale o quello in preparazione */}
+          {stampabili.length > 1 && (
+            <form method="get" style={{ display: "flex", gap: 8, alignItems: "end" }}>
+              <input type="hidden" name="scope" value={scopeParam} />
+              <label className="field" style={{ marginBottom: 0 }}>
+                Periodo promozionale
+                <select name="campagna" defaultValue={campaign?.id ?? ""}>
+                  {stampabili.map((c) => (
+                    <option key={c.id} value={c.id}>{etichettaPeriodo(c)}</option>
+                  ))}
+                </select>
+              </label>
+              <button className="btn btn-sm" type="submit">Cambia</button>
+            </form>
+          )}
           <form method="get" style={{ display: "flex", gap: 8, alignItems: "end" }}>
             {Object.entries(sp).map(([k, v]) => (k !== "scope" && v ? <input key={k} type="hidden" name={k} value={v} /> : null))}
             <label className="field" style={{ marginBottom: 0 }}>
@@ -124,6 +152,7 @@ export default async function ZooStampaPage({
           <form method="get" style={{ display: "grid", gridTemplateColumns: "2fr 2fr 2fr auto", gap: 10, alignItems: "end" }}>
             <input type="hidden" name="scope" value={scopeParam} />
             <input type="hidden" name="sel" value={sp.sel ?? ""} />
+            {campaign && <input type="hidden" name="campagna" value={campaign.id} />}
             <label className="field" style={{ marginBottom: 0 }}>Cerca<input type="text" name="q" defaultValue={sp.q ?? ""} placeholder="descrizione, EAN, marca" /></label>
             <label className="field" style={{ marginBottom: 0 }}>
               Scheda volantino
@@ -157,7 +186,7 @@ export default async function ZooStampaPage({
             })}
             formats={ZOO_FORMATS.map((f) => ({ id: f.id, name: f.name }))}
             scopeParam={scopeParam}
-            filters={{ q: sp.q ?? "", scheda: sp.scheda ?? "", marca: sp.marca ?? "" }}
+            filters={{ q: sp.q ?? "", scheda: sp.scheda ?? "", marca: sp.marca ?? "", campagna: campaign?.id ?? "" }}
             initialSelected={selectedIds}
             initialFormats={Object.fromEntries(
               selectedIds.map((id) => [id, sp[`formato_${id}`] ?? globalFormatId]).filter(([, v]) => v)

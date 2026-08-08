@@ -3,7 +3,7 @@ import { getCurrentUser } from "@/lib/auth";
 import StampeHeader from "@/components/stampe/StampeHeader";
 import { canAccessArea, isZooEditor, scopesForUser, resolveScope } from "@/lib/stampe";
 import { getDb } from "@/lib/db";
-import { getZooDb, activeCampaign, zooImageUrl, effectiveParentText } from "@/lib/zoo";
+import { getZooDb, campagnaInLavorazione, zooImageUrl, effectiveParentText } from "@/lib/zoo";
 import {
   voteZooOffer, voteZooOffersBulk, toggleOfferSelected, updateOfferVolantino, renameScheda, addScheda,
   resolveZooSuggestion, sendZooSuggestion,
@@ -29,7 +29,8 @@ export default async function ZooVolantinoPage({
   const scopeParam = `${scope.type}:${scope.id}`;
   const consortium = isZooEditor(user);
 
-  const campaign = db.campaigns.find((c) => c.id === sp.campagna) ?? activeCampaign(db);
+  // solo il volantino IN LAVORAZIONE: su quelli chiusi o archiviati non si sceglie più
+  const campaign = campagnaInLavorazione(db);
   const allOffers = campaign ? db.offers.filter((o) => o.campaignId === campaign.id) : [];
   const schedaFilter = sp.scheda ?? "";
   const baseOffers = schedaFilter
@@ -69,7 +70,9 @@ export default async function ZooVolantinoPage({
           <div style={{ flex: 1 }}>
             <h1 style={{ margin: 0 }}>Scelta Offerte</h1>
             <p className="subtitle" style={{ margin: "4px 0 0" }}>
-              {campaign ? `${campaign.nome} (${campaign.dal || "—"} → ${campaign.al || "—"}) · ${selCount} offerte scelte per il volantino` : "Nessuna campagna attiva"}
+              {campaign
+                ? `${campaign.nome} (${campaign.dal || "—"} → ${campaign.al || "—"}) · ${selCount} offerte scelte per il volantino`
+                : "Nessun volantino in lavorazione: aprine uno da Import offerte"}
               {consortium
                 ? " · Tu vedi i voti di tutti i PV e fai la selezione finale."
                 : " · Segna le offerte che ti piacciono: il Consorzio vede i voti di tutti i responsabili."}

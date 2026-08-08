@@ -12,6 +12,9 @@ import {
   rigeneraTestiAI, saveParentTexts, setParentImage, toggleParentCaratteristica, scioglieParent, toggleZooHidden,
 } from "@/lib/zoo-actions";
 
+/** Pagina a cui tornano le azioni su foto e prodotti padre (le stesse servono a Import offerte). */
+const BACK = "/stampe/zoo/dati";
+
 export default async function ZooDatiPage({
   searchParams,
 }: {
@@ -107,7 +110,7 @@ export default async function ZooDatiPage({
                 <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "4px 0 8px" }}>
                   Puoi selezionare più foto insieme: se il nome del file contiene l&apos;EAN o il codice fornitore, l&apos;abbinamento è automatico.
                 </p>
-                <form action={uploadZooPhotos.bind(null, scopeParam)} style={{ display: "flex", gap: 8 }}>
+                <form action={uploadZooPhotos.bind(null, BACK, scopeParam)} style={{ display: "flex", gap: 8 }}>
                   <input type="file" name="foto" accept="image/*" multiple required />
                   <button className="btn btn-sm" type="submit">Carica foto</button>
                 </form>
@@ -132,7 +135,7 @@ export default async function ZooDatiPage({
                 <img src={zooImageUrl(undefined, activeParent) === "/immagini/mancante.jpg" && parentChildren[0] ? zooImageUrl(parentChildren[0]) : zooImageUrl(undefined, activeParent)} alt="" style={{ width: "100%", borderRadius: 8, background: "#fff", border: "1px solid #e4e4e4" }} />
                 {consortium && (
                   <>
-                    <form action={setParentImage.bind(null, activeParent.id, scopeParam)} style={{ marginTop: 8, display: "grid", gap: 6 }}>
+                    <form action={setParentImage.bind(null, BACK, activeParent.id, scopeParam)} style={{ marginTop: 8, display: "grid", gap: 6 }}>
                       <select name="fromChild" style={{ fontSize: 12 }}>
                         <option value="">Immagine di riferimento: scegli da un articolo…</option>
                         {parentChildren.filter((c) => c.image).map((c) => (
@@ -141,7 +144,7 @@ export default async function ZooDatiPage({
                       </select>
                       <button className="btn btn-outline btn-sm" type="submit">Usa questa</button>
                     </form>
-                    <form action={setParentImage.bind(null, activeParent.id, scopeParam)} style={{ marginTop: 6, display: "grid", gap: 6 }}>
+                    <form action={setParentImage.bind(null, BACK, activeParent.id, scopeParam)} style={{ marginTop: 6, display: "grid", gap: 6 }}>
                       <input type="file" name="file" accept="image/*" style={{ fontSize: 12 }} />
                       <button className="btn btn-outline btn-sm" type="submit">Carica nuova immagine</button>
                     </form>
@@ -153,7 +156,7 @@ export default async function ZooDatiPage({
                     {db.settings.caratteristiche.map((c) => {
                       const on = activeParent.caratteristiche.includes(c);
                       return consortium ? (
-                        <form key={c} action={toggleParentCaratteristica.bind(null, activeParent.id, c, scopeParam)}>
+                        <form key={c} action={toggleParentCaratteristica.bind(null, BACK, activeParent.id, c, scopeParam)}>
                           <button type="submit" className={`pill ${on ? "pill-green" : "pill-gray"}`} style={{ cursor: "pointer", border: "none" }}>
                             {on ? "✓ " : ""}{c}
                           </button>
@@ -164,7 +167,7 @@ export default async function ZooDatiPage({
                 </div>
               </div>
               <div>
-                <form action={saveParentTexts.bind(null, activeParent.id, scopeParam)} style={{ display: "grid", gap: 10 }}>
+                <form action={saveParentTexts.bind(null, BACK, activeParent.id, scopeParam)} style={{ display: "grid", gap: 10 }}>
                   <label className="field" style={{ marginBottom: 0 }}>
                     Nome prodotto padre
                     <input type="text" name="nome" defaultValue={effectiveParentText(db, scope, activeParent, "nome", academyDb).value} />
@@ -185,10 +188,10 @@ export default async function ZooDatiPage({
                 </form>
                 {consortium && (
                   <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                    <form action={rigeneraTestiAI.bind(null, activeParent.id, scopeParam)}>
+                    <form action={rigeneraTestiAI.bind(null, BACK, activeParent.id, scopeParam)}>
                       <button className="btn btn-outline btn-sm" type="submit">Rigenera testi con AI</button>
                     </form>
-                    <form action={scioglieParent.bind(null, activeParent.id, scopeParam)}>
+                    <form action={scioglieParent.bind(null, BACK, activeParent.id, scopeParam)}>
                       <button className="btn btn-outline btn-sm" type="submit">Sciogli raggruppamento</button>
                     </form>
                   </div>
@@ -250,10 +253,10 @@ export default async function ZooDatiPage({
           <input type="hidden" name="scope" value={scopeParam} />
           {consortium && (
             <div style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "center" }}>
-              <button className="btn btn-sm" formAction={createZooParent.bind(null, scopeParam)} type="submit">
+              <button className="btn btn-sm" formAction={createZooParent.bind(null, BACK, scopeParam)} type="submit">
                 Crea padre dagli articoli selezionati
               </button>
-              <button className="btn btn-sm" formAction={associaConAI.bind(null, scopeParam)} type="submit" style={{ background: "#6d3fa7" }}>
+              <button className="btn btn-sm" formAction={associaConAI.bind(null, BACK, scopeParam)} type="submit" style={{ background: "#6d3fa7" }}>
                 Associa con AI (raggruppa + genera testi)
               </button>
               <span className="hint">
@@ -333,7 +336,7 @@ export default async function ZooDatiPage({
 
         {/* form esterni (via attributo form=) per l'abbinamento manuale delle foto */}
         {consortium && products.slice(0, 400).filter((p) => !p.image).map((p) => (
-          <form key={p.id} id={`ph_${p.id}`} action={associateZooPhoto.bind(null, scopeParam, p.id)} />
+          <form key={p.id} id={`ph_${p.id}`} action={associateZooPhoto.bind(null, BACK, scopeParam, p.id)} />
         ))}
 
         {/* fornitori/marchi nascosti per questo ambito */}

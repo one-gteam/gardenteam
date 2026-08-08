@@ -22,7 +22,10 @@ export default async function StampeHeader({ user, active, area = "arredo" }: { 
         { href: "/stampe/zoo/layout", label: "Layout", key: "layout" },
         { href: "/stampe/zoo/stampa", label: "Stampa cartelli", key: "stampa" },
         ...(isAdmin || user.role === "zoo_manager"
-          ? [{ href: "/stampe/zoo/impostazioni", label: "Impostazioni", key: "impostazioni" }]
+          ? [
+              { href: "/stampe/zoo/archivio", label: "Archivio volantini", key: "archivio" },
+              { href: "/stampe/zoo/impostazioni", label: "Impostazioni", key: "impostazioni" },
+            ]
           : []),
         ...(sites.includes("arredo") ? [{ href: "/stampe/arredo/dati", label: "⇄ Cartelli Arredo", key: "arredo" }] : []),
         ...(sites.length > 1 ? [{ href: "/scegli", label: "⇄ Cambia area", key: "academy" }] : []),

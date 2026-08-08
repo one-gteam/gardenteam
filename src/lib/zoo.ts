@@ -45,6 +45,17 @@ export interface ZooScheda {
   nome: string;
 }
 
+/**
+ * Ciclo di vita di un volantino:
+ *  - lavorazione → ci si sta lavorando: Import offerte, Scelta Offerte e Crea
+ *    Volantino agiscono SOLO su questo, su pagine pulite;
+ *  - chiusa → lavoro finito, offerte in corso nei punti vendita: non si compone
+ *    più, ma i cartelli si stampano ancora (è il volantino "vivo" a scaffale);
+ *  - archiviata → sostituita da un volantino nuovo: sparisce dalle pagine di
+ *    lavoro e resta in "Archivio volantini", da dove si recupera o si elimina.
+ */
+export type CampaignStato = "lavorazione" | "chiusa" | "archiviata";
+
 /** Campagna = import mensile di offerte, con validità e schede (pagine) del volantino. */
 export interface ZooCampaign {
   id: string;
@@ -52,7 +63,12 @@ export interface ZooCampaign {
   dal: string; // yyyy-mm-dd
   al: string;
   schede: ZooScheda[];
-  attiva: boolean;
+  attiva: boolean; // storico: manteneva "quella corrente" prima dei tre stati
+  stato?: CampaignStato;
+  chiusaIl?: string; // ISO
+  archiviataIl?: string; // ISO
+  /** Offerte e voti eliminati definitivamente: resta solo lo schema delle pagine. */
+  svuotataIl?: string;
 }
 
 export interface ZooOffer {
@@ -328,8 +344,41 @@ export function zooImageUrl(p?: ZooProduct, parent?: ZooParent): string {
   return "/immagini/mancante.jpg";
 }
 
+/**
+ * Stato del volantino, ricavato anche dalle campagne salvate prima dei tre stati:
+ * lì l'unica informazione era `attiva`, quindi la corrente diventa "in lavorazione"
+ * e tutte le altre finiscono in archivio.
+ */
+export function campaignStato(c: ZooCampaign): CampaignStato {
+  return c.stato ?? (c.attiva ? "lavorazione" : "archiviata");
+}
+
+/** Il volantino su cui si sta lavorando: uno solo alla volta. */
+export function campagnaInLavorazione(db: ZooDB): ZooCampaign | undefined {
+  return db.campaigns.find((c) => campaignStato(c) === "lavorazione");
+}
+
+/** Il volantino chiuso più recente: offerte in corso a scaffale, cartelli ancora stampabili. */
+export function campagnaInCorso(db: ZooDB): ZooCampaign | undefined {
+  return db.campaigns.filter((c) => campaignStato(c) === "chiusa").slice(-1)[0];
+}
+
+/** Volantini di cui ha senso stampare i cartelli: quello in corso e quello in preparazione. */
+export function campagneStampabili(db: ZooDB): ZooCampaign[] {
+  return [campagnaInCorso(db), campagnaInLavorazione(db)].filter(Boolean) as ZooCampaign[];
+}
+
+export function campagneArchiviate(db: ZooDB): ZooCampaign[] {
+  return db.campaigns.filter((c) => campaignStato(c) === "archiviata").reverse();
+}
+
+/**
+ * Campagna delle pagine di lavoro (Import offerte, Scelta Offerte, Crea Volantino):
+ * quella in lavorazione. Se non ce n'è una si ripiega sulla chiusa più recente, così
+ * le pagine mostrano comunque qualcosa finché non si apre il volantino successivo.
+ */
 export function activeCampaign(db: ZooDB): ZooCampaign | undefined {
-  return db.campaigns.find((c) => c.attiva) ?? db.campaigns[db.campaigns.length - 1];
+  return campagnaInLavorazione(db) ?? campagnaInCorso(db) ?? db.campaigns[db.campaigns.length - 1];
 }
 
 export function fornitoriList(db: ZooDB): string[] {
