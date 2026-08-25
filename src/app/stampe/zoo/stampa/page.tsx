@@ -10,6 +10,7 @@ import {
   campagneStampabili, campagnaInCorso, campagnaInLavorazione, campaignStato,
   ZOO_FIELDS, ZOO_FORMATS,
 } from "@/lib/zoo";
+import { importPvPrices } from "@/lib/zoo-actions";
 
 /** Stampa cartelli Offerte Zoo: stesso impianto dell'Arredo (selezione, formati per riga, stampa 1:1). */
 export default async function ZooStampaPage({
@@ -147,6 +148,27 @@ export default async function ZooStampaPage({
             <button className="btn btn-sm" type="submit">OK</button>
           </form>
         </div>
+
+        {sp.prezzi !== undefined && (
+          <div className="alert alert-green">
+            ✓ {sp.prezzi} prezzi caricati per {scope.label}: sostituiscono il prezzo promo del Consorzio sui cartelli di questo ambito.
+          </div>
+        )}
+
+        {scope.type !== "system" && (
+          <div className="card" style={{ marginBottom: 16, padding: 14 }}>
+            <strong>Carica i tuoi prezzi</strong>
+            <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "4px 0 8px" }}>
+              Se i prezzi di {scope.label} differiscono da quelli del Consorzio, carica un Excel con EAN (o CODICE
+              FORNITORE) e PREZZO: sostituirà il prezzo promo sui cartelli di questo ambito, articolo per articolo.{" "}
+              <a href={`/stampe/zoo/excel?prezzi=1&scope=${scopeParam}`}>Scarica il modello precompilato</a>
+            </p>
+            <form action={importPvPrices.bind(null, scopeParam)} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <input type="file" name="file" accept=".xlsx,.xls,.csv" required />
+              <button className="btn btn-sm" type="submit">Importa prezzi</button>
+            </form>
+          </div>
+        )}
 
         <div className="card" style={{ marginBottom: 16, padding: 14 }}>
           <form method="get" style={{ display: "grid", gridTemplateColumns: "2fr 2fr 2fr auto", gap: 10, alignItems: "end" }}>

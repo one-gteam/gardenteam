@@ -344,6 +344,48 @@ export function zooImageUrl(p?: ZooProduct, parent?: ZooParent): string {
   return "/immagini/mancante.jpg";
 }
 
+const STOPWORDS_ABBINAMENTO = new Set([
+  "di", "da", "del", "della", "dei", "delle", "con", "per", "e", "il", "lo", "la",
+  "i", "gli", "le", "un", "uno", "una", "in", "a", "al", "allo", "alla", "ai",
+  "agli", "alle", "su", "sul", "tra", "fra", "nuovo", "nuova",
+]);
+
+/** Parole "significative" di un testo: minuscolo, senza accenti/punteggiatura, senza le più comuni. */
+function tokenizzaPerAbbinamento(text: string): string[] {
+  return text
+    .toLowerCase()
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length > 1 && !STOPWORDS_ABBINAMENTO.has(w));
+}
+
+/**
+ * Propone a quale articolo abbinare una foto in base al SOLO nome del file (nessuna
+ * AI): confronta le parole significative del nome file con marca+descrizione di ogni
+ * articolo ancora senza foto (indice di Jaccard, con un piccolo bonus se coincidono
+ * numeri come taglie o grammature), e ritorna i candidati migliori in ordine di
+ * punteggio. L'abbinamento resta una PROPOSTA: va confermato da chi carica le foto.
+ */
+export function suggestPhotoMatch(
+  fileBase: string, products: ZooProduct[], limit = 5
+): { productId: string; score: number }[] {
+  const fileTokens = new Set(tokenizzaPerAbbinamento(fileBase.replace(/[_-]/g, " ")));
+  if (fileTokens.size === 0) return [];
+  const fileNums = new Set([...fileTokens].filter((t) => /^\d+$/.test(t)));
+  const scored = products.map((p) => {
+    const prodTokens = new Set(tokenizzaPerAbbinamento(`${p.marca} ${p.descrizione}`));
+    if (prodTokens.size === 0) return { productId: p.id, score: 0 };
+    let common = 0;
+    for (const t of fileTokens) if (prodTokens.has(t)) common++;
+    let numBonus = 0;
+    for (const n of fileNums) if (prodTokens.has(n)) numBonus += 0.5;
+    const union = new Set([...fileTokens, ...prodTokens]).size;
+    return { productId: p.id, score: union > 0 ? (common + numBonus) / union : 0 };
+  });
+  return scored.filter((s) => s.score > 0).sort((a, b) => b.score - a.score).slice(0, limit);
+}
+
 /**
  * Stato del volantino, ricavato anche dalle campagne salvate prima dei tre stati:
  * lì l'unica informazione era `attiva`, quindi la corrente diventa "in lavorazione"

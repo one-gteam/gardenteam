@@ -3,14 +3,14 @@ import { getCurrentUser } from "@/lib/auth";
 import StampeHeader from "@/components/stampe/StampeHeader";
 import { canAccessArea, isZooEditor, scopesForUser, resolveScope } from "@/lib/stampe";
 import { getDb } from "@/lib/db";
-import { listStorageFiles } from "@/lib/supabase";
+import { listStorageFiles, publicUrlFor } from "@/lib/supabase";
 import {
   getZooDb, zooImageUrl, effectiveParentText, campagnaInLavorazione, campagnaInCorso, campaignStato,
-  type ZooProduct,
+  suggestPhotoMatch, type ZooProduct,
 } from "@/lib/zoo";
 import {
   importZooOffers, updateCampaignDates, associaNuoviConAI, uploadZooPhotos, associateZooPhoto,
-  createZooParent, associaConAI, rigeneraTestiAI, saveParentTexts, setParentImage,
+  confirmZooPhotoMatches, createZooParent, associaConAI, rigeneraTestiAI, saveParentTexts, setParentImage,
   toggleParentCaratteristica, scioglieParent, chiudiVolantino, riapriVolantino, nuovoVolantino,
 } from "@/lib/zoo-actions";
 
@@ -68,6 +68,12 @@ export default async function ZooOffertePage({
   const availablePhotos = (await listStorageFiles("zoo-foto")).filter(
     (f) => /\.(jpg|jpeg|png|webp)$/i.test(f) && !usedPhotos.has(f)
   );
+  // proposte di abbinamento per nome (nessuna AI): solo sugli articoli di questo volantino, senza foto
+  const senzaFoto = offerProducts.filter((p) => !p.image);
+  const photoSuggestions = availablePhotos.slice(0, 200).map((f) => ({
+    file: f,
+    candidates: suggestPhotoMatch(f.replace(/\.[a-z0-9]+$/i, ""), senzaFoto, 5),
+  }));
 
   const fmt = (d?: string) => (d ? new Date(`${d}T00:00:00`).toLocaleDateString("it-IT") : "—");
   const q = (sp.q ?? "").toLowerCase();
@@ -108,6 +114,7 @@ export default async function ZooOffertePage({
         {sp.importate !== undefined && (
           <div className="alert alert-green">
             ✓ Importate {sp.importate} offerte ({sp.nuovi ?? 0} prodotti nuovi aggiunti al database base).
+            {sp.senzaprezzo && ` ${sp.senzaprezzo} senza prezzo promo (vedi condizioni): da completare a mano.`}
           </div>
         )}
         {sp.padri !== undefined && (
@@ -118,6 +125,9 @@ export default async function ZooOffertePage({
         )}
         {sp.foto !== undefined && (
           <div className="alert alert-green">✓ {sp.foto} foto caricate, {sp.abbinate} abbinate in automatico per EAN/codice.</div>
+        )}
+        {sp.abbinatenome !== undefined && (
+          <div className="alert alert-green">✓ {sp.abbinatenome} foto abbinate per nome.</div>
         )}
         {sp.chiuso && (
           <div className="alert alert-green">
@@ -207,7 +217,10 @@ export default async function ZooOffertePage({
                 <strong>Carica l&apos;Excel delle offerte</strong>
                 <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "4px 0 8px" }}>
                   Colonne: EAN, DESCRIZIONE PROMO, PREZZO PROMO, PREZZO LISTINO, CONDIZIONI (+ MARCA/FORNITORE per i
-                  prodotti nuovi). Puoi caricare più file sullo stesso volantino.{" "}
+                  prodotti nuovi). Riconosce anche i listini multi-fornitore con l&apos;intestazione (FORNITORE, EAN,
+                  NR. ARTICOLO FORNITORE, TESTO BREVE, PREZZO DI VENDITA…) ripetuta prima di ogni fornitore: le righe
+                  senza un prezzo promo numerico (es. &quot;marginiamo&quot;, &quot;3x2&quot;) entrano comunque, senza
+                  prezzo, con la nota in condizioni da completare a mano. Puoi caricare più file sullo stesso volantino.{" "}
                   <a href={`/stampe/zoo/excel?offerte=1&scope=${scopeParam}`}>Scarica il modello</a>
                 </p>
                 <form action={importZooOffers.bind(null, scopeParam)} style={{ display: "grid", gap: 8 }}>
@@ -235,6 +248,59 @@ export default async function ZooOffertePage({
                 )}
               </div>
             </div>
+          </div>
+        )}
+
+        {/* ---------- proposte di abbinamento foto→articolo per nome (nessuna AI) ---------- */}
+        {consortium && campaign && photoSuggestions.length > 0 && (
+          <div className="card" style={{ marginBottom: 14, padding: 14 }}>
+            <strong>Abbina le foto agli articoli</strong>
+            <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "4px 0 8px" }}>
+              Le foto senza EAN/codice nel nome non si abbinano da sole: qui sotto trovi un&apos;ipotesi per ciascuna,
+              basata sul confronto tra il nome del file e la descrizione dell&apos;articolo. Controlla, correggi dove
+              serve con il menu a tendina, poi conferma in blocco.
+            </p>
+            <form action={confirmZooPhotoMatches.bind(null, BACK, scopeParam)}>
+              <div className="table-wrap">
+                <table className="data">
+                  <thead>
+                    <tr><th style={{ width: 56 }}>Foto</th><th>File</th><th>Abbina a</th></tr>
+                  </thead>
+                  <tbody>
+                    {photoSuggestions.map(({ file, candidates }) => {
+                      const altri = senzaFoto.filter((p) => !candidates.some((c) => c.productId === p.id));
+                      return (
+                        <tr key={file}>
+                          <td>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={publicUrlFor(`zoo-foto/${file}`)} alt="" style={{ width: 44, height: 44, objectFit: "contain", background: "#fff", borderRadius: 6, border: "1px solid #eee" }} />
+                          </td>
+                          <td style={{ fontSize: 12 }}>{file}</td>
+                          <td>
+                            <select name={`pick_${file}`} defaultValue={candidates[0]?.productId ?? ""} style={{ fontSize: 12.5, maxWidth: 420 }}>
+                              <option value="">— nessuno —</option>
+                              {candidates.map((c) => {
+                                const p = senzaFoto.find((x) => x.id === c.productId)!;
+                                return (
+                                  <option key={c.productId} value={c.productId}>
+                                    {Math.round(c.score * 100)}% — {p.descrizione}
+                                  </option>
+                                );
+                              })}
+                              {altri.length > 0 && <option disabled>──────────</option>}
+                              {altri.map((p) => (
+                                <option key={p.id} value={p.id}>{p.descrizione}</option>
+                              ))}
+                            </select>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <button className="btn btn-sm" type="submit" style={{ marginTop: 10 }}>Conferma abbinamenti</button>
+            </form>
           </div>
         )}
 

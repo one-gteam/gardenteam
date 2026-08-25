@@ -41,6 +41,66 @@ function priceStr(v: string): string {
   return num.toFixed(2).replace(".", ",");
 }
 
+/** Prezzo valido e diverso da zero (i listini fornitore usano spesso "0" per "non disponibile"). */
+function priceOrEmpty(v: string): string {
+  const p = priceStr(v);
+  return p && Number(p.replace(",", ".")) > 0 ? p : "";
+}
+
+interface ListinoRow {
+  ean: string; codice: string; descrizione: string; fornitore: string;
+  prezzoListino: string; prezzoPromo: string; condizioni: string;
+  marca?: string; categoria?: string;
+}
+
+/**
+ * Formato "listino multi-fornitore": la riga di intestazione (FORNITORE, EAN,
+ * NR. ARTICOLO FORNITORE, TESTO BREVE, PREZZO DI VENDITA, % SCONTO 1 PROMO,
+ * PREZZO/TIPO PROMO CONSIGLIATO) si ripete prima di ogni fornitore, ma ogni riga
+ * dati porta già il proprio fornitore in colonna B: non serve altra logica "a
+ * blocchi", basta trovare le colonne una volta e saltare le righe che ripetono
+ * l'intestazione. Usato come fallback quando il formato a colonne fisse (righe
+ * oggetto con intestazione unica in cima) non produce righe valide.
+ */
+function parseListinoBlocchi(XLSX: typeof import("xlsx"), wb: import("xlsx").WorkBook): ListinoRow[] {
+  const grid = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: "" });
+  const norm = (v: unknown) => String(v ?? "").trim().toLowerCase();
+  const want: Record<string, string> = {
+    fornitore: "fornitore", ean: "ean", codice: "nr. articolo fornitore",
+    descrizione: "testo breve", prezzoListino: "prezzo di vendita",
+    prezzoPromo: "prezzo/tipo promo consigliato",
+  };
+  let cols: Record<string, number> | undefined;
+  for (const row of grid) {
+    const cells = row.map(norm);
+    if (cells.includes(want.fornitore) && cells.includes(want.ean) && cells.includes(want.descrizione)) {
+      cols = Object.fromEntries(Object.entries(want).map(([k, label]) => [k, cells.indexOf(label)]));
+      break;
+    }
+  }
+  if (!cols || cols.fornitore < 0 || cols.ean < 0) return [];
+  const rows: ListinoRow[] = [];
+  for (const row of grid) {
+    const fornitoreCell = norm(row[cols.fornitore]);
+    if (!fornitoreCell || fornitoreCell === want.fornitore) continue; // riga di intestazione ripetuta o vuota
+    const ean = String(row[cols.ean] ?? "").trim().replace(/\.0$/, "");
+    if (!ean) continue;
+    const promoRaw = String(row[cols.prezzoPromo] ?? "").trim();
+    const promoNum = Number(promoRaw.replace(",", "."));
+    const isNumeric = promoRaw !== "" && !Number.isNaN(promoNum);
+    rows.push({
+      ean,
+      codice: cols.codice >= 0 ? String(row[cols.codice] ?? "").trim().replace(/\.0$/, "") : "",
+      descrizione: cols.descrizione >= 0 ? String(row[cols.descrizione] ?? "").trim() : "",
+      fornitore: String(row[cols.fornitore] ?? "").trim(),
+      prezzoListino: cols.prezzoListino >= 0 ? priceOrEmpty(String(row[cols.prezzoListino] ?? "").trim()) : "",
+      prezzoPromo: isNumeric ? priceStr(promoRaw) : "",
+      condizioni: isNumeric ? "" : promoRaw,
+    });
+  }
+  return rows;
+}
+
 /* ================== 1. Database prodotti / caricamento foto ================== */
 
 export async function importZooProducts(scopeParam: string, formData: FormData) {
@@ -115,6 +175,30 @@ export async function associateZooPhoto(back: string, scopeParam: string, produc
     await saveZooDb(db);
   }
   redirect(backUrl(back, scopeParam, { prodotto: productId }));
+}
+
+/**
+ * Conferma in blocco gli abbinamenti foto→articolo proposti per nome (nessuna AI):
+ * un campo `pick_<nomefile>` per foto, valorizzato con l'id del prodotto scelto
+ * (vuoto = nessun abbinamento per quella foto).
+ */
+export async function confirmZooPhotoMatches(back: string, scopeParam: string, formData: FormData) {
+  await requireZooUser();
+  const db = await getZooDb();
+  let n = 0;
+  for (const [key, value] of formData.entries()) {
+    if (!key.startsWith("pick_")) continue;
+    const fileName = key.slice("pick_".length);
+    const productId = String(value);
+    if (!productId || !fileName) continue;
+    const p = db.products.find((x) => x.id === productId);
+    if (p) {
+      p.image = publicUrlFor(`zoo-foto/${fileName}`);
+      n++;
+    }
+  }
+  await saveZooDb(db);
+  redirect(backUrl(back, scopeParam, { abbinatenome: String(n) }));
 }
 
 function applyGroups(
@@ -296,6 +380,25 @@ export async function toggleZooHidden(scopeParam: string, kind: "fornitore" | "m
   redirect(backUrl(back, scopeParam));
 }
 
+/** Nasconde in blocco gli articoli selezionati (checkbox "sel") per l'ambito corrente. */
+export async function toggleZooHiddenBulk(back: string, scopeParam: string, formData: FormData) {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  if (scope.type === "system") redirect(backUrl(back, scopeParam));
+  const ids = (formData.getAll("sel") as string[]).filter(Boolean);
+  const eans = new Set(db.products.filter((p) => ids.includes(p.id)).map((p) => p.ean));
+  for (const ean of eans) {
+    const existing = db.hidden.find(
+      (h) => h.scopeType === scope.type && h.scopeId === scope.id && h.kind === "articolo" && h.value === ean
+    );
+    if (!existing) db.hidden.push({ scopeType: scope.type, scopeId: scope.id, kind: "articolo", value: ean });
+  }
+  await saveZooDb(db);
+  redirect(backUrl(back, scopeParam, { nontenuti: String(eans.size) }));
+}
+
 /* ================== 2. Import offerte mensili ================== */
 
 export async function importZooOffers(scopeParam: string, formData: FormData) {
@@ -308,7 +411,23 @@ export async function importZooOffers(scopeParam: string, formData: FormData) {
   if (!file || file.size === 0) redirect(backUrl("/stampe/zoo/offerte", scopeParam, { importate: "0" }));
   const XLSX = await import("xlsx");
   const wb = XLSX.read(Buffer.from(await file!.arrayBuffer()), { type: "buffer" });
-  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[wb.SheetNames[0]], { defval: "" });
+  const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[wb.SheetNames[0]], { defval: "" });
+  // formato a colonne fisse (intestazione unica in cima): se non produce righe con EAN,
+  // si ricade sul formato "listino multi-fornitore" (intestazione ripetuta per blocco)
+  const standardRows: ListinoRow[] = rawRows
+    .map((row) => ({
+      ean: cell(row, "EAN", "CODICE EAN", "BARCODE"),
+      descrizione: cell(row, "DESCRIZIONE PROMO", "DESCRIZIONE", "ARTICOLO"),
+      codice: cell(row, "CODICE FORNITORE", "COD. FORNITORE", "CODICE"),
+      fornitore: cell(row, "FORNITORE", "DITTA"),
+      prezzoListino: priceOrEmpty(cell(row, "PREZZO LISTINO", "LISTINO")),
+      prezzoPromo: priceOrEmpty(cell(row, "PREZZO PROMO", "PREZZO OFFERTA", "PREZZO")),
+      condizioni: cell(row, "CONDIZIONI", "VALIDITA'", "NOTE"),
+      marca: cell(row, "MARCA", "MARCHIO", "BRAND"),
+      categoria: cell(row, "CATEGORIA", "REPARTO"),
+    }))
+    .filter((r) => r.ean);
+  const rows = standardRows.length > 0 ? standardRows : parseListinoBlocchi(XLSX, wb);
   const db = await getZooDb();
 
   /*
@@ -340,11 +459,10 @@ export async function importZooOffers(scopeParam: string, formData: FormData) {
 
   let nOffers = 0;
   let nNew = 0;
+  let nSenzaPrezzo = 0;
   for (const row of rows) {
-    const ean = cell(row, "EAN", "CODICE EAN", "BARCODE");
-    const descrizione = cell(row, "DESCRIZIONE PROMO", "DESCRIZIONE", "ARTICOLO");
-    const prezzoPromo = priceStr(cell(row, "PREZZO PROMO", "PREZZO OFFERTA", "PREZZO"));
-    if (!ean || !prezzoPromo) continue;
+    const { ean, descrizione } = row;
+    if (!ean) continue;
     let product = db.products.find((p) => p.ean === ean);
     let nuovo = false;
     if (!product) {
@@ -353,27 +471,30 @@ export async function importZooOffers(scopeParam: string, formData: FormData) {
       nNew++;
       product = {
         id: `z_${ean}`, ean,
-        codice: cell(row, "CODICE FORNITORE", "COD. FORNITORE", "CODICE"),
+        codice: row.codice,
         descrizione: descrizione,
-        marca: cell(row, "MARCA", "MARCHIO", "BRAND"),
-        fornitore: cell(row, "FORNITORE", "DITTA"),
-        categoria: cell(row, "CATEGORIA", "REPARTO"),
+        marca: row.marca ?? "",
+        fornitore: row.fornitore,
+        categoria: row.categoria,
       };
       db.products.push(product);
     }
+    if (!row.prezzoPromo) nSenzaPrezzo++;
     db.offers.push({
       id: `zo_${Date.now()}_${nOffers}`,
       campaignId, ean, productId: product.id,
       descrizione: descrizione || product.descrizione,
-      prezzoPromo,
-      prezzoListino: priceStr(cell(row, "PREZZO LISTINO", "LISTINO")),
-      condizioni: cell(row, "CONDIZIONI", "VALIDITA'", "NOTE"),
+      prezzoPromo: row.prezzoPromo,
+      prezzoListino: row.prezzoListino,
+      condizioni: row.condizioni,
       nuovo,
     });
     nOffers++;
   }
   await saveZooDb(db);
-  redirect(backUrl("/stampe/zoo/offerte", scopeParam, { importate: String(nOffers), nuovi: String(nNew) }));
+  redirect(backUrl("/stampe/zoo/offerte", scopeParam, {
+    importate: String(nOffers), nuovi: String(nNew), ...(nSenzaPrezzo ? { senzaprezzo: String(nSenzaPrezzo) } : {}),
+  }));
 }
 
 export async function updateCampaignDates(campaignId: string, scopeParam: string, formData: FormData) {

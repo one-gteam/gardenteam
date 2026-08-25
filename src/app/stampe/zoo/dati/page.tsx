@@ -3,13 +3,15 @@ import { getCurrentUser } from "@/lib/auth";
 import StampeHeader from "@/components/stampe/StampeHeader";
 import { canAccessArea, isZooEditor, scopesForUser, resolveScope } from "@/lib/stampe";
 import { getDb } from "@/lib/db";
-import { listStorageFiles } from "@/lib/supabase";
+import { listStorageFiles, publicUrlFor } from "@/lib/supabase";
 import {
   getZooDb, zooImageUrl, effectiveParentText, isZooHidden, hiddenEntriesFor, fornitoriList, marcheList,
+  suggestPhotoMatch,
 } from "@/lib/zoo";
 import {
-  importZooProducts, uploadZooPhotos, associateZooPhoto, createZooParent, associaConAI,
+  importZooProducts, uploadZooPhotos, associateZooPhoto, confirmZooPhotoMatches, createZooParent, associaConAI,
   rigeneraTestiAI, saveParentTexts, setParentImage, toggleParentCaratteristica, scioglieParent, toggleZooHidden,
+  toggleZooHiddenBulk,
 } from "@/lib/zoo-actions";
 
 /** Pagina a cui tornano le azioni su foto e prodotti padre (le stesse servono a Import offerte). */
@@ -54,6 +56,12 @@ export default async function ZooDatiPage({
   const availablePhotos = (await listStorageFiles("zoo-foto")).filter(
     (f) => /\.(jpg|jpeg|png|webp)$/i.test(f) && !usedPhotos.has(f)
   );
+  // proposte di abbinamento per nome (nessuna AI), su tutto il catalogo senza foto
+  const senzaFotoCatalogo = db.products.filter((p) => !p.image);
+  const photoSuggestions = availablePhotos.slice(0, 200).map((f) => ({
+    file: f,
+    candidates: suggestPhotoMatch(f.replace(/\.[a-z0-9]+$/i, ""), senzaFotoCatalogo, 5),
+  }));
 
   const senzaPadre = db.products.filter((p) => !p.parentId).length;
 
@@ -83,10 +91,16 @@ export default async function ZooDatiPage({
 
         {sp.importati !== undefined && <div className="alert alert-green">✓ Import Excel: {sp.importati} articoli elaborati.</div>}
         {sp.foto !== undefined && <div className="alert alert-green">✓ {sp.foto} foto caricate, {sp.abbinate} abbinate in automatico per EAN/codice.</div>}
+        {sp.abbinatenome !== undefined && <div className="alert alert-green">✓ {sp.abbinatenome} foto abbinate per nome.</div>}
         {sp.padri !== undefined && (
           <div className="alert alert-green">
             ✓ Creati {sp.padri} prodotti padre {sp.ai === "1" ? "con l'AI (testi volantino e cartello generati)" : "con raggruppamento automatico (testi bozza da rivedere)"}.
             {sp.aierr && <span style={{ color: "#a33" }}> Nota AI: {sp.aierr}</span>}
+          </div>
+        )}
+        {sp.nontenuti !== undefined && (
+          <div className="alert alert-green">
+            ✓ {sp.nontenuti} articoli segnati come non tenuti da {scope.label}: non compariranno nella stampa cartelli, ora né in futuro, finché non li rendi di nuovo visibili.
           </div>
         )}
 
@@ -116,6 +130,59 @@ export default async function ZooDatiPage({
                 </form>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* ---------- proposte di abbinamento foto→articolo per nome (nessuna AI) ---------- */}
+        {consortium && scope.type === "system" && photoSuggestions.length > 0 && (
+          <div className="card" style={{ marginBottom: 14, padding: 14 }}>
+            <strong>Abbina le foto agli articoli</strong>
+            <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "4px 0 8px" }}>
+              Le foto senza EAN/codice nel nome non si abbinano da sole: qui sotto trovi un&apos;ipotesi per ciascuna,
+              basata sul confronto tra il nome del file e la descrizione dell&apos;articolo. Controlla, correggi dove
+              serve con il menu a tendina, poi conferma in blocco.
+            </p>
+            <form action={confirmZooPhotoMatches.bind(null, BACK, scopeParam)}>
+              <div className="table-wrap">
+                <table className="data">
+                  <thead>
+                    <tr><th style={{ width: 56 }}>Foto</th><th>File</th><th>Abbina a</th></tr>
+                  </thead>
+                  <tbody>
+                    {photoSuggestions.map(({ file, candidates }) => {
+                      const altri = senzaFotoCatalogo.filter((p) => !candidates.some((c) => c.productId === p.id));
+                      return (
+                        <tr key={file}>
+                          <td>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={publicUrlFor(`zoo-foto/${file}`)} alt="" style={{ width: 44, height: 44, objectFit: "contain", background: "#fff", borderRadius: 6, border: "1px solid #eee" }} />
+                          </td>
+                          <td style={{ fontSize: 12 }}>{file}</td>
+                          <td>
+                            <select name={`pick_${file}`} defaultValue={candidates[0]?.productId ?? ""} style={{ fontSize: 12.5, maxWidth: 420 }}>
+                              <option value="">— nessuno —</option>
+                              {candidates.map((c) => {
+                                const p = senzaFotoCatalogo.find((x) => x.id === c.productId)!;
+                                return (
+                                  <option key={c.productId} value={c.productId}>
+                                    {Math.round(c.score * 100)}% — {p.descrizione}
+                                  </option>
+                                );
+                              })}
+                              {altri.length > 0 && <option disabled>──────────</option>}
+                              {altri.slice(0, 300).map((p) => (
+                                <option key={p.id} value={p.id}>{p.descrizione}</option>
+                              ))}
+                            </select>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <button className="btn btn-sm" type="submit" style={{ marginTop: 10 }}>Conferma abbinamenti</button>
+            </form>
           </div>
         )}
 
@@ -248,27 +315,36 @@ export default async function ZooDatiPage({
           </form>
         </div>
 
-        {/* tabella articoli con selezione multipla → crea padre / associa con AI */}
+        {/* tabella articoli con selezione multipla → crea padre / associa con AI / non tenuti */}
         <form>
           <input type="hidden" name="scope" value={scopeParam} />
-          {consortium && (
-            <div style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "center" }}>
-              <button className="btn btn-sm" formAction={createZooParent.bind(null, BACK, scopeParam)} type="submit">
-                Crea padre dagli articoli selezionati
-              </button>
-              <button className="btn btn-sm" formAction={associaConAI.bind(null, BACK, scopeParam)} type="submit" style={{ background: "#6d3fa7" }}>
-                Associa con AI (raggruppa + genera testi)
-              </button>
-              <span className="hint">
-                {db.settings.apiKey ? "chiave API Claude configurata" : "nessuna chiave API: verrà usato il raggruppamento automatico con testi bozza"}
-              </span>
+          {(consortium || scope.type !== "system") && (
+            <div style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "center", flexWrap: "wrap" }}>
+              {consortium && (
+                <>
+                  <button className="btn btn-sm" formAction={createZooParent.bind(null, BACK, scopeParam)} type="submit">
+                    Crea padre dagli articoli selezionati
+                  </button>
+                  <button className="btn btn-sm" formAction={associaConAI.bind(null, BACK, scopeParam)} type="submit" style={{ background: "#6d3fa7" }}>
+                    Associa con AI (raggruppa + genera testi)
+                  </button>
+                  <span className="hint">
+                    {db.settings.apiKey ? "chiave API Claude configurata" : "nessuna chiave API: verrà usato il raggruppamento automatico con testi bozza"}
+                  </span>
+                </>
+              )}
+              {scope.type !== "system" && (
+                <button className="btn btn-outline btn-sm" formAction={toggleZooHiddenBulk.bind(null, BACK, scopeParam)} type="submit">
+                  Segna selezionati come non tenuti
+                </button>
+              )}
             </div>
           )}
           <div className="card table-wrap">
             <table className="data">
               <thead>
                 <tr>
-                  {consortium && <th style={{ width: 30 }}></th>}
+                  {(consortium || scope.type !== "system") && <th style={{ width: 30 }}></th>}
                   <th style={{ width: 56 }}>Foto</th>
                   <th>Descrizione</th>
                   <th>EAN / Codice</th>
@@ -284,7 +360,7 @@ export default async function ZooDatiPage({
                   const hidden = scope.type !== "system" && isZooHidden(db, scope, p, academyDb);
                   return (
                     <tr key={p.id} style={hidden ? { opacity: 0.45 } : undefined}>
-                      {consortium && <td><input type="checkbox" name="sel" value={p.id} /></td>}
+                      {(consortium || scope.type !== "system") && <td><input type="checkbox" name="sel" value={p.id} /></td>}
                       <td>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={zooImageUrl(p)} alt="" style={{ width: 44, height: 44, objectFit: "contain", background: "#fff", borderRadius: 6, border: "1px solid #eee" }} />
