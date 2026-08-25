@@ -131,3 +131,31 @@ export async function groupAndDescribe(
   }
   return { groups: heuristicGroups(products, settings, singleGroup), usedAi: false };
 }
+
+/**
+ * Come `groupAndDescribe`, ma a lotti: un'unica chiamata Claude con centinaia di
+ * articoli rischia di superare il tempo massimo di una funzione serverless (Vercel
+ * termina la funzione senza che il codice possa nemmeno intercettare l'errore, quindi
+ * senza salvare nulla). Elabora al massimo `maxProducts` articoli, in lotti da
+ * `batchSize`, e riporta quanti restano per un giro successivo.
+ */
+export async function groupAndDescribeBatched(
+  apiKey: string | undefined,
+  products: ZooProduct[],
+  settings: ZooSettings,
+  opts: { batchSize?: number; maxProducts?: number } = {}
+): Promise<{ groups: AiGroup[]; usedAi: boolean; error?: string; restanti: number }> {
+  const batchSize = opts.batchSize ?? 40;
+  const maxProducts = opts.maxProducts ?? 160;
+  const toProcess = products.slice(0, maxProducts);
+  const groups: AiGroup[] = [];
+  let usedAi = toProcess.length > 0;
+  let error: string | undefined;
+  for (let i = 0; i < toProcess.length; i += batchSize) {
+    const res = await groupAndDescribe(apiKey, toProcess.slice(i, i + batchSize), settings);
+    groups.push(...res.groups);
+    if (!res.usedAi) usedAi = false;
+    if (res.error && !error) error = res.error;
+  }
+  return { groups, usedAi, error, restanti: products.length - toProcess.length };
+}

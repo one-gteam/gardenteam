@@ -7,7 +7,7 @@ import { canAccessStampe, isZooEditor, resolveScope } from "./stampe";
 import {
   getZooDb, saveZooDb, ZooDB, ZooParent, campagnaInLavorazione, campagnaInCorso, campaignStato,
 } from "./zoo";
-import { groupAndDescribe } from "./zoo-ai";
+import { groupAndDescribe, groupAndDescribeBatched } from "./zoo-ai";
 import { uploadPublicFile, publicUrlFor, listStorageFiles } from "./supabase";
 
 async function requireZooUser() {
@@ -246,7 +246,13 @@ export async function createZooParent(back: string, scopeParam: string, formData
   redirect(backUrl(back, scopeParam, { padre: id }));
 }
 
-/** "Associa con AI": raggruppa gli articoli selezionati e genera i testi volantino/cartello. */
+/**
+ * "Associa con AI": raggruppa gli articoli selezionati e genera i testi volantino/cartello.
+ * A lotti (vedi groupAndDescribeBatched): con una selezione molto grande (es. "seleziona
+ * tutto" su centinaia di articoli) una singola chiamata Claude rischierebbe di far scadere
+ * il tempo massimo della funzione senza salvare nulla. Se restano articoli, l'operazione
+ * va ripetuta (i già raggruppati non vengono riproposti, perché hanno un padre).
+ */
 export async function associaConAI(back: string, scopeParam: string, formData: FormData) {
   const user = await requireZooUser();
   if (!isZooEditor(user)) redirect(backUrl(back, scopeParam));
@@ -254,11 +260,13 @@ export async function associaConAI(back: string, scopeParam: string, formData: F
   const db = await getZooDb();
   const selected = db.products.filter((p) => ids.includes(p.id));
   if (selected.length === 0) redirect(backUrl(back, scopeParam));
-  const { groups, usedAi, error } = await groupAndDescribe(db.settings.apiKey, selected, db.settings);
+  const { groups, usedAi, error, restanti } = await groupAndDescribeBatched(db.settings.apiKey, selected, db.settings);
   const created = applyGroups(db, groups, usedAi);
   await saveZooDb(db);
   redirect(backUrl(back, scopeParam, {
-    ai: usedAi ? "1" : "0", padri: String(created), ...(error ? { aierr: error.slice(0, 120) } : {}),
+    ai: usedAi ? "1" : "0", padri: String(created),
+    ...(restanti ? { restanti: String(restanti) } : {}),
+    ...(error ? { aierr: error.slice(0, 120) } : {}),
   }));
 }
 
@@ -731,11 +739,13 @@ export async function associaNuoviConAI(scopeParam: string) {
   );
   const orphans = db.products.filter((p) => !p.parentId && inVolantino.has(p.id));
   if (orphans.length === 0) redirect(backUrl("/stampe/zoo/offerte", scopeParam, { padri: "0" }));
-  const { groups, usedAi, error } = await groupAndDescribe(db.settings.apiKey, orphans, db.settings);
+  const { groups, usedAi, error, restanti } = await groupAndDescribeBatched(db.settings.apiKey, orphans, db.settings);
   const created = applyGroups(db, groups, usedAi);
   await saveZooDb(db);
   redirect(backUrl("/stampe/zoo/offerte", scopeParam, {
-    padri: String(created), ai: usedAi ? "1" : "0", ...(error ? { aierr: error.slice(0, 120) } : {}),
+    padri: String(created), ai: usedAi ? "1" : "0",
+    ...(restanti ? { restanti: String(restanti) } : {}),
+    ...(error ? { aierr: error.slice(0, 120) } : {}),
   }));
 }
 

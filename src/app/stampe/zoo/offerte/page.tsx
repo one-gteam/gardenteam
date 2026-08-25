@@ -17,6 +17,11 @@ import {
   svuotaOfferteVolantino, rimuoviOfferteMarginiamo,
 } from "@/lib/zoo-actions";
 
+// "Associa con AI" può richiedere più dei 10s di default per un lotto di articoli:
+// alza il limite dove la piattaforma lo consente (vale anche per le server action
+// invocate da questa pagina, non solo per il render).
+export const maxDuration = 60;
+
 /** Le azioni su foto e padri tornano qui (le stesse servono a "Database prodotti"). */
 const BACK = "/stampe/zoo/offerte";
 
@@ -128,6 +133,7 @@ export default async function ZooOffertePage({
         {sp.padri !== undefined && (
           <div className="alert alert-green">
             ✓ Creati {sp.padri} prodotti padre {sp.ai === "1" ? "con l'AI" : "con raggruppamento automatico (testi bozza)"}.
+            {sp.restanti && ` Ne restano ${sp.restanti} da raggruppare: si lavora a lotti, ripeti l'operazione per continuare.`}
             {sp.aierr && <span style={{ color: "#a33" }}> Nota AI: {sp.aierr}</span>}
           </div>
         )}
