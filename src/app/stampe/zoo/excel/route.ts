@@ -3,7 +3,7 @@ import * as XLSX from "xlsx";
 import { getCurrentUser } from "@/lib/auth";
 import { canAccessArea, resolveScope } from "@/lib/stampe";
 import { getDb } from "@/lib/db";
-import { getZooDb, activeCampaign, zooImageUrl, effectiveParentText, pvPriceFor } from "@/lib/zoo";
+import { getZooDb, activeCampaign, pvPriceFor, volantinoExportRows } from "@/lib/zoo";
 
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
@@ -52,33 +52,9 @@ export async function GET(req: NextRequest) {
     });
     filename = "prezzi_pv_zoo.xlsx";
   } else if (sp.volantino === "1") {
-    // export per il grafico: offerte selezionate con testi e riferimento foto
+    // export per il grafico: offerte selezionate con testi e riferimento foto (stessa lista usata dallo ZIP con le foto)
     const campaign = db.campaigns.find((c) => c.id === sp.campagna) ?? activeCampaign(db);
-    const offers = campaign ? db.offers.filter((o) => o.campaignId === campaign.id && o.selezionata) : [];
-    rows = offers
-      .sort((a, b) => (a.schedaId ?? "").localeCompare(b.schedaId ?? "") || (a.ordine ?? 0) - (b.ordine ?? 0))
-      .map((o) => {
-        const p = db.products.find((x) => x.id === o.productId);
-        const parent = p?.parentId ? db.parents.find((x) => x.id === p.parentId) : undefined;
-        return {
-          SCHEDA: campaign?.schede.find((s) => s.id === o.schedaId)?.nome ?? "",
-          EAN: o.ean,
-          MARCA: p?.marca ?? "",
-          TITOLO: parent ? effectiveParentText(db, scope, parent, "nome", academyDb).value : (p?.descrizione ?? o.descrizione),
-          "DESCRIZIONE VOLANTINO": parent ? effectiveParentText(db, scope, parent, "descVolantino", academyDb).value : o.descrizione,
-          "PREZZO PROMO": o.prezzoPromo,
-          "PREZZO LISTINO": o.prezzoListino ?? "",
-          ETICHETTA: o.label ?? "",
-          "AREA TEMATICA": o.gruppo ?? "",
-          "DESCRIZIONE AREA": o.gruppoDescrizione ?? "",
-          "TENERE VICINO A": o.tieniVicinoA
-            ? (db.offers.find((x) => x.id === o.tieniVicinoA)?.descrizione ?? "")
-            : "",
-          CONDIZIONI: o.condizioni ?? "",
-          FOTO: zooImageUrl(p, parent),
-          "VALIDITA'": campaign ? `${campaign.dal} - ${campaign.al}` : "",
-        };
-      });
+    rows = volantinoExportRows(db, academyDb, scope, campaign) as unknown as Record<string, string>[];
     filename = `volantino_${(campaign?.nome ?? "zoo").replace(/\s+/g, "_").toLowerCase()}.xlsx`;
   } else {
     // export catalogo completo

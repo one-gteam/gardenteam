@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Save, FileDown, Sheet, Plus } from "lucide-react";
+import { Save, FileDown, Sheet, Plus, ImageDown } from "lucide-react";
 import { saveVolantinoLayout, updateZooOfferQuick, uploadVolantinoImage } from "@/lib/zoo-actions";
 import type { VolPage, VolBlock, VolSection } from "@/lib/zoo";
 
@@ -71,9 +71,9 @@ function normalizza(page: VolPage): VolPage {
 }
 
 export default function VolantinoBuilder({
-  campaignId, offers, initialPages, excelHref, animali, caratts, labels, marche, fornitori,
+  campaignId, offers, initialPages, excelHref, fotoZipHref, animali, caratts, labels, marche, fornitori,
 }: {
-  campaignId: string; offers: OffLite[]; initialPages: VolPage[]; excelHref: string;
+  campaignId: string; offers: OffLite[]; initialPages: VolPage[]; excelHref: string; fotoZipHref: string;
   animali: string[]; caratts: string[]; labels: string[]; marche: string[]; fornitori: string[];
 }) {
   const [pages, setPages] = useState<VolPage[]>(() =>
@@ -479,6 +479,14 @@ export default function VolantinoBuilder({
             </button>
             <a className="btn btn-outline btn-sm" title="Excel per il grafico" aria-label="Excel per il grafico" href={excelHref}>
               <Sheet size={14} style={{ verticalAlign: -2 }} />
+            </a>
+            <a
+              className="btn btn-outline btn-sm"
+              title="ZIP per il grafico: Excel + foto in alta risoluzione"
+              aria-label="ZIP per il grafico: Excel + foto in alta risoluzione"
+              href={fotoZipHref}
+            >
+              <ImageDown size={14} style={{ verticalAlign: -2 }} />
             </a>
             <button className="btn btn-outline btn-sm" title="Aggiungi pagina" aria-label="Aggiungi pagina" onClick={() => upd((ps) => [...ps, pagina("")])}>
               <Plus size={14} style={{ verticalAlign: -2 }} />

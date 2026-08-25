@@ -62,6 +62,19 @@ export function publicUrlFor(path: string): string {
   return data.publicUrl;
 }
 
+/**
+ * URL firmato per caricare UN file direttamente dal browser a Supabase Storage,
+ * bypassando il server: le funzioni serverless di Vercel hanno un limite di
+ * dimensione del body in ingresso (pochi MB) che un caricamento massivo di foto
+ * ad alta risoluzione supera facilmente. Il token è nell'URL stesso: basta un
+ * PUT diretto (nessuna chiave pubblica da esporre al browser).
+ */
+export async function createSignedUploadUrl(path: string): Promise<string> {
+  const { data, error } = await supabase().storage.from(STORAGE_BUCKET).createSignedUploadUrl(path, { upsert: true });
+  if (error) throw new Error(`URL di caricamento firmato fallito (${path}): ${error.message}`);
+  return data.signedUrl;
+}
+
 /** Elenca i nomi dei file presenti in una "cartella" del bucket (es. per l'associazione manuale delle foto). */
 export async function listStorageFiles(prefix: string): Promise<string[]> {
   const { data, error } = await supabase().storage.from(STORAGE_BUCKET).list(prefix, { limit: 1000 });

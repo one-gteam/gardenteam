@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { getCurrentUser } from "@/lib/auth";
 import { canAccessArea, isZooEditor } from "@/lib/stampe";
-import { getZooDb, migraVolantinoPages } from "@/lib/zoo";
+import { getZooDb, volantinoCellRows } from "@/lib/zoo";
 
 /**
  * Export del volantino composto, pensato per il grafico: una riga per cella,
@@ -19,45 +19,10 @@ export async function GET(req: NextRequest) {
   }
 
   const campaignId = req.nextUrl.searchParams.get("campagna") ?? "";
-  const layout = db.volantinoLayouts.find((l) => l.campaignId === campaignId);
-  if (!layout) return new NextResponse("Volantino non ancora salvato", { status: 404 });
-  const pages = migraVolantinoPages(layout.pages);
-
-  const rows: Record<string, string | number>[] = [];
-  pages.forEach((page, pi) => {
-    const nomePagina = page.titolo || `Pagina ${pi + 1}`;
-    page.blocks.forEach((b, bi) => {
-      const offs = (b.offerIds ?? []).map((id) => db.offers.find((o) => o.id === id)).filter(Boolean);
-      if (offs.length === 0 && !b.testo && !b.imageUrl && !b.label) return; // celle vuote: non servono al grafico
-      // sezione che contiene questa cella (per lo sfondo comune)
-      const sez = (page.sezioni ?? []).find(
-        (s) => b.r >= s.r && b.r < s.r + s.rs && b.c >= s.c && b.c < s.c + s.cs
-      );
-      const primo = offs[0];
-      rows.push({
-        "N. pagina": pi + 1,
-        Pagina: nomePagina,
-        "Note della pagina": page.note ?? "",
-        Cella: `${pi + 1}-${bi + 1}`,
-        Riga: b.r + 1,
-        Colonna: b.c + 1,
-        "Righe occupate": b.rs,
-        "Colonne occupate": b.cs,
-        Sezione: sez?.titolo ?? "",
-        "Sfondo sezione": sez?.bg ?? "",
-        "N. offerte": offs.length,
-        EAN: offs.map((o) => o!.ean).join(" / "),
-        Descrizione: b.descrizione ?? offs.map((o) => o!.descrizione).join(" / "),
-        Marca: offs.map((o) => db.products.find((p) => p.id === o!.productId)?.marca ?? "").join(" / "),
-        "Prezzo promo": b.prezzo ?? offs.map((o) => o!.prezzoPromo).join(" / "),
-        "Prezzo listino": offs.map((o) => o!.prezzoListino ?? "").join(" / "),
-        Etichetta: b.label ?? primo?.label ?? "",
-        Testo: b.testo ?? "",
-        Immagine: b.imageUrl ?? "",
-        "Commento per il grafico": b.commento ?? "",
-      });
-    });
-  });
+  if (!db.volantinoLayouts.some((l) => l.campaignId === campaignId)) {
+    return new NextResponse("Volantino non ancora salvato", { status: 404 });
+  }
+  const rows = volantinoCellRows(db, campaignId);
 
   const ws = XLSX.utils.json_to_sheet(rows);
   const wb = XLSX.utils.book_new();

@@ -360,6 +360,21 @@ function tokenizzaPerAbbinamento(text: string): string[] {
     .filter((w) => w.length > 1 && !STOPWORDS_ABBINAMENTO.has(w));
 }
 
+export interface AbbinamentoIndexEntry { productId: string; tokens: Set<string>; nums: Set<string> }
+
+/**
+ * Precalcola le parole significative di marca+descrizione di ogni articolo, UNA
+ * volta sola: `suggestPhotoMatch` viene chiamata una volta per ciascuna foto da
+ * abbinare, quindi con centinaia di foto e centinaia/migliaia di articoli senza
+ * foto ripetere la tokenizzazione ad ogni chiamata sarebbe sprecato.
+ */
+export function buildAbbinamentoIndex(products: ZooProduct[]): AbbinamentoIndexEntry[] {
+  return products.map((p) => {
+    const tokens = new Set(tokenizzaPerAbbinamento(`${p.marca} ${p.descrizione}`));
+    return { productId: p.id, tokens, nums: new Set([...tokens].filter((t) => /^\d+$/.test(t))) };
+  });
+}
+
 /**
  * Propone a quale articolo abbinare una foto in base al SOLO nome del file (nessuna
  * AI): confronta le parole significative del nome file con marca+descrizione di ogni
@@ -368,20 +383,19 @@ function tokenizzaPerAbbinamento(text: string): string[] {
  * punteggio. L'abbinamento resta una PROPOSTA: va confermato da chi carica le foto.
  */
 export function suggestPhotoMatch(
-  fileBase: string, products: ZooProduct[], limit = 5
+  fileBase: string, index: AbbinamentoIndexEntry[], limit = 5
 ): { productId: string; score: number }[] {
   const fileTokens = new Set(tokenizzaPerAbbinamento(fileBase.replace(/[_-]/g, " ")));
   if (fileTokens.size === 0) return [];
   const fileNums = new Set([...fileTokens].filter((t) => /^\d+$/.test(t)));
-  const scored = products.map((p) => {
-    const prodTokens = new Set(tokenizzaPerAbbinamento(`${p.marca} ${p.descrizione}`));
-    if (prodTokens.size === 0) return { productId: p.id, score: 0 };
+  const scored = index.map(({ productId, tokens, nums }) => {
+    if (tokens.size === 0) return { productId, score: 0 };
     let common = 0;
-    for (const t of fileTokens) if (prodTokens.has(t)) common++;
+    for (const t of fileTokens) if (tokens.has(t)) common++;
     let numBonus = 0;
-    for (const n of fileNums) if (prodTokens.has(n)) numBonus += 0.5;
-    const union = new Set([...fileTokens, ...prodTokens]).size;
-    return { productId: p.id, score: union > 0 ? (common + numBonus) / union : 0 };
+    for (const n of fileNums) if (nums.has(n)) numBonus += 0.5;
+    const union = new Set([...fileTokens, ...tokens]).size;
+    return { productId, score: union > 0 ? (common + numBonus) / union : 0 };
   });
   return scored.filter((s) => s.score > 0).sort((a, b) => b.score - a.score).slice(0, limit);
 }
@@ -483,6 +497,126 @@ export function zooCartelloValues(db: ZooDB, offer: ZooOffer): Record<string, st
     condizioni: offer.condizioni ?? "",
     immagine: zooImageUrl(product, parent),
   };
+}
+
+/** Una riga dell'export per il grafico: stesse chiavi delle intestazioni del foglio Excel. */
+export interface VolantinoExportRow {
+  SCHEDA: string; EAN: string; MARCA: string; TITOLO: string;
+  "DESCRIZIONE VOLANTINO": string; "PREZZO PROMO": string; "PREZZO LISTINO": string;
+  ETICHETTA: string; "AREA TEMATICA": string; "DESCRIZIONE AREA": string;
+  "TENERE VICINO A": string; CONDIZIONI: string; FOTO: string; "VALIDITA'": string;
+}
+
+/**
+ * Righe dell'export "per il grafico" (Excel e ZIP con le foto condividono lo stesso
+ * elenco, così restano sempre coerenti): le offerte selezionate per il volantino, con
+ * testi effettivi (personalizzazioni d'ambito comprese) e riferimento alla foto.
+ */
+export function volantinoExportRows(
+  db: ZooDB, academyDb: DB, scope: Scope, campaign: ZooCampaign | undefined
+): VolantinoExportRow[] {
+  const offers = campaign ? db.offers.filter((o) => o.campaignId === campaign.id && o.selezionata) : [];
+  return offers
+    .sort((a, b) => (a.schedaId ?? "").localeCompare(b.schedaId ?? "") || (a.ordine ?? 0) - (b.ordine ?? 0))
+    .map((o) => {
+      const p = db.products.find((x) => x.id === o.productId);
+      const parent = p?.parentId ? db.parents.find((x) => x.id === p.parentId) : undefined;
+      return {
+        SCHEDA: campaign?.schede.find((s) => s.id === o.schedaId)?.nome ?? "",
+        EAN: o.ean,
+        MARCA: p?.marca ?? "",
+        TITOLO: parent ? effectiveParentText(db, scope, parent, "nome", academyDb).value : (p?.descrizione ?? o.descrizione),
+        "DESCRIZIONE VOLANTINO": parent ? effectiveParentText(db, scope, parent, "descVolantino", academyDb).value : o.descrizione,
+        "PREZZO PROMO": o.prezzoPromo,
+        "PREZZO LISTINO": o.prezzoListino ?? "",
+        ETICHETTA: o.label ?? "",
+        "AREA TEMATICA": o.gruppo ?? "",
+        "DESCRIZIONE AREA": o.gruppoDescrizione ?? "",
+        "TENERE VICINO A": o.tieniVicinoA ? (db.offers.find((x) => x.id === o.tieniVicinoA)?.descrizione ?? "") : "",
+        CONDIZIONI: o.condizioni ?? "",
+        FOTO: zooImageUrl(p, parent),
+        "VALIDITA'": campaign ? `${campaign.dal} - ${campaign.al}` : "",
+      };
+    });
+}
+
+/** Una riga dell'export "per cella" del volantino composto (crea-volantino/excel). */
+export interface VolantinoCellRow {
+  "N. pagina": number; Pagina: string; "Note della pagina": string; Cella: string;
+  Riga: number; Colonna: number; "Righe occupate": number; "Colonne occupate": number;
+  Sezione: string; "Sfondo sezione": string; "N. offerte": number; EAN: string;
+  Descrizione: string; Marca: string; "Prezzo promo": string; "Prezzo listino": string;
+  Etichetta: string; Testo: string; Immagine: string; "Commento per il grafico": string;
+}
+
+/** Righe dell'export "per cella": una per ogni cella non vuota della griglia del volantino. */
+export function volantinoCellRows(db: ZooDB, campaignId: string): VolantinoCellRow[] {
+  const layout = db.volantinoLayouts.find((l) => l.campaignId === campaignId);
+  if (!layout) return [];
+  const pages = migraVolantinoPages(layout.pages);
+  const rows: VolantinoCellRow[] = [];
+  pages.forEach((page, pi) => {
+    const nomePagina = page.titolo || `Pagina ${pi + 1}`;
+    page.blocks.forEach((b, bi) => {
+      const offs = (b.offerIds ?? []).map((id) => db.offers.find((o) => o.id === id)).filter(Boolean) as ZooOffer[];
+      if (offs.length === 0 && !b.testo && !b.imageUrl && !b.label) return; // celle vuote: non servono al grafico
+      const sez = (page.sezioni ?? []).find(
+        (s) => b.r >= s.r && b.r < s.r + s.rs && b.c >= s.c && b.c < s.c + s.cs
+      );
+      const primo = offs[0];
+      rows.push({
+        "N. pagina": pi + 1, Pagina: nomePagina, "Note della pagina": page.note ?? "",
+        Cella: `${pi + 1}-${bi + 1}`, Riga: b.r + 1, Colonna: b.c + 1,
+        "Righe occupate": b.rs, "Colonne occupate": b.cs,
+        Sezione: sez?.titolo ?? "", "Sfondo sezione": sez?.bg ?? "",
+        "N. offerte": offs.length, EAN: offs.map((o) => o.ean).join(" / "),
+        Descrizione: b.descrizione ?? offs.map((o) => o.descrizione).join(" / "),
+        Marca: offs.map((o) => db.products.find((p) => p.id === o.productId)?.marca ?? "").join(" / "),
+        "Prezzo promo": b.prezzo ?? offs.map((o) => o.prezzoPromo).join(" / "),
+        "Prezzo listino": offs.map((o) => o.prezzoListino ?? "").join(" / "),
+        Etichetta: b.label ?? primo?.label ?? "",
+        Testo: b.testo ?? "",
+        Immagine: b.imageUrl ?? "",
+        "Commento per il grafico": b.commento ?? "",
+      });
+    });
+  });
+  return rows;
+}
+
+export interface VolantinoPhotoRef { url: string; nome: string }
+
+/**
+ * Foto da consegnare al grafico assieme al volantino: quelle degli articoli
+ * davvero impaginati (una per articolo/padre, dedotta dalla stessa `zooImageUrl`
+ * usata ovunque nel sito) più le eventuali immagini di sfondo caricate nelle
+ * celle. Deduplicate per URL. Solo URL assoluti (Supabase Storage): i percorsi
+ * locali di sviluppo o "mancante.jpg" non hanno una foto reale da esportare.
+ */
+export function volantinoPhotoRefs(db: ZooDB, campaignId: string): VolantinoPhotoRef[] {
+  const layout = db.volantinoLayouts.find((l) => l.campaignId === campaignId);
+  if (!layout) return [];
+  const pages = migraVolantinoPages(layout.pages);
+  const seen = new Map<string, VolantinoPhotoRef>();
+  for (const page of pages) {
+    for (const b of page.blocks) {
+      for (const offerId of b.offerIds ?? []) {
+        const o = db.offers.find((x) => x.id === offerId);
+        if (!o) continue;
+        const p = db.products.find((x) => x.id === o.productId);
+        const parent = p?.parentId ? db.parents.find((x) => x.id === p.parentId) : undefined;
+        const url = zooImageUrl(p, parent);
+        if (url.startsWith("http") && !seen.has(url)) {
+          const nome = `${o.ean}_${(parent?.nome ?? p?.descrizione ?? o.descrizione).slice(0, 40)}`;
+          seen.set(url, { url, nome });
+        }
+      }
+      if (b.imageUrl && b.imageUrl.startsWith("http") && !seen.has(b.imageUrl)) {
+        seen.set(b.imageUrl, { url: b.imageUrl, nome: `sfondo_${page.titolo ?? ""}_${b.id}` });
+      }
+    }
+  }
+  return [...seen.values()];
 }
 
 /** Layout cartello zoo di partenza, usato finché il Consorzio non ne salva uno. */

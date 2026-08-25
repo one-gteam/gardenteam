@@ -4,12 +4,14 @@ import StampeHeader from "@/components/stampe/StampeHeader";
 import { canAccessArea, isZooEditor, scopesForUser, resolveScope } from "@/lib/stampe";
 import { getDb } from "@/lib/db";
 import { listStorageFiles, publicUrlFor } from "@/lib/supabase";
+import PhotoUploader from "@/components/stampe/PhotoUploader";
+import BulkCheckbox from "@/components/stampe/BulkCheckbox";
 import {
   getZooDb, zooImageUrl, effectiveParentText, isZooHidden, hiddenEntriesFor, fornitoriList, marcheList,
-  suggestPhotoMatch,
+  suggestPhotoMatch, buildAbbinamentoIndex,
 } from "@/lib/zoo";
 import {
-  importZooProducts, uploadZooPhotos, associateZooPhoto, confirmZooPhotoMatches, createZooParent, associaConAI,
+  importZooProducts, finalizeZooPhotoUpload, associateZooPhoto, confirmZooPhotoMatches, createZooParent, associaConAI,
   rigeneraTestiAI, saveParentTexts, setParentImage, toggleParentCaratteristica, scioglieParent, toggleZooHidden,
   toggleZooHiddenBulk,
 } from "@/lib/zoo-actions";
@@ -58,9 +60,10 @@ export default async function ZooDatiPage({
   );
   // proposte di abbinamento per nome (nessuna AI), su tutto il catalogo senza foto
   const senzaFotoCatalogo = db.products.filter((p) => !p.image);
+  const abbinamentoIndex = buildAbbinamentoIndex(senzaFotoCatalogo);
   const photoSuggestions = availablePhotos.slice(0, 200).map((f) => ({
     file: f,
-    candidates: suggestPhotoMatch(f.replace(/\.[a-z0-9]+$/i, ""), senzaFotoCatalogo, 5),
+    candidates: suggestPhotoMatch(f.replace(/\.[a-z0-9]+$/i, ""), abbinamentoIndex, 5),
   }));
 
   const senzaPadre = db.products.filter((p) => !p.parentId).length;
@@ -122,12 +125,11 @@ export default async function ZooDatiPage({
               <div>
                 <strong>Caricamento foto</strong>
                 <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "4px 0 8px" }}>
-                  Puoi selezionare più foto insieme: se il nome del file contiene l&apos;EAN o il codice fornitore, l&apos;abbinamento è automatico.
+                  Puoi selezionare anche centinaia di foto insieme (caricate direttamente, niente limiti di
+                  dimensione): se il nome del file contiene l&apos;EAN o il codice fornitore, l&apos;abbinamento è
+                  automatico.
                 </p>
-                <form action={uploadZooPhotos.bind(null, BACK, scopeParam)} style={{ display: "flex", gap: 8 }}>
-                  <input type="file" name="foto" accept="image/*" multiple required />
-                  <button className="btn btn-sm" type="submit">Carica foto</button>
-                </form>
+                <PhotoUploader back={BACK} scopeParam={scopeParam} finalize={finalizeZooPhotoUpload} />
               </div>
             </div>
           </div>
@@ -344,7 +346,7 @@ export default async function ZooDatiPage({
             <table className="data">
               <thead>
                 <tr>
-                  {(consortium || scope.type !== "system") && <th style={{ width: 30 }}></th>}
+                  {(consortium || scope.type !== "system") && <th style={{ width: 30 }}><BulkCheckbox name="sel" /></th>}
                   <th style={{ width: 56 }}>Foto</th>
                   <th>Descrizione</th>
                   <th>EAN / Codice</th>

@@ -4,14 +4,17 @@ import StampeHeader from "@/components/stampe/StampeHeader";
 import { canAccessArea, isZooEditor, scopesForUser, resolveScope } from "@/lib/stampe";
 import { getDb } from "@/lib/db";
 import { listStorageFiles, publicUrlFor } from "@/lib/supabase";
+import PhotoUploader from "@/components/stampe/PhotoUploader";
+import BulkCheckbox from "@/components/stampe/BulkCheckbox";
 import {
   getZooDb, zooImageUrl, effectiveParentText, campagnaInLavorazione, campagnaInCorso, campaignStato,
-  suggestPhotoMatch, type ZooProduct,
+  suggestPhotoMatch, buildAbbinamentoIndex, type ZooProduct,
 } from "@/lib/zoo";
 import {
-  importZooOffers, updateCampaignDates, associaNuoviConAI, uploadZooPhotos, associateZooPhoto,
+  importZooOffers, updateCampaignDates, associaNuoviConAI, finalizeZooPhotoUpload, associateZooPhoto,
   confirmZooPhotoMatches, createZooParent, associaConAI, rigeneraTestiAI, saveParentTexts, setParentImage,
   toggleParentCaratteristica, scioglieParent, chiudiVolantino, riapriVolantino, nuovoVolantino,
+  svuotaOfferteVolantino, rimuoviOfferteMarginiamo,
 } from "@/lib/zoo-actions";
 
 /** Le azioni su foto e padri tornano qui (le stesse servono a "Database prodotti"). */
@@ -70,10 +73,14 @@ export default async function ZooOffertePage({
   );
   // proposte di abbinamento per nome (nessuna AI): solo sugli articoli di questo volantino, senza foto
   const senzaFoto = offerProducts.filter((p) => !p.image);
+  const abbinamentoIndex = buildAbbinamentoIndex(senzaFoto);
   const photoSuggestions = availablePhotos.slice(0, 200).map((f) => ({
     file: f,
-    candidates: suggestPhotoMatch(f.replace(/\.[a-z0-9]+$/i, ""), senzaFoto, 5),
+    candidates: suggestPhotoMatch(f.replace(/\.[a-z0-9]+$/i, ""), abbinamentoIndex, 5),
   }));
+
+  // offerte "marginiamo": nessuna promo dal fornitore, il PV decide il margine da sé — non sono offerte vere
+  const marginiamo = offers.filter((o) => (o.condizioni ?? "").trim().toLowerCase() === "marginiamo");
 
   const fmt = (d?: string) => (d ? new Date(`${d}T00:00:00`).toLocaleDateString("it-IT") : "—");
   const q = (sp.q ?? "").toLowerCase();
@@ -115,6 +122,7 @@ export default async function ZooOffertePage({
           <div className="alert alert-green">
             ✓ Importate {sp.importate} offerte ({sp.nuovi ?? 0} prodotti nuovi aggiunti al database base).
             {sp.senzaprezzo && ` ${sp.senzaprezzo} senza prezzo promo (vedi condizioni): da completare a mano.`}
+            {sp.esclusemarginiamo && ` ${sp.esclusemarginiamo} righe "marginiamo" escluse dalle offerte.`}
           </div>
         )}
         {sp.padri !== undefined && (
@@ -135,6 +143,12 @@ export default async function ZooOffertePage({
             pronto apri il volantino successivo qui sotto.
           </div>
         )}
+        {sp.svuotato !== undefined && (
+          <div className="alert alert-green">✓ Eliminate {sp.svuotato} offerte: carica di nuovo l&apos;Excel qui sotto.</div>
+        )}
+        {sp.rimossemarginiamo !== undefined && (
+          <div className="alert alert-green">✓ Rimosse {sp.rimossemarginiamo} offerte &quot;marginiamo&quot;.</div>
+        )}
         {sp.nuovo && <div className="alert alert-green">✓ Nuovo volantino aperto: le pagine ripartono pulite.</div>}
         {sp.riaperto && <div className="alert alert-green">✓ Volantino riaperto: puoi modificarlo di nuovo.</div>}
         {sp.errore === "giaaperto" && (
@@ -154,11 +168,20 @@ export default async function ZooOffertePage({
                   <span style={{ fontSize: 12.5, color: "var(--muted)" }}>
                     {fmt(campaign.dal)} → {fmt(campaign.al)} · {offers.length} offerte
                   </span>
-                  <form action={chiudiVolantino.bind(null, campaign.id, scopeParam)} style={{ marginLeft: "auto" }}>
-                    <button className="btn btn-sm" type="submit" title="Il lavoro è finito: le offerte partono e si stampano i cartelli">
-                      Chiudi volantino
-                    </button>
-                  </form>
+                  <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+                    {offers.length > 0 && (
+                      <form action={svuotaOfferteVolantino.bind(null, campaign.id, scopeParam)}>
+                        <button className="btn btn-outline btn-sm" type="submit" title="Elimina tutte le offerte di questo volantino per ricaricare l'Excel da zero">
+                          Elimina tutte le offerte
+                        </button>
+                      </form>
+                    )}
+                    <form action={chiudiVolantino.bind(null, campaign.id, scopeParam)}>
+                      <button className="btn btn-sm" type="submit" title="Il lavoro è finito: le offerte partono e si stampano i cartelli">
+                        Chiudi volantino
+                      </button>
+                    </form>
+                  </div>
                 </>
               ) : (
                 <>
@@ -218,9 +241,8 @@ export default async function ZooOffertePage({
                 <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "4px 0 8px" }}>
                   Colonne: EAN, DESCRIZIONE PROMO, PREZZO PROMO, PREZZO LISTINO, CONDIZIONI (+ MARCA/FORNITORE per i
                   prodotti nuovi). Riconosce anche i listini multi-fornitore con l&apos;intestazione (FORNITORE, EAN,
-                  NR. ARTICOLO FORNITORE, TESTO BREVE, PREZZO DI VENDITA…) ripetuta prima di ogni fornitore: le righe
-                  senza un prezzo promo numerico (es. &quot;marginiamo&quot;, &quot;3x2&quot;) entrano comunque, senza
-                  prezzo, con la nota in condizioni da completare a mano. Puoi caricare più file sullo stesso volantino.{" "}
+                  NR. ARTICOLO FORNITORE, TESTO BREVE, PREZZO DI VENDITA…) ripetuta prima di ogni fornitore. Puoi
+                  caricare più file sullo stesso volantino.{" "}
                   <a href={`/stampe/zoo/excel?offerte=1&scope=${scopeParam}`}>Scarica il modello</a>
                 </p>
                 <form action={importZooOffers.bind(null, scopeParam)} style={{ display: "grid", gap: 8 }}>
@@ -228,19 +250,22 @@ export default async function ZooOffertePage({
                   <label style={{ fontSize: 12.5 }}>
                     <input type="checkbox" name="sostituisci" value="1" /> sostituisci le offerte già caricate
                   </label>
+                  <label style={{ fontSize: 12.5 }}>
+                    <input type="checkbox" name="escludimarginiamo" value="1" defaultChecked />{" "}
+                    escludi le righe &quot;marginiamo&quot; (nessuna promo dal fornitore, decide il PV): non entrano
+                    come offerta, l&apos;articolo resta comunque nel database
+                  </label>
                   <button className="btn btn-sm" type="submit">Importa offerte</button>
                 </form>
               </div>
               <div>
                 <strong>Caricamento foto</strong>
                 <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "4px 0 8px" }}>
-                  Puoi selezionare più foto insieme: se il nome del file contiene l&apos;EAN o il codice fornitore,
-                  l&apos;abbinamento è automatico. Ogni articolo ha la sua foto; nel padre si sceglie quella di riferimento.
+                  Puoi selezionare anche centinaia di foto insieme (caricate direttamente, niente limiti di
+                  dimensione): se il nome del file contiene l&apos;EAN o il codice fornitore, l&apos;abbinamento è
+                  automatico. Ogni articolo ha la sua foto; nel padre si sceglie quella di riferimento.
                 </p>
-                <form action={uploadZooPhotos.bind(null, BACK, scopeParam)} style={{ display: "grid", gap: 8 }}>
-                  <input type="file" name="foto" accept="image/*" multiple required />
-                  <button className="btn btn-sm" type="submit">Carica foto</button>
-                </form>
+                <PhotoUploader back={BACK} scopeParam={scopeParam} finalize={finalizeZooPhotoUpload} />
                 {availablePhotos.length > 0 && (
                   <p className="hint" style={{ marginTop: 6 }}>
                     {availablePhotos.length} foto caricate non ancora abbinate: le abbini dalla tabella qui sotto.
@@ -248,6 +273,17 @@ export default async function ZooOffertePage({
                 )}
               </div>
             </div>
+          </div>
+        )}
+
+        {/* ---------- offerte "marginiamo" già importate: rimozione in blocco ---------- */}
+        {consortium && campaign && marginiamo.length > 0 && (
+          <div className="alert alert-amber" style={{ marginBottom: 14 }}>
+            <strong>{marginiamo.length} offerte &quot;marginiamo&quot;</strong> (nessuna promo dal fornitore, decide il
+            PV): non sono offerte vere, non dovrebbero comparire nei cartelli.{" "}
+            <form action={rimuoviOfferteMarginiamo.bind(null, campaign.id, scopeParam)} style={{ display: "inline" }}>
+              <button className="btn btn-sm" type="submit">Rimuovile</button>
+            </form>
           </div>
         )}
 
@@ -481,7 +517,7 @@ export default async function ZooOffertePage({
                 <table className="data">
                   <thead>
                     <tr>
-                      {consortium && <th style={{ width: 30 }}></th>}
+                      {consortium && <th style={{ width: 30 }}><BulkCheckbox name="sel" /></th>}
                       <th style={{ width: 56 }}>Foto</th>
                       <th>Offerta</th>
                       <th>EAN</th>

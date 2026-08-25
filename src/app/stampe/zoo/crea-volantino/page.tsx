@@ -141,6 +141,7 @@ export default async function CreaVolantinoPage({
             offers={offers}
             initialPages={layout ? migraVolantinoPages(layout.pages) : []}
             excelHref={`/stampe/zoo/crea-volantino/excel?campagna=${campaign.id}`}
+            fotoZipHref={`/stampe/zoo/crea-volantino/foto?campagna=${campaign.id}`}
             animali={ANIMALI}
             caratts={carattsProdotto}
             labels={db.settings.labels}

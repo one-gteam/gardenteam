@@ -136,32 +136,29 @@ export async function importZooProducts(scopeParam: string, formData: FormData) 
 }
 
 /**
- * Carica una o più foto: se il nome file contiene EAN o codice fornitore,
- * l'associazione è automatica. `back` è la pagina da cui si è partiti (Database
- * prodotti o Import offerte): le due lavorano sugli stessi articoli.
+ * Completa il caricamento foto DOPO che il browser le ha già messe nel bucket
+ * (upload diretto via URL firmato, vedi /api/zoo-foto/sign: bypassa il limite
+ * di dimensione del body delle funzioni serverless, che con centinaia di foto
+ * in alta risoluzione manda in errore un upload passato dal server). Qui resta
+ * solo l'abbinamento automatico per EAN/codice contenuto nel nome file. `back`
+ * è la pagina da cui si è partiti (Database prodotti o Import offerte).
  */
-export async function uploadZooPhotos(back: string, scopeParam: string, formData: FormData) {
+export async function finalizeZooPhotoUpload(back: string, scopeParam: string, fileNames: string[]) {
   await requireZooUser();
-  const files = formData.getAll("foto") as File[];
   const db = await getZooDb();
-  let saved = 0;
   let matched = 0;
-  for (const file of files) {
-    if (!file || file.size === 0 || !file.type.startsWith("image/")) continue;
-    const clean = file.name.toLowerCase().replace(/[^a-z0-9._-]/g, "_");
-    const url = await uploadPublicFile(`zoo-foto/${clean}`, Buffer.from(await file.arrayBuffer()), file.type);
-    saved++;
+  for (const clean of fileNames) {
     const base = clean.replace(/\.[a-z0-9]+$/, "");
     const hit = db.products.find(
       (p) => (p.ean && base.includes(p.ean)) || (p.codice && p.codice.length > 3 && base.includes(p.codice.toLowerCase()))
     );
     if (hit) {
-      hit.image = url;
+      hit.image = publicUrlFor(`zoo-foto/${clean}`);
       matched++;
     }
   }
   await saveZooDb(db);
-  redirect(backUrl(back, scopeParam, { foto: String(saved), abbinate: String(matched) }));
+  redirect(backUrl(back, scopeParam, { foto: String(fileNames.length), abbinate: String(matched) }));
 }
 
 /** Associa manualmente una foto già caricata (nel bucket zoo-foto) a un prodotto. */
@@ -456,10 +453,12 @@ export async function importZooOffers(scopeParam: string, formData: FormData) {
     }
   }
   const campaignId = campaign.id;
+  const escludiMarginiamo = String(formData.get("escludimarginiamo") ?? "") === "1";
 
   let nOffers = 0;
   let nNew = 0;
   let nSenzaPrezzo = 0;
+  let nMarginiamo = 0;
   for (const row of rows) {
     const { ean, descrizione } = row;
     if (!ean) continue;
@@ -479,6 +478,11 @@ export async function importZooOffers(scopeParam: string, formData: FormData) {
       };
       db.products.push(product);
     }
+    // "marginiamo": il fornitore non ha dato una promo, decide il PV — non è un'offerta vera
+    if (escludiMarginiamo && row.condizioni.trim().toLowerCase() === "marginiamo") {
+      nMarginiamo++;
+      continue;
+    }
     if (!row.prezzoPromo) nSenzaPrezzo++;
     db.offers.push({
       id: `zo_${Date.now()}_${nOffers}`,
@@ -493,6 +497,7 @@ export async function importZooOffers(scopeParam: string, formData: FormData) {
   }
   await saveZooDb(db);
   redirect(backUrl("/stampe/zoo/offerte", scopeParam, {
+    ...(nMarginiamo ? { esclusemarginiamo: String(nMarginiamo) } : {}),
     importate: String(nOffers), nuovi: String(nNew), ...(nSenzaPrezzo ? { senzaprezzo: String(nSenzaPrezzo) } : {}),
   }));
 }
@@ -509,6 +514,42 @@ export async function updateCampaignDates(campaignId: string, scopeParam: string
     await saveZooDb(db);
   }
   redirect(backUrl("/stampe/zoo/offerte", scopeParam));
+}
+
+/**
+ * Elimina tutte le offerte di questo volantino (e i relativi voti) per ripartire
+ * con un nuovo caricamento Excel da zero: la campagna resta, i prodotti e i
+ * padri del database base non vengono toccati.
+ */
+export async function svuotaOfferteVolantino(campaignId: string, scopeParam: string) {
+  const user = await requireZooUser();
+  if (!isZooEditor(user)) redirect(backUrl("/stampe/zoo/offerte", scopeParam));
+  const db = await getZooDb();
+  const rimosse = new Set(db.offers.filter((o) => o.campaignId === campaignId).map((o) => o.id));
+  db.offers = db.offers.filter((o) => o.campaignId !== campaignId);
+  db.votes = db.votes.filter((v) => !rimosse.has(v.offerId));
+  await saveZooDb(db);
+  redirect(backUrl("/stampe/zoo/offerte", scopeParam, { svuotato: String(rimosse.size) }));
+}
+
+/**
+ * Rimuove dalle offerte di questo volantino quelle segnate "marginiamo" (il
+ * fornitore non ha dato una promo, decide il PV): non sono offerte vere e non
+ * dovrebbero comparire nei cartelli. Il prodotto resta nel database.
+ */
+export async function rimuoviOfferteMarginiamo(campaignId: string, scopeParam: string) {
+  const user = await requireZooUser();
+  if (!isZooEditor(user)) redirect(backUrl("/stampe/zoo/offerte", scopeParam));
+  const db = await getZooDb();
+  const rimosse = new Set(
+    db.offers
+      .filter((o) => o.campaignId === campaignId && (o.condizioni ?? "").trim().toLowerCase() === "marginiamo")
+      .map((o) => o.id)
+  );
+  db.offers = db.offers.filter((o) => !rimosse.has(o.id));
+  db.votes = db.votes.filter((v) => !rimosse.has(v.offerId));
+  await saveZooDb(db);
+  redirect(backUrl("/stampe/zoo/offerte", scopeParam, { rimossemarginiamo: String(rimosse.size) }));
 }
 
 /* ---------- Ciclo di vita del volantino ---------- */
