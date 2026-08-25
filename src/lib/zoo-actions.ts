@@ -921,7 +921,9 @@ export async function saveZooSettings(scopeParam: string, formData: FormData) {
   const db = await getZooDb();
   const list = (name: string) =>
     String(formData.get(name) ?? "").split(/\r?\n|,/).map((s) => s.trim()).filter(Boolean);
-  db.settings.caratteristiche = list("caratteristiche");
+  db.settings.categorieAnimali = list("categorieAnimali");
+  db.settings.caratteristicheProdotto = list("caratteristicheProdotto");
+  db.settings.caratteristiche = [...db.settings.categorieAnimali, ...db.settings.caratteristicheProdotto];
   db.settings.labels = list("labels");
   db.settings.schedeDefault = list("schedeDefault");
   db.settings.istruzioniVolantino = String(formData.get("istruzioniVolantino") ?? db.settings.istruzioniVolantino);

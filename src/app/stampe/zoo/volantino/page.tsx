@@ -3,14 +3,14 @@ import { getCurrentUser } from "@/lib/auth";
 import StampeHeader from "@/components/stampe/StampeHeader";
 import { canAccessArea, isZooEditor, scopesForUser, resolveScope } from "@/lib/stampe";
 import { getDb } from "@/lib/db";
-import { getZooDb, campagnaInLavorazione, zooImageUrl, effectiveParentText } from "@/lib/zoo";
+import { getZooDb, campagnaInLavorazione, zooImageUrl, effectiveParentText, animaliDi } from "@/lib/zoo";
 import {
   voteZooOffer, voteZooOffersBulk, toggleOfferSelected, updateOfferVolantino, renameScheda, addScheda,
   resolveZooSuggestion, sendZooSuggestion,
 } from "@/lib/zoo-actions";
 import ShiftChecks from "@/components/stampe/ShiftChecks";
 
-const ANIMALI = ["Cane", "Gatto", "Roditori", "Uccelli", "Pesci"];
+const RIGHE_MAX = 300;
 
 export default async function ZooVolantinoPage({
   searchParams,
@@ -44,7 +44,8 @@ export default async function ZooVolantinoPage({
     return parent?.caratteristiche ?? [];
   };
   const prodOf = (o: (typeof allOffers)[number]) => db.products.find((p) => p.id === o.productId);
-  const carattsProdotto = db.settings.caratteristiche.filter((c) => !ANIMALI.includes(c));
+  const ANIMALI = db.settings.categorieAnimali;
+  const carattsProdotto = db.settings.caratteristicheProdotto;
   const marche = [...new Set(baseOffers.map((o) => prodOf(o)?.marca).filter(Boolean) as string[])].sort();
   const fornitori = [...new Set(baseOffers.map((o) => prodOf(o)?.fornitore).filter(Boolean) as string[])].sort();
   // se sono già su una scheda con nome animale (es. "Cane"), il filtro parte da lì
@@ -58,6 +59,37 @@ export default async function ZooVolantinoPage({
     if (sp.fornitore && prodOf(o)?.fornitore !== sp.fornitore) return false;
     return true;
   });
+
+  // ordinamento per colonna (clic sull'intestazione): mantiene tutti i filtri correnti
+  const sortDir = sp.dir === "desc" ? "desc" : "asc";
+  const sortVal = (o: (typeof offers)[number]): string | number => {
+    switch (sp.sort) {
+      case "prezzo": return Number.parseFloat((o.prezzoPromo || "0").replace(",", "."));
+      case "marca": return prodOf(o)?.marca ?? "";
+      case "fornitore": return prodOf(o)?.fornitore ?? "";
+      case "animale": return animaliDi(db, caratteristicheOf(o)).join(", ");
+      default: return o.descrizione;
+    }
+  };
+  const offersOrdinate = sp.sort
+    ? [...offers].sort((a, b) => {
+        const va = sortVal(a);
+        const vb = sortVal(b);
+        const cmp = typeof va === "number" && typeof vb === "number" ? va - vb : String(va).localeCompare(String(vb), "it");
+        return sortDir === "desc" ? -cmp : cmp;
+      })
+    : offers;
+  const offersVisibili = offersOrdinate.slice(0, RIGHE_MAX);
+  const sortHref = (field: string) => {
+    const params = new URLSearchParams();
+    for (const [k, v] of Object.entries(sp)) if (v && k !== "sort" && k !== "dir" && k !== "scope") params.set(k, v);
+    params.set("scope", scopeParam);
+    params.set("sort", field);
+    params.set("dir", sp.sort === field && sortDir === "asc" ? "desc" : "asc");
+    return `?${params.toString()}`;
+  };
+  const sortArrow = (field: string) => (sp.sort === field ? (sortDir === "asc" ? " ▲" : " ▼") : "");
+
   const activeOffer = allOffers.find((o) => o.id === sp.offerta);
   const selCount = allOffers.filter((o) => o.selezionata).length;
   const openSuggestions = db.suggestions.filter((s) => s.status === "aperta");
@@ -226,8 +258,9 @@ export default async function ZooVolantinoPage({
                 <button className="btn btn-sm" type="submit" style={{ width: "100%" }}>Filtra</button>
               </form>
               <p className="hint" style={{ marginTop: 10, fontSize: 11.5 }}>
-                {offers.length} offerte in elenco. Spunta più offerte (anche con Shift+clic) e usa i pulsanti
-                sopra la tabella per proporle o segnarle non trattate in blocco.
+                {offers.length} offerte in elenco{offers.length > RIGHE_MAX ? ` (mostrate le prime ${RIGHE_MAX}: restringi con i filtri)` : ""}.
+                Spunta più offerte (anche con Shift+clic) e usa i pulsanti sopra la tabella per proporle o segnarle
+                non trattate in blocco. Clic sulle intestazioni della tabella per ordinare.
               </p>
             </div>
 
@@ -248,18 +281,22 @@ export default async function ZooVolantinoPage({
                   <tr>
                     <th style={{ width: 30 }}></th>
                     <th style={{ width: 56 }}>Foto</th>
-                    <th>Offerta</th>
-                    <th>Prezzo</th>
+                    <th><a href={sortHref("descrizione")} style={{ textDecoration: "none", color: "inherit" }}>Offerta{sortArrow("descrizione")}</a></th>
+                    <th><a href={sortHref("fornitore")} style={{ textDecoration: "none", color: "inherit" }}>Fornitore{sortArrow("fornitore")}</a></th>
+                    <th><a href={sortHref("marca")} style={{ textDecoration: "none", color: "inherit" }}>Marca{sortArrow("marca")}</a></th>
+                    <th><a href={sortHref("animale")} style={{ textDecoration: "none", color: "inherit" }}>Animale{sortArrow("animale")}</a></th>
+                    <th><a href={sortHref("prezzo")} style={{ textDecoration: "none", color: "inherit" }}>Prezzo{sortArrow("prezzo")}</a></th>
                     <th>Voti dei PV</th>
                     <th className="no-print">Il tuo voto</th>
                     {consortium && <th>Volantino (selezione finale)</th>}
                   </tr>
                 </thead>
                 <tbody>
-                  {offers.length === 0 && <tr><td colSpan={7} className="empty">Nessuna offerta {schedaFilter ? "assegnata a questa scheda" : "in campagna"}.</td></tr>}
-                  {offers.map((o) => {
+                  {offers.length === 0 && <tr><td colSpan={10} className="empty">Nessuna offerta {schedaFilter ? "assegnata a questa scheda" : "in campagna"}.</td></tr>}
+                  {offersVisibili.map((o) => {
                     const product = db.products.find((p) => p.id === o.productId);
                     const parent = product?.parentId ? db.parents.find((x) => x.id === product.parentId) : undefined;
+                    const animaliOfferta = animaliDi(db, parent?.caratteristiche ?? []);
                     const votes = db.votes.filter((v) => v.offerId === o.id);
                     const pref = votes.filter((v) => v.tipo === "preferita");
                     const non = votes.filter((v) => v.tipo === "nontrattato");
@@ -310,6 +347,9 @@ export default async function ZooVolantinoPage({
                             );
                           })()}
                         </td>
+                        <td style={{ fontSize: 12.5 }}>{product?.fornitore || "—"}</td>
+                        <td style={{ fontSize: 12.5 }}>{product?.marca || "—"}</td>
+                        <td style={{ fontSize: 11.5, color: "var(--muted)" }}>{animaliOfferta.join(", ") || "—"}</td>
                         <td>
                           <strong>€ {o.prezzoPromo}</strong>
                           {o.prezzoListino && <div style={{ fontSize: 11.5, color: "var(--muted)", textDecoration: "line-through" }}>€ {o.prezzoListino}</div>}

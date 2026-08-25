@@ -8,7 +8,7 @@ import PhotoUploader from "@/components/stampe/PhotoUploader";
 import BulkCheckbox from "@/components/stampe/BulkCheckbox";
 import {
   getZooDb, zooImageUrl, effectiveParentText, campagnaInLavorazione, campagnaInCorso, campaignStato,
-  suggestPhotoMatch, buildAbbinamentoIndex, type ZooProduct,
+  suggestPhotoMatch, buildAbbinamentoIndex, animaliDi, caratteristicheProdottoDi, type ZooProduct, type ZooOffer,
 } from "@/lib/zoo";
 import {
   importZooOffers, updateCampaignDates, associaNuoviConAI, finalizeZooPhotoUpload, associateZooPhoto,
@@ -24,6 +24,15 @@ export const maxDuration = 60;
 
 /** Le azioni su foto e padri tornano qui (le stesse servono a "Database prodotti"). */
 const BACK = "/stampe/zoo/offerte";
+
+/** Ricostruisce la query string corrente cambiando solo "vista" (mantiene ricerca/filtri). */
+function vistaQs(sp: Record<string, string | undefined>, scopeParam: string, vista: string): string {
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(sp)) if (v && k !== "scope" && k !== "vista") params.set(k, v);
+  params.set("scope", scopeParam);
+  params.set("vista", vista);
+  return params.toString();
+}
 
 /**
  * Import offerte: la pagina di partenza del volantino IN LAVORAZIONE. Qui dentro
@@ -64,10 +73,6 @@ export default async function ZooOffertePage({
   ];
   const senzaPadre = offerProducts.filter((p) => !p.parentId);
 
-  // padri usati da questo volantino, con i loro articoli
-  const parentIds = [...new Set(offerProducts.map((p) => p.parentId).filter(Boolean) as string[])];
-  const parents = parentIds.map((id) => db.parents.find((p) => p.id === id)!).filter(Boolean);
-
   const activeParent = db.parents.find((p) => p.id === sp.padre);
   const parentChildren = activeParent ? db.products.filter((p) => p.parentId === activeParent.id) : [];
 
@@ -97,6 +102,29 @@ export default async function ZooOffertePage({
     if (q && !`${o.descrizione} ${o.ean}`.toLowerCase().includes(q)) return false;
     return true;
   });
+
+  /*
+   * Vista raggruppata (default): una riga per padre invece che una per articolo.
+   * Con centinaia di offerte è molto più leggera da caricare e da scorrere, ed è
+   * anche il modo naturale di navigare i padri (sostituisce il vecchio elenco a
+   * pillole, scomodo oltre la decina di prodotti padre).
+   */
+  const vistaArticoli = sp.vista === "articoli";
+  const gruppi = (() => {
+    const map = new Map<string, { parent?: (typeof db.parents)[number]; offs: ZooOffer[] }>();
+    for (const o of visibili) {
+      const product = db.products.find((p) => p.id === o.productId);
+      const parent = product?.parentId ? db.parents.find((x) => x.id === product.parentId) : undefined;
+      const key = parent?.id ?? `_o_${o.id}`;
+      const g = map.get(key) ?? { parent, offs: [] };
+      g.offs.push(o);
+      map.set(key, g);
+    }
+    return [...map.values()];
+  })();
+  const RIGHE_MAX = 300;
+  const gruppiVisibili = gruppi.slice(0, RIGHE_MAX);
+  const visibiliCap = visibili.slice(0, RIGHE_MAX);
 
   return (
     <div>
@@ -455,21 +483,6 @@ export default async function ZooOffertePage({
               </div>
             )}
 
-            {/* ---------- padri di questo volantino ---------- */}
-            {parents.length > 0 && !activeParent && (
-              <div className="card" style={{ marginBottom: 14, padding: 14 }}>
-                <strong>Prodotti padre di questo volantino ({parents.length})</strong>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
-                  {parents.map((p) => (
-                    <a key={p.id} className="pill pill-blue" href={`${BACK}?scope=${scopeParam}&padre=${p.id}`} style={{ textDecoration: "none" }}>
-                      {effectiveParentText(db, scope, p, "nome", academyDb).value}{" "}
-                      ({db.products.filter((x) => x.parentId === p.id).length})
-                    </a>
-                  ))}
-                </div>
-              </div>
-            )}
-
             {/* ---------- raggruppamento: a mano o con l'AI ---------- */}
             {consortium && senzaPadre.length > 0 && (
               <div className="alert" style={{ background: "#f3ecfb", border: "1px solid #d9c6f2", marginBottom: 14 }}>
@@ -487,10 +500,21 @@ export default async function ZooOffertePage({
               </div>
             )}
 
-            {/* filtri */}
+            {/* filtri + vista */}
             <div className="card" style={{ marginBottom: 14, padding: 14 }}>
+              <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+                <a className={`pill ${!vistaArticoli ? "pill-blue" : "pill-gray"}`} style={{ textDecoration: "none" }}
+                  href={`${BACK}?${vistaQs(sp, scopeParam, "raggruppata")}`}>
+                  Vista raggruppata ({gruppi.length})
+                </a>
+                <a className={`pill ${vistaArticoli ? "pill-blue" : "pill-gray"}`} style={{ textDecoration: "none" }}
+                  href={`${BACK}?${vistaQs(sp, scopeParam, "articoli")}`}>
+                  Vista articoli singoli ({visibili.length})
+                </a>
+              </div>
               <form method="get" style={{ display: "grid", gridTemplateColumns: "2fr auto auto", gap: 10, alignItems: "end" }}>
                 <input type="hidden" name="scope" value={scopeParam} />
+                <input type="hidden" name="vista" value={vistaArticoli ? "articoli" : "raggruppata"} />
                 <label className="field" style={{ marginBottom: 0 }}>
                   Cerca<input type="text" name="q" defaultValue={sp.q ?? ""} placeholder="descrizione o EAN" />
                 </label>
@@ -525,20 +549,80 @@ export default async function ZooOffertePage({
                     <tr>
                       {consortium && <th style={{ width: 30 }}><BulkCheckbox name="sel" /></th>}
                       <th style={{ width: 56 }}>Foto</th>
-                      <th>Offerta</th>
-                      <th>EAN</th>
+                      <th>{vistaArticoli ? "Offerta" : "Prodotto"}</th>
+                      <th>Animale</th>
+                      <th>Caratteristica</th>
+                      <th>{vistaArticoli ? "EAN" : "Articoli"}</th>
                       <th>Prezzo promo</th>
                       <th>Listino</th>
-                      <th>Padre</th>
+                      {vistaArticoli && <th>Padre</th>}
                     </tr>
                   </thead>
                   <tbody>
-                    {visibili.length === 0 && (
-                      <tr><td colSpan={7} className="empty">Nessuna offerta: carica l&apos;Excel delle promo qui sopra.</td></tr>
+                    {(vistaArticoli ? visibiliCap.length : gruppiVisibili.length) === 0 && (
+                      <tr><td colSpan={9} className="empty">Nessuna offerta: carica l&apos;Excel delle promo qui sopra.</td></tr>
                     )}
-                    {visibili.map((o) => {
+
+                    {/* ---- vista raggruppata: una riga per padre (le orfane restano singole) ---- */}
+                    {!vistaArticoli && gruppiVisibili.map((g) => {
+                      const { parent, offs } = g;
+                      const first = offs[0];
+                      const product = db.products.find((p) => p.id === first.productId);
+                      const num = (s: string) => Number.parseFloat(s.replace(",", "."));
+                      const prezzi = [...new Set(offs.map((o) => o.prezzoPromo).filter(Boolean))];
+                      const prezzoLabel = prezzi.length === 0 ? "—"
+                        : prezzi.length === 1 ? `€ ${prezzi[0]}`
+                        : `€ ${Math.min(...prezzi.map(num)).toFixed(2).replace(".", ",")} – € ${Math.max(...prezzi.map(num)).toFixed(2).replace(".", ",")}`;
+                      const animali = animaliDi(db, parent?.caratteristiche ?? []);
+                      const prodottoCarat = caratteristicheProdottoDi(db, parent?.caratteristiche ?? []);
+                      const key = parent?.id ?? `_o_${first.id}`;
+                      return (
+                        <tr key={key}>
+                          {consortium && (
+                            <td>{!parent && product && <input type="checkbox" name="sel" value={product.id} />}</td>
+                          )}
+                          <td>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={zooImageUrl(product, parent)} alt="" style={{ width: 44, height: 44, objectFit: "contain", background: "#fff", borderRadius: 6, border: "1px solid #eee" }} />
+                          </td>
+                          <td>
+                            {parent ? (
+                              <a className="pill pill-blue" href={`${BACK}?scope=${scopeParam}&padre=${parent.id}`} style={{ textDecoration: "none" }}>
+                                {effectiveParentText(db, scope, parent, "nome", academyDb).value}
+                              </a>
+                            ) : (
+                              <strong style={{ fontSize: 13 }}>{first.descrizione}</strong>
+                            )}
+                            {!parent && <span className="pill pill-gray" style={{ marginLeft: 6 }}>senza padre</span>}
+                          </td>
+                          <td style={{ fontSize: 11.5, color: "var(--muted)" }}>{animali.join(", ") || "—"}</td>
+                          <td style={{ fontSize: 11.5, color: "var(--muted)" }}>{prodottoCarat.join(", ") || "—"}</td>
+                          <td style={{ fontSize: 12 }}>
+                            {offs.length > 1 ? (
+                              <details>
+                                <summary style={{ cursor: "pointer", color: "#274b7a" }}>{offs.length} articoli</summary>
+                                <ul style={{ margin: "4px 0 0", paddingLeft: 16, fontSize: 11 }}>
+                                  {offs.map((o) => <li key={o.id}>{o.descrizione} · EAN {o.ean}</li>)}
+                                </ul>
+                              </details>
+                            ) : (
+                              first.ean
+                            )}
+                          </td>
+                          <td><strong>{prezzoLabel}</strong></td>
+                          <td style={{ fontSize: 12.5 }}>
+                            {first.prezzoListino ? `€ ${first.prezzoListino}${offs.length > 1 ? "…" : ""}` : "—"}
+                          </td>
+                        </tr>
+                      );
+                    })}
+
+                    {/* ---- vista articoli singoli: una riga per offerta ---- */}
+                    {vistaArticoli && visibiliCap.map((o) => {
                       const product = db.products.find((p) => p.id === o.productId);
                       const parent = product?.parentId ? db.parents.find((x) => x.id === product.parentId) : undefined;
+                      const animali = animaliDi(db, parent?.caratteristiche ?? []);
+                      const prodottoCarat = caratteristicheProdottoDi(db, parent?.caratteristiche ?? []);
                       return (
                         <tr key={o.id}>
                           {consortium && (
@@ -565,6 +649,8 @@ export default async function ZooOffertePage({
                               </details>
                             )}
                           </td>
+                          <td style={{ fontSize: 11.5, color: "var(--muted)" }}>{animali.join(", ") || "—"}</td>
+                          <td style={{ fontSize: 11.5, color: "var(--muted)" }}>{prodottoCarat.join(", ") || "—"}</td>
                           <td style={{ fontSize: 12 }}>{o.ean}</td>
                           <td><strong>€ {o.prezzoPromo}</strong></td>
                           <td style={{ fontSize: 12.5 }}>{o.prezzoListino ? `€ ${o.prezzoListino}` : "—"}</td>
@@ -583,6 +669,11 @@ export default async function ZooOffertePage({
                   </tbody>
                 </table>
               </div>
+              {((vistaArticoli && visibili.length > RIGHE_MAX) || (!vistaArticoli && gruppi.length > RIGHE_MAX)) && (
+                <p className="hint" style={{ marginTop: 6 }}>
+                  Mostrate le prime {RIGHE_MAX} righe: usa la ricerca per restringere l&apos;elenco.
+                </p>
+              )}
             </form>
 
             {/* form esterni (via attributo form=) per l'abbinamento manuale delle foto */}

@@ -87,8 +87,8 @@ export default async function CreaVolantinoPage({
           .sort((a, b) => b.voti - a.voti || a.nonTrattati - b.nonTrattati);
       })()
     : [];
-  const ANIMALI = ["Cane", "Gatto", "Roditori", "Uccelli", "Pesci"];
-  const carattsProdotto = db.settings.caratteristiche.filter((c) => !ANIMALI.includes(c));
+  const ANIMALI = db.settings.categorieAnimali;
+  const carattsProdotto = db.settings.caratteristicheProdotto;
   const fmtData = (d: string) => (d ? new Date(`${d}T00:00:00`).toLocaleDateString("it-IT") : "—");
   const layout = campaign ? db.volantinoLayouts.find((l) => l.campaignId === campaign.id) : undefined;
 

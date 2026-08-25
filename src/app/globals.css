@@ -494,6 +494,8 @@ table.data tr:last-child td { border-bottom: none; }
 }
 @media (max-width: 1400px) { .vol-layout { grid-template-columns: 270px minmax(0, 1fr) 290px; gap: 12px; } }
 @media (max-width: 1100px) { .vol-layout { grid-template-columns: 1fr; } }
+/* schermi larghi: colonna offerte più ampia, due colonne di prodotti da collocare */
+@media (min-width: 1800px) { .vol-layout { grid-template-columns: 480px minmax(0, 1fr) 320px; } }
 
 /* intestazione della pagina: una riga sola, resta visibile scorrendo */
 .vol-head {
@@ -503,21 +505,32 @@ table.data tr:last-child td { border-bottom: none; }
 .vol-head h1 { font-size: 18px; margin: 0; }
 .vol-head .subtitle { font-size: 12.5px; margin: 0; }
 
+/*
+ * Il filtro (intestazione + campi) resta SEMPRE visibile: solo l'elenco "da
+ * collocare" scorre, in un riquadro proprio, così scorrere per vedere altri
+ * prodotti non fa sparire i filtri (comodo con centinaia di articoli).
+ */
 .vol-filtro {
-  position: sticky; top: calc(var(--vol-top2, 120px) + 8px); max-height: calc(100vh - var(--vol-top2, 120px) - 20px); overflow-y: auto;
+  position: sticky; top: calc(var(--vol-top2, 120px) + 8px); max-height: calc(100vh - var(--vol-top2, 120px) - 20px);
+  display: flex; flex-direction: column; overflow: hidden;
   background: #fff; border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow);
 }
+.vol-filtro-fissa { flex: 0 0 auto; }
+.vol-filtro-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 .vol-filtro-head {
   position: sticky; top: 0; z-index: 2; background: var(--green-100); color: var(--green-900);
   font-weight: 800; font-size: 12.5px; padding: 8px 12px; border-bottom: 1px solid var(--line);
+  display: flex; align-items: center; gap: 6px;
 }
+.vol-filtro-head button { margin-left: auto; }
 .vol-filtro-body { padding: 10px 12px 12px; }
-.vol-filtro-lista { padding: 10px 12px 14px; }
+.vol-filtro-lista { padding: 10px 12px 14px; display: grid; grid-template-columns: 1fr; gap: 8px; }
+@media (min-width: 1800px) { .vol-filtro-lista { grid-template-columns: 1fr 1fr; } }
 .vol-filtro .field { margin-bottom: 8px; font-size: 12px; }
 .vol-filtro .field select, .vol-filtro .field input { margin-top: 2px; font-size: 12px; padding: 5px 8px; }
 .vol-off {
   border: 1px solid var(--line); border-radius: 8px; background: #fff;
-  padding: 6px 8px; margin-bottom: 6px; cursor: grab;
+  padding: 6px 8px; cursor: grab;
 }
 .vol-off:hover { border-color: var(--green-500); box-shadow: var(--shadow); }
 

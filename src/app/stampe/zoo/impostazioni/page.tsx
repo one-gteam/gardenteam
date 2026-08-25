@@ -56,13 +56,18 @@ export default async function ZooImpostazioniPage({
               <h2 style={{ marginTop: 0 }}>Impostazioni del Consorzio</h2>
               <form action={saveZooSettings.bind(null, scopeParam)} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                 <label className="field" style={{ marginBottom: 0 }}>
-                  Caratteristiche prodotto (una per riga: es. umido, secco, cane, gatto…)
-                  <textarea name="caratteristiche" rows={5} defaultValue={db.settings.caratteristiche.join("\n")} />
+                  Categorie di animale (una per riga: es. cane, gatto, roditori…)
+                  <textarea name="categorieAnimali" rows={5} defaultValue={db.settings.categorieAnimali.join("\n")} />
+                </label>
+                <label className="field" style={{ marginBottom: 0 }}>
+                  Caratteristiche di prodotto (una per riga: es. umido, secco, snack…)
+                  <textarea name="caratteristicheProdotto" rows={5} defaultValue={db.settings.caratteristicheProdotto.join("\n")} />
                 </label>
                 <label className="field" style={{ marginBottom: 0 }}>
                   Etichette per le offerte del volantino (una per riga)
                   <textarea name="labels" rows={5} defaultValue={db.settings.labels.join("\n")} />
                 </label>
+                <div />
                 <label className="field" style={{ marginBottom: 0 }}>
                   Schede standard del volantino (struttura di partenza per ogni campagna)
                   <textarea name="schedeDefault" rows={4} defaultValue={db.settings.schedeDefault.join("\n")} />

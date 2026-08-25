@@ -211,7 +211,9 @@ export function migraVolantinoPages(pages: unknown[]): VolPage[] {
 }
 
 export interface ZooSettings {
-  caratteristiche: string[]; // umido, secco, cane, gatto, roditori...
+  caratteristiche: string[]; // = [...categorieAnimali, ...caratteristicheProdotto]: unione usata per il tag dei padri e il vincolo dell'AI
+  categorieAnimali: string[]; // sottoinsieme di "caratteristiche": cane, gatto, roditori...
+  caratteristicheProdotto: string[]; // sottoinsieme di "caratteristiche": umido, secco, snack...
   volantinoEditors?: string[]; // utenti (oltre a sistema/Gestore Zoo) che possono usare Crea Volantino
   labels: string[]; // etichette assegnabili alle offerte (es. SOTTOCOSTO, NOVITÀ)
   schedeDefault: string[]; // struttura standard delle schede del volantino
@@ -238,8 +240,13 @@ export interface ZooDB {
 
 /* ================== Persistenza ================== */
 
+const CATEGORIE_ANIMALI_DEFAULT = ["Cane", "Gatto", "Roditori", "Uccelli", "Pesci"];
+const CARATTERISTICHE_PRODOTTO_DEFAULT = ["Umido", "Secco", "Snack", "Accessori", "Igiene"];
+
 const DEFAULT_SETTINGS: ZooSettings = {
-  caratteristiche: ["Cane", "Gatto", "Roditori", "Uccelli", "Pesci", "Umido", "Secco", "Snack", "Accessori", "Igiene"],
+  caratteristiche: [...CATEGORIE_ANIMALI_DEFAULT, ...CARATTERISTICHE_PRODOTTO_DEFAULT],
+  categorieAnimali: CATEGORIE_ANIMALI_DEFAULT,
+  caratteristicheProdotto: CARATTERISTICHE_PRODOTTO_DEFAULT,
   labels: ["SOTTOCOSTO", "NOVITÀ", "ESCLUSIVA", "FORMATO CONVENIENZA", "PREZZO WOW"],
   schedeDefault: ["Copertina", "Cane", "Gatto", "Altri animali", "Accessori e igiene", "Retro"],
   istruzioniVolantino:
@@ -443,6 +450,14 @@ export function fornitoriList(db: ZooDB): string[] {
 
 export function marcheList(db: ZooDB): string[] {
   return Array.from(new Set(db.products.map((p) => p.marca).filter(Boolean))).sort();
+}
+
+/** Le "caratteristiche" di un padre sono un elenco unico (animale + prodotto insieme): queste due funzioni separano le due dimensioni per mostrarle in colonne distinte. */
+export function animaliDi(db: ZooDB, caratteristiche: string[]): string[] {
+  return caratteristiche.filter((c) => db.settings.categorieAnimali.includes(c));
+}
+export function caratteristicheProdottoDi(db: ZooDB, caratteristiche: string[]): string[] {
+  return caratteristiche.filter((c) => db.settings.caratteristicheProdotto.includes(c));
 }
 
 /* ================== Cartelli Zoo: campi, formati e layout per ambito ================== */

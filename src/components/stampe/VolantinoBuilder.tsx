@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Save, FileDown, Sheet, Plus, ImageDown } from "lucide-react";
+import { Save, FileDown, Sheet, Plus, ImageDown, ChevronDown, ChevronUp } from "lucide-react";
 import { saveVolantinoLayout, updateZooOfferQuick, uploadVolantinoImage } from "@/lib/zoo-actions";
 import type { VolPage, VolBlock, VolSection } from "@/lib/zoo";
 
@@ -87,6 +87,7 @@ export default function VolantinoBuilder({
   const [spread, setSpread] = useState(0);
   const [avviso, setAvviso] = useState("");
   const [f, setF] = useState({ animale: "", caratt: "", label: "", minVoti: "", minNon: "", marca: "", fornitore: "" });
+  const [filtroChiuso, setFiltroChiuso] = useState(false);
   const primoRender = useRef(true);
 
   /* --- offerte già collocate: spariscono dall'elenco a sinistra --- */
@@ -356,52 +357,63 @@ export default function VolantinoBuilder({
     <div className="vol-layout">
       {/* ---------- colonna sinistra: filtro + offerte disponibili ---------- */}
       <aside className="vol-filtro no-print" onDragOver={(e) => e.preventDefault()} onDrop={dropSuElenco}>
-        <div className="vol-filtro-head">Filtra le offerte</div>
-        <div className="vol-filtro-body">
-          <label className="field">Tipologia di animale
-            <select value={f.animale} onChange={(e) => setF({ ...f, animale: e.target.value })}>
-              <option value="">Tutte</option>
-              {animali.map((a) => <option key={a} value={a}>{a}</option>)}
-            </select>
-          </label>
-          <label className="field">Caratteristica prodotto
-            <select value={f.caratt} onChange={(e) => setF({ ...f, caratt: e.target.value })}>
-              <option value="">Tutte</option>
-              {caratts.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </label>
-          <label className="field">Tipologia di offerta
-            <select value={f.label} onChange={(e) => setF({ ...f, label: e.target.value })}>
-              <option value="">Tutte</option>
-              {labels.map((l) => <option key={l} value={l}>{l}</option>)}
-            </select>
-          </label>
-          <div style={{ display: "flex", gap: 8 }}>
-            <label className="field" style={{ flex: 1 }}>Voti da
-              <input type="number" min={0} value={f.minVoti} onChange={(e) => setF({ ...f, minVoti: e.target.value })} />
-            </label>
-            <label className="field" style={{ flex: 1 }}>Non tratt. da
-              <input type="number" min={0} value={f.minNon} onChange={(e) => setF({ ...f, minNon: e.target.value })} />
-            </label>
+        <div className="vol-filtro-fissa">
+          <div className="vol-filtro-head">
+            Filtra le offerte
+            <button type="button" className="mini-btn" title={filtroChiuso ? "Espandi filtro" : "Comprimi filtro"}
+              onClick={() => setFiltroChiuso((v) => !v)}>
+              {filtroChiuso ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+            </button>
           </div>
-          <label className="field">Marca
-            <select value={f.marca} onChange={(e) => setF({ ...f, marca: e.target.value })}>
-              <option value="">Tutte</option>
-              {marche.map((m) => <option key={m} value={m}>{m}</option>)}
-            </select>
-          </label>
-          <label className="field">Fornitore
-            <select value={f.fornitore} onChange={(e) => setF({ ...f, fornitore: e.target.value })}>
-              <option value="">Tutti</option>
-              {fornitori.map((x) => <option key={x} value={x}>{x}</option>)}
-            </select>
-          </label>
-          <button className="btn btn-outline btn-sm" type="button" style={{ width: "100%" }}
-            onClick={() => setF({ animale: "", caratt: "", label: "", minVoti: "", minNon: "", marca: "", fornitore: "" })}>
-            Azzera filtri
-          </button>
+          {!filtroChiuso && (
+            <div className="vol-filtro-body">
+              <label className="field">Tipologia di animale
+                <select value={f.animale} onChange={(e) => setF({ ...f, animale: e.target.value })}>
+                  <option value="">Tutte</option>
+                  {animali.map((a) => <option key={a} value={a}>{a}</option>)}
+                </select>
+              </label>
+              <label className="field">Caratteristica prodotto
+                <select value={f.caratt} onChange={(e) => setF({ ...f, caratt: e.target.value })}>
+                  <option value="">Tutte</option>
+                  {caratts.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </label>
+              <label className="field">Tipologia di offerta
+                <select value={f.label} onChange={(e) => setF({ ...f, label: e.target.value })}>
+                  <option value="">Tutte</option>
+                  {labels.map((l) => <option key={l} value={l}>{l}</option>)}
+                </select>
+              </label>
+              <div style={{ display: "flex", gap: 8 }}>
+                <label className="field" style={{ flex: 1 }}>Voti da
+                  <input type="number" min={0} value={f.minVoti} onChange={(e) => setF({ ...f, minVoti: e.target.value })} />
+                </label>
+                <label className="field" style={{ flex: 1 }}>Non tratt. da
+                  <input type="number" min={0} value={f.minNon} onChange={(e) => setF({ ...f, minNon: e.target.value })} />
+                </label>
+              </div>
+              <label className="field">Marca
+                <select value={f.marca} onChange={(e) => setF({ ...f, marca: e.target.value })}>
+                  <option value="">Tutte</option>
+                  {marche.map((m) => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </label>
+              <label className="field">Fornitore
+                <select value={f.fornitore} onChange={(e) => setF({ ...f, fornitore: e.target.value })}>
+                  <option value="">Tutti</option>
+                  {fornitori.map((x) => <option key={x} value={x}>{x}</option>)}
+                </select>
+              </label>
+              <button className="btn btn-outline btn-sm" type="button" style={{ width: "100%" }}
+                onClick={() => setF({ animale: "", caratt: "", label: "", minVoti: "", minNon: "", marca: "", fornitore: "" })}>
+                Azzera filtri
+              </button>
+            </div>
+          )}
         </div>
 
+        <div className="vol-filtro-scroll">
         <div className="vol-filtro-head">
           Da collocare ({disponibili.length})
           {inserite.size > 0 && <span className="pill pill-green" style={{ marginLeft: 6 }}>{inserite.size} già nel volantino</span>}
@@ -450,6 +462,7 @@ export default function VolantinoBuilder({
               )}
             </div>
           ))}
+        </div>
         </div>
       </aside>
 
