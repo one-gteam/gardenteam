@@ -7,15 +7,17 @@ import { listStorageFiles, publicUrlFor } from "@/lib/supabase";
 import PhotoUploader from "@/components/stampe/PhotoUploader";
 import BulkCheckbox from "@/components/stampe/BulkCheckbox";
 import InlineEdit from "@/components/stampe/InlineEdit";
+import InlineSelect from "@/components/stampe/InlineSelect";
 import {
   getZooDb, zooImageUrl, effectiveParentText, campagnaInLavorazione, campagnaInCorso, campaignStato,
   suggestPhotoMatch, buildAbbinamentoIndex, animaliDi, caratteristicheProdottoDi, type ZooProduct, type ZooOffer,
 } from "@/lib/zoo";
 import {
-  importZooOffers, updateCampaignDates, associaNuoviConAI, finalizeZooPhotoUpload, associateZooPhoto,
+  importZooOffers, updateCampaignDates, associaNuoviConAI, finalizeZooPhotoUpload,
   confirmZooPhotoMatches, createZooParent, associaConAI, rigeneraTestiAI, saveParentTexts, setParentImage,
   toggleParentCaratteristica, scioglieParent, chiudiVolantino, riapriVolantino, nuovoVolantino,
   svuotaOfferteVolantino, rimuoviOfferteMarginiamo, updateParentFieldInline, updateOfferFieldInline,
+  setParentTagInline,
 } from "@/lib/zoo-actions";
 
 // "Associa con AI" può richiedere più dei 10s di default per un lotto di articoli:
@@ -66,19 +68,26 @@ export default async function ZooOffertePage({
   const inCorso = campagnaInCorso(db);
   const offers = campaign ? db.offers.filter((o) => o.campaignId === campaign.id) : [];
 
+  /*
+   * Indici per id: con oltre mille articoli e centinaia di offerte, cercare con
+   * `.find()` dentro il ciclo delle righe costa quadratico e si sentiva.
+   */
+  const prodById = new Map(db.products.map((p) => [p.id, p]));
+  const parentById = new Map(db.parents.map((p) => [p.id, p]));
+
   // articoli di QUESTO volantino: è su questi che si lavora, non su tutto il database
   // (senza ripetizioni: più offerte possono puntare allo stesso articolo)
   const offerProducts = [
     ...new Map(
       offers
-        .map((o) => db.products.find((p) => p.id === o.productId))
+        .map((o) => prodById.get(o.productId ?? ""))
         .filter((p): p is ZooProduct => Boolean(p))
         .map((p) => [p.id, p])
     ).values(),
   ];
   const senzaPadre = offerProducts.filter((p) => !p.parentId);
 
-  const activeParent = db.parents.find((p) => p.id === sp.padre);
+  const activeParent = sp.padre ? parentById.get(sp.padre) : undefined;
   const parentChildren = activeParent ? db.products.filter((p) => p.parentId === activeParent.id) : [];
 
   // foto già caricate ma non ancora abbinate ad alcun articolo
@@ -86,13 +95,24 @@ export default async function ZooOffertePage({
   const availablePhotos = (await listStorageFiles("zoo-foto")).filter(
     (f) => /\.(jpg|jpeg|png|webp)$/i.test(f) && !usedPhotos.has(f)
   );
-  // proposte di abbinamento per nome (nessuna AI): solo sugli articoli di questo volantino, senza foto
+  /*
+   * Le proposte di abbinamento costano: tokenizzare tutti gli articoli senza foto
+   * e confrontarli con ogni file richiede centinaia di ms ad ogni caricamento
+   * della pagina. Si calcolano solo quando la sezione è aperta davvero
+   * (?abbina=1), che è anche il modo in cui la sezione si comprime.
+   */
+  const abbinaAperto = sp.abbina === "1";
   const senzaFoto = offerProducts.filter((p) => !p.image);
-  const abbinamentoIndex = buildAbbinamentoIndex(senzaFoto);
-  const photoSuggestions = availablePhotos.slice(0, 200).map((f) => ({
-    file: f,
-    candidates: suggestPhotoMatch(f.replace(/\.[a-z0-9]+$/i, ""), abbinamentoIndex, 5),
-  }));
+  const senzaFotoById = new Map(senzaFoto.map((p) => [p.id, p]));
+  const photoSuggestions = abbinaAperto
+    ? (() => {
+        const index = buildAbbinamentoIndex(senzaFoto);
+        return availablePhotos.slice(0, 200).map((f) => ({
+          file: f,
+          candidates: suggestPhotoMatch(f.replace(/\.[a-z0-9]+$/i, ""), index, 5),
+        }));
+      })()
+    : [];
 
   // offerte "marginiamo": nessuna promo dal fornitore, il PV decide il margine da sé — non sono offerte vere
   const marginiamo = offers.filter((o) => (o.condizioni ?? "").trim().toLowerCase() === "marginiamo");
@@ -100,10 +120,7 @@ export default async function ZooOffertePage({
   const fmt = (d?: string) => (d ? new Date(`${d}T00:00:00`).toLocaleDateString("it-IT") : "—");
   const q = (sp.q ?? "").toLowerCase();
   const visibili = offers.filter((o) => {
-    if (sp.senzapadre === "1") {
-      const prod = db.products.find((p) => p.id === o.productId);
-      if (prod?.parentId) return false;
-    }
+    if (sp.senzapadre === "1" && prodById.get(o.productId ?? "")?.parentId) return false;
     if (q && !`${o.descrizione} ${o.ean}`.toLowerCase().includes(q)) return false;
     return true;
   });
@@ -118,8 +135,8 @@ export default async function ZooOffertePage({
   const gruppi = (() => {
     const map = new Map<string, { parent?: (typeof db.parents)[number]; offs: ZooOffer[] }>();
     for (const o of visibili) {
-      const product = db.products.find((p) => p.id === o.productId);
-      const parent = product?.parentId ? db.parents.find((x) => x.id === product.parentId) : undefined;
+      const product = prodById.get(o.productId ?? "");
+      const parent = product?.parentId ? parentById.get(product.parentId) : undefined;
       const key = parent?.id ?? `_o_${o.id}`;
       const g = map.get(key) ?? { parent, offs: [] };
       g.offs.push(o);
@@ -428,10 +445,19 @@ export default async function ZooOffertePage({
         )}
 
         {/* ---------- proposte di abbinamento foto→articolo per nome (nessuna AI) ---------- */}
-        {consortium && campaign && photoSuggestions.length > 0 && (
+        {consortium && campaign && availablePhotos.length > 0 && (
           <div className="card" style={{ marginBottom: 14, padding: 14 }}>
-            <strong>Abbina le foto agli articoli</strong>
-            <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "4px 0 8px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <strong>Abbina le foto agli articoli</strong>
+              <span className="pill pill-orange">{availablePhotos.length} da abbinare</span>
+              <a className="btn btn-outline btn-sm" style={{ marginLeft: "auto" }}
+                href={`${BACK}?${pageQs(sp, { scope: scopeParam, abbina: abbinaAperto ? undefined : "1" })}`}>
+                {abbinaAperto ? "▴ Comprimi" : "▾ Apri"}
+              </a>
+            </div>
+            {abbinaAperto && (
+            <>
+            <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "8px 0" }}>
               Le foto senza EAN/codice nel nome non si abbinano da sole: qui sotto trovi un&apos;ipotesi per ciascuna,
               basata sul confronto tra il nome del file e la descrizione dell&apos;articolo. Controlla, correggi dove
               serve con il menu a tendina, poi conferma in blocco.
@@ -444,7 +470,11 @@ export default async function ZooOffertePage({
                   </thead>
                   <tbody>
                     {photoSuggestions.map(({ file, candidates }) => {
-                      const altri = senzaFoto.filter((p) => !candidates.some((c) => c.productId === p.id));
+                      // solo i candidati proposti: elencare tutti gli articoli senza foto
+                      // significherebbe ripetere ~900 <option> per ogni riga
+                      const candidatiConProdotto = candidates
+                        .map((c) => ({ c, p: senzaFotoById.get(c.productId) }))
+                        .filter((x): x is { c: typeof candidates[number]; p: ZooProduct } => Boolean(x.p));
                       return (
                         <tr key={file}>
                           <td>
@@ -453,19 +483,12 @@ export default async function ZooOffertePage({
                           </td>
                           <td style={{ fontSize: 12 }}>{file}</td>
                           <td>
-                            <select name={`pick_${file}`} defaultValue={candidates[0]?.productId ?? ""} style={{ fontSize: 12.5, maxWidth: 420 }}>
+                            <select name={`pick_${file}`} defaultValue={candidatiConProdotto[0]?.c.productId ?? ""} style={{ fontSize: 12.5, maxWidth: 420 }}>
                               <option value="">— nessuno —</option>
-                              {candidates.map((c) => {
-                                const p = senzaFoto.find((x) => x.id === c.productId)!;
-                                return (
-                                  <option key={c.productId} value={c.productId}>
-                                    {Math.round(c.score * 100)}% — {p.descrizione}
-                                  </option>
-                                );
-                              })}
-                              {altri.length > 0 && <option disabled>──────────</option>}
-                              {altri.map((p) => (
-                                <option key={p.id} value={p.id}>{p.descrizione}</option>
+                              {candidatiConProdotto.map(({ c, p }) => (
+                                <option key={c.productId} value={c.productId}>
+                                  {Math.round(c.score * 100)}% — {p.descrizione}
+                                </option>
                               ))}
                             </select>
                           </td>
@@ -475,8 +498,15 @@ export default async function ZooOffertePage({
                   </tbody>
                 </table>
               </div>
-              <button className="btn btn-sm" type="submit" style={{ marginTop: 10 }}>Conferma abbinamenti</button>
+              <p className="hint" style={{ marginTop: 6 }}>
+                Se per una foto nessuna proposta è giusta, lasciala su &quot;nessuno&quot;: resta caricata e la
+                abbini a mano dal <a href={`/stampe/zoo/dati?scope=${scopeParam}`}>Database prodotti</a>, dove
+                puoi cercare l&apos;articolo per descrizione, EAN o codice.
+              </p>
+              <button className="btn btn-sm" type="submit" style={{ marginTop: 6 }}>Conferma abbinamenti</button>
             </form>
+            </>
+            )}
           </div>
         )}
 
@@ -580,7 +610,7 @@ export default async function ZooOffertePage({
                     {!vistaArticoli && gruppiVisibili.map((g) => {
                       const { parent, offs } = g;
                       const first = offs[0];
-                      const product = db.products.find((p) => p.id === first.productId);
+                      const product = prodById.get(first.productId ?? "");
                       const num = (s: string) => Number.parseFloat(s.replace(",", "."));
                       const prezzi = [...new Set(offs.map((o) => o.prezzoPromo).filter(Boolean))];
                       const prezzoLabel = prezzi.length === 0 ? "—"
@@ -625,8 +655,22 @@ export default async function ZooOffertePage({
                               <span style={{ fontSize: 11.5, color: "var(--muted)" }}>{descr || "—"}</span>
                             )}
                           </td>
-                          <td style={{ fontSize: 11.5, color: "var(--muted)" }}>{animali.join(", ") || "—"}</td>
-                          <td style={{ fontSize: 11.5, color: "var(--muted)" }}>{prodottoCarat.join(", ") || "—"}</td>
+                          <td>
+                            {consortium && parent ? (
+                              <InlineSelect value={animali[0] ?? ""} options={db.settings.categorieAnimali}
+                                onSave={setParentTagInline.bind(null, parent.id, "animale")} />
+                            ) : (
+                              <span style={{ fontSize: 11.5, color: "var(--muted)" }}>{animali.join(", ") || "—"}</span>
+                            )}
+                          </td>
+                          <td>
+                            {consortium && parent ? (
+                              <InlineSelect value={prodottoCarat[0] ?? ""} options={db.settings.caratteristicheProdotto}
+                                onSave={setParentTagInline.bind(null, parent.id, "prodotto")} />
+                            ) : (
+                              <span style={{ fontSize: 11.5, color: "var(--muted)" }}>{prodottoCarat.join(", ") || "—"}</span>
+                            )}
+                          </td>
                           <td style={{ fontSize: 12 }}>
                             {offs.length > 1 ? (
                               <details>
@@ -656,8 +700,8 @@ export default async function ZooOffertePage({
 
                     {/* ---- vista articoli singoli: una riga per offerta ---- */}
                     {vistaArticoli && visibiliCap.map((o) => {
-                      const product = db.products.find((p) => p.id === o.productId);
-                      const parent = product?.parentId ? db.parents.find((x) => x.id === product.parentId) : undefined;
+                      const product = prodById.get(o.productId ?? "");
+                      const parent = product?.parentId ? parentById.get(product.parentId) : undefined;
                       const animali = animaliDi(db, parent?.caratteristiche ?? []);
                       const prodottoCarat = caratteristicheProdottoDi(db, parent?.caratteristiche ?? []);
                       const aperto = !!parent && activeParent?.id === parent.id;
@@ -679,22 +723,24 @@ export default async function ZooOffertePage({
                             )}
                             {o.condizioni && <div style={{ fontSize: 11.5, color: "var(--muted)" }}>{o.condizioni}</div>}
                             {o.nuovo && <span className="pill pill-orange" style={{ marginTop: 2 }}>nuovo nel database</span>}
-                            {product && !product.image && availablePhotos.length > 0 && consortium && (
-                              <details style={{ fontSize: 11.5, marginTop: 2 }}>
-                                <summary style={{ cursor: "pointer", color: "#274b7a" }}>abbina una foto…</summary>
-                                <div style={{ display: "flex", gap: 4, marginTop: 4 }}>
-                                  <select name="fileName" form={`ph_${product.id}`} style={{ fontSize: 11.5 }} defaultValue="">
-                                    <option value="" disabled>scegli file</option>
-                                    {availablePhotos.map((f) => <option key={f} value={f}>{f}</option>)}
-                                  </select>
-                                  <button className="btn btn-outline btn-sm" type="submit" form={`ph_${product.id}`}>OK</button>
-                                </div>
-                              </details>
-                            )}
                           </td>
                           <td className="col-wide" style={{ fontSize: 11.5, color: "var(--muted)" }}>{parentDescr || "—"}</td>
-                          <td style={{ fontSize: 11.5, color: "var(--muted)" }}>{animali.join(", ") || "—"}</td>
-                          <td style={{ fontSize: 11.5, color: "var(--muted)" }}>{prodottoCarat.join(", ") || "—"}</td>
+                          <td>
+                            {consortium && parent ? (
+                              <InlineSelect value={animali[0] ?? ""} options={db.settings.categorieAnimali}
+                                onSave={setParentTagInline.bind(null, parent.id, "animale")} />
+                            ) : (
+                              <span style={{ fontSize: 11.5, color: "var(--muted)" }}>{animali.join(", ") || "—"}</span>
+                            )}
+                          </td>
+                          <td>
+                            {consortium && parent ? (
+                              <InlineSelect value={prodottoCarat[0] ?? ""} options={db.settings.caratteristicheProdotto}
+                                onSave={setParentTagInline.bind(null, parent.id, "prodotto")} />
+                            ) : (
+                              <span style={{ fontSize: 11.5, color: "var(--muted)" }}>{prodottoCarat.join(", ") || "—"}</span>
+                            )}
+                          </td>
                           <td style={{ fontSize: 12 }}>{o.ean}</td>
                           <td>
                             {consortium ? (
@@ -726,11 +772,6 @@ export default async function ZooOffertePage({
                 </p>
               )}
             </form>
-
-            {/* form esterni (via attributo form=) per l'abbinamento manuale delle foto */}
-            {consortium && offerProducts.filter((p) => !p.image).map((p) => (
-              <form key={p.id} id={`ph_${p.id}`} action={associateZooPhoto.bind(null, BACK, scopeParam, p.id)} />
-            ))}
           </>
         )}
       </div>

@@ -357,6 +357,30 @@ export async function updateParentFieldInline(
   return { ok: true };
 }
 
+/**
+ * Imposta in linea la categoria di animale (o la caratteristica di prodotto) di
+ * un padre: le due dimensioni convivono nello stesso elenco `caratteristiche`,
+ * quindi si sostituiscono solo i valori della dimensione scelta lasciando
+ * intatta l'altra. Valore vuoto = nessun tag per quella dimensione.
+ */
+export async function setParentTagInline(
+  parentId: string, kind: "animale" | "prodotto", value: string
+): Promise<{ ok: boolean }> {
+  const user = await requireZooUser();
+  if (!isZooEditor(user)) return { ok: false };
+  const db = await getZooDb();
+  const parent = db.parents.find((p) => p.id === parentId);
+  if (!parent) return { ok: false };
+  const dominio = kind === "animale" ? db.settings.categorieAnimali : db.settings.caratteristicheProdotto;
+  if (value && !dominio.includes(value)) return { ok: false };
+  parent.caratteristiche = [
+    ...parent.caratteristiche.filter((c) => !dominio.includes(c)),
+    ...(value ? [value] : []),
+  ];
+  await saveZooDb(db);
+  return { ok: true };
+}
+
 /** Modifica in linea di un campo dell'offerta (autosalvataggio, nessun redirect). */
 export async function updateOfferFieldInline(
   offerId: string, field: "descrizione" | "prezzoPromo" | "prezzoListino", value: string
@@ -826,7 +850,26 @@ export async function voteZooOffersBulk(tipo: "preferita" | "nontrattato", scope
   const db = await getZooDb();
   const academyDb = await getDb();
   const scope = resolveScope(user, scopeParam, academyDb);
-  const ids = (formData.getAll("zsel") as string[]).filter(Boolean);
+  /*
+   * Scelta Offerte presenta un prodotto padre per riga: la spunta porta l'id di
+   * una sola offerta del gruppo, quindi qui si estende a tutte le varianti dello
+   * stesso padre (nella stessa campagna) — è quello che si aspetta chi spunta
+   * la riga "Crocchette Adult", non "solo il gusto pollo".
+   */
+  const scelte = (formData.getAll("zsel") as string[]).filter(Boolean);
+  const prodById = new Map(db.products.map((p) => [p.id, p]));
+  const ids = new Set<string>();
+  for (const offerId of scelte) {
+    const o = db.offers.find((x) => x.id === offerId);
+    if (!o) continue;
+    ids.add(o.id);
+    const parentId = prodById.get(o.productId ?? "")?.parentId;
+    if (!parentId) continue;
+    for (const s of db.offers) {
+      if (s.campaignId !== o.campaignId) continue;
+      if (prodById.get(s.productId ?? "")?.parentId === parentId) ids.add(s.id);
+    }
+  }
   for (const offerId of ids) {
     if (db.votes.some((v) => v.offerId === offerId && v.userId === user.id && v.tipo === tipo)) continue;
     db.votes.push({
@@ -836,7 +879,7 @@ export async function voteZooOffersBulk(tipo: "preferita" | "nontrattato", scope
     });
   }
   await saveZooDb(db);
-  redirect(backUrl("/stampe/zoo/volantino", scopeParam, { votate: String(ids.length) }));
+  redirect(backUrl("/stampe/zoo/volantino", scopeParam, { votate: String(ids.size) }));
 }
 
 export async function toggleOfferSelected(offerId: string, scopeParam: string) {

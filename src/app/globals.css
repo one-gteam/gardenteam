@@ -539,9 +539,12 @@ table.data tr:last-child td { border-bottom: none; }
 @media (min-width: 1800px) { .vol-filtro-lista { grid-template-columns: 1fr 1fr; } }
 .vol-filtro .field { margin-bottom: 8px; font-size: 12px; }
 .vol-filtro .field select, .vol-filtro .field input { margin-top: 2px; font-size: 12px; padding: 5px 8px; }
+/* `min-width: 0` è indispensabile: senza, la scheda non scende sotto la larghezza
+   del suo testo (i titoli usano white-space: nowrap) e nella disposizione a due
+   colonne le schede sbordavano fuori dal riquadro, tagliate a metà */
 .vol-off {
   border: 1px solid var(--line); border-radius: 8px; background: #fff;
-  padding: 6px 8px; cursor: grab;
+  padding: 6px 8px; cursor: grab; min-width: 0; overflow: hidden;
 }
 .vol-off:hover { border-color: var(--green-500); box-shadow: var(--shadow); }
 

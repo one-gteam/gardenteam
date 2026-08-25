@@ -37,13 +37,23 @@ export default async function ZooVolantinoPage({
     ? allOffers.filter((o) => o.selezionata && o.schedaId === schedaFilter)
     : allOffers;
 
+  /*
+   * Indici per id: con oltre mille articoli e centinaia di offerte, un `.find()`
+   * dentro il ciclo delle righe (per prodotto, padre e voti) costa quadratico ed
+   * era una delle ragioni per cui questa pagina risultava lenta.
+   */
+  const prodById = new Map(db.products.map((p) => [p.id, p]));
+  const parentById = new Map(db.parents.map((p) => [p.id, p]));
+  const votesByOffer = new Map<string, typeof db.votes>();
+  for (const v of db.votes) votesByOffer.set(v.offerId, [...(votesByOffer.get(v.offerId) ?? []), v]);
+
   // ---- filtro offerte (colonna sinistra) ----
-  const caratteristicheOf = (o: (typeof allOffers)[number]): string[] => {
-    const product = db.products.find((p) => p.id === o.productId);
-    const parent = product?.parentId ? db.parents.find((x) => x.id === product.parentId) : undefined;
-    return parent?.caratteristiche ?? [];
+  const parentOf = (o: (typeof allOffers)[number]) => {
+    const parentId = prodById.get(o.productId ?? "")?.parentId;
+    return parentId ? parentById.get(parentId) : undefined;
   };
-  const prodOf = (o: (typeof allOffers)[number]) => db.products.find((p) => p.id === o.productId);
+  const caratteristicheOf = (o: (typeof allOffers)[number]): string[] => parentOf(o)?.caratteristiche ?? [];
+  const prodOf = (o: (typeof allOffers)[number]) => prodById.get(o.productId ?? "");
   const ANIMALI = db.settings.categorieAnimali;
   const carattsProdotto = db.settings.caratteristicheProdotto;
   const marche = [...new Set(baseOffers.map((o) => prodOf(o)?.marca).filter(Boolean) as string[])].sort();
@@ -87,8 +97,7 @@ export default async function ZooVolantinoPage({
   const gruppi = (() => {
     const map = new Map<string, { parent?: (typeof db.parents)[number]; offs: typeof offersOrdinate }>();
     for (const o of offersOrdinate) {
-      const product = prodOf(o);
-      const parent = product?.parentId ? db.parents.find((x) => x.id === product.parentId) : undefined;
+      const parent = parentOf(o);
       const key = parent?.id ?? `_o_${o.id}`;
       const g = map.get(key) ?? { parent, offs: [] };
       g.offs.push(o);
@@ -323,7 +332,7 @@ export default async function ZooVolantinoPage({
                       ? `€ ${prezzi[0] ?? first.prezzoPromo}`
                       : `€ ${Math.min(...prezzi.map(num)).toFixed(2).replace(".", ",")} – € ${Math.max(...prezzi.map(num)).toFixed(2).replace(".", ",")}`;
                     // voti aggregati: PV distinti che hanno votato almeno una variante del gruppo
-                    const groupVotes = db.votes.filter((v) => offs.some((o) => o.id === v.offerId));
+                    const groupVotes = offs.flatMap((o) => votesByOffer.get(o.id) ?? []);
                     const pref = [...new Map(groupVotes.filter((v) => v.tipo === "preferita").map((v) => [v.userId, v])).values()];
                     const non = [...new Map(groupVotes.filter((v) => v.tipo === "nontrattato").map((v) => [v.userId, v])).values()];
                     const myPref = pref.some((v) => v.userId === user.id);
@@ -334,9 +343,12 @@ export default async function ZooVolantinoPage({
                     return (
                       <tr key={parent?.id ?? first.id} style={selCountGroup === offs.length ? { background: "#f4faf4" } : undefined}>
                         <td>
-                          {!isGroup && (
-                            <input type="checkbox" name="zsel" value={first.id} form="bulkform" title="Spunta per proporre/segnalare in blocco (Shift+clic per intervalli)" />
-                          )}
+                          {/* la spunta porta l'id della prima offerta: l'azione in blocco estende
+                              il voto a tutte le varianti dello stesso padre */}
+                          <input type="checkbox" name="zsel" value={first.id} form="bulkform"
+                            title={isGroup
+                              ? `Spunta per proporre/segnalare tutte le ${offs.length} varianti (Shift+clic per intervalli)`
+                              : "Spunta per proporre/segnalare in blocco (Shift+clic per intervalli)"} />
                         </td>
                         <td>
                           {/* eslint-disable-next-line @next/next/no-img-element */}

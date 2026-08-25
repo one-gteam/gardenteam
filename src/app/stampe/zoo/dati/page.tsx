@@ -8,7 +8,7 @@ import PhotoUploader from "@/components/stampe/PhotoUploader";
 import BulkCheckbox from "@/components/stampe/BulkCheckbox";
 import {
   getZooDb, zooImageUrl, effectiveParentText, isZooHidden, hiddenEntriesFor, fornitoriList, marcheList,
-  suggestPhotoMatch, buildAbbinamentoIndex,
+  suggestPhotoMatch, buildAbbinamentoIndex, type ZooProduct,
 } from "@/lib/zoo";
 import {
   importZooProducts, finalizeZooPhotoUpload, associateZooPhoto, confirmZooPhotoMatches, createZooParent, associaConAI,
@@ -21,6 +21,15 @@ export const maxDuration = 60;
 
 /** Pagina a cui tornano le azioni su foto e prodotti padre (le stesse servono a Import offerte). */
 const BACK = "/stampe/zoo/dati";
+
+/** Query string corrente con "abbina" aggiornato (undefined = sezione chiusa). */
+function datiQs(sp: Record<string, string | undefined>, scopeParam: string, abbina?: string): string {
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(sp)) if (v && k !== "scope" && k !== "abbina") params.set(k, v);
+  params.set("scope", scopeParam);
+  if (abbina) params.set("abbina", abbina);
+  return params.toString();
+}
 
 export default async function ZooDatiPage({
   searchParams,
@@ -61,13 +70,24 @@ export default async function ZooDatiPage({
   const availablePhotos = (await listStorageFiles("zoo-foto")).filter(
     (f) => /\.(jpg|jpeg|png|webp)$/i.test(f) && !usedPhotos.has(f)
   );
-  // proposte di abbinamento per nome (nessuna AI), su tutto il catalogo senza foto
+  /*
+   * Proposte di abbinamento per nome (nessuna AI), su tutto il catalogo senza foto.
+   * Calcolate solo a sezione aperta (?abbina=1): tokenizzare l'intero catalogo e
+   * confrontarlo con ogni file costa centinaia di ms, sprecati se non si stanno
+   * abbinando foto.
+   */
+  const abbinaAperto = sp.abbina === "1";
   const senzaFotoCatalogo = db.products.filter((p) => !p.image);
-  const abbinamentoIndex = buildAbbinamentoIndex(senzaFotoCatalogo);
-  const photoSuggestions = availablePhotos.slice(0, 200).map((f) => ({
-    file: f,
-    candidates: suggestPhotoMatch(f.replace(/\.[a-z0-9]+$/i, ""), abbinamentoIndex, 5),
-  }));
+  const senzaFotoById = new Map(senzaFotoCatalogo.map((p) => [p.id, p]));
+  const photoSuggestions = abbinaAperto
+    ? (() => {
+        const index = buildAbbinamentoIndex(senzaFotoCatalogo);
+        return availablePhotos.slice(0, 200).map((f) => ({
+          file: f,
+          candidates: suggestPhotoMatch(f.replace(/\.[a-z0-9]+$/i, ""), index, 5),
+        }));
+      })()
+    : [];
 
   const senzaPadre = db.products.filter((p) => !p.parentId).length;
 
@@ -140,13 +160,23 @@ export default async function ZooDatiPage({
         )}
 
         {/* ---------- proposte di abbinamento foto→articolo per nome (nessuna AI) ---------- */}
-        {consortium && scope.type === "system" && photoSuggestions.length > 0 && (
+        {consortium && scope.type === "system" && availablePhotos.length > 0 && (
           <div className="card" style={{ marginBottom: 14, padding: 14 }}>
-            <strong>Abbina le foto agli articoli</strong>
-            <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "4px 0 8px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <strong>Abbina le foto agli articoli</strong>
+              <span className="pill pill-orange">{availablePhotos.length} da abbinare</span>
+              <a className="btn btn-outline btn-sm" style={{ marginLeft: "auto" }}
+                href={`${BACK}?${datiQs(sp, scopeParam, abbinaAperto ? undefined : "1")}`}>
+                {abbinaAperto ? "▴ Comprimi" : "▾ Apri"}
+              </a>
+            </div>
+            {abbinaAperto && (
+            <>
+            <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "8px 0" }}>
               Le foto senza EAN/codice nel nome non si abbinano da sole: qui sotto trovi un&apos;ipotesi per ciascuna,
               basata sul confronto tra il nome del file e la descrizione dell&apos;articolo. Controlla, correggi dove
-              serve con il menu a tendina, poi conferma in blocco.
+              serve con il menu a tendina, poi conferma in blocco. Se nessuna proposta è giusta, lascia
+              &quot;nessuno&quot; e abbina la foto dalla riga dell&apos;articolo nella tabella qui sotto.
             </p>
             <form action={confirmZooPhotoMatches.bind(null, BACK, scopeParam)}>
               <div className="table-wrap">
@@ -156,7 +186,11 @@ export default async function ZooDatiPage({
                   </thead>
                   <tbody>
                     {photoSuggestions.map(({ file, candidates }) => {
-                      const altri = senzaFotoCatalogo.filter((p) => !candidates.some((c) => c.productId === p.id));
+                      // solo i candidati proposti: elencare tutto il catalogo senza foto
+                      // significherebbe ripetere oltre mille <option> per ogni riga
+                      const candidatiConProdotto = candidates
+                        .map((c) => ({ c, p: senzaFotoById.get(c.productId) }))
+                        .filter((x): x is { c: typeof candidates[number]; p: ZooProduct } => Boolean(x.p));
                       return (
                         <tr key={file}>
                           <td>
@@ -165,19 +199,12 @@ export default async function ZooDatiPage({
                           </td>
                           <td style={{ fontSize: 12 }}>{file}</td>
                           <td>
-                            <select name={`pick_${file}`} defaultValue={candidates[0]?.productId ?? ""} style={{ fontSize: 12.5, maxWidth: 420 }}>
+                            <select name={`pick_${file}`} defaultValue={candidatiConProdotto[0]?.c.productId ?? ""} style={{ fontSize: 12.5, maxWidth: 420 }}>
                               <option value="">— nessuno —</option>
-                              {candidates.map((c) => {
-                                const p = senzaFotoCatalogo.find((x) => x.id === c.productId)!;
-                                return (
-                                  <option key={c.productId} value={c.productId}>
-                                    {Math.round(c.score * 100)}% — {p.descrizione}
-                                  </option>
-                                );
-                              })}
-                              {altri.length > 0 && <option disabled>──────────</option>}
-                              {altri.slice(0, 300).map((p) => (
-                                <option key={p.id} value={p.id}>{p.descrizione}</option>
+                              {candidatiConProdotto.map(({ c, p }) => (
+                                <option key={c.productId} value={c.productId}>
+                                  {Math.round(c.score * 100)}% — {p.descrizione}
+                                </option>
                               ))}
                             </select>
                           </td>
@@ -189,6 +216,8 @@ export default async function ZooDatiPage({
               </div>
               <button className="btn btn-sm" type="submit" style={{ marginTop: 10 }}>Conferma abbinamenti</button>
             </form>
+            </>
+            )}
           </div>
         )}
 
@@ -374,7 +403,9 @@ export default async function ZooDatiPage({
                       <td>
                         <strong style={{ fontSize: 13 }}>{p.descrizione}</strong>
                         {p.prezzo && <div style={{ fontSize: 11.5, color: "var(--muted)" }}>prezzo base € {p.prezzo}</div>}
-                        {!p.image && availablePhotos.length > 0 && consortium && (
+                        {/* i menu delle foto si mostrano solo in "modalità abbinamento": ripeterli su
+                            ogni riga costa migliaia di <option> inutili nel resto del tempo */}
+                        {abbinaAperto && !p.image && availablePhotos.length > 0 && consortium && (
                           <details style={{ fontSize: 11.5, marginTop: 2 }}>
                             <summary style={{ cursor: "pointer", color: "#274b7a" }}>abbina una foto…</summary>
                             <div style={{ display: "flex", gap: 4, marginTop: 4 }}>
@@ -417,7 +448,7 @@ export default async function ZooDatiPage({
         </form>
 
         {/* form esterni (via attributo form=) per l'abbinamento manuale delle foto */}
-        {consortium && products.slice(0, 400).filter((p) => !p.image).map((p) => (
+        {abbinaAperto && consortium && products.slice(0, 400).filter((p) => !p.image).map((p) => (
           <form key={p.id} id={`ph_${p.id}`} action={associateZooPhoto.bind(null, BACK, scopeParam, p.id)} />
         ))}
 

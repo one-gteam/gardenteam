@@ -1,5 +1,3 @@
-import fs from "fs";
-import path from "path";
 import { Scope, ScopeType } from "./stampe";
 import { DB } from "./types";
 import { readDomain, writeDomain } from "./supabase";
@@ -336,19 +334,18 @@ export function pvPriceFor(db: ZooDB, scope: Scope, ean: string, academyDb: DB):
   return undefined;
 }
 
-/** Foto del prodotto zoo: percorso salvato, tentativo per EAN/codice, altrimenti "mancante". */
+/**
+ * Foto del prodotto zoo: immagine del padre, altrimenti dell'articolo, altrimenti
+ * il segnaposto "mancante".
+ *
+ * Nessuna ricerca su disco: le foto vivono nel bucket Supabase (zoo-foto) e il
+ * percorso finisce in `image`. La vecchia sonda su `public/zoo-foto` provava 8
+ * `fs.existsSync` per ogni articolo senza foto — 1.200+ articoli su questo
+ * volantino, ripetuti ad ogni riga di ogni tabella — su una cartella che non
+ * esiste nemmeno: era il costo maggiore nel render delle pagine offerte.
+ */
 export function zooImageUrl(p?: ZooProduct, parent?: ZooParent): string {
-  if (parent?.image) return parent.image;
-  if (p?.image) return p.image;
-  if (p) {
-    for (const name of [p.ean, p.codice]) {
-      for (const ext of ["jpg", "png", "jpeg", "webp"]) {
-        const abs = path.join(process.cwd(), "public", "zoo-foto", `${name}.${ext}`);
-        if (fs.existsSync(abs)) return `/zoo-foto/${name}.${ext}`;
-      }
-    }
-  }
-  return "/immagini/mancante.jpg";
+  return parent?.image ?? p?.image ?? "/immagini/mancante.jpg";
 }
 
 const STOPWORDS_ABBINAMENTO = new Set([
