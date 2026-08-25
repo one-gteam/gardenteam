@@ -324,6 +324,55 @@ export async function saveParentTexts(back: string, parentId: string, scopeParam
   redirect(backUrl(back, scopeParam, { padre: parentId }));
 }
 
+/**
+ * Come `saveParentTexts`, un solo campo e senza redirect: per la modifica in
+ * linea nella tabella (autosalvataggio) invocata direttamente dal client, dove
+ * un redirect ricaricherebbe la pagina ad ogni perdita di fuoco del campo.
+ */
+export async function updateParentFieldInline(
+  parentId: string, field: "nome" | "descVolantino" | "descCartello", scopeParam: string, value: string
+): Promise<{ ok: boolean }> {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  const parent = db.parents.find((p) => p.id === parentId);
+  if (!parent) return { ok: false };
+  if (scope.type === "system") {
+    if (!isZooEditor(user)) return { ok: false };
+    parent[field] = value;
+    parent.aiGenerated = false;
+  } else {
+    const existing = db.textOverrides.find(
+      (o) => o.scopeType === scope.type && o.scopeId === scope.id && o.parentId === parentId && o.field === field
+    );
+    if (value && value !== parent[field]) {
+      if (existing) existing.value = value;
+      else db.textOverrides.push({ scopeType: scope.type, scopeId: scope.id, parentId, field, value });
+    } else if (existing && value === parent[field]) {
+      db.textOverrides = db.textOverrides.filter((o) => o !== existing);
+    }
+  }
+  await saveZooDb(db);
+  return { ok: true };
+}
+
+/** Modifica in linea di un campo dell'offerta (autosalvataggio, nessun redirect). */
+export async function updateOfferFieldInline(
+  offerId: string, field: "descrizione" | "prezzoPromo" | "prezzoListino", value: string
+): Promise<{ ok: boolean }> {
+  const user = await requireZooUser();
+  if (!isZooEditor(user)) return { ok: false };
+  const db = await getZooDb();
+  const o = db.offers.find((x) => x.id === offerId);
+  if (!o) return { ok: false };
+  const v = value.trim();
+  if (field === "descrizione") o.descrizione = v || o.descrizione;
+  else o[field] = v;
+  await saveZooDb(db);
+  return { ok: true };
+}
+
 export async function setParentImage(back: string, parentId: string, scopeParam: string, formData: FormData) {
   const user = await requireZooUser();
   if (!isZooEditor(user)) redirect(backUrl(back, scopeParam, { padre: parentId }));
@@ -800,6 +849,25 @@ export async function toggleOfferSelected(offerId: string, scopeParam: string) {
     if (!o.selezionata) o.schedaId = undefined;
     await saveZooDb(db);
   }
+  redirect(backUrl("/stampe/zoo/volantino", scopeParam));
+}
+
+/**
+ * Come `toggleOfferSelected`, ma su un intero gruppo di offerte (le varianti di
+ * uno stesso padre, presentate come una riga sola in Scelta Offerte): se non
+ * sono tutte già nel volantino le aggiunge tutte, altrimenti le toglie tutte.
+ */
+export async function toggleOffersGroupSelected(offerIds: string[], scopeParam: string) {
+  const user = await requireZooUser();
+  if (!isZooEditor(user)) redirect(backUrl("/stampe/zoo/volantino", scopeParam));
+  const db = await getZooDb();
+  const offs = db.offers.filter((o) => offerIds.includes(o.id));
+  const tutteDentro = offs.length > 0 && offs.every((o) => o.selezionata);
+  for (const o of offs) {
+    o.selezionata = !tutteDentro;
+    if (!o.selezionata) o.schedaId = undefined;
+  }
+  await saveZooDb(db);
   redirect(backUrl("/stampe/zoo/volantino", scopeParam));
 }
 

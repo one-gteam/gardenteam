@@ -5,8 +5,8 @@ import { canAccessArea, isZooEditor, scopesForUser, resolveScope } from "@/lib/s
 import { getDb } from "@/lib/db";
 import { getZooDb, campagnaInLavorazione, zooImageUrl, effectiveParentText, animaliDi } from "@/lib/zoo";
 import {
-  voteZooOffer, voteZooOffersBulk, toggleOfferSelected, updateOfferVolantino, renameScheda, addScheda,
-  resolveZooSuggestion, sendZooSuggestion,
+  voteZooOffer, voteZooOffersBulk, toggleOfferSelected, toggleOffersGroupSelected, updateOfferVolantino,
+  renameScheda, addScheda, resolveZooSuggestion, sendZooSuggestion,
 } from "@/lib/zoo-actions";
 import ShiftChecks from "@/components/stampe/ShiftChecks";
 
@@ -79,7 +79,25 @@ export default async function ZooVolantinoPage({
         return sortDir === "desc" ? -cmp : cmp;
       })
     : offers;
-  const offersVisibili = offersOrdinate.slice(0, RIGHE_MAX);
+  /*
+   * Le varianti di uno stesso padre diventano una riga sola: con centinaia di
+   * offerte è molto più leggero da scorrere, e chi sceglie ragiona comunque per
+   * prodotto ("mettiamo questa linea?") più che per singolo gusto/formato.
+   */
+  const gruppi = (() => {
+    const map = new Map<string, { parent?: (typeof db.parents)[number]; offs: typeof offersOrdinate }>();
+    for (const o of offersOrdinate) {
+      const product = prodOf(o);
+      const parent = product?.parentId ? db.parents.find((x) => x.id === product.parentId) : undefined;
+      const key = parent?.id ?? `_o_${o.id}`;
+      const g = map.get(key) ?? { parent, offs: [] };
+      g.offs.push(o);
+      map.set(key, g);
+    }
+    return [...map.values()];
+  })();
+  const gruppiVisibili = gruppi.slice(0, RIGHE_MAX);
+
   const sortHref = (field: string) => {
     const params = new URLSearchParams();
     for (const [k, v] of Object.entries(sp)) if (v && k !== "sort" && k !== "dir" && k !== "scope") params.set(k, v);
@@ -258,7 +276,7 @@ export default async function ZooVolantinoPage({
                 <button className="btn btn-sm" type="submit" style={{ width: "100%" }}>Filtra</button>
               </form>
               <p className="hint" style={{ marginTop: 10, fontSize: 11.5 }}>
-                {offers.length} offerte in elenco{offers.length > RIGHE_MAX ? ` (mostrate le prime ${RIGHE_MAX}: restringi con i filtri)` : ""}.
+                {offers.length} offerte in {gruppi.length} prodotti{gruppi.length > RIGHE_MAX ? ` (mostrati i primi ${RIGHE_MAX}: restringi con i filtri)` : ""}.
                 Spunta più offerte (anche con Shift+clic) e usa i pulsanti sopra la tabella per proporle o segnarle
                 non trattate in blocco. Clic sulle intestazioni della tabella per ordinare.
               </p>
@@ -292,67 +310,75 @@ export default async function ZooVolantinoPage({
                   </tr>
                 </thead>
                 <tbody>
-                  {offers.length === 0 && <tr><td colSpan={10} className="empty">Nessuna offerta {schedaFilter ? "assegnata a questa scheda" : "in campagna"}.</td></tr>}
-                  {offersVisibili.map((o) => {
-                    const product = db.products.find((p) => p.id === o.productId);
-                    const parent = product?.parentId ? db.parents.find((x) => x.id === product.parentId) : undefined;
+                  {gruppi.length === 0 && <tr><td colSpan={10} className="empty">Nessuna offerta {schedaFilter ? "assegnata a questa scheda" : "in campagna"}.</td></tr>}
+                  {gruppiVisibili.map((g) => {
+                    const { parent, offs } = g;
+                    const first = offs[0];
+                    const isGroup = offs.length > 1;
+                    const product = prodOf(first);
                     const animaliOfferta = animaliDi(db, parent?.caratteristiche ?? []);
-                    const votes = db.votes.filter((v) => v.offerId === o.id);
-                    const pref = votes.filter((v) => v.tipo === "preferita");
-                    const non = votes.filter((v) => v.tipo === "nontrattato");
+                    const num = (s: string) => Number.parseFloat((s || "0").replace(",", "."));
+                    const prezzi = [...new Set(offs.map((o) => o.prezzoPromo).filter(Boolean))];
+                    const prezzoLabel = prezzi.length <= 1
+                      ? `€ ${prezzi[0] ?? first.prezzoPromo}`
+                      : `€ ${Math.min(...prezzi.map(num)).toFixed(2).replace(".", ",")} – € ${Math.max(...prezzi.map(num)).toFixed(2).replace(".", ",")}`;
+                    // voti aggregati: PV distinti che hanno votato almeno una variante del gruppo
+                    const groupVotes = db.votes.filter((v) => offs.some((o) => o.id === v.offerId));
+                    const pref = [...new Map(groupVotes.filter((v) => v.tipo === "preferita").map((v) => [v.userId, v])).values()];
+                    const non = [...new Map(groupVotes.filter((v) => v.tipo === "nontrattato").map((v) => [v.userId, v])).values()];
                     const myPref = pref.some((v) => v.userId === user.id);
                     const myNon = non.some((v) => v.userId === user.id);
-                    const scheda = campaign.schede.find((s) => s.id === o.schedaId);
+                    const scheda = campaign.schede.find((s) => s.id === first.schedaId);
+                    const ids = offs.map((o) => o.id);
+                    const selCountGroup = offs.filter((o) => o.selezionata).length;
                     return (
-                      <tr key={o.id} style={o.selezionata ? { background: "#f4faf4" } : undefined}>
+                      <tr key={parent?.id ?? first.id} style={selCountGroup === offs.length ? { background: "#f4faf4" } : undefined}>
                         <td>
-                          <input type="checkbox" name="zsel" value={o.id} form="bulkform" title="Spunta per proporre/segnalare in blocco (Shift+clic per intervalli)" />
+                          {!isGroup && (
+                            <input type="checkbox" name="zsel" value={first.id} form="bulkform" title="Spunta per proporre/segnalare in blocco (Shift+clic per intervalli)" />
+                          )}
                         </td>
                         <td>
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img src={zooImageUrl(product, parent)} alt="" style={{ width: 44, height: 44, objectFit: "contain", background: "#fff", borderRadius: 6, border: "1px solid #eee" }} />
                         </td>
                         <td>
-                          <strong style={{ fontSize: 13 }}>{o.descrizione}</strong>
+                          <strong style={{ fontSize: 13 }}>
+                            {parent ? effectiveParentText(db, scope, parent, "nome", academyDb).value : first.descrizione}
+                          </strong>
                           <div style={{ fontSize: 11.5, color: "var(--muted)" }}>
-                            {product?.marca} · EAN {o.ean}
+                            {product?.marca}
+                            {isGroup ? ` · ${offs.length} varianti` : ` · EAN ${first.ean}`}
                             {parent && <> · <span title="descrizione volantino del padre">{effectiveParentText(db, scope, parent, "descVolantino", academyDb).value.slice(0, 60)}</span></>}
                           </div>
-                          <div style={{ display: "flex", gap: 4, marginTop: 3, flexWrap: "wrap" }}>
-                            {o.label && <span className="pill pill-orange">{o.label}</span>}
-                            {o.gruppo && <span className="pill pill-blue" title={o.gruppoDescrizione}>{o.gruppo}</span>}
-                            {o.tieniVicinoA && <span className="pill pill-gray" title="da tenere adiacente a un'altra offerta">adiacente</span>}
-                            {scheda && <span className="pill pill-green">{scheda.nome}</span>}
-                          </div>
-                          {/* articoli racchiusi dall'offerta: i gusti/formati raggruppati sotto lo stesso padre */}
-                          {(() => {
-                            const articoli = parent
-                              ? db.products.filter((p) => p.parentId === parent.id)
-                              : product ? [product] : [];
-                            if (articoli.length === 0) return null;
-                            return (
-                              <details style={{ marginTop: 4 }}>
-                                <summary style={{ cursor: "pointer", fontSize: 11.5, color: "var(--green-700)", fontWeight: 600 }}>
-                                  Vedi i {articoli.length} articoli inclusi
-                                </summary>
-                                <ul style={{ margin: "4px 0 0", paddingLeft: 18, fontSize: 11.5, color: "var(--muted)" }}>
-                                  {articoli.map((a) => (
-                                    <li key={a.ean}>
-                                      {a.descrizione}
-                                      <span style={{ opacity: 0.75 }}> · EAN {a.ean}{a.codice ? ` · cod. ${a.codice}` : ""}</span>
-                                    </li>
-                                  ))}
-                                </ul>
-                              </details>
-                            );
-                          })()}
+                          {!isGroup && (
+                            <div style={{ display: "flex", gap: 4, marginTop: 3, flexWrap: "wrap" }}>
+                              {first.label && <span className="pill pill-orange">{first.label}</span>}
+                              {first.gruppo && <span className="pill pill-blue" title={first.gruppoDescrizione}>{first.gruppo}</span>}
+                              {first.tieniVicinoA && <span className="pill pill-gray" title="da tenere adiacente a un'altra offerta">adiacente</span>}
+                              {scheda && <span className="pill pill-green">{scheda.nome}</span>}
+                            </div>
+                          )}
+                          <details style={{ marginTop: 4 }}>
+                            <summary style={{ cursor: "pointer", fontSize: 11.5, color: "var(--green-700)", fontWeight: 600 }}>
+                              Vedi {offs.length > 1 ? `i ${offs.length} articoli inclusi` : "l'articolo"}
+                            </summary>
+                            <ul style={{ margin: "4px 0 0", paddingLeft: 18, fontSize: 11.5, color: "var(--muted)" }}>
+                              {offs.map((o) => (
+                                <li key={o.id}>
+                                  {o.descrizione}
+                                  <span style={{ opacity: 0.75 }}> · EAN {o.ean} · € {o.prezzoPromo}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </details>
                         </td>
                         <td style={{ fontSize: 12.5 }}>{product?.fornitore || "—"}</td>
                         <td style={{ fontSize: 12.5 }}>{product?.marca || "—"}</td>
                         <td style={{ fontSize: 11.5, color: "var(--muted)" }}>{animaliOfferta.join(", ") || "—"}</td>
                         <td>
-                          <strong>€ {o.prezzoPromo}</strong>
-                          {o.prezzoListino && <div style={{ fontSize: 11.5, color: "var(--muted)", textDecoration: "line-through" }}>€ {o.prezzoListino}</div>}
+                          <strong>{prezzoLabel}</strong>
+                          {!isGroup && first.prezzoListino && <div style={{ fontSize: 11.5, color: "var(--muted)", textDecoration: "line-through" }}>€ {first.prezzoListino}</div>}
                         </td>
                         <td style={{ fontSize: 12 }}>
                           {pref.length > 0 && (
@@ -365,23 +391,42 @@ export default async function ZooVolantinoPage({
                               non trattato da {non.length}: {non.map((v) => v.scopeLabel).slice(0, 3).join(", ")}{non.length > 3 ? "…" : ""}
                             </div>
                           )}
-                          {votes.length === 0 && <span style={{ color: "var(--muted)" }}>—</span>}
+                          {pref.length === 0 && non.length === 0 && <span style={{ color: "var(--muted)" }}>—</span>}
                         </td>
                         <td className="no-print" style={{ whiteSpace: "nowrap" }}>
-                          <form action={voteZooOffer.bind(null, o.id, "preferita", scopeParam)} style={{ display: "inline" }}>
-                            <button className={`btn btn-sm ${myPref ? "" : "btn-outline"}`} type="submit" title="La proporrei nel volantino (clic di nuovo per togliere)">
-                              Proponi
-                            </button>
-                          </form>{" "}
-                          <form action={voteZooOffer.bind(null, o.id, "nontrattato", scopeParam)} style={{ display: "inline" }}>
-                            <button className={`btn btn-sm ${myNon ? "" : "btn-outline"}`} type="submit" title="Non ho in vendita questo prodotto (clic di nuovo per togliere)">
-                              Non tratto
-                            </button>
-                          </form>{" "}
+                          {isGroup ? (
+                            <>
+                              <form action={voteZooOffersBulk.bind(null, "preferita", scopeParam)} style={{ display: "inline" }}>
+                                {ids.map((id) => <input key={id} type="hidden" name="zsel" value={id} />)}
+                                <button className={`btn btn-sm ${myPref ? "" : "btn-outline"}`} type="submit" title="Proponi tutte le varianti (clic di nuovo per togliere il tuo voto)">
+                                  Proponi
+                                </button>
+                              </form>{" "}
+                              <form action={voteZooOffersBulk.bind(null, "nontrattato", scopeParam)} style={{ display: "inline" }}>
+                                {ids.map((id) => <input key={id} type="hidden" name="zsel" value={id} />)}
+                                <button className={`btn btn-sm ${myNon ? "" : "btn-outline"}`} type="submit" title="Non tratto nessuna variante (clic di nuovo per togliere)">
+                                  Non tratto
+                                </button>
+                              </form>
+                            </>
+                          ) : (
+                            <>
+                              <form action={voteZooOffer.bind(null, first.id, "preferita", scopeParam)} style={{ display: "inline" }}>
+                                <button className={`btn btn-sm ${myPref ? "" : "btn-outline"}`} type="submit" title="La proporrei nel volantino (clic di nuovo per togliere)">
+                                  Proponi
+                                </button>
+                              </form>{" "}
+                              <form action={voteZooOffer.bind(null, first.id, "nontrattato", scopeParam)} style={{ display: "inline" }}>
+                                <button className={`btn btn-sm ${myNon ? "" : "btn-outline"}`} type="submit" title="Non ho in vendita questo prodotto (clic di nuovo per togliere)">
+                                  Non tratto
+                                </button>
+                              </form>
+                            </>
+                          )}{" "}
                           <details className="flag-details" style={{ display: "inline-block" }}>
                             <summary className="mini-btn" title="Segnala un errore o un'incongruenza su questa offerta">⚑</summary>
                             <form action={sendZooSuggestion.bind(null, scopeParam)} className="flag-popover">
-                              <input type="hidden" name="offerId" value={o.id} />
+                              <input type="hidden" name="offerId" value={first.id} />
                               <input type="hidden" name="back" value="/stampe/zoo/volantino" />
                               <input type="text" name="message" required placeholder="Descrivi l'errore o l'incongruenza" />
                               <button className="btn btn-sm" type="submit">Invia al Consorzio</button>
@@ -390,12 +435,22 @@ export default async function ZooVolantinoPage({
                         </td>
                         {consortium && (
                           <td style={{ whiteSpace: "nowrap" }}>
-                            <form action={toggleOfferSelected.bind(null, o.id, scopeParam)} style={{ display: "inline" }}>
-                              <button className={`btn btn-sm ${o.selezionata ? "" : "btn-outline"}`} type="submit">
-                                {o.selezionata ? "✓ Nel volantino" : "Aggiungi"}
-                              </button>
-                            </form>{" "}
-                            <a className="btn btn-outline btn-sm" href={`/stampe/zoo/volantino?scope=${scopeParam}${schedaFilter ? `&scheda=${schedaFilter}` : ""}&offerta=${o.id}`}>Modifica</a>
+                            {isGroup ? (
+                              <form action={toggleOffersGroupSelected.bind(null, ids, scopeParam)} style={{ display: "inline" }}>
+                                <button className={`btn btn-sm ${selCountGroup === offs.length ? "" : "btn-outline"}`} type="submit">
+                                  {selCountGroup === offs.length ? "✓ Nel volantino" : selCountGroup > 0 ? `${selCountGroup}/${offs.length} nel volantino` : "Aggiungi tutte"}
+                                </button>
+                              </form>
+                            ) : (
+                              <>
+                                <form action={toggleOfferSelected.bind(null, first.id, scopeParam)} style={{ display: "inline" }}>
+                                  <button className={`btn btn-sm ${first.selezionata ? "" : "btn-outline"}`} type="submit">
+                                    {first.selezionata ? "✓ Nel volantino" : "Aggiungi"}
+                                  </button>
+                                </form>{" "}
+                                <a className="btn btn-outline btn-sm" href={`/stampe/zoo/volantino?scope=${scopeParam}${schedaFilter ? `&scheda=${schedaFilter}` : ""}&offerta=${first.id}`}>Modifica</a>
+                              </>
+                            )}
                           </td>
                         )}
                       </tr>

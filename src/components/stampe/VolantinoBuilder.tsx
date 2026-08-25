@@ -97,8 +97,13 @@ export default function VolantinoBuilder({
     return s;
   }, [pages]);
 
+  /*
+   * L'elenco mostra TUTTE le offerte che passano il filtro, comprese quelle già
+   * collocate in una cella (in grigio, "già usata"): sparirle del tutto rendeva
+   * difficile capire cosa fosse già stato piazzato. Restano trascinabili, utile
+   * per rimetterne una in una seconda cella (es. la stessa offerta su due pagine).
+   */
   const disponibili = useMemo(() => offers.filter((o) => {
-    if (inserite.has(o.id)) return false;
     if (f.animale && !o.caratts.includes(f.animale)) return false;
     if (f.caratt && !o.caratts.includes(f.caratt)) return false;
     if (f.label && o.label !== f.label) return false;
@@ -107,7 +112,8 @@ export default function VolantinoBuilder({
     if (f.marca && o.marca !== f.marca) return false;
     if (f.fornitore && o.fornitore !== f.fornitore) return false;
     return true;
-  }), [offers, f, inserite]);
+  }).sort((a, b) => Number(inserite.has(a.id)) - Number(inserite.has(b.id))), [offers, f, inserite]);
+  const daCollocare = disponibili.filter((o) => !inserite.has(o.id)).length;
 
   const upd = (fn: (p: VolPage[]) => VolPage[]) => setPages((prev) => fn(structuredClone(prev)).map(normalizza));
   const offer = (id?: string) => offers.find((o) => o.id === id);
@@ -415,7 +421,7 @@ export default function VolantinoBuilder({
 
         <div className="vol-filtro-scroll">
         <div className="vol-filtro-head">
-          Da collocare ({disponibili.length})
+          Da collocare ({daCollocare})
           {inserite.size > 0 && <span className="pill pill-green" style={{ marginLeft: 6 }}>{inserite.size} già nel volantino</span>}
         </div>
         <div className="vol-filtro-lista">
@@ -424,8 +430,11 @@ export default function VolantinoBuilder({
               Nessuna offerta da collocare. Per rimetterne una qui, trascina la sua cella su questo elenco.
             </p>
           )}
-          {disponibili.map((o) => (
-            <div key={o.id} className="vol-off" draggable onDragStart={() => setDrag({ kind: "offer", id: o.id })}>
+          {disponibili.map((o) => {
+            const usata = inserite.has(o.id);
+            return (
+            <div key={o.id} className="vol-off" draggable onDragStart={() => setDrag({ kind: "offer", id: o.id })}
+              style={usata ? { opacity: 0.45 } : undefined}>
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={o.foto} alt="" style={{ width: 32, height: 32, objectFit: "contain" }} />
@@ -433,9 +442,14 @@ export default function VolantinoBuilder({
                   <div style={{ fontSize: 11.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {o.padre ?? o.descrizione}
                   </div>
+                  {o.padre && (
+                    <div style={{ fontSize: 10.5, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {o.descrizione}
+                    </div>
+                  )}
                   <div style={{ fontSize: 10.5, color: "var(--muted)", display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
                     € {o.prezzo}
-                    {o.padre && <span className="pill pill-blue">padre · {o.articoli.length} art.</span>}
+                    {usata && <span className="pill pill-gray">già usata</span>}
                     {o.voti > 0 && <span className="pill pill-green">{o.voti} voti</span>}
                     {o.nonTrattati > 0 && <span className="pill pill-red">{o.nonTrattati} n.t.</span>}
                     {o.label && <span className="pill pill-blue">{o.label}</span>}
@@ -450,18 +464,14 @@ export default function VolantinoBuilder({
                     : o.padre ? `Vedi i ${o.articoli.length} articoli contenuti` : "Vedi l'articolo"}
                 </button>
               )}
-              {dettaglio === o.id && o.padre && (
-                <div style={{ fontSize: 10.5, color: "var(--muted)", marginTop: 4 }}>
-                  Testo a volantino: <em>{o.descrizione}</em>
-                </div>
-              )}
               {dettaglio === o.id && (
                 <ul style={{ margin: "4px 0 0", paddingLeft: 16, fontSize: 10.5, color: "var(--muted)" }}>
                   {o.articoli.map((a) => <li key={a.ean}>{a.descrizione} <span style={{ opacity: 0.7 }}>· {a.ean}</span></li>)}
                 </ul>
               )}
             </div>
-          ))}
+            );
+          })}
         </div>
         </div>
       </aside>

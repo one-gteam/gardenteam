@@ -181,6 +181,17 @@ table.data td { padding: 10px; border-bottom: 1px solid var(--line); }
 table.data tr:last-child td { border-bottom: none; }
 .table-wrap { overflow-x: auto; }
 
+/* colonne allargabili/stringibili trascinando l'angolo (nessun JS): l'utente
+   regola la larghezza di una colonna quando il contenuto non ci sta */
+.th-resize {
+  display: inline-block; resize: horizontal; overflow: auto;
+  min-width: 30px; max-width: 640px; padding-right: 2px;
+}
+
+/* colonna visibile solo su schermi larghi, dove c'è spazio da riempire */
+.col-wide { display: none; }
+@media (min-width: 1400px) { .col-wide { display: table-cell; } }
+
 /* ---------- Bars (analytics) ---------- */
 .bar-row { display: grid; grid-template-columns: 220px 1fr 52px; align-items: center; gap: 10px; margin-bottom: 9px; font-size: 13px; }
 .bar-row .bar-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
