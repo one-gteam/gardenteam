@@ -1,18 +1,22 @@
 import { CardLayout, isImageField, PrintField, PrintFormat } from "@/lib/stampe";
+import { layoutFontCss } from "@/lib/layout-fonts";
 import { stickerShapeStyle } from "./stickerStyle";
 
 const FONT_CN = '"Avenir Next LT Pro Cn", "Avenir Next LT Pro", "Segoe UI", sans-serif';
 
-/** Prezzo come nel template: intero grande + centesimi in apice ("109,00" → 109 ⁰⁰). */
-function Prezzo({ value, size, scale }: { value: string; size: number; scale: number }) {
+/**
+ * Prezzo come nel template: intero grande + centesimi in apice ("109,00" → 109 ⁰⁰).
+ * I centesimi stanno in un <sup>, non in uno span con vertical-align: dentro un
+ * contenitore flex l'allineamento verticale veniva ignorato e in stampa i
+ * centesimi finivano in basso invece che in alto.
+ */
+function Prezzo({ value, size, scale, font }: { value: string; size: number; scale: number; font?: string }) {
   const [int, cent] = value.split(",");
   const fs = (size * scale) / 2.4;
   return (
-    <span style={{ fontFamily: FONT_CN, fontWeight: 800, lineHeight: 0.95, whiteSpace: "nowrap" }}>
-      <span style={{ fontSize: fs }}>{int}</span>
-      {cent !== undefined && (
-        <span style={{ fontSize: fs * 0.38, verticalAlign: "super" }}>,{cent}</span>
-      )}
+    <span style={{ fontFamily: font ?? FONT_CN, fontWeight: 800, lineHeight: 0.95, whiteSpace: "nowrap", fontSize: fs }}>
+      {int}
+      {cent !== undefined && <sup style={{ fontSize: "0.5em", lineHeight: 0 }}>,{cent}</sup>}
     </span>
   );
 }
@@ -115,7 +119,8 @@ export default function Cartello({
           const justify = item.align === "left" ? "flex-start" : item.align === "center" ? "center" : "flex-end";
           return (
             <div key={i} style={{ ...box, display: "flex", justifyContent: justify, alignItems: "flex-start", color }}>
-              <Prezzo value={value} size={item.size ?? meta.size} scale={scale} />
+              <Prezzo value={value} size={item.size ?? meta.size} scale={scale}
+                font={item.font !== undefined ? layoutFontCss(item.font) : undefined} />
             </div>
           );
         }
@@ -127,7 +132,7 @@ export default function Cartello({
               fontSize: ((item.size ?? meta.size) * scale) / 2.4,
               fontWeight: (item.bold ?? meta.bold) ? 700 : 400,
               fontStyle: item.italic ? "italic" : "normal",
-              fontFamily: meta.font === "cn" ? FONT_CN : undefined,
+              fontFamily: item.font !== undefined ? layoutFontCss(item.font) : meta.font === "cn" ? FONT_CN : undefined,
               lineHeight: 1.2,
               color,
               textAlign: item.align ?? "left",

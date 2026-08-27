@@ -38,6 +38,36 @@ export interface ZooTextOverride {
   value: string;
 }
 
+/**
+ * Animale/caratteristica del padre riscritti da un'insegna/PV: non toccano i tag
+ * del Consorzio (che restano quelli usati per il volantino comune), valgono solo
+ * sui cartelli di quell'ambito.
+ */
+export interface ZooTagOverride {
+  scopeType: ScopeType;
+  scopeId: string;
+  parentId: string;
+  kind: "animale" | "prodotto";
+  value: string; // vuoto = campo lasciato in bianco per questo ambito
+}
+
+/** Testi dell'offerta riscritti da un'insegna/PV (descrizione e condizioni). */
+export interface ZooOfferOverride {
+  scopeType: ScopeType;
+  scopeId: string;
+  offerId: string;
+  field: "descrizione" | "condizioni";
+  value: string;
+}
+
+/** Cartello già stampato da un ambito: serve a non ristampare due volte lo stesso. */
+export interface ZooPrinted {
+  scopeType: ScopeType;
+  scopeId: string;
+  offerId: string;
+  at: string; // ISO
+}
+
 export interface ZooScheda {
   id: string;
   nome: string;
@@ -234,6 +264,7 @@ export interface ZooSettings {
   istruzioniCartello: string; // regole di scrittura testi cartelli
   apiKey?: string; // chiave API Claude — impostabile SOLO dall'amministratore di sistema
   formatoRegole: { caratteristica: string; formatId: string }[]; // formato consigliato per caratteristica
+  condizioniStandard: string[]; // condizioni pronte del Consorzio, riusabili sui cartelli
 }
 
 export interface ZooDB {
@@ -241,6 +272,9 @@ export interface ZooDB {
   products: ZooProduct[];
   parents: ZooParent[];
   textOverrides: ZooTextOverride[];
+  tagOverrides: ZooTagOverride[];
+  offerOverrides: ZooOfferOverride[];
+  printed: ZooPrinted[];
   campaigns: ZooCampaign[];
   offers: ZooOffer[];
   votes: ZooVote[];
@@ -267,17 +301,19 @@ const DEFAULT_SETTINGS: ZooSettings = {
   istruzioniCartello:
     "Testi descrittivi più completi (2-4 righe) per il cartello in punto vendita: composizione, formato, a chi è adatto. Tono informativo, frasi complete.",
   formatoRegole: [],
+  condizioniStandard: [],
 };
 
 export async function getZooDb(): Promise<ZooDB> {
   const empty: ZooDB = {
     settings: DEFAULT_SETTINGS,
-    products: [], parents: [], textOverrides: [], campaigns: [], offers: [],
+    products: [], parents: [], textOverrides: [], tagOverrides: [], offerOverrides: [], printed: [],
+    campaigns: [], offers: [],
     votes: [], hidden: [], pvPrices: [], suggestions: [], volantinoLayouts: [], zooLayouts: [],
   };
   const db = await readDomain<ZooDB>("zoo", empty);
   db.settings = { ...DEFAULT_SETTINGS, ...(db.settings ?? {}) };
-  for (const k of ["products", "parents", "textOverrides", "campaigns", "offers", "votes", "hidden", "pvPrices", "suggestions", "volantinoLayouts", "zooLayouts"] as const) {
+  for (const k of ["products", "parents", "textOverrides", "tagOverrides", "offerOverrides", "printed", "campaigns", "offers", "votes", "hidden", "pvPrices", "suggestions", "volantinoLayouts", "zooLayouts"] as const) {
     if (!db[k]) (db as unknown as Record<string, unknown>)[k] = [];
   }
   return db;
@@ -318,6 +354,43 @@ export function effectiveParentText(
     if (ov) return { value: ov.value, custom: true };
   }
   return { value: parent[field] ?? "", custom: false };
+}
+
+/**
+ * Animale e caratteristica del padre come li vede questo ambito: se l'insegna li
+ * ha riscritti vince la sua versione, altrimenti valgono i tag del Consorzio.
+ */
+export function effectiveParentTag(
+  db: ZooDB, scope: Scope, parent: ZooParent, kind: "animale" | "prodotto", academyDb: DB
+): { value: string; custom: boolean } {
+  for (const s of chainFor(scope, academyDb)) {
+    if (s.type === "system") break;
+    const ov = db.tagOverrides.find(
+      (o) => o.scopeType === s.type && o.scopeId === s.id && o.parentId === parent.id && o.kind === kind
+    );
+    if (ov) return { value: ov.value, custom: true };
+  }
+  const dal = kind === "animale" ? animaliDi(db, parent.caratteristiche) : caratteristicheProdottoDi(db, parent.caratteristiche);
+  return { value: dal.join(", "), custom: false };
+}
+
+/** Descrizione/condizioni dell'offerta come le vede questo ambito. */
+export function effectiveOfferText(
+  db: ZooDB, scope: Scope, offer: ZooOffer, field: "descrizione" | "condizioni", academyDb: DB
+): { value: string; custom: boolean } {
+  for (const s of chainFor(scope, academyDb)) {
+    if (s.type === "system") break;
+    const ov = db.offerOverrides.find(
+      (o) => o.scopeType === s.type && o.scopeId === s.id && o.offerId === offer.id && o.field === field
+    );
+    if (ov) return { value: ov.value, custom: true };
+  }
+  return { value: offer[field] ?? "", custom: false };
+}
+
+/** Il cartello di questa offerta è già stato stampato da questo ambito? */
+export function printedAt(db: ZooDB, scope: Scope, offerId: string): string | undefined {
+  return db.printed.find((p) => p.scopeType === scope.type && p.scopeId === scope.id && p.offerId === offerId)?.at;
 }
 
 /** Il prodotto è nascosto per questo ambito (fornitore, marchio o singolo articolo)? */
@@ -478,6 +551,8 @@ import type { PrintField, PrintFormat, LayoutItem, LayoutBorder } from "./stampe
 
 /** Campi disponibili sul cartello di un'offerta zoo (stessa meccanica dell'Arredo). */
 export const ZOO_FIELDS: PrintField[] = [
+  { id: "titolo", label: "Titolo del prodotto padre", size: 20, bold: true, font: "cn" },
+  { id: "descCartello", label: "Descrizione del padre (cartello)", size: 12, bold: false },
   { id: "descrizione", label: "Descrizione offerta", size: 22, bold: true, font: "cn" },
   { id: "descrizioneArticolo", label: "Descrizione articolo", size: 14, bold: false },
   { id: "marca", label: "Marca", size: 14, bold: false },
@@ -517,23 +592,41 @@ export function effectiveZooLayout(db: ZooDB, scope: Scope, formatId: string): Z
 }
 
 /** Valori del cartello per un'offerta (con prezzo del PV se caricato). */
-export function zooCartelloValues(db: ZooDB, offer: ZooOffer): Record<string, string> {
+export function zooCartelloValues(
+  db: ZooDB, offer: ZooOffer, scope?: Scope, academyDb?: DB
+): Record<string, string> {
   const product = db.products.find((p) => p.id === offer.productId);
   const parent = product?.parentId ? db.parents.find((x) => x.id === product.parentId) : undefined;
   // il cartello è per il codice padre: elenca gli EAN di tutte le sue varianti, non solo quella dell'offerta
   const fratelli = parent ? db.products.filter((p) => p.parentId === parent.id) : product ? [product] : [];
+  // con un ambito si applicano le personalizzazioni dell'insegna/PV, altrimenti resta la versione del Consorzio
+  const perScope = scope && academyDb;
+  const testoPadre = (field: "nome" | "descCartello") =>
+    !parent ? "" : perScope ? effectiveParentText(db, scope, parent, field, academyDb).value : parent[field] ?? "";
+  const tagPadre = (kind: "animale" | "prodotto") => {
+    if (!parent) return "";
+    if (perScope) return effectiveParentTag(db, scope, parent, kind, academyDb).value;
+    const dal = kind === "animale" ? animaliDi(db, parent.caratteristiche) : caratteristicheProdottoDi(db, parent.caratteristiche);
+    return dal.join(", ");
+  };
+  const testoOfferta = (field: "descrizione" | "condizioni") =>
+    perScope ? effectiveOfferText(db, scope, offer, field, academyDb).value : offer[field] ?? "";
+  const foto = zooImageUrl(product, parent);
   return {
-    descrizione: offer.descrizione,
+    titolo: testoPadre("nome"),
+    descCartello: testoPadre("descCartello"),
+    descrizione: testoOfferta("descrizione"),
     descrizioneArticolo: product?.descrizione ?? "",
     marca: product?.marca ?? "",
     prezzoPromo: offer.prezzoPromo ? `€ ${offer.prezzoPromo}` : "",
     prezzoListino: offer.prezzoListino ? `€ ${offer.prezzoListino}` : "",
     label: offer.label ?? "",
-    condizioni: offer.condizioni ?? "",
+    condizioni: testoOfferta("condizioni"),
     eanLista: fratelli.map((p) => p.ean).join(" · "),
-    animale: animaliDi(db, parent?.caratteristiche ?? []).join(", "),
-    caratteristica: caratteristicheProdottoDi(db, parent?.caratteristiche ?? []).join(", "),
-    immagine: zooImageUrl(product, parent),
+    animale: tagPadre("animale"),
+    caratteristica: tagPadre("prodotto"),
+    // niente foto caricata: si lascia il campo vuoto invece del segnaposto "mancante"
+    immagine: foto === "/immagini/mancante.jpg" ? "" : foto,
   };
 }
 

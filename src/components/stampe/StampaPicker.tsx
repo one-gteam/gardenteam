@@ -25,6 +25,8 @@ export default function StampaPicker({
   initialHidden,
   globalFormat,
   baseUrl = "/stampe/arredo/stampa",
+  printed,
+  onPrint,
 }: {
   products: ProdLite[];
   formats: { id: string; name: string }[];
@@ -38,6 +40,8 @@ export default function StampaPicker({
   initialHidden: Record<string, string[]>;
   globalFormat: string;
   baseUrl?: string; // pagina di stampa da richiamare (default: arredo)
+  printed?: Record<string, string>; // id → data ISO dell'ultima stampa in questo ambito
+  onPrint?: (ids: string[]) => Promise<{ ok: boolean }>; // segna come stampati al momento della stampa
 }) {
   const router = useRouter();
   const [selected, setSelected] = useState<string[]>(initialSelected);
@@ -79,6 +83,18 @@ export default function StampaPicker({
 
   const anyA5 = selected.some((id) => ["a5", "za5"].includes(rowFormat[id] ?? applyAll));
 
+  const dataStampa = (id: string) =>
+    printed?.[id] ? new Date(printed[id]).toLocaleDateString("it-IT") : undefined;
+
+  /** Prima di aprire l'anteprima di stampa segna i cartelli come già stampati. */
+  const vaiAllaStampa = async () => {
+    const url = buildUrl(true);
+    if (onPrint && selected.length > 0) {
+      try { await onPrint(selected); } catch { /* la stampa non deve fallire per questo */ }
+    }
+    router.push(url);
+  };
+
   const selectedProds = selected.map((id) => products.find((p) => p.id === id)).filter(Boolean) as ProdLite[];
 
   return (
@@ -114,6 +130,11 @@ export default function StampaPicker({
               onClick={(e) => toggle(i, e.shiftKey)}
             >
               {isSel ? "☑" : "☐"} {p.titolo}
+              {dataStampa(p.id) && (
+                <span className="pill pill-gray" style={{ marginLeft: 6, fontSize: 9.5 }} title={`Già stampato il ${dataStampa(p.id)}`}>
+                  ✓ stampato
+                </span>
+              )}
               <div style={{ fontSize: 11, color: "var(--muted)" }}>{p.codice} · € {p.prezzo} · {p.tipologia}</div>
             </button>
           );
@@ -220,7 +241,7 @@ export default function StampaPicker({
               <button type="button" className="btn btn-outline" onClick={() => router.push(buildUrl(false))}>
                 Aggiorna anteprima →
               </button>
-              <button type="button" className="btn" onClick={() => router.push(buildUrl(true))}>
+              <button type="button" className="btn" onClick={vaiAllaStampa}>
                 Anteprima di stampa / Esporta PDF
               </button>
             </div>

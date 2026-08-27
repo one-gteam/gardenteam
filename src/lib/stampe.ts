@@ -82,6 +82,7 @@ export interface LayoutItem {
   bold?: boolean; // grassetto: sovrascrive il default del campo per questo elemento
   italic?: boolean; // corsivo (nessun default: solo per elemento)
   align?: "left" | "center" | "right"; // allineamento del testo nel paragrafo
+  font?: string; // chiave di LAYOUT_FONTS (vedi lib/layout-fonts): sovrascrive il carattere del campo
 }
 
 /** Bordo del foglio (cartello intero), scelto nell'editor del layout. */

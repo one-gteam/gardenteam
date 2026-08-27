@@ -15,6 +15,7 @@ import {
   effectiveValue,
   ScopeType,
 } from "./stampe";
+import { LAYOUT_FONTS } from "./layout-fonts";
 
 async function requireStampeUser() {
   const user = await requireUser();
@@ -669,6 +670,7 @@ export async function saveLayout(
       ...(typeof i.bold === "boolean" ? { bold: i.bold } : {}),
       ...(typeof i.italic === "boolean" ? { italic: i.italic } : {}),
       ...(["left", "center", "right"].includes(i.align as string) ? { align: i.align as "left" | "center" | "right" } : {}),
+      ...(typeof i.font === "string" && LAYOUT_FONTS.some((f) => f.id === i.font) ? { font: i.font as string } : {}),
       ...(i.sticker && typeof i.sticker === "object"
         ? {
             sticker: {

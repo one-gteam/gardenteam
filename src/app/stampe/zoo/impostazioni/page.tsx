@@ -72,7 +72,14 @@ export default async function ZooImpostazioniPage({
                   Schede standard del volantino (struttura di partenza per ogni campagna)
                   <textarea name="schedeDefault" rows={4} defaultValue={db.settings.schedeDefault.join("\n")} />
                 </label>
-                <div />
+                <label className="field" style={{ marginBottom: 0 }}>
+                  Condizioni pronte per i cartelli (una per riga)
+                  <textarea name="condizioniStandard" rows={4} defaultValue={db.settings.condizioniStandard.join("\n")}
+                    placeholder={"Offerta valida fino a esaurimento scorte\nMassimo 3 pezzi per cliente"} />
+                  <span className="hint">
+                    Ogni insegna può poi scegliere la propria condizione sul singolo cartello, in Stampa cartelli.
+                  </span>
+                </label>
                 <label className="field" style={{ marginBottom: 0 }}>
                   Istruzioni per i testi del VOLANTINO (guidano anche l&apos;AI)
                   <textarea name="istruzioniVolantino" rows={4} defaultValue={db.settings.istruzioniVolantino} />

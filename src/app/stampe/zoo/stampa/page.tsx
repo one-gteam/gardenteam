@@ -5,12 +5,18 @@ import StampeHeader from "@/components/stampe/StampeHeader";
 import Cartello from "@/components/stampe/Cartello";
 import StampaPicker from "@/components/stampe/StampaPicker";
 import { canAccessArea, scopesForUser, resolveScope } from "@/lib/stampe";
+import InlineEdit from "@/components/stampe/InlineEdit";
+import InlineSelect from "@/components/stampe/InlineSelect";
 import {
   getZooDb, effectiveZooLayout, zooCartelloValues, pvPriceFor, isZooHidden,
   campagneStampabili, campagnaInCorso, campagnaInLavorazione, campaignStato,
+  effectiveParentText, effectiveParentTag, effectiveOfferText, printedAt, NO_VOLANTINO,
   ZOO_FIELDS, ZOO_FORMATS,
 } from "@/lib/zoo";
-import { importPvPrices } from "@/lib/zoo-actions";
+import {
+  importPvPrices, markZooPrinted, resetZooPrinted,
+  updateParentFieldInline, setParentTagScoped, setOfferTextScoped, setPvPriceInline,
+} from "@/lib/zoo-actions";
 
 /** Stampa cartelli Offerte Zoo: stesso impianto dell'Arredo (selezione, formati per riga, stampa 1:1). */
 export default async function ZooStampaPage({
@@ -43,16 +49,25 @@ export default async function ZooStampaPage({
     const d = (x: string) => (x ? new Date(`${x}T00:00:00`).toLocaleDateString("it-IT") : "—");
     return `${c.nome} (${p}: ${d(c.dal)} → ${d(c.al)})`;
   };
+  /** L'offerta finisce sul volantino? (pagina assegnata e non scartata) */
+  const inVolantino = (o: (typeof allOffers)[number]) =>
+    Boolean(o.selezionata) || (Boolean(o.paginaId) && o.paginaId !== NO_VOLANTINO);
+
   const q = (sp.q ?? "").toLowerCase();
   const visible = allOffers.filter((o) => {
     const product = db.products.find((p) => p.id === o.productId);
     if (product && isZooHidden(db, scope, product, academyDb)) return false;
     if (sp.scheda && o.schedaId !== sp.scheda) return false;
     if (sp.marca && product?.marca !== sp.marca) return false;
+    if (sp.volantino === "si" && !inVolantino(o)) return false;
+    if (sp.volantino === "no" && inVolantino(o)) return false;
+    if (sp.stampati === "si" && !printedAt(db, scope, o.id)) return false;
+    if (sp.stampati === "no" && printedAt(db, scope, o.id)) return false;
     if (q && !`${o.descrizione} ${o.ean} ${product?.marca ?? ""}`.toLowerCase().includes(q)) return false;
     return true;
   });
   const marche = [...new Set(allOffers.map((o) => db.products.find((p) => p.id === o.productId)?.marca).filter(Boolean) as string[])].sort();
+  const nStampati = allOffers.filter((o) => printedAt(db, scope, o.id)).length;
 
   const selectedIds = (sp.sel ?? "").split(",").filter(Boolean);
   const selected = selectedIds.map((id) => allOffers.find((o) => o.id === id)).filter(Boolean) as typeof allOffers;
@@ -60,7 +75,7 @@ export default async function ZooStampaPage({
   const formatFor = (oid: string) => ZOO_FORMATS.find((f) => f.id === (sp[`formato_${oid}`] ?? globalFormatId)) ?? ZOO_FORMATS[0];
 
   const valuesFor = (o: (typeof allOffers)[number]) => {
-    const vals = zooCartelloValues(db, o);
+    const vals = zooCartelloValues(db, o, scope, academyDb);
     const pv = pvPriceFor(db, scope, o.ean, academyDb);
     if (pv) vals.prezzoPromo = `€ ${pv}`;
     const customPrice = sp[`prezzo_${o.id}`];
@@ -170,8 +185,12 @@ export default async function ZooStampaPage({
           </div>
         )}
 
+        {sp.azzerati !== undefined && (
+          <div className="alert alert-green">✓ Azzerato il &quot;già stampato&quot; su {sp.azzerati} cartelli.</div>
+        )}
+
         <div className="card" style={{ marginBottom: 16, padding: 14 }}>
-          <form method="get" style={{ display: "grid", gridTemplateColumns: "2fr 2fr 2fr auto", gap: 10, alignItems: "end" }}>
+          <form method="get" style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr)) auto", gap: 10, alignItems: "end" }}>
             <input type="hidden" name="scope" value={scopeParam} />
             <input type="hidden" name="sel" value={sp.sel ?? ""} />
             {campaign && <input type="hidden" name="campagna" value={campaign.id} />}
@@ -184,6 +203,22 @@ export default async function ZooStampaPage({
               </select>
             </label>
             <label className="field" style={{ marginBottom: 0 }}>
+              Sul volantino
+              <select name="volantino" defaultValue={sp.volantino ?? ""}>
+                <option value="">Tutte</option>
+                <option value="si">Solo le offerte in volantino</option>
+                <option value="no">Solo quelle NON in volantino</option>
+              </select>
+            </label>
+            <label className="field" style={{ marginBottom: 0 }}>
+              Già stampati
+              <select name="stampati" defaultValue={sp.stampati ?? ""}>
+                <option value="">Tutti</option>
+                <option value="no">Solo da stampare</option>
+                <option value="si">Solo già stampati</option>
+              </select>
+            </label>
+            <label className="field" style={{ marginBottom: 0 }}>
               Marca
               <select name="marca" defaultValue={sp.marca ?? ""}>
                 <option value="">Tutte</option>
@@ -192,6 +227,17 @@ export default async function ZooStampaPage({
             </label>
             <button className="btn btn-sm" type="submit">Filtra</button>
           </form>
+          {campaign && nStampati > 0 && (
+            <form action={resetZooPrinted.bind(null, "/stampe/zoo/stampa", scopeParam, campaign.id)} style={{ marginTop: 10 }}>
+              <span style={{ fontSize: 12.5, color: "var(--muted)", marginRight: 8 }}>
+                {nStampati} cartelli risultano già stampati da {scope.label}.
+              </span>
+              <button className="btn btn-outline btn-sm" type="submit"
+                title="Rimette tutti i cartelli di questo periodo come «da stampare»">
+                Azzera &quot;già stampato&quot;
+              </button>
+            </form>
+          )}
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "300px 1fr 300px", gap: 16, alignItems: "start" }}>
@@ -208,7 +254,14 @@ export default async function ZooStampaPage({
             })}
             formats={ZOO_FORMATS.map((f) => ({ id: f.id, name: f.name }))}
             scopeParam={scopeParam}
-            filters={{ q: sp.q ?? "", scheda: sp.scheda ?? "", marca: sp.marca ?? "", campagna: campaign?.id ?? "" }}
+            filters={{
+              q: sp.q ?? "", scheda: sp.scheda ?? "", marca: sp.marca ?? "",
+              volantino: sp.volantino ?? "", stampati: sp.stampati ?? "", campagna: campaign?.id ?? "",
+            }}
+            printed={Object.fromEntries(
+              visible.map((o) => [o.id, printedAt(db, scope, o.id) ?? ""]).filter(([, v]) => v)
+            )}
+            onPrint={markZooPrinted.bind(null, scopeParam)}
             initialSelected={selectedIds}
             initialFormats={Object.fromEntries(
               selectedIds.map((id) => [id, sp[`formato_${id}`] ?? globalFormatId]).filter(([, v]) => v)
@@ -241,6 +294,111 @@ export default async function ZooStampaPage({
             )}
           </div>
         </div>
+
+        {/* personalizzazione dei testi del cartello per questo ambito */}
+        {selected.length > 0 && (
+          <div className="card" style={{ marginTop: 16, padding: 14 }}>
+            <h2 style={{ marginTop: 0 }}>
+              {scope.type === "system" ? "Testi del cartello (versione Consorzio)" : `Personalizza per ${scope.label}`}
+            </h2>
+            <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 10px" }}>
+              {scope.type === "system"
+                ? "Stai modificando i testi comuni a tutte le insegne."
+                : `Le modifiche qui sotto valgono solo per i cartelli di ${scope.label}: la versione del Consorzio resta intatta. Un campo lasciato uguale a quello del Consorzio non crea una personalizzazione.`}
+            </p>
+            <div className="table-wrap">
+              <table className="data">
+                <thead>
+                  <tr>
+                    <th>Titolo (padre)</th>
+                    <th className="col-wide">Descrizione (cartello)</th>
+                    <th>Animale</th>
+                    <th>Caratteristica</th>
+                    <th>Prezzo</th>
+                    <th>Condizioni</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selected.map((o) => {
+                    const product = db.products.find((p) => p.id === o.productId);
+                    const parent = product?.parentId ? db.parents.find((x) => x.id === product.parentId) : undefined;
+                    const nome = parent ? effectiveParentText(db, scope, parent, "nome", academyDb) : undefined;
+                    const desc = parent ? effectiveParentText(db, scope, parent, "descCartello", academyDb) : undefined;
+                    const animale = parent ? effectiveParentTag(db, scope, parent, "animale", academyDb) : undefined;
+                    const caratt = parent ? effectiveParentTag(db, scope, parent, "prodotto", academyDb) : undefined;
+                    const cond = effectiveOfferText(db, scope, o, "condizioni", academyDb);
+                    const pv = pvPriceFor(db, scope, o.ean, academyDb);
+                    return (
+                      <tr key={o.id}>
+                        <td>
+                          {parent ? (
+                            <>
+                              <InlineEdit value={nome!.value}
+                                onSave={updateParentFieldInline.bind(null, parent.id, "nome", scopeParam)} />
+                              {nome!.custom && <span className="pill pill-orange">personalizzato</span>}
+                            </>
+                          ) : (
+                            <span style={{ fontSize: 11.5, color: "var(--muted)" }}>{o.descrizione} (senza padre)</span>
+                          )}
+                        </td>
+                        <td className="col-wide">
+                          {parent ? (
+                            <>
+                              <InlineEdit value={desc!.value} multiline placeholder="descrizione per il cartello…"
+                                onSave={updateParentFieldInline.bind(null, parent.id, "descCartello", scopeParam)} />
+                              {desc!.custom && <span className="pill pill-orange">personalizzata</span>}
+                            </>
+                          ) : <span className="pill pill-gray">—</span>}
+                        </td>
+                        <td>
+                          {parent ? (
+                            <>
+                              <InlineSelect value={animale!.value} options={db.settings.categorieAnimali}
+                                onSave={setParentTagScoped.bind(null, parent.id, "animale", scopeParam)} />
+                              {animale!.custom && <span className="pill pill-orange">personalizzato</span>}
+                            </>
+                          ) : <span className="pill pill-gray">—</span>}
+                        </td>
+                        <td>
+                          {parent ? (
+                            <>
+                              <InlineSelect value={caratt!.value} options={db.settings.caratteristicheProdotto}
+                                onSave={setParentTagScoped.bind(null, parent.id, "prodotto", scopeParam)} />
+                              {caratt!.custom && <span className="pill pill-orange">personalizzata</span>}
+                            </>
+                          ) : <span className="pill pill-gray">—</span>}
+                        </td>
+                        <td>
+                          {scope.type === "system" ? (
+                            <strong>€ {o.prezzoPromo}</strong>
+                          ) : (
+                            <>
+                              <InlineEdit value={pv ?? ""} placeholder={o.prezzoPromo}
+                                onSave={setPvPriceInline.bind(null, o.ean, scopeParam)} />
+                              {pv
+                                ? <span className="pill pill-orange">vostro prezzo</span>
+                                : <span className="hint">Consorzio: € {o.prezzoPromo}</span>}
+                            </>
+                          )}
+                        </td>
+                        <td>
+                          {db.settings.condizioniStandard.length > 0 && (
+                            <InlineSelect value={db.settings.condizioniStandard.includes(cond.value) ? cond.value : ""}
+                              options={db.settings.condizioniStandard} vuoto="— scegli una condizione pronta —"
+                              onSave={setOfferTextScoped.bind(null, o.id, "condizioni", scopeParam)} />
+                          )}
+                          <InlineEdit value={cond.value} placeholder="oppure scrivi le tue condizioni…"
+                            onSave={setOfferTextScoped.bind(null, o.id, "condizioni", scopeParam)} />
+                          {cond.custom && <span className="pill pill-orange">personalizzate</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

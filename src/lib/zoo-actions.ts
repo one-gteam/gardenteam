@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { requireUser } from "./auth";
 import { getDb } from "./db";
 import { canAccessStampe, isZooEditor, resolveScope } from "./stampe";
+import { LAYOUT_FONTS } from "./layout-fonts";
 import {
   getZooDb, saveZooDb, ZooDB, ZooParent, campagnaInLavorazione, campagnaInCorso, campaignStato, NO_VOLANTINO,
 } from "./zoo";
@@ -427,6 +428,103 @@ export async function updateOfferFieldInline(
   } else o[field] = v || undefined;
   await saveZooDb(db);
   return { ok: true };
+}
+
+/**
+ * Animale/caratteristica del padre riscritti da un'insegna/PV: il Consorzio
+ * cambia i tag veri (che guidano anche il volantino), gli altri ambiti salvano
+ * una personalizzazione che vale solo per i loro cartelli.
+ */
+export async function setParentTagScoped(
+  parentId: string, kind: "animale" | "prodotto", scopeParam: string, value: string
+): Promise<{ ok: boolean }> {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  const parent = db.parents.find((p) => p.id === parentId);
+  if (!parent) return { ok: false };
+  const dominio = kind === "animale" ? db.settings.categorieAnimali : db.settings.caratteristicheProdotto;
+  const v = value.trim();
+  if (v && !dominio.includes(v)) return { ok: false };
+  if (scope.type === "system") {
+    if (!isZooEditor(user)) return { ok: false };
+    parent.caratteristiche = [...parent.caratteristiche.filter((c) => !dominio.includes(c)), ...(v ? [v] : [])];
+  } else {
+    db.tagOverrides = db.tagOverrides.filter(
+      (o) => !(o.scopeType === scope.type && o.scopeId === scope.id && o.parentId === parentId && o.kind === kind)
+    );
+    db.tagOverrides.push({ scopeType: scope.type, scopeId: scope.id, parentId, kind, value: v });
+  }
+  await saveZooDb(db);
+  return { ok: true };
+}
+
+/**
+ * Descrizione/condizioni dell'offerta riscritte da un'insegna/PV (il Consorzio
+ * modifica invece l'offerta vera, comune a tutti).
+ */
+export async function setOfferTextScoped(
+  offerId: string, field: "descrizione" | "condizioni", scopeParam: string, value: string
+): Promise<{ ok: boolean }> {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  const offer = db.offers.find((o) => o.id === offerId);
+  if (!offer) return { ok: false };
+  const v = value.trim();
+  if (scope.type === "system") {
+    if (!isZooEditor(user)) return { ok: false };
+    if (field === "descrizione") offer.descrizione = v || offer.descrizione;
+    else offer.condizioni = v || undefined;
+  } else {
+    db.offerOverrides = db.offerOverrides.filter(
+      (o) => !(o.scopeType === scope.type && o.scopeId === scope.id && o.offerId === offerId && o.field === field)
+    );
+    // riportarlo uguale al Consorzio significa togliere la personalizzazione
+    if (v !== (offer[field] ?? "")) {
+      db.offerOverrides.push({ scopeType: scope.type, scopeId: scope.id, offerId, field, value: v });
+    }
+  }
+  await saveZooDb(db);
+  return { ok: true };
+}
+
+/** Segna come stampati i cartelli di queste offerte per l'ambito corrente. */
+export async function markZooPrinted(scopeParam: string, offerIds: string[]): Promise<{ ok: boolean }> {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  const at = new Date().toISOString();
+  for (const offerId of offerIds) {
+    if (!db.offers.some((o) => o.id === offerId)) continue;
+    const esistente = db.printed.find(
+      (p) => p.scopeType === scope.type && p.scopeId === scope.id && p.offerId === offerId
+    );
+    if (esistente) esistente.at = at;
+    else db.printed.push({ scopeType: scope.type, scopeId: scope.id, offerId, at });
+  }
+  await saveZooDb(db);
+  return { ok: true };
+}
+
+/** Azzera il "già stampato": senza id azzera tutta la campagna indicata. */
+export async function resetZooPrinted(back: string, scopeParam: string, campaignId: string, formData: FormData) {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  const ids = (formData.getAll("sel") as string[]).filter(Boolean);
+  const dellaCampagna = new Set(db.offers.filter((o) => o.campaignId === campaignId).map((o) => o.id));
+  const daAzzerare = ids.length > 0 ? new Set(ids.filter((id) => dellaCampagna.has(id))) : dellaCampagna;
+  const prima = db.printed.length;
+  db.printed = db.printed.filter(
+    (p) => !(p.scopeType === scope.type && p.scopeId === scope.id && daAzzerare.has(p.offerId))
+  );
+  await saveZooDb(db);
+  redirect(backUrl(back, scopeParam, { azzerati: String(prima - db.printed.length), campagna: campaignId }));
 }
 
 /**
@@ -1133,6 +1231,24 @@ export async function importPvPrices(scopeParam: string, formData: FormData) {
   redirect(backUrl("/stampe/zoo/stampa", scopeParam, { prezzi: String(n) }));
 }
 
+/**
+ * Prezzo di vendita del singolo articolo per questo ambito (stessa cosa che fa
+ * l'import Excel dei prezzi, ma su una riga sola): vuoto = torna al prezzo promo
+ * del Consorzio.
+ */
+export async function setPvPriceInline(ean: string, scopeParam: string, value: string): Promise<{ ok: boolean }> {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  if (scope.type === "system") return { ok: false };
+  const prezzo = priceStr(value);
+  db.pvPrices = db.pvPrices.filter((p) => !(p.scopeType === scope.type && p.scopeId === scope.id && p.ean === ean));
+  if (prezzo) db.pvPrices.push({ scopeType: scope.type, scopeId: scope.id, ean, prezzo });
+  await saveZooDb(db);
+  return { ok: true };
+}
+
 /** Proposta di correzione al Consorzio (testi condivisi, dati offerta...). */
 export async function sendZooSuggestion(scopeParam: string, formData: FormData) {
   const user = await requireZooUser();
@@ -1179,6 +1295,8 @@ export async function saveZooSettings(scopeParam: string, formData: FormData) {
   db.settings.caratteristiche = [...db.settings.categorieAnimali, ...db.settings.caratteristicheProdotto];
   db.settings.labels = list("labels");
   db.settings.schedeDefault = list("schedeDefault");
+  db.settings.condizioniStandard = String(formData.get("condizioniStandard") ?? "")
+    .split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
   db.settings.istruzioniVolantino = String(formData.get("istruzioniVolantino") ?? db.settings.istruzioniVolantino);
   db.settings.istruzioniCartello = String(formData.get("istruzioniCartello") ?? db.settings.istruzioniCartello);
   await saveZooDb(db);
@@ -1284,6 +1402,7 @@ export async function saveZooLayout(
       ...(typeof i.bold === "boolean" ? { bold: i.bold as boolean } : {}),
       ...(typeof i.italic === "boolean" ? { italic: i.italic as boolean } : {}),
       ...(["left", "center", "right"].includes(i.align as string) ? { align: i.align as "left" | "center" | "right" } : {}),
+      ...(typeof i.font === "string" && LAYOUT_FONTS.some((f) => f.id === i.font) ? { font: i.font as string } : {}),
       ...(i.sticker && typeof i.sticker === "object" ? { sticker: i.sticker as import("./stampe").StickerStyle } : {}),
     }));
   let borderRaw: unknown;

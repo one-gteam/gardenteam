@@ -2,6 +2,7 @@
 
 import { useRef, useState, useTransition } from "react";
 import type { LayoutBorder, LayoutItem, PrintField, PrintFormat, StickerStyle } from "@/lib/stampe";
+import { LAYOUT_FONTS, layoutFontCss } from "@/lib/layout-fonts";
 import { saveLayout } from "@/lib/stampe-actions";
 import { saveZooLayout } from "@/lib/zoo-actions";
 import { stickerShapeStyle } from "./stickerStyle";
@@ -84,6 +85,11 @@ export default function LayoutEditor({
   const mmY = (pct: number) => (pct / 100) * format.h;
   const pctFromMmX = (mm: number) => (mm / format.w) * 100;
   const pctFromMmY = (mm: number) => (mm / format.h) * 100;
+  // le misure si possono leggere e scrivere in mm o in cm, a scelta
+  const [unita, setUnita] = useState<"mm" | "cm">("mm");
+  const inUnita = (mm: number) => (unita === "cm" ? (mm / 10).toFixed(2) : mm.toFixed(1));
+  const daUnita = (v: string) => (unita === "cm" ? (Number(v) || 0) * 10 : Number(v) || 0);
+  const passo = unita === "cm" ? 0.05 : 0.5;
 
   const onMouseDown = (e: React.MouseEvent, index: number, mode: "move" | "resize") => {
     if (!canEdit) return;
@@ -296,7 +302,7 @@ export default function LayoutEditor({
                   )}
                   {canEdit && selected === i && (
                     <span style={{ position: "absolute", left: 0, top: -18, fontSize: 10.5, color: "#274b7a", background: "#fff", padding: "0 4px", border: "1px solid var(--line)", borderRadius: 3, whiteSpace: "nowrap" }}>
-                      {mmX(item.w).toFixed(1)} × {mmY(item.h).toFixed(1)} mm
+                      {inUnita(mmX(item.w))} × {inUnita(mmY(item.h))} {unita}
                     </span>
                   )}
                   {canEdit && <span className="resize-handle" onMouseDown={(e) => onMouseDown(e, i, "resize")} />}
@@ -321,6 +327,7 @@ export default function LayoutEditor({
                   fontSize,
                   fontWeight: (item.bold ?? meta?.bold) ? 800 : 400,
                   fontStyle: item.italic ? "italic" : "normal",
+                  fontFamily: item.font !== undefined ? layoutFontCss(item.font) : undefined,
                   color: isPrice ? "#c2410c" : "#1c2b21",
                   textAlign: item.align ?? (isPrice ? "right" : "left"),
                   cursor: canEdit ? "move" : "default",
@@ -328,13 +335,13 @@ export default function LayoutEditor({
                 onMouseDown={(e) => onMouseDown(e, i, "move")}
               >
                 {isPrice ? (
-                  raw ? <>{intPart}{centPart !== undefined && <sup style={{ fontSize: "0.5em" }}>,{centPart}</sup>}</> : ""
+                  raw ? <>{intPart}{centPart !== undefined && <sup style={{ fontSize: "0.5em", lineHeight: 0 }}>,{centPart}</sup>}</> : ""
                 ) : (
                   raw || meta?.label
                 )}
                 {canEdit && selected === i && (
                   <span style={{ position: "absolute", left: 0, top: -18, fontSize: 10.5, color: "#274b7a", background: "#fff", padding: "0 4px", border: "1px solid var(--line)", borderRadius: 3, whiteSpace: "nowrap" }}>
-                    {mmX(item.w).toFixed(1)} × {mmY(item.h).toFixed(1)} mm
+                    {inUnita(mmX(item.w))} × {inUnita(mmY(item.h))} {unita}
                   </span>
                 )}
                 {canEdit && <span className="resize-handle" onMouseDown={(e) => onMouseDown(e, i, "resize")} />}
@@ -349,6 +356,41 @@ export default function LayoutEditor({
       </div>
 
       <div className="card" style={{ padding: 14 }}>
+        {/* proprietà del foglio: valgono per tutto il cartello, non per il campo selezionato */}
+        {canEdit && (
+          <div style={{ borderBottom: "1.5px dashed var(--line)", paddingBottom: 12, marginBottom: 12 }}>
+            <h3 style={{ marginTop: 0 }}>Foglio ({format.w}×{format.h} mm)</h3>
+            <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12.5, marginBottom: 8 }}>
+              <input type="checkbox" checked={border.on} onChange={(e) => setBorder((b) => ({ ...b, on: e.target.checked }))} />
+              Bordo attorno al foglio
+            </label>
+            {border.on && (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                <label className="field" style={{ marginBottom: 0 }}>
+                  Spessore (cm)
+                  <input type="number" step={0.01} min={0.02} max={0.6} value={(border.width / 10).toFixed(2)}
+                    onChange={(e) => setBorder((b) => ({ ...b, width: Math.max(0.25, Math.min(6, (Number(e.target.value) || 0.1) * 10)) }))} />
+                </label>
+                <label className="field" style={{ marginBottom: 0 }}>
+                  Spessore (mm)
+                  <input type="number" step={0.25} min={0.25} max={6} value={border.width}
+                    onChange={(e) => setBorder((b) => ({ ...b, width: Math.max(0.25, Math.min(6, Number(e.target.value) || 1)) }))} />
+                </label>
+                <label className="field" style={{ marginBottom: 0 }}>
+                  Stile
+                  <select value={border.style} onChange={(e) => setBorder((b) => ({ ...b, style: e.target.value as LayoutBorder["style"] }))}>
+                    <option value="solid">Continuo</option>
+                    <option value="dashed">Tratteggiato</option>
+                  </select>
+                </label>
+                <label className="field" style={{ marginBottom: 0 }}>
+                  Colore
+                  <input type="color" value={border.color} onChange={(e) => setBorder((b) => ({ ...b, color: e.target.value }))} style={{ width: "100%", height: 34, padding: 2 }} />
+                </label>
+              </div>
+            )}
+          </div>
+        )}
         {selItem?.sticker && canEdit && (
           <div style={{ borderBottom: "1.5px dashed var(--line)", paddingBottom: 12, marginBottom: 12 }}>
             <h3 style={{ marginTop: 0 }}>Sticker selezionato</h3>
@@ -398,6 +440,12 @@ export default function LayoutEditor({
           <div style={{ borderBottom: "1.5px dashed var(--line)", paddingBottom: 12, marginBottom: 12 }}>
             <h3 style={{ marginTop: 0 }}>Campo selezionato</h3>
             <label className="field">
+              Carattere
+              <select value={selItem.font ?? ""} onChange={(e) => updateSelected({ font: e.target.value })}>
+                {LAYOUT_FONTS.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
+              </select>
+            </label>
+            <label className="field">
               Dimensione font: {selItem.size ?? fields.find((f) => f.id === selItem.fieldId)?.size ?? 11}
               <input
                 type="range" min={6} max={80}
@@ -437,26 +485,33 @@ export default function LayoutEditor({
                 ))}
               </div>
             </label>
+            <div style={{ fontSize: 11.5, color: "var(--muted)", marginBottom: 4 }}>
+              Misure sul foglio — {unita === "cm" ? "centimetri" : "millimetri"}{" "}
+              <button type="button" className="btn btn-outline btn-sm" style={{ padding: "0 6px", fontSize: 11 }}
+                onClick={() => setUnita((u) => (u === "cm" ? "mm" : "cm"))}>
+                passa a {unita === "cm" ? "mm" : "cm"}
+              </button>
+            </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
               <label className="field" style={{ marginBottom: 0 }}>
-                X (mm)
-                <input type="number" step={0.5} value={mmX(selItem.x).toFixed(1)}
-                  onChange={(e) => updateSelected({ x: Math.max(0, Math.min(100 - selItem.w, pctFromMmX(Number(e.target.value) || 0))) })} />
+                X ({unita})
+                <input type="number" step={passo} value={inUnita(mmX(selItem.x))}
+                  onChange={(e) => updateSelected({ x: Math.max(0, Math.min(100 - selItem.w, pctFromMmX(daUnita(e.target.value)))) })} />
               </label>
               <label className="field" style={{ marginBottom: 0 }}>
-                Y (mm)
-                <input type="number" step={0.5} value={mmY(selItem.y).toFixed(1)}
-                  onChange={(e) => updateSelected({ y: Math.max(0, Math.min(100 - selItem.h, pctFromMmY(Number(e.target.value) || 0))) })} />
+                Y ({unita})
+                <input type="number" step={passo} value={inUnita(mmY(selItem.y))}
+                  onChange={(e) => updateSelected({ y: Math.max(0, Math.min(100 - selItem.h, pctFromMmY(daUnita(e.target.value)))) })} />
               </label>
               <label className="field" style={{ marginBottom: 0 }}>
-                Largh. (mm)
-                <input type="number" step={0.5} value={mmX(selItem.w).toFixed(1)}
-                  onChange={(e) => updateSelected({ w: Math.max(3, Math.min(100 - selItem.x, pctFromMmX(Number(e.target.value) || 0))) })} />
+                Largh. ({unita})
+                <input type="number" step={passo} value={inUnita(mmX(selItem.w))}
+                  onChange={(e) => updateSelected({ w: Math.max(3, Math.min(100 - selItem.x, pctFromMmX(daUnita(e.target.value)))) })} />
               </label>
               <label className="field" style={{ marginBottom: 0 }}>
-                Alt. (mm)
-                <input type="number" step={0.5} value={mmY(selItem.h).toFixed(1)}
-                  onChange={(e) => updateSelected({ h: Math.max(2, Math.min(100 - selItem.y, pctFromMmY(Number(e.target.value) || 0))) })} />
+                Alt. ({unita})
+                <input type="number" step={passo} value={inUnita(mmY(selItem.h))}
+                  onChange={(e) => updateSelected({ h: Math.max(2, Math.min(100 - selItem.y, pctFromMmY(daUnita(e.target.value)))) })} />
               </label>
             </div>
             <label className="field" style={{ marginBottom: 0 }}>
@@ -470,35 +525,6 @@ export default function LayoutEditor({
                 <button type="button" className="btn btn-outline btn-sm" title="Basso" onClick={() => updateSelected({ y: 100 - selItem.h })}>⇣ Basso</button>
               </div>
             </label>
-          </div>
-        )}
-        {canEdit && (
-          <div style={{ borderBottom: "1.5px dashed var(--line)", paddingBottom: 12, marginBottom: 12 }}>
-            <h3 style={{ marginTop: 0 }}>Bordo del foglio</h3>
-            <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12.5, marginBottom: 8 }}>
-              <input type="checkbox" checked={border.on} onChange={(e) => setBorder((b) => ({ ...b, on: e.target.checked }))} />
-              Mostra un bordo sul foglio
-            </label>
-            {border.on && (
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                <label className="field" style={{ marginBottom: 0 }}>
-                  Spessore (mm)
-                  <input type="number" step={0.25} min={0.25} max={6} value={border.width}
-                    onChange={(e) => setBorder((b) => ({ ...b, width: Number(e.target.value) || 1 }))} />
-                </label>
-                <label className="field" style={{ marginBottom: 0 }}>
-                  Stile
-                  <select value={border.style} onChange={(e) => setBorder((b) => ({ ...b, style: e.target.value as LayoutBorder["style"] }))}>
-                    <option value="solid">Continuo</option>
-                    <option value="dashed">Tratteggiato</option>
-                  </select>
-                </label>
-                <label className="field" style={{ gridColumn: "1 / -1", marginBottom: 0 }}>
-                  Colore
-                  <input type="color" value={border.color} onChange={(e) => setBorder((b) => ({ ...b, color: e.target.value }))} style={{ width: "100%", height: 34, padding: 2 }} />
-                </label>
-              </div>
-            )}
           </div>
         )}
         <h3 style={{ marginTop: 0 }}>Collega a tipologie</h3>

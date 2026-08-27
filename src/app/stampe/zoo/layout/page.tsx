@@ -35,7 +35,7 @@ export default async function ZooLayoutPage({
   // offerta di esempio per l'anteprima: la prima della campagna attiva
   const campaign = activeCampaign(db);
   const sample = campaign ? db.offers.find((o) => o.campaignId === campaign.id) : db.offers[0];
-  const sampleValues = sample ? zooCartelloValues(db, sample) : {};
+  const sampleValues = sample ? zooCartelloValues(db, sample, scope, academyDb) : {};
 
   return (
     <div>
