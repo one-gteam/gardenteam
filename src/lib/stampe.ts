@@ -81,6 +81,15 @@ export interface LayoutItem {
   size?: number; // dimensione font: sovrascrive il default del campo per questo elemento
   bold?: boolean; // grassetto: sovrascrive il default del campo per questo elemento
   italic?: boolean; // corsivo (nessun default: solo per elemento)
+  align?: "left" | "center" | "right"; // allineamento del testo nel paragrafo
+}
+
+/** Bordo del foglio (cartello intero), scelto nell'editor del layout. */
+export interface LayoutBorder {
+  on: boolean;
+  width: number; // mm
+  color: string;
+  style: "solid" | "dashed";
 }
 
 export interface CardLayout {
@@ -90,6 +99,7 @@ export interface CardLayout {
   scopeId: string;
   tipologie: string[]; // vuoto = tutte
   items: LayoutItem[];
+  border?: LayoutBorder;
 }
 
 export interface ErrorReport {

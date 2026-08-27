@@ -80,6 +80,7 @@ export default async function ZooLayoutPage({
           format={format}
           fields={ZOO_FIELDS}
           initialItems={current.items}
+          initialBorder={current.border}
           scopeParam={scopeParam}
           initialTipologie={[]}
           tipologieDisponibili={[]}

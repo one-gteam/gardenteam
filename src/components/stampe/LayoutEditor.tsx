@@ -1,16 +1,19 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
-import type { LayoutItem, PrintField, PrintFormat, StickerStyle } from "@/lib/stampe";
+import type { LayoutBorder, LayoutItem, PrintField, PrintFormat, StickerStyle } from "@/lib/stampe";
 import { saveLayout } from "@/lib/stampe-actions";
 import { saveZooLayout } from "@/lib/zoo-actions";
 import { stickerShapeStyle } from "./stickerStyle";
+
+const DEFAULT_BORDER: LayoutBorder = { on: false, width: 1, color: "#111111", style: "solid" };
 
 /** Editor drag & drop del layout cartello: trascina i campi, ridimensionali dall'angolo. */
 export default function LayoutEditor({
   format,
   fields,
   initialItems,
+  initialBorder,
   scopeParam,
   initialTipologie,
   tipologieDisponibili,
@@ -22,6 +25,7 @@ export default function LayoutEditor({
   format: PrintFormat;
   fields: PrintField[];
   initialItems: LayoutItem[];
+  initialBorder?: LayoutBorder;
   scopeParam: string;
   initialTipologie: string[];
   tipologieDisponibili: string[];
@@ -31,6 +35,7 @@ export default function LayoutEditor({
   area?: "arredo" | "zoo"; // dove salvare il layout (default: arredo)
 }) {
   const [items, setItems] = useState<LayoutItem[]>(initialItems);
+  const [border, setBorder] = useState<LayoutBorder>(initialBorder ?? DEFAULT_BORDER);
   const [tipologie, setTipologie] = useState<string[]>(initialTipologie);
   const [selected, setSelected] = useState<number | null>(null);
   const [saved, setSaved] = useState(false);
@@ -72,6 +77,13 @@ export default function LayoutEditor({
     const meta = fields.find((f) => f.id === fieldId);
     return fieldId === "__img" || fieldId === "foto" || fieldId === "logoAzienda" || fieldId === "logoInsegna" || meta?.type === "image";
   };
+  const isPriceField = (fieldId: string) => fieldId === "prezzo" || fieldId === "prezzoPromo";
+
+  // conversione % del cartello ↔ millimetri reali, per mostrare/impostare le misure sul foglio
+  const mmX = (pct: number) => (pct / 100) * format.w;
+  const mmY = (pct: number) => (pct / 100) * format.h;
+  const pctFromMmX = (mm: number) => (mm / format.w) * 100;
+  const pctFromMmY = (mm: number) => (mm / format.h) * 100;
 
   const onMouseDown = (e: React.MouseEvent, index: number, mode: "move" | "resize") => {
     if (!canEdit) return;
@@ -169,7 +181,9 @@ export default function LayoutEditor({
 
   const doSave = () => {
     startTransition(async () => {
-      await (area === "zoo" ? saveZooLayout : saveLayout)(format.id, scopeParam, tipologie.join(","), JSON.stringify(items));
+      await (area === "zoo" ? saveZooLayout : saveLayout)(
+        format.id, scopeParam, tipologie.join(","), JSON.stringify(items), JSON.stringify(border)
+      );
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     });
@@ -236,7 +250,12 @@ export default function LayoutEditor({
         <div
           ref={canvasRef}
           className="cartello editor-canvas"
-          style={{ width: W, height: H, backgroundImage: format.background ? `url(${format.background})` : undefined, backgroundSize: "cover" }}
+          style={{
+            width: W, height: H,
+            backgroundImage: format.background ? `url(${format.background})` : undefined, backgroundSize: "cover",
+            boxSizing: "border-box",
+            border: border.on ? `${border.width * scale}px ${border.style} ${border.color}` : undefined,
+          }}
           onMouseMove={onMouseMove}
           onMouseUp={endDrag}
           onMouseLeave={endDrag}
@@ -275,11 +294,21 @@ export default function LayoutEditor({
                   ) : (
                     <span style={{ fontSize: 11, color: "#999" }}>{meta?.label ?? "Immagine"}</span>
                   )}
+                  {canEdit && selected === i && (
+                    <span style={{ position: "absolute", left: 0, top: -18, fontSize: 10.5, color: "#274b7a", background: "#fff", padding: "0 4px", border: "1px solid var(--line)", borderRadius: 3, whiteSpace: "nowrap" }}>
+                      {mmX(item.w).toFixed(1)} × {mmY(item.h).toFixed(1)} mm
+                    </span>
+                  )}
                   {canEdit && <span className="resize-handle" onMouseDown={(e) => onMouseDown(e, i, "resize")} />}
                 </div>
               );
             }
-            const isPrice = item.fieldId === "prezzo" || item.fieldId === "prezzoPromo";
+            const isPrice = isPriceField(item.fieldId);
+            const fontSize = ((item.size ?? meta?.size ?? 11) * scale) / 2.4;
+            const raw = sampleValues[item.fieldId] ?? "";
+            // il valore arriva già con "€" quando previsto (es. offerte Zoo): non va riaggiunto,
+            // basta separare i centesimi per renderli più piccoli e in apice
+            const [intPart, centPart] = raw.split(",");
             return (
               <div
                 key={i}
@@ -289,16 +318,25 @@ export default function LayoutEditor({
                   top: `${item.y}%`,
                   width: `${item.w}%`,
                   height: `${item.h}%`,
-                  fontSize: ((item.size ?? meta?.size ?? 11) * scale) / 2.4,
+                  fontSize,
                   fontWeight: (item.bold ?? meta?.bold) ? 800 : 400,
                   fontStyle: item.italic ? "italic" : "normal",
                   color: isPrice ? "#c2410c" : "#1c2b21",
-                  textAlign: isPrice ? "right" : "left",
+                  textAlign: item.align ?? (isPrice ? "right" : "left"),
                   cursor: canEdit ? "move" : "default",
                 }}
                 onMouseDown={(e) => onMouseDown(e, i, "move")}
               >
-                {isPrice ? `€ ${sampleValues[item.fieldId] ?? ""}` : sampleValues[item.fieldId] || meta?.label}
+                {isPrice ? (
+                  raw ? <>{intPart}{centPart !== undefined && <sup style={{ fontSize: "0.5em" }}>,{centPart}</sup>}</> : ""
+                ) : (
+                  raw || meta?.label
+                )}
+                {canEdit && selected === i && (
+                  <span style={{ position: "absolute", left: 0, top: -18, fontSize: 10.5, color: "#274b7a", background: "#fff", padding: "0 4px", border: "1px solid var(--line)", borderRadius: 3, whiteSpace: "nowrap" }}>
+                    {mmX(item.w).toFixed(1)} × {mmY(item.h).toFixed(1)} mm
+                  </span>
+                )}
                 {canEdit && <span className="resize-handle" onMouseDown={(e) => onMouseDown(e, i, "resize")} />}
               </div>
             );
@@ -368,7 +406,7 @@ export default function LayoutEditor({
                 style={{ width: "100%" }}
               />
             </label>
-            <div style={{ display: "flex", gap: 14 }}>
+            <div style={{ display: "flex", gap: 14, marginBottom: 10 }}>
               <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12.5 }}>
                 <input
                   type="checkbox"
@@ -382,6 +420,85 @@ export default function LayoutEditor({
                 Corsivo
               </label>
             </div>
+            <label className="field" style={{ marginBottom: 10 }}>
+              Allineamento del testo
+              <div style={{ display: "flex", gap: 4, marginTop: 4 }}>
+                {(["left", "center", "right"] as const).map((a) => (
+                  <button
+                    key={a}
+                    type="button"
+                    className={`btn btn-sm ${(selItem.align ?? (isPriceField(selItem.fieldId) ? "right" : "left")) === a ? "" : "btn-outline"}`}
+                    style={{ flex: 1 }}
+                    onClick={() => updateSelected({ align: a })}
+                    title={a === "left" ? "Sinistra" : a === "center" ? "Centro" : "Destra"}
+                  >
+                    {a === "left" ? "⇤" : a === "center" ? "↔" : "⇥"}
+                  </button>
+                ))}
+              </div>
+            </label>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
+              <label className="field" style={{ marginBottom: 0 }}>
+                X (mm)
+                <input type="number" step={0.5} value={mmX(selItem.x).toFixed(1)}
+                  onChange={(e) => updateSelected({ x: Math.max(0, Math.min(100 - selItem.w, pctFromMmX(Number(e.target.value) || 0))) })} />
+              </label>
+              <label className="field" style={{ marginBottom: 0 }}>
+                Y (mm)
+                <input type="number" step={0.5} value={mmY(selItem.y).toFixed(1)}
+                  onChange={(e) => updateSelected({ y: Math.max(0, Math.min(100 - selItem.h, pctFromMmY(Number(e.target.value) || 0))) })} />
+              </label>
+              <label className="field" style={{ marginBottom: 0 }}>
+                Largh. (mm)
+                <input type="number" step={0.5} value={mmX(selItem.w).toFixed(1)}
+                  onChange={(e) => updateSelected({ w: Math.max(3, Math.min(100 - selItem.x, pctFromMmX(Number(e.target.value) || 0))) })} />
+              </label>
+              <label className="field" style={{ marginBottom: 0 }}>
+                Alt. (mm)
+                <input type="number" step={0.5} value={mmY(selItem.h).toFixed(1)}
+                  onChange={(e) => updateSelected({ h: Math.max(2, Math.min(100 - selItem.y, pctFromMmY(Number(e.target.value) || 0))) })} />
+              </label>
+            </div>
+            <label className="field" style={{ marginBottom: 0 }}>
+              Allinea sul foglio
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 4, marginTop: 4 }}>
+                <button type="button" className="btn btn-outline btn-sm" title="Sinistra" onClick={() => updateSelected({ x: 0 })}>⇤ Sx</button>
+                <button type="button" className="btn btn-outline btn-sm" title="Centro orizzontale" onClick={() => updateSelected({ x: (100 - selItem.w) / 2 })}>↔ Centro</button>
+                <button type="button" className="btn btn-outline btn-sm" title="Destra" onClick={() => updateSelected({ x: 100 - selItem.w })}>⇥ Dx</button>
+                <button type="button" className="btn btn-outline btn-sm" title="Alto" onClick={() => updateSelected({ y: 0 })}>⇡ Alto</button>
+                <button type="button" className="btn btn-outline btn-sm" title="Centro verticale" onClick={() => updateSelected({ y: (100 - selItem.h) / 2 })}>↕ Centro</button>
+                <button type="button" className="btn btn-outline btn-sm" title="Basso" onClick={() => updateSelected({ y: 100 - selItem.h })}>⇣ Basso</button>
+              </div>
+            </label>
+          </div>
+        )}
+        {canEdit && (
+          <div style={{ borderBottom: "1.5px dashed var(--line)", paddingBottom: 12, marginBottom: 12 }}>
+            <h3 style={{ marginTop: 0 }}>Bordo del foglio</h3>
+            <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12.5, marginBottom: 8 }}>
+              <input type="checkbox" checked={border.on} onChange={(e) => setBorder((b) => ({ ...b, on: e.target.checked }))} />
+              Mostra un bordo sul foglio
+            </label>
+            {border.on && (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                <label className="field" style={{ marginBottom: 0 }}>
+                  Spessore (mm)
+                  <input type="number" step={0.25} min={0.25} max={6} value={border.width}
+                    onChange={(e) => setBorder((b) => ({ ...b, width: Number(e.target.value) || 1 }))} />
+                </label>
+                <label className="field" style={{ marginBottom: 0 }}>
+                  Stile
+                  <select value={border.style} onChange={(e) => setBorder((b) => ({ ...b, style: e.target.value as LayoutBorder["style"] }))}>
+                    <option value="solid">Continuo</option>
+                    <option value="dashed">Tratteggiato</option>
+                  </select>
+                </label>
+                <label className="field" style={{ gridColumn: "1 / -1", marginBottom: 0 }}>
+                  Colore
+                  <input type="color" value={border.color} onChange={(e) => setBorder((b) => ({ ...b, color: e.target.value }))} style={{ width: "100%", height: 34, padding: 2 }} />
+                </label>
+              </div>
+            )}
           </div>
         )}
         <h3 style={{ marginTop: 0 }}>Collega a tipologie</h3>

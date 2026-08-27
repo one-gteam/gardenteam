@@ -96,6 +96,7 @@ export default async function LayoutPage({
           format={{ ...format, background: backgroundFor(db, format, scope, academyDb) }}
           fields={db.fields}
           initialItems={current?.items ?? []}
+          initialBorder={current?.border}
           scopeParam={scopeParam}
           initialTipologie={own?.tipologie ?? []}
           tipologieDisponibili={tipologie}

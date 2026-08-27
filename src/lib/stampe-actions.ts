@@ -634,7 +634,8 @@ export async function saveLayout(
   formatId: string,
   scopeParam: string,
   tipologieCsv: string,
-  itemsJson: string
+  itemsJson: string,
+  borderJson: string
 ) {
   const user = await requireStampeUser();
   const db = await getStampeDb();
@@ -664,6 +665,10 @@ export async function saveLayout(
       h: Math.max(2, Math.min(100, Number(i.h) || 5)),
       ...(typeof i.color === "string" && /^#[0-9a-fA-F]{3,8}$/.test(i.color) ? { color: i.color } : {}),
       ...(i.fieldId === "__img" ? { imageUrl: String(i.imageUrl).slice(0, 300) } : {}),
+      ...(Number.isFinite(Number(i.size)) ? { size: Math.max(4, Math.min(120, Number(i.size))) } : {}),
+      ...(typeof i.bold === "boolean" ? { bold: i.bold } : {}),
+      ...(typeof i.italic === "boolean" ? { italic: i.italic } : {}),
+      ...(["left", "center", "right"].includes(i.align as string) ? { align: i.align as "left" | "center" | "right" } : {}),
       ...(i.sticker && typeof i.sticker === "object"
         ? {
             sticker: {
@@ -679,6 +684,20 @@ export async function saveLayout(
         : {}),
     }));
 
+  let borderRaw: unknown;
+  try {
+    borderRaw = JSON.parse(borderJson);
+  } catch {
+    borderRaw = null;
+  }
+  const b = (borderRaw && typeof borderRaw === "object" ? borderRaw : {}) as Record<string, unknown>;
+  const border = {
+    on: b.on === true,
+    width: Math.max(0.25, Math.min(6, Number(b.width) || 1)),
+    color: typeof b.color === "string" && /^#[0-9a-fA-F]{3,8}$/.test(b.color) ? b.color : "#111111",
+    style: b.style === "dashed" ? ("dashed" as const) : ("solid" as const),
+  };
+
   const tipologie = tipologieCsv.split(",").map((t) => t.trim()).filter(Boolean);
   let layout = db.layouts.find(
     (l) =>
@@ -688,11 +707,12 @@ export async function saveLayout(
       l.tipologie.join(",") === tipologie.join(",")
   );
   if (!layout) {
-    layout = { id: `l_${Date.now()}`, formatId, scopeType: scope.type as ScopeType, scopeId: scope.id, tipologie, items: clean };
+    layout = { id: `l_${Date.now()}`, formatId, scopeType: scope.type as ScopeType, scopeId: scope.id, tipologie, items: clean, border };
     db.layouts.push(layout);
   } else {
     layout.items = clean;
     layout.tipologie = tipologie;
+    layout.border = border;
   }
   await saveStampeDb(db);
   revalidatePath("/stampe/arredo/layout");

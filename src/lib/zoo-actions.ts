@@ -1258,7 +1258,9 @@ export async function updateZooOfferQuick(offerId: string, descrizione: string, 
 }
 
 /** Salva il layout cartello zoo per formato+ambito (stessa firma di saveLayout dell'Arredo). */
-export async function saveZooLayout(formatId: string, scopeParam: string, _tipologieCsv: string, itemsJson: string) {
+export async function saveZooLayout(
+  formatId: string, scopeParam: string, _tipologieCsv: string, itemsJson: string, borderJson: string
+) {
   const user = await requireZooUser();
   const db = await getZooDb();
   const academyDb = await getDb();
@@ -1278,11 +1280,24 @@ export async function saveZooLayout(formatId: string, scopeParam: string, _tipol
       h: Math.max(2, Math.min(100, Number(i.h) || 5)),
       ...(typeof i.color === "string" && /^#[0-9a-fA-F]{3,8}$/.test(i.color) ? { color: i.color as string } : {}),
       ...(typeof i.imageUrl === "string" ? { imageUrl: i.imageUrl as string } : {}),
+      ...(Number.isFinite(Number(i.size)) ? { size: Math.max(4, Math.min(120, Number(i.size))) } : {}),
+      ...(typeof i.bold === "boolean" ? { bold: i.bold as boolean } : {}),
+      ...(typeof i.italic === "boolean" ? { italic: i.italic as boolean } : {}),
+      ...(["left", "center", "right"].includes(i.align as string) ? { align: i.align as "left" | "center" | "right" } : {}),
       ...(i.sticker && typeof i.sticker === "object" ? { sticker: i.sticker as import("./stampe").StickerStyle } : {}),
     }));
+  let borderRaw: unknown;
+  try { borderRaw = JSON.parse(borderJson); } catch { borderRaw = null; }
+  const b = (borderRaw && typeof borderRaw === "object" ? borderRaw : {}) as Record<string, unknown>;
+  const border = {
+    on: b.on === true,
+    width: Math.max(0.25, Math.min(6, Number(b.width) || 1)),
+    color: typeof b.color === "string" && /^#[0-9a-fA-F]{3,8}$/.test(b.color) ? b.color : "#111111",
+    style: b.style === "dashed" ? ("dashed" as const) : ("solid" as const),
+  };
   const existing = db.zooLayouts.find((l) => l.formatId === formatId && l.scopeType === scope.type && l.scopeId === scope.id);
-  if (existing) existing.items = clean;
-  else db.zooLayouts.push({ id: `zl_${Date.now()}`, formatId, scopeType: scope.type, scopeId: scope.id, items: clean });
+  if (existing) { existing.items = clean; existing.border = border; }
+  else db.zooLayouts.push({ id: `zl_${Date.now()}`, formatId, scopeType: scope.type, scopeId: scope.id, items: clean, border });
   await saveZooDb(db);
 }
 

@@ -33,6 +33,7 @@ export default function Cartello({
 }) {
   const W = format.w * scale;
   const H = format.h * scale;
+  const border = layout?.border;
   return (
     <div
       className="cartello"
@@ -41,6 +42,8 @@ export default function Cartello({
         height: H,
         backgroundImage: format.background ? `url("${format.background}")` : undefined,
         backgroundSize: "100% 100%",
+        boxSizing: "border-box",
+        border: border?.on ? `${border.width * scale}px ${border.style} ${border.color}` : undefined,
       }}
     >
       {!layout && (
@@ -109,9 +112,10 @@ export default function Cartello({
         }
         const color = item.color ?? "#111";
         if (item.fieldId === "prezzo" || item.fieldId === "prezzoPromo") {
+          const justify = item.align === "left" ? "flex-start" : item.align === "center" ? "center" : "flex-end";
           return (
-            <div key={i} style={{ ...box, display: "flex", justifyContent: "flex-end", alignItems: "flex-start", color }}>
-              <Prezzo value={value} size={meta.size} scale={scale} />
+            <div key={i} style={{ ...box, display: "flex", justifyContent: justify, alignItems: "flex-start", color }}>
+              <Prezzo value={value} size={item.size ?? meta.size} scale={scale} />
             </div>
           );
         }
@@ -120,11 +124,13 @@ export default function Cartello({
             key={i}
             style={{
               ...box,
-              fontSize: (meta.size * scale) / 2.4,
-              fontWeight: meta.bold ? 700 : 400,
+              fontSize: ((item.size ?? meta.size) * scale) / 2.4,
+              fontWeight: (item.bold ?? meta.bold) ? 700 : 400,
+              fontStyle: item.italic ? "italic" : "normal",
               fontFamily: meta.font === "cn" ? FONT_CN : undefined,
               lineHeight: 1.2,
               color,
+              textAlign: item.align ?? "left",
               whiteSpace: "pre-line",
             }}
           >
