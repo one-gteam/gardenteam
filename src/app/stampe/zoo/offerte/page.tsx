@@ -22,6 +22,7 @@ import {
   toggleParentCaratteristica, scioglieParent, chiudiVolantino, riapriVolantino, nuovoVolantino,
   svuotaOfferteVolantino, rimuoviOfferteMarginiamo, updateParentFieldInline, updateOfferFieldInline,
   updateOfferGroupFieldInline, setParentTagInline, moveProductToParent, setParentImageFromFile,
+  mergeParentsForm,
 } from "@/lib/zoo-actions";
 
 // "Associa con AI" può richiedere più dei 10s di default per un lotto di articoli:
@@ -353,6 +354,11 @@ export default async function ZooOffertePage({
         {sp.abbinatenome !== undefined && (
           <div className="alert alert-green">✓ {sp.abbinatenome} foto abbinate per nome.</div>
         )}
+        {sp.unificati !== undefined && (
+          sp.unificati === "0"
+            ? <div className="alert alert-amber">Per unire servono almeno due prodotti padre spuntati.</div>
+            : <div className="alert alert-green">✓ {sp.unificati} prodotti padre uniti in uno: controlla i testi del padre risultante qui sotto.</div>
+        )}
         {sp.chiuso && (
           <div className="alert alert-green">
             ✓ Volantino chiuso. Le offerte restano stampabili in Stampa cartelli finché sono in corso; quando sarai
@@ -650,6 +656,12 @@ export default async function ZooOffertePage({
                   <button className="btn btn-sm" formAction={associaConAI.bind(null, BACK, scopeParam)} type="submit" style={{ background: "#6d3fa7" }}>
                     Associa i selezionati con AI (raggruppa + genera testi)
                   </button>
+                  {!vistaArticoli && (
+                    <button className="btn btn-outline btn-sm" formAction={mergeParentsForm.bind(null, BACK, scopeParam)} type="submit"
+                      title="Spunta due o più prodotti padre: gli articoli passeranno tutti sotto il primo spuntato">
+                      Unisci i padri selezionati
+                    </button>
+                  )}
                   <span className="hint">
                     {db.settings.apiKey
                       ? "chiave API Claude configurata"
@@ -702,7 +714,11 @@ export default async function ZooOffertePage({
                       return [
                         <tr key={key}>
                           {consortium && (
-                            <td>{!parent && product && <input type="checkbox" name="sel" value={product.id} />}</td>
+                            <td>
+                              {parent
+                                ? <input type="checkbox" name="selpadre" value={parent.id} title="Spunta due o più padri e usa «Unisci i padri selezionati»: il primo dà i testi" />
+                                : product && <input type="checkbox" name="sel" value={product.id} />}
+                            </td>
                           )}
                           <td>
                             {/* eslint-disable-next-line @next/next/no-img-element */}

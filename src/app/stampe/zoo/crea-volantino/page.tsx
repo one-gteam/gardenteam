@@ -83,6 +83,7 @@ export default async function CreaVolantinoPage({
               caratts: parent?.caratteristiche ?? [],
               label: primo.label,
               padre: parent ? effectiveParentText(db, scope, parent, "nome", academyDb).value : undefined,
+              padreId: parent?.id,
               articoli,
             };
           })

@@ -468,6 +468,46 @@ export async function moveProductToParent(
   return { ok: true };
 }
 
+/**
+ * Unisce più prodotti padre in uno: gli articoli dei padri "sorgente" passano
+ * sotto il padre di destinazione, che conserva i propri testi (le
+ * caratteristiche si sommano, la foto resta quella della destinazione se c'è).
+ * I padri svuotati e le loro personalizzazioni per ambito vengono eliminati.
+ */
+export async function mergeZooParents(targetId: string, sourceIds: string[]): Promise<{ ok: boolean; spostati: number }> {
+  const user = await requireZooUser();
+  if (!isZooEditor(user)) return { ok: false, spostati: 0 };
+  const db = await getZooDb();
+  const target = db.parents.find((p) => p.id === targetId);
+  const sources = db.parents.filter((p) => sourceIds.includes(p.id) && p.id !== targetId);
+  if (!target || sources.length === 0) return { ok: false, spostati: 0 };
+  let spostati = 0;
+  for (const p of db.products) {
+    if (p.parentId && sources.some((s) => s.id === p.parentId)) {
+      p.parentId = target.id;
+      spostati++;
+    }
+  }
+  target.caratteristiche = [...new Set([...target.caratteristiche, ...sources.flatMap((s) => s.caratteristiche)])];
+  if (!target.image) target.image = sources.find((s) => s.image)?.image;
+  const rimossi = new Set(sources.map((s) => s.id));
+  db.parents = db.parents.filter((p) => !rimossi.has(p.id));
+  db.textOverrides = db.textOverrides.filter((o) => !rimossi.has(o.parentId));
+  await saveZooDb(db);
+  return { ok: true, spostati };
+}
+
+/**
+ * Variante per il form di Import offerte: unisce i padri spuntati (checkbox
+ * "selpadre") nel PRIMO spuntato, che dà i testi al gruppo risultante.
+ */
+export async function mergeParentsForm(back: string, scopeParam: string, formData: FormData) {
+  const ids = (formData.getAll("selpadre") as string[]).filter(Boolean);
+  if (ids.length < 2) redirect(backUrl(back, scopeParam, { unificati: "0" }));
+  const res = await mergeZooParents(ids[0], ids.slice(1));
+  redirect(backUrl(back, scopeParam, { unificati: res.ok ? String(ids.length) : "0", padre: ids[0] }));
+}
+
 /** Assegna al padre una delle foto già caricate nel bucket. */
 export async function setParentImageFromFile(parentId: string, fileName: string): Promise<{ ok: boolean }> {
   const user = await requireZooUser();

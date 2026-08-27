@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Save, FileDown, Sheet, Plus, ImageDown, ChevronDown, ChevronUp } from "lucide-react";
-import { saveVolantinoLayout, updateZooOfferQuick, uploadVolantinoImage } from "@/lib/zoo-actions";
+import { saveVolantinoLayout, updateZooOfferQuick, uploadVolantinoImage, mergeZooParents } from "@/lib/zoo-actions";
 import type { VolPage, VolBlock, VolSection } from "@/lib/zoo";
 
 export interface ArtLite { ean: string; descrizione: string; marca: string }
@@ -16,6 +16,7 @@ export interface OffLite {
   voti: number; nonTrattati: number; scheda?: string;
   marca: string; fornitore: string; caratts: string[]; label?: string;
   padre?: string; // nome del prodotto padre, se la voce ne rappresenta uno
+  padreId?: string; // id del padre (serve per unire più padri in uno)
   offerIds?: string[]; // offerte racchiuse dalla voce (assente = solo `id`)
   articoli: ArtLite[]; // articoli (gusti/formati) racchiusi dalla voce
   paginaId?: string; // pagina decisa in Import offerte (NO_VOLANTINO = scartata)
@@ -96,6 +97,7 @@ export default function VolantinoBuilder({
   const [filtroChiuso, setFiltroChiuso] = useState(false);
   const [mostraScartate, setMostraScartate] = useState(false);
   const [soloQuestaPagina, setSoloQuestaPagina] = useState(true);
+  const [padriDaUnire, setPadriDaUnire] = useState<string[]>([]); // id padre, in ordine di spunta
   const primoRender = useRef(true);
 
   /* --- schede: copertina da sola, poi coppie 2-3, 4-5, 6-7… --- */
@@ -197,6 +199,16 @@ export default function VolantinoBuilder({
   }, [pages, salva]);
 
   const flash = (m: string) => { setAvviso(m); setTimeout(() => setAvviso(""), 3500); };
+
+  /** Unisce i padri spuntati nell'elenco: il PRIMO spuntato dà i testi al gruppo. */
+  const unisciPadri = async () => {
+    if (padriDaUnire.length < 2) return;
+    const nome = offers.find((o) => o.padreId === padriDaUnire[0])?.padre ?? "il primo spuntato";
+    if (!confirm(`Unire ${padriDaUnire.length} prodotti padre in "${nome}"? Gli altri verranno eliminati e i loro articoli passeranno sotto di lui.`)) return;
+    const res = await mergeZooParents(padriDaUnire[0], padriDaUnire.slice(1));
+    if (res.ok) window.location.reload();
+    else flash("Unione non riuscita.");
+  };
 
   /**
    * Ordina le offerte da collocare tenendo insieme quelle che vanno impaginate
@@ -459,7 +471,8 @@ export default function VolantinoBuilder({
               <div key={`${o.id}_${i}`} style={{ minWidth: 0 }}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={o.foto} alt="" style={{ maxWidth: "100%", height: b.rs > 1 ? 58 : 32, objectFit: "contain" }} />
-                <div style={{ fontWeight: 600, fontSize: 9.5, lineHeight: 1.15 }}>
+                {o.padre && <div style={{ fontWeight: 800, fontSize: 9.5, lineHeight: 1.15 }}>{o.padre}</div>}
+                <div style={{ fontWeight: o.padre ? 500 : 600, fontSize: o.padre ? 8.5 : 9.5, lineHeight: 1.15, color: o.padre ? "#555" : undefined }}>
                   {(i === 0 ? b.descrizione : undefined) ?? o.descrizione}
                 </div>
                 <div style={{ color: "#c2410c", fontWeight: 800, fontSize: 12 }}>
@@ -604,6 +617,12 @@ export default function VolantinoBuilder({
         <div className="vol-filtro-head">
           Da collocare ({daCollocare})
           {inserite.size > 0 && <span className="pill pill-green" style={{ marginLeft: 6 }}>{inserite.size} già nel volantino</span>}
+          {padriDaUnire.length >= 2 && (
+            <button type="button" className="btn btn-sm" style={{ marginLeft: "auto" }} onClick={unisciPadri}
+              title="Il primo spuntato dà nome e testi al gruppo unito">
+              Unisci {padriDaUnire.length} padri
+            </button>
+          )}
         </div>
         <div className="vol-filtro-lista">
           {disponibili.length === 0 && (
@@ -617,6 +636,12 @@ export default function VolantinoBuilder({
             <div key={o.id} className="vol-off" draggable onDragStart={() => setDrag({ kind: "offer", id: o.id })}
               style={usata ? { opacity: 0.45 } : undefined}>
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                {o.padreId && (
+                  <input type="checkbox" title="Spunta due o più padri per unirli in uno (il primo dà i testi)"
+                    checked={padriDaUnire.includes(o.padreId)}
+                    onChange={(e) => setPadriDaUnire((prev) =>
+                      e.target.checked ? [...prev, o.padreId!] : prev.filter((id) => id !== o.padreId))} />
+                )}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={o.foto} alt="" style={{ width: 32, height: 32, objectFit: "contain" }} />
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -778,12 +803,27 @@ export default function VolantinoBuilder({
                 <hr style={{ border: "none", borderTop: "1px solid var(--line)", margin: "10px 0" }} />
                 <strong style={{ fontSize: 12.5 }}>Offerte nella cella ({selOffs.length})</strong>
                 {selOffs.map((o, i) => (
-                  <div key={`${o.id}_${i}`} style={{ display: "flex", gap: 6, alignItems: "center", margin: "4px 0", fontSize: 11.5 }}>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={o.foto} alt="" style={{ width: 24, height: 24, objectFit: "contain" }} />
-                    <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.descrizione}</span>
-                    <button className="mini-btn" title="Togli dalla cella (torna nell'elenco)"
-                      onClick={() => patch(sel!.pi, selBlock.id, { offerIds: (selBlock.offerIds ?? []).filter((_, j) => j !== i) })}>✕</button>
+                  <div key={`${o.id}_${i}`} style={{ margin: "4px 0", fontSize: 11.5 }}>
+                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={o.foto} alt="" style={{ width: 24, height: 24, objectFit: "contain" }} />
+                      <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        <strong>{o.padre ?? o.descrizione}</strong>
+                        {o.padre && <span style={{ color: "var(--muted)" }}> · {o.descrizione}</span>}
+                      </span>
+                      <button className="mini-btn" title="Togli dalla cella (torna nell'elenco)"
+                        onClick={() => patch(sel!.pi, selBlock.id, { offerIds: (selBlock.offerIds ?? []).filter((_, j) => j !== i) })}>✕</button>
+                    </div>
+                    {o.articoli.length > 0 && (
+                      <details style={{ marginLeft: 30, marginTop: 2 }}>
+                        <summary style={{ cursor: "pointer", fontSize: 10.5, color: "var(--green-700)" }}>
+                          {o.articoli.length > 1 ? `${o.articoli.length} articoli inclusi` : "1 articolo"}
+                        </summary>
+                        <ul style={{ margin: "2px 0 0", paddingLeft: 14, fontSize: 10.5, color: "var(--muted)" }}>
+                          {o.articoli.map((a) => <li key={a.ean}>{a.descrizione} · {a.ean}</li>)}
+                        </ul>
+                      </details>
+                    )}
                   </div>
                 ))}
                 <label className="field">Descrizione (solo su questo volantino)
