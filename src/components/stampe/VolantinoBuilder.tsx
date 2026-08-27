@@ -101,6 +101,7 @@ export default function VolantinoBuilder({
   const [mostraScartate, setMostraScartate] = useState(false);
   const [soloQuestaPagina, setSoloQuestaPagina] = useState(true);
   const [padriDaUnire, setPadriDaUnire] = useState<string[]>([]); // id padre, in ordine di spunta
+  const [pdfPending, setPdfPending] = useState(false);
   const primoRender = useRef(true);
 
   /* --- schede: copertina da sola, poi coppie 2-3, 4-5, 6-7… --- */
@@ -202,6 +203,64 @@ export default function VolantinoBuilder({
   }, [pages, salva]);
 
   const flash = (m: string) => { setAvviso(m); setTimeout(() => setAvviso(""), 3500); };
+
+  /**
+   * Genera il PDF del volantino (una pagina per foglio, come "Esporta PDF" ma
+   * automatico e su tutte le pagine) e lo carica su Supabase Storage, poi
+   * scarica lo ZIP: la route dello ZIP lo trova già lì e lo include. Le pagine
+   * "solo per la stampa" esistono già nel DOM (le usa anche @media print) ma
+   * sono `display: none` fuori stampa: le si rende visibili solo per la
+   * cattura, poi si torna come prima.
+   */
+  const generaEScaricaZip = async () => {
+    setPdfPending(true);
+    try {
+      const [{ jsPDF }, { default: html2canvas }] = await Promise.all([
+        import("jspdf"),
+        import("html2canvas"),
+      ]);
+      const container = document.querySelector<HTMLElement>(".solo-stampa");
+      if (!container) throw new Error("pagine non trovate");
+      const primaDisplay = container.style.display;
+      container.style.display = "block";
+      try {
+        const pageEls = Array.from(container.querySelectorAll<HTMLElement>(".vol-page-wrap"));
+        const doc = new jsPDF({ unit: "mm", format: "a4" });
+        for (let i = 0; i < pageEls.length; i++) {
+          const canvas = await html2canvas(pageEls[i], {
+            scale: 2,
+            backgroundColor: "#ffffff",
+            useCORS: true,
+            onclone: (clonedDoc: Document) => {
+              clonedDoc.querySelectorAll(".no-print").forEach((el) => el.remove());
+            },
+          });
+          const img = canvas.toDataURL("image/jpeg", 0.92);
+          if (i > 0) doc.addPage();
+          const pageW = doc.internal.pageSize.getWidth();
+          const pageH = (canvas.height * pageW) / canvas.width;
+          doc.addImage(img, "JPEG", 0, 0, pageW, pageH);
+        }
+        const blob = doc.output("blob");
+        const firma = await fetch("/api/zoo-volantino/sign-pdf", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ campaignId }),
+        });
+        if (!firma.ok) throw new Error("firma non riuscita");
+        const { signedUrl } = (await firma.json()) as { signedUrl: string };
+        const put = await fetch(signedUrl, { method: "PUT", headers: { "content-type": "application/pdf" }, body: blob });
+        if (!put.ok) throw new Error("caricamento non riuscito");
+      } finally {
+        container.style.display = primaDisplay;
+      }
+    } catch {
+      flash("PDF non generato (proseguo comunque): lo ZIP conterrà solo Excel e foto.");
+    } finally {
+      setPdfPending(false);
+      window.location.href = fotoZipHref;
+    }
+  };
 
   /** Unisce i padri spuntati nell'elenco: il PRIMO spuntato dà i testi al gruppo. */
   const unisciPadri = async () => {
@@ -554,6 +613,7 @@ export default function VolantinoBuilder({
           {(page.sezioni ?? []).map((s) => (
             <div key={s.id} className="vol-sezione"
               style={{ gridColumn: `${s.c + 1} / span ${s.cs}`, gridRow: `${s.r + 1} / span ${s.rs}`, background: s.bg }}>
+              {s.testo && <div className="vol-sezione-testo">{s.testo}</div>}
               {s.titolo && <div className="vol-sezione-titolo">{s.titolo}</div>}
             </div>
           ))}
@@ -740,14 +800,16 @@ export default function VolantinoBuilder({
             <a className="btn btn-outline btn-sm" title="Excel per il grafico" aria-label="Excel per il grafico" href={excelHref}>
               <Sheet size={14} style={{ verticalAlign: -2 }} />
             </a>
-            <a
+            <button
               className="btn btn-outline btn-sm"
-              title="ZIP per il grafico: Excel + foto in alta risoluzione"
-              aria-label="ZIP per il grafico: Excel + foto in alta risoluzione"
-              href={fotoZipHref}
+              type="button"
+              title="ZIP per il grafico: Excel + foto in alta risoluzione + PDF di anteprima"
+              aria-label="ZIP per il grafico: Excel + foto in alta risoluzione + PDF di anteprima"
+              disabled={pdfPending}
+              onClick={generaEScaricaZip}
             >
-              <ImageDown size={14} style={{ verticalAlign: -2 }} />
-            </a>
+              {pdfPending ? "Genero il PDF…" : <ImageDown size={14} style={{ verticalAlign: -2 }} />}
+            </button>
             {daDisporre.length > 0 && (
               <button className="btn btn-sm" type="button" onClick={disponiPerPagina}
                 title="Colloca nelle pagine le offerte a cui è già stata assegnata una pagina in Import offerte">
@@ -914,15 +976,20 @@ export default function VolantinoBuilder({
             </p>
             <button className="btn btn-outline btn-sm" onClick={() => aggiungiSezione(sel!.pi, selBlock)}>Crea sezione da questa cella</button>
             {(selPage.sezioni ?? []).map((s) => (
-              <div key={s.id} style={{ display: "flex", gap: 4, alignItems: "center", marginTop: 6 }}>
-                <input value={s.titolo ?? ""} onChange={(e) => patchSezione(sel!.pi, s.id, { titolo: e.target.value })}
-                  placeholder="Titolo" style={{ marginTop: 0, flex: 1, fontSize: 11 }} />
-                <input type="color" value={s.bg} onChange={(e) => patchSezione(sel!.pi, s.id, { bg: e.target.value })}
-                  style={{ marginTop: 0, width: 30, height: 26, padding: 0 }} />
-                <button className="mini-btn" title="Allarga a destra" onClick={() => patchSezione(sel!.pi, s.id, { cs: Math.min(s.cs + 1, selPage.cols - s.c) })}>→</button>
-                <button className="mini-btn" title="Allarga in basso" onClick={() => patchSezione(sel!.pi, s.id, { rs: Math.min(s.rs + 1, selPage.rows - s.r) })}>↓</button>
-                <button className="mini-btn" title="Elimina sezione"
-                  onClick={() => upd((ps) => { ps[sel!.pi].sezioni = (ps[sel!.pi].sezioni ?? []).filter((x) => x.id !== s.id); return ps; })}>✕</button>
+              <div key={s.id} style={{ marginTop: 6, paddingTop: 6, borderTop: "1px solid var(--line)" }}>
+                <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                  <input value={s.titolo ?? ""} onChange={(e) => patchSezione(sel!.pi, s.id, { titolo: e.target.value })}
+                    placeholder="Titolo" style={{ marginTop: 0, flex: 1, fontSize: 11 }} />
+                  <input type="color" value={s.bg} onChange={(e) => patchSezione(sel!.pi, s.id, { bg: e.target.value })}
+                    style={{ marginTop: 0, width: 30, height: 26, padding: 0 }} />
+                  <button className="mini-btn" title="Allarga a destra" onClick={() => patchSezione(sel!.pi, s.id, { cs: Math.min(s.cs + 1, selPage.cols - s.c) })}>→</button>
+                  <button className="mini-btn" title="Allarga in basso" onClick={() => patchSezione(sel!.pi, s.id, { rs: Math.min(s.rs + 1, selPage.rows - s.r) })}>↓</button>
+                  <button className="mini-btn" title="Elimina sezione"
+                    onClick={() => upd((ps) => { ps[sel!.pi].sezioni = (ps[sel!.pi].sezioni ?? []).filter((x) => x.id !== s.id); return ps; })}>✕</button>
+                </div>
+                <textarea key={`stx_${s.id}`} rows={2} defaultValue={s.testo ?? ""} placeholder="Testo del gruppo (es. presentazione, promo dedicata…)"
+                  onBlur={(e) => patchSezione(sel!.pi, s.id, { testo: e.target.value || undefined })}
+                  style={{ marginTop: 4, fontSize: 11, width: "100%" }} />
               </div>
             ))}
           </div>

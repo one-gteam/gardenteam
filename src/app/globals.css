@@ -627,6 +627,10 @@ table.data td { overflow-wrap: anywhere; }
 .vol-sezione-titolo {
   position: absolute; bottom: 3px; left: 6px; font-weight: 800; font-size: 11px; color: var(--green-900);
 }
+.vol-sezione-testo {
+  position: absolute; top: 4px; left: 6px; right: 6px; font-size: 9.5px; line-height: 1.25;
+  color: var(--green-900); white-space: pre-wrap;
+}
 
 @media print {
   .site-header, .no-print { display: none !important; }

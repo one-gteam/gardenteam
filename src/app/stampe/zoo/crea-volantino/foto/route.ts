@@ -4,6 +4,7 @@ import { Zip, ZipPassThrough } from "fflate";
 import { getCurrentUser } from "@/lib/auth";
 import { canAccessArea, isZooEditor } from "@/lib/stampe";
 import { getZooDb, volantinoCellRows, volantinoPhotoRefs } from "@/lib/zoo";
+import { publicUrlFor } from "@/lib/supabase";
 
 // Il fetch di decine/centinaia di foto in alta risoluzione può richiedere più
 // dei 10s di default: alza il limite dove la piattaforma lo consente (Hobby lo
@@ -45,6 +46,10 @@ export async function GET(req: NextRequest) {
     return name;
   };
 
+  // il PDF (generato nel browser, una pagina per foglio) è opzionale: se non è mai
+  // stato generato per questa campagna, il fetch restituisce 404 e lo ZIP parte comunque
+  const pdfUrl = publicUrlFor(`volantino-pdf/${campaignId}.pdf`);
+
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       const zip = new Zip((err, data, final) => {
@@ -53,33 +58,40 @@ export async function GET(req: NextRequest) {
         if (final) controller.close();
       });
 
+      /** Scarica un URL e lo riversa in un'unica voce dello ZIP, senza bufferizzarlo tutto in memoria. */
+      const aggiungiDaUrl = async (url: string, nomeFile: string) => {
+        let res: Response;
+        try {
+          res = await fetch(url);
+        } catch {
+          return false; // un file irraggiungibile non deve far fallire tutto lo ZIP
+        }
+        if (!res.ok || !res.body) return false;
+        const entry = new ZipPassThrough(nomeFile);
+        zip.add(entry);
+        const reader = res.body.getReader();
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) {
+            entry.push(new Uint8Array(0), true);
+            return true;
+          }
+          entry.push(value, false);
+        }
+      };
+
       (async () => {
         try {
           const excelEntry = new ZipPassThrough("volantino_per_grafico.xlsx");
           zip.add(excelEntry);
           excelEntry.push(new Uint8Array(excelBuf), true);
 
+          await aggiungiDaUrl(pdfUrl, "volantino_anteprima.pdf");
+
           for (const photo of photos) {
-            let res: Response;
-            try {
-              res = await fetch(photo.url);
-            } catch {
-              continue; // una foto irraggiungibile non deve far fallire tutto lo ZIP
-            }
-            if (!res.ok || !res.body) continue;
             const pathOnly = photo.url.split("?")[0];
             const ext = (pathOnly.split(".").pop() || "jpg").toLowerCase().slice(0, 5);
-            const entry = new ZipPassThrough(uniqueName(photo.nome, ext));
-            zip.add(entry);
-            const reader = res.body.getReader();
-            for (;;) {
-              const { done, value } = await reader.read();
-              if (done) {
-                entry.push(new Uint8Array(0), true);
-                break;
-              }
-              entry.push(value, false);
-            }
+            await aggiungiDaUrl(photo.url, uniqueName(photo.nome, ext));
           }
           zip.end();
         } catch (e) {

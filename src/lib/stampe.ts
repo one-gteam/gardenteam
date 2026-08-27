@@ -78,6 +78,9 @@ export interface LayoutItem {
   color?: string; // colore testo (es. bianco sui template a banda)
   imageUrl?: string; // solo per fieldId "__img"
   sticker?: StickerStyle; // bollino/sticker associato al campo fieldId
+  size?: number; // dimensione font: sovrascrive il default del campo per questo elemento
+  bold?: boolean; // grassetto: sovrascrive il default del campo per questo elemento
+  italic?: boolean; // corsivo (nessun default: solo per elemento)
 }
 
 export interface CardLayout {

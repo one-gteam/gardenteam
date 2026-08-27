@@ -62,9 +62,16 @@ export default function LayoutEditor({
     }
   };
 
-  const scale = 2.4; // px per mm
+  // zoom di lavoro: il cartello reale è piccolo, ingrandirlo mentre si lavora aiuta a posizionare i campi con precisione
+  const [zoom, setZoom] = useState(1.5);
+  const scale = 2.4 * zoom; // px per mm
   const W = format.w * scale;
   const H = format.h * scale;
+
+  const isImageField = (fieldId: string) => {
+    const meta = fields.find((f) => f.id === fieldId);
+    return fieldId === "__img" || fieldId === "foto" || fieldId === "logoAzienda" || fieldId === "logoInsegna" || meta?.type === "image";
+  };
 
   const onMouseDown = (e: React.MouseEvent, index: number, mode: "move" | "resize") => {
     if (!canEdit) return;
@@ -212,12 +219,20 @@ export default function LayoutEditor({
       </div>
 
       <div>
-        {canEdit && (
-          <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
-            <button type="button" className="btn btn-outline btn-sm" onClick={undo} disabled={historyPos.current === 0} title="Annulla (indietro)">↶ Indietro</button>
-            <button type="button" className="btn btn-outline btn-sm" onClick={redo} disabled={historyPos.current >= history.current.length - 1} title="Ripristina (avanti)">↷ Avanti</button>
+        <div style={{ display: "flex", gap: 6, marginBottom: 8, alignItems: "center", flexWrap: "wrap" }}>
+          {canEdit && (
+            <>
+              <button type="button" className="btn btn-outline btn-sm" onClick={undo} disabled={historyPos.current === 0} title="Annulla (indietro)">↶ Indietro</button>
+              <button type="button" className="btn btn-outline btn-sm" onClick={redo} disabled={historyPos.current >= history.current.length - 1} title="Ripristina (avanti)">↷ Avanti</button>
+            </>
+          )}
+          <div style={{ display: "flex", gap: 4, alignItems: "center", marginLeft: canEdit ? 10 : 0 }}>
+            <button type="button" className="btn btn-outline btn-sm" onClick={() => setZoom((z) => Math.max(0.8, +(z - 0.2).toFixed(1)))} title="Rimpicciolisci">－</button>
+            <span style={{ fontSize: 12.5, color: "var(--muted)", minWidth: 42, textAlign: "center" }}>{Math.round(zoom * 100)}%</span>
+            <button type="button" className="btn btn-outline btn-sm" onClick={() => setZoom((z) => Math.min(2.6, +(z + 0.2).toFixed(1)))} title="Ingrandisci">＋</button>
           </div>
-        )}
+        </div>
+        <div style={{ maxHeight: "82vh", overflow: "auto", border: "1px solid var(--line)", borderRadius: 8, padding: 12, background: "#f4f5f2" }}>
         <div
           ref={canvasRef}
           className="cartello editor-canvas"
@@ -244,8 +259,7 @@ export default function LayoutEditor({
                 </div>
               );
             }
-            const isImage =
-              item.fieldId === "__img" || item.fieldId === "foto" || item.fieldId === "logoAzienda" || item.fieldId === "logoInsegna" || meta?.type === "image";
+            const isImage = isImageField(item.fieldId);
             const imgSrc = item.fieldId === "__img" ? item.imageUrl : sampleValues[item.fieldId];
             if (isImage) {
               return (
@@ -275,8 +289,9 @@ export default function LayoutEditor({
                   top: `${item.y}%`,
                   width: `${item.w}%`,
                   height: `${item.h}%`,
-                  fontSize: ((meta?.size ?? 11) * scale) / 2.4,
-                  fontWeight: meta?.bold ? 800 : 400,
+                  fontSize: ((item.size ?? meta?.size ?? 11) * scale) / 2.4,
+                  fontWeight: (item.bold ?? meta?.bold) ? 800 : 400,
+                  fontStyle: item.italic ? "italic" : "normal",
                   color: isPrice ? "#c2410c" : "#1c2b21",
                   textAlign: isPrice ? "right" : "left",
                   cursor: canEdit ? "move" : "default",
@@ -288,6 +303,7 @@ export default function LayoutEditor({
               </div>
             );
           })}
+        </div>
         </div>
         <p style={{ fontSize: 12, color: "var(--muted)", margin: "8px 0 0" }}>
           Anteprima con un prodotto di esempio · trascina i campi, ridimensiona dall&apos;angolo in basso a destra.
@@ -338,6 +354,34 @@ export default function LayoutEditor({
               Dimensione testo: {selItem.sticker.size}
               <input type="range" min={6} max={60} value={selItem.sticker.size} onChange={(e) => updateSelected({ sticker: { size: Number(e.target.value) } })} style={{ width: "100%" }} />
             </label>
+          </div>
+        )}
+        {selItem && !selItem.sticker && !isImageField(selItem.fieldId) && canEdit && (
+          <div style={{ borderBottom: "1.5px dashed var(--line)", paddingBottom: 12, marginBottom: 12 }}>
+            <h3 style={{ marginTop: 0 }}>Campo selezionato</h3>
+            <label className="field">
+              Dimensione font: {selItem.size ?? fields.find((f) => f.id === selItem.fieldId)?.size ?? 11}
+              <input
+                type="range" min={6} max={80}
+                value={selItem.size ?? fields.find((f) => f.id === selItem.fieldId)?.size ?? 11}
+                onChange={(e) => updateSelected({ size: Number(e.target.value) })}
+                style={{ width: "100%" }}
+              />
+            </label>
+            <div style={{ display: "flex", gap: 14 }}>
+              <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12.5 }}>
+                <input
+                  type="checkbox"
+                  checked={selItem.bold ?? fields.find((f) => f.id === selItem.fieldId)?.bold ?? false}
+                  onChange={(e) => updateSelected({ bold: e.target.checked })}
+                />
+                Grassetto
+              </label>
+              <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12.5 }}>
+                <input type="checkbox" checked={selItem.italic ?? false} onChange={(e) => updateSelected({ italic: e.target.checked })} />
+                Corsivo
+              </label>
+            </div>
           </div>
         )}
         <h3 style={{ marginTop: 0 }}>Collega a tipologie</h3>

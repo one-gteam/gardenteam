@@ -430,6 +430,25 @@ export async function updateOfferFieldInline(
 }
 
 /**
+ * Modifica in linea la descrizione di un articolo del database (non ha un
+ * padre: nella tabella di Database prodotti è l'unico campo di testo che ha
+ * senso editare direttamente sulla riga).
+ */
+export async function updateProductFieldInline(
+  productId: string, field: "descrizione", value: string
+): Promise<{ ok: boolean }> {
+  const user = await requireZooUser();
+  if (!isZooEditor(user)) return { ok: false };
+  const db = await getZooDb();
+  const p = db.products.find((x) => x.id === productId);
+  if (!p) return { ok: false };
+  const v = value.trim();
+  if (field === "descrizione") p.descrizione = v || p.descrizione;
+  await saveZooDb(db);
+  return { ok: true };
+}
+
+/**
  * Come sopra ma su tutte le offerte di un prodotto padre: nella vista
  * raggruppata la riga rappresenta il padre, quindi pagina/etichetta/focus si
  * applicano a tutte le sue varianti insieme.

@@ -168,6 +168,7 @@ export interface VolSection {
   id: string;
   r: number; c: number; rs: number; cs: number;
   titolo?: string;
+  testo?: string; // testo libero mostrato sopra lo sfondo, oltre al titolo
   bg: string; // colore di sfondo
 }
 
@@ -478,11 +479,15 @@ import type { PrintField, PrintFormat, LayoutItem } from "./stampe";
 /** Campi disponibili sul cartello di un'offerta zoo (stessa meccanica dell'Arredo). */
 export const ZOO_FIELDS: PrintField[] = [
   { id: "descrizione", label: "Descrizione offerta", size: 22, bold: true, font: "cn" },
+  { id: "descrizioneArticolo", label: "Descrizione articolo", size: 14, bold: false },
   { id: "marca", label: "Marca", size: 14, bold: false },
   { id: "prezzoPromo", label: "Prezzo promo", size: 46, bold: true, font: "cn" },
   { id: "prezzoListino", label: "Prezzo listino (barrato)", size: 16, bold: false },
   { id: "label", label: "Etichetta (SOTTOCOSTO, NOVITÀ…)", size: 16, bold: true, font: "cn" },
   { id: "condizioni", label: "Condizioni", size: 11, bold: false },
+  { id: "eanLista", label: "EAN (tutti gli articoli del padre)", size: 9, bold: false },
+  { id: "animale", label: "Tipologia animale", size: 12, bold: false },
+  { id: "caratteristica", label: "Caratteristica prodotto", size: 12, bold: false },
   { id: "immagine", label: "Foto prodotto", size: 12, bold: false, type: "image" },
 ];
 
@@ -514,13 +519,19 @@ export function effectiveZooLayout(db: ZooDB, scope: Scope, formatId: string): Z
 export function zooCartelloValues(db: ZooDB, offer: ZooOffer): Record<string, string> {
   const product = db.products.find((p) => p.id === offer.productId);
   const parent = product?.parentId ? db.parents.find((x) => x.id === product.parentId) : undefined;
+  // il cartello è per il codice padre: elenca gli EAN di tutte le sue varianti, non solo quella dell'offerta
+  const fratelli = parent ? db.products.filter((p) => p.parentId === parent.id) : product ? [product] : [];
   return {
     descrizione: offer.descrizione,
+    descrizioneArticolo: product?.descrizione ?? "",
     marca: product?.marca ?? "",
     prezzoPromo: offer.prezzoPromo ? `€ ${offer.prezzoPromo}` : "",
     prezzoListino: offer.prezzoListino ? `€ ${offer.prezzoListino}` : "",
     label: offer.label ?? "",
     condizioni: offer.condizioni ?? "",
+    eanLista: fratelli.map((p) => p.ean).join(" · "),
+    animale: animaliDi(db, parent?.caratteristiche ?? []).join(", "),
+    caratteristica: caratteristicheProdottoDi(db, parent?.caratteristiche ?? []).join(", "),
     immagine: zooImageUrl(product, parent),
   };
 }
@@ -570,7 +581,7 @@ export function volantinoExportRows(
 export interface VolantinoCellRow {
   "N. pagina": number; Pagina: string; "Note della pagina": string; Cella: string;
   Riga: number; Colonna: number; "Righe occupate": number; "Colonne occupate": number;
-  Sezione: string; "Sfondo sezione": string; "N. offerte": number; EAN: string;
+  Sezione: string; "Sfondo sezione": string; "Testo sezione": string; "N. offerte": number; EAN: string;
   Descrizione: string; Marca: string; "Prezzo promo": string; "Prezzo listino": string;
   Etichetta: string; Testo: string; Immagine: string; "Commento per il grafico": string;
 }
@@ -594,7 +605,7 @@ export function volantinoCellRows(db: ZooDB, campaignId: string): VolantinoCellR
         "N. pagina": pi + 1, Pagina: nomePagina, "Note della pagina": page.note ?? "",
         Cella: `${pi + 1}-${bi + 1}`, Riga: b.r + 1, Colonna: b.c + 1,
         "Righe occupate": b.rs, "Colonne occupate": b.cs,
-        Sezione: sez?.titolo ?? "", "Sfondo sezione": sez?.bg ?? "",
+        Sezione: sez?.titolo ?? "", "Sfondo sezione": sez?.bg ?? "", "Testo sezione": sez?.testo ?? "",
         "N. offerte": offs.length, EAN: offs.map((o) => o.ean).join(" / "),
         Descrizione: b.descrizione ?? offs.map((o) => o.descrizione).join(" / "),
         Marca: offs.map((o) => db.products.find((p) => p.id === o.productId)?.marca ?? "").join(" / "),
