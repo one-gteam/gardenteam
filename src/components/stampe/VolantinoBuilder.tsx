@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Save, FileDown, Sheet, Plus, ImageDown, ChevronDown, ChevronUp } from "lucide-react";
-import { saveVolantinoLayout, updateZooOfferQuick, uploadVolantinoImage, mergeZooParents } from "@/lib/zoo-actions";
+import {
+  saveVolantinoLayout, updateZooOfferQuick, uploadVolantinoImage, mergeZooParents, updateParentFieldInline,
+} from "@/lib/zoo-actions";
 import type { VolPage, VolBlock, VolSection } from "@/lib/zoo";
 
 export interface ArtLite { ean: string; descrizione: string; marca: string }
@@ -78,10 +80,11 @@ function normalizza(page: VolPage): VolPage {
 }
 
 export default function VolantinoBuilder({
-  campaignId, offers, initialPages, excelHref, fotoZipHref, animali, caratts, labels, marche, fornitori,
+  campaignId, offers, initialPages, excelHref, fotoZipHref, animali, caratts, labels, marche, fornitori, scopeParam,
 }: {
   campaignId: string; offers: OffLite[]; initialPages: VolPage[]; excelHref: string; fotoZipHref: string;
   animali: string[]; caratts: string[]; labels: string[]; marche: string[]; fornitori: string[];
+  scopeParam: string;
 }) {
   const [pages, setPages] = useState<VolPage[]>(() =>
     (initialPages.length ? initialPages : PAGINE_DEFAULT()).map(normalizza)
@@ -424,10 +427,13 @@ export default function VolantinoBuilder({
     else flash("Caricamento immagine non riuscito.");
   };
 
-  const aggiungiSezione = (pi: number, b: VolBlock) => upd((ps) => {
-    ps[pi].sezioni = [...(ps[pi].sezioni ?? []), { id: uid("vs"), r: b.r, c: b.c, rs: b.rs, cs: b.cs, bg: "#eaf3e2", titolo: "Sezione" }];
-    return ps;
-  });
+  const aggiungiSezione = (pi: number, b: VolBlock) => {
+    upd((ps) => {
+      ps[pi].sezioni = [...(ps[pi].sezioni ?? []), { id: uid("vs"), r: b.r, c: b.c, rs: b.rs, cs: b.cs, bg: "#eaf3e2", titolo: "Sezione" }];
+      return ps;
+    });
+    flash("Sezione creata su questa cella: allargala con → e ↓ qui sotto, o cambiale colore e titolo.");
+  };
   const patchSezione = (pi: number, id: string, dati: Partial<VolSection>) => upd((ps) => {
     const s = (ps[pi].sezioni ?? []).find((x) => x.id === id);
     if (s) Object.assign(s, dati);
@@ -448,6 +454,14 @@ export default function VolantinoBuilder({
     const offs = (b.offerIds ?? []).map(offer).filter(Boolean) as OffLite[];
     const isVuoto = vuoto(b);
     const attiva = sel?.pi === pi && sel?.id === b.id;
+    /*
+     * Se la cella sta dentro una sezione, non deve dipingere il proprio fondo
+     * bianco: le celle stanno sopra (z-index 1) e coprivano completamente il
+     * colore della sezione, che quindi sembrava non venire creata.
+     */
+    const dentroSezione = (pages[pi].sezioni ?? []).some(
+      (s) => b.r >= s.r && b.r < s.r + s.rs && b.c >= s.c && b.c < s.c + s.cs
+    );
     return (
       <div
         key={b.id}
@@ -460,7 +474,9 @@ export default function VolantinoBuilder({
         style={{
           gridColumn: `${b.c + 1} / span ${b.cs}`, gridRow: `${b.r + 1} / span ${b.rs}`,
           border: isVuoto ? "1.5px dashed var(--line)" : "1px solid var(--line)",
-          background: b.imageUrl ? `center/cover no-repeat url(${b.imageUrl})` : isVuoto ? "rgba(255,255,255,0.5)" : "#fff",
+          background: b.imageUrl
+            ? `center/cover no-repeat url(${b.imageUrl})`
+            : dentroSezione ? "transparent" : isVuoto ? "rgba(255,255,255,0.5)" : "#fff",
         }}
       >
         <span className="vol-rif no-print">{riferimento(pi, b)}</span>
@@ -834,6 +850,20 @@ export default function VolantinoBuilder({
                     )}
                   </div>
                 ))}
+                {/* il titolo appartiene al prodotto padre: si salva nel database, non solo qui */}
+                {selOffs[0].padreId && (
+                  <label className="field">
+                    Titolo del prodotto padre <span className="hint" style={{ fontWeight: 400 }}>(vale ovunque)</span>
+                    <input key={`t_${selOffs[0].padreId}`} defaultValue={selOffs[0].padre ?? ""}
+                      onBlur={async (e) => {
+                        const v = e.target.value.trim();
+                        if (!v || v === selOffs[0].padre) return;
+                        const res = await updateParentFieldInline(selOffs[0].padreId!, "nome", scopeParam, v);
+                        if (res.ok) window.location.reload();
+                        else flash("Titolo non salvato.");
+                      }} />
+                  </label>
+                )}
                 <label className="field">Descrizione (solo su questo volantino)
                   <input key={`d_${selBlock.id}`} defaultValue={selBlock.descrizione ?? selOffs[0].descrizione}
                     onBlur={(e) => patch(sel!.pi, selBlock.id, { descrizione: e.target.value || undefined })} />
