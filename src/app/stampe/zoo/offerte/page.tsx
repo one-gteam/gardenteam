@@ -10,6 +10,7 @@ import InlineEdit from "@/components/stampe/InlineEdit";
 import InlineSelect from "@/components/stampe/InlineSelect";
 import ColumnResize from "@/components/stampe/ColumnResize";
 import ParentQuickEdit from "@/components/stampe/ParentQuickEdit";
+import PhotoMatcher from "@/components/stampe/PhotoMatcher";
 import {
   getZooDb, zooImageUrl, effectiveParentText, campagnaInLavorazione, campagnaInCorso, campaignStato,
   suggestPhotoMatch, buildAbbinamentoIndex, animaliDi, caratteristicheProdottoDi, migraVolantinoPages,
@@ -17,7 +18,7 @@ import {
 } from "@/lib/zoo";
 import {
   importZooOffers, updateCampaignDates, associaNuoviConAI, finalizeZooPhotoUpload,
-  confirmZooPhotoMatches, createZooParent, associaConAI, rigeneraTestiAI, saveParentTexts, setParentImage,
+  confirmZooPhotoTargets, createZooParent, associaConAI, rigeneraTestiAI, saveParentTexts, setParentImage,
   toggleParentCaratteristica, scioglieParent, chiudiVolantino, riapriVolantino, nuovoVolantino,
   svuotaOfferteVolantino, rimuoviOfferteMarginiamo, updateParentFieldInline, updateOfferFieldInline,
   updateOfferGroupFieldInline, setParentTagInline, moveProductToParent, setParentImageFromFile,
@@ -123,6 +124,17 @@ export default async function ZooOffertePage({
           candidates: suggestPhotoMatch(f.replace(/\.[a-z0-9]+$/i, ""), index, 5),
         }));
       })()
+    : [];
+  /*
+   * Catalogo su cui cerca l'abbinamento manuale: tutti gli articoli del volantino
+   * e tutti i prodotti padre (una foto può stare bene sul padre più che sul
+   * singolo gusto). Inviato una volta sola al componente, non per riga.
+   */
+  const catalogoAbbinabile = abbinaAperto
+    ? [
+        ...db.parents.map((p) => ({ id: `p:${p.id}`, label: `[padre] ${p.nome}` })),
+        ...offerProducts.map((p) => ({ id: p.id, label: `${p.descrizione} · ${p.ean}` })),
+      ]
     : [];
 
   // offerte "marginiamo": nessuna promo dal fornitore, il PV decide il margine da sé — non sono offerte vere
@@ -506,52 +518,21 @@ export default async function ZooOffertePage({
             <>
             <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "8px 0" }}>
               Le foto senza EAN/codice nel nome non si abbinano da sole: qui sotto trovi un&apos;ipotesi per ciascuna,
-              basata sul confronto tra il nome del file e la descrizione dell&apos;articolo. Controlla, correggi dove
-              serve con il menu a tendina, poi conferma in blocco.
+              basata sul confronto tra il nome del file e la descrizione. Se la proposta non va bene — o se non ce
+              n&apos;è nessuna — usa la ricerca sotto il menu: puoi scegliere qualsiasi articolo o prodotto padre.
             </p>
-            <form action={confirmZooPhotoMatches.bind(null, BACK, scopeParam)}>
-              <div className="table-wrap">
-                <table className="data">
-                  <thead>
-                    <tr><th style={{ width: 56 }}>Foto</th><th>File</th><th>Abbina a</th></tr>
-                  </thead>
-                  <tbody>
-                    {photoSuggestions.map(({ file, candidates }) => {
-                      // solo i candidati proposti: elencare tutti gli articoli senza foto
-                      // significherebbe ripetere ~900 <option> per ogni riga
-                      const candidatiConProdotto = candidates
-                        .map((c) => ({ c, p: senzaFotoById.get(c.productId) }))
-                        .filter((x): x is { c: typeof candidates[number]; p: ZooProduct } => Boolean(x.p));
-                      return (
-                        <tr key={file}>
-                          <td>
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={publicUrlFor(`zoo-foto/${file}`)} alt="" style={{ width: 44, height: 44, objectFit: "contain", background: "#fff", borderRadius: 6, border: "1px solid #eee" }} />
-                          </td>
-                          <td style={{ fontSize: 12 }}>{file}</td>
-                          <td>
-                            <select name={`pick_${file}`} defaultValue={candidatiConProdotto[0]?.c.productId ?? ""} style={{ fontSize: 12.5, maxWidth: 420 }}>
-                              <option value="">— nessuno —</option>
-                              {candidatiConProdotto.map(({ c, p }) => (
-                                <option key={c.productId} value={c.productId}>
-                                  {Math.round(c.score * 100)}% — {p.descrizione}
-                                </option>
-                              ))}
-                            </select>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              <p className="hint" style={{ marginTop: 6 }}>
-                Se per una foto nessuna proposta è giusta, lasciala su &quot;nessuno&quot;: resta caricata e la
-                abbini a mano dal <a href={`/stampe/zoo/dati?scope=${scopeParam}`}>Database prodotti</a>, dove
-                puoi cercare l&apos;articolo per descrizione, EAN o codice.
-              </p>
-              <button className="btn btn-sm" type="submit" style={{ marginTop: 6 }}>Conferma abbinamenti</button>
-            </form>
+            <PhotoMatcher
+              foto={photoSuggestions.map(({ file, candidates }) => ({
+                file,
+                url: publicUrlFor(`zoo-foto/${file}`),
+                candidati: candidates
+                  .map((c) => ({ c, p: senzaFotoById.get(c.productId) }))
+                  .filter((x): x is { c: typeof candidates[number]; p: ZooProduct } => Boolean(x.p))
+                  .map(({ c, p }) => ({ id: c.productId, label: p.descrizione, score: c.score })),
+              }))}
+              catalogo={catalogoAbbinabile}
+              onConfirm={confirmZooPhotoTargets}
+            />
             </>
             )}
           </div>

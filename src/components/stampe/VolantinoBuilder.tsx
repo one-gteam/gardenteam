@@ -95,7 +95,16 @@ export default function VolantinoBuilder({
   const [f, setF] = useState({ animale: "", caratt: "", label: "", minVoti: "", minNon: "", marca: "", fornitore: "" });
   const [filtroChiuso, setFiltroChiuso] = useState(false);
   const [mostraScartate, setMostraScartate] = useState(false);
+  const [soloQuestaPagina, setSoloQuestaPagina] = useState(true);
   const primoRender = useRef(true);
+
+  /* --- schede: copertina da sola, poi coppie 2-3, 4-5, 6-7… --- */
+  const spreads = useMemo(() => {
+    const out: number[][] = [[0]];
+    for (let i = 1; i < pages.length; i += 2) out.push(pages[i + 1] ? [i, i + 1] : [i]);
+    return out;
+  }, [pages]);
+  const spreadCorrente = spreads[Math.min(spread, spreads.length - 1)] ?? [0];
 
   /* --- offerte già collocate: spariscono dall'elenco a sinistra --- */
   const inserite = useMemo(() => {
@@ -110,9 +119,22 @@ export default function VolantinoBuilder({
    * difficile capire cosa fosse già stato piazzato. Restano trascinabili, utile
    * per rimetterne una in una seconda cella (es. la stessa offerta su due pagine).
    */
+  /*
+   * L'elenco a sinistra segue la scheda aperta: mostra le offerte destinate alle
+   * pagine visibili più quelle ancora senza pagina (escluse le "no volantino"),
+   * che sono le uniche che ha senso collocare qui e ora.
+   */
+  const idPagineVisibili = useMemo(
+    () => new Set(spreadCorrente.map((pi) => pages[pi]?.id).filter(Boolean) as string[]),
+    [spreadCorrente, pages]
+  );
+
   const disponibili = useMemo(() => offers.filter((o) => {
     // le offerte marcate "no volantino" restano fuori, salvo richiesta esplicita
     if (o.paginaId === NO_VOLANTINO && !mostraScartate) return false;
+    if (!soloQuestaPagina || !o.paginaId || idPagineVisibili.has(o.paginaId)) {
+      // passa: è di queste pagine, oppure non ha ancora una pagina
+    } else return false;
     if (f.animale && !o.caratts.includes(f.animale)) return false;
     if (f.caratt && !o.caratts.includes(f.caratt)) return false;
     if (f.label && o.label !== f.label) return false;
@@ -121,7 +143,8 @@ export default function VolantinoBuilder({
     if (f.marca && o.marca !== f.marca) return false;
     if (f.fornitore && o.fornitore !== f.fornitore) return false;
     return true;
-  }).sort((a, b) => Number(inserite.has(a.id)) - Number(inserite.has(b.id))), [offers, f, inserite, mostraScartate]);
+  }).sort((a, b) => Number(inserite.has(a.id)) - Number(inserite.has(b.id))),
+  [offers, f, inserite, mostraScartate, soloQuestaPagina, idPagineVisibili]);
   const daCollocare = disponibili.filter((o) => !inserite.has(o.id)).length;
 
   /*
@@ -134,6 +157,12 @@ export default function VolantinoBuilder({
     () => offers.filter((o) => o.paginaId && o.paginaId !== NO_VOLANTINO && !inserite.has(o.id)),
     [offers, inserite]
   );
+  /** Riquadri con più di un'offerta: da sparpagliare, una per cella. */
+  const celleAffollate = useMemo(
+    () => pages.reduce((n, p) => n + p.blocks.filter((b) => (b.offerIds?.length ?? 0) > 1).length, 0),
+    [pages]
+  );
+
   const eccedenze = useMemo(() => {
     const libere = new Map<string, number>();
     for (const p of pages) libere.set(p.id, p.blocks.filter(vuoto).length);
@@ -188,18 +217,26 @@ export default function VolantinoBuilder({
     });
   };
 
-  /** Riempie le celle libere di ogni pagina con le offerte assegnate a quella pagina. */
+  /**
+   * Riempie le celle libere di ogni pagina con le offerte assegnate a quella
+   * pagina: UNA offerta per cella, mai due nello stesso riquadro. Se la pagina
+   * ha una tipologia impostata (animale/caratteristica), a parità di condizioni
+   * vengono prima le offerte che le corrispondono.
+   */
   const disponiPerPagina = () => {
     if (daDisporre.length === 0) return flash("Nessuna offerta con una pagina assegnata da collocare.");
     let messe = 0;
     upd((ps) => {
       for (const page of ps) {
-        const perQuesta = ordinaPerVicinanza(daDisporre.filter((o) => o.paginaId === page.id));
+        let perQuesta = ordinaPerVicinanza(daDisporre.filter((o) => o.paginaId === page.id));
+        if (page.animale || page.caratt) {
+          const corrisponde = (o: OffLite) =>
+            (!page.animale || o.caratts.includes(page.animale)) && (!page.caratt || o.caratts.includes(page.caratt));
+          perQuesta = [...perQuesta.filter(corrisponde), ...perQuesta.filter((o) => !corrisponde(o))];
+        }
         if (perQuesta.length === 0) continue;
         // celle libere in ordine di lettura, così i gruppi restano adiacenti
-        const libere = page.blocks
-          .filter((b) => !b.offerIds?.length && !b.testo && !b.imageUrl && !b.label)
-          .sort((a, b) => a.r - b.r || a.c - b.c);
+        const libere = page.blocks.filter(vuoto).sort((a, b) => a.r - b.r || a.c - b.c);
         for (let i = 0; i < Math.min(libere.length, perQuesta.length); i++) {
           libere[i].offerIds = [perQuesta[i].id];
           messe++;
@@ -211,6 +248,25 @@ export default function VolantinoBuilder({
     flash(fuori > 0
       ? `Collocate ${messe} offerte. ${fuori} non ci stanno nelle pagine assegnate: restano nell'elenco a sinistra.`
       : `Collocate ${messe} offerte nelle pagine assegnate.`);
+  };
+
+  /** Sparpaglia le celle con più offerte: una sola per riquadro, il resto torna a sinistra. */
+  const unaPerCella = () => {
+    let liberate = 0;
+    upd((ps) => {
+      for (const page of ps) {
+        for (const b of page.blocks) {
+          if ((b.offerIds?.length ?? 0) > 1) {
+            liberate += b.offerIds!.length - 1;
+            b.offerIds = [b.offerIds![0]];
+          }
+        }
+      }
+      return ps;
+    });
+    flash(liberate > 0
+      ? `${liberate} offerte tolte dai riquadri con più prodotti: sono tornate nell'elenco a sinistra.`
+      : "Ogni riquadro contiene già una sola offerta.");
   };
 
   /**
@@ -366,13 +422,6 @@ export default function VolantinoBuilder({
     return ps;
   });
 
-  /* --- schede: copertina da sola, poi coppie 2-3, 4-5, 6-7… --- */
-  const spreads = useMemo(() => {
-    const out: number[][] = [[0]];
-    for (let i = 1; i < pages.length; i += 2) out.push(pages[i + 1] ? [i, i + 1] : [i]);
-    return out;
-  }, [pages]);
-  const spreadCorrente = spreads[Math.min(spread, spreads.length - 1)] ?? [0];
   const etichettaSpread = (g: number[]) =>
     g[0] === 0 ? "Copertina" : g.length > 1 ? `Pag. ${g[0] + 1}-${g[1] + 1}` : `Pag. ${g[0] + 1}`;
 
@@ -436,7 +485,20 @@ export default function VolantinoBuilder({
           <span className="vol-numero">Pag. {pi + 1}</span>
           <input value={page.titolo ?? ""} placeholder="nome pagina"
             onChange={(e) => upd((ps) => { ps[pi].titolo = e.target.value; return ps; })}
-            style={{ marginTop: 0, width: 118, fontWeight: 700, fontSize: 12 }} />
+            style={{ marginTop: 0, width: 108, fontWeight: 700, fontSize: 12 }} />
+          {/* tipologia della pagina: guida la disposizione automatica delle offerte */}
+          <select value={page.animale ?? ""} title="Tipologia di animale della pagina"
+            onChange={(e) => upd((ps) => { ps[pi].animale = e.target.value || undefined; return ps; })}
+            style={{ marginTop: 0, width: 82, fontSize: 11 }}>
+            <option value="">animale…</option>
+            {animali.map((a) => <option key={a} value={a}>{a}</option>)}
+          </select>
+          <select value={page.caratt ?? ""} title="Caratteristica di prodotto della pagina"
+            onChange={(e) => upd((ps) => { ps[pi].caratt = e.target.value || undefined; return ps; })}
+            style={{ marginTop: 0, width: 88, fontSize: 11 }}>
+            <option value="">caratt…</option>
+            {caratts.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
           <span style={{ fontSize: 10.5, color: "var(--muted)" }}>griglia</span>
           <select value={page.cols} onChange={(e) => upd((ps) => { ps[pi].cols = Number(e.target.value); return ps; })} style={{ marginTop: 0, width: 46, fontSize: 11 }}>
             {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}
@@ -521,6 +583,10 @@ export default function VolantinoBuilder({
                   <option value="">Tutti</option>
                   {fornitori.map((x) => <option key={x} value={x}>{x}</option>)}
                 </select>
+              </label>
+              <label style={{ fontSize: 11.5, display: "block", marginBottom: 4 }}>
+                <input type="checkbox" checked={soloQuestaPagina} onChange={(e) => setSoloQuestaPagina(e.target.checked)} />{" "}
+                solo le offerte di queste pagine (più quelle senza pagina)
               </label>
               <label style={{ fontSize: 11.5, display: "block", marginBottom: 8 }}>
                 <input type="checkbox" checked={mostraScartate} onChange={(e) => setMostraScartate(e.target.checked)} />{" "}
@@ -643,6 +709,12 @@ export default function VolantinoBuilder({
               title="Riordina le offerte già collocate mettendo vicine quelle con stessa etichetta o focus">
               Avvicina simili
             </button>
+            {celleAffollate > 0 && (
+              <button className="btn btn-outline btn-sm" type="button" onClick={unaPerCella}
+                title="Lascia una sola offerta per riquadro: le altre tornano nell'elenco a sinistra">
+                Una per riquadro ({celleAffollate})
+              </button>
+            )}
             <button className="btn btn-outline btn-sm" title="Aggiungi pagina" aria-label="Aggiungi pagina" onClick={() => upd((ps) => [...ps, pagina("")])}>
               <Plus size={14} style={{ verticalAlign: -2 }} />
             </button>

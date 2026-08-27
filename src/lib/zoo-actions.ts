@@ -175,6 +175,33 @@ export async function associateZooPhoto(back: string, scopeParam: string, produc
 }
 
 /**
+ * Conferma in blocco gli abbinamenti foto→articolo/padre scelti nella tabella di
+ * abbinamento. Il bersaglio è l'id di un articolo, oppure "p:<id>" per un
+ * prodotto padre: la ricerca permette di scegliere l'uno o l'altro.
+ */
+export async function confirmZooPhotoTargets(
+  coppie: { file: string; target: string }[]
+): Promise<{ ok: boolean; n: number }> {
+  const user = await requireZooUser();
+  if (!isZooEditor(user)) return { ok: false, n: 0 };
+  const db = await getZooDb();
+  let n = 0;
+  for (const { file, target } of coppie) {
+    if (!file || !target) continue;
+    const url = publicUrlFor(`zoo-foto/${file}`);
+    if (target.startsWith("p:")) {
+      const parent = db.parents.find((p) => p.id === target.slice(2));
+      if (parent) { parent.image = url; n++; }
+    } else {
+      const p = db.products.find((x) => x.id === target);
+      if (p) { p.image = url; n++; }
+    }
+  }
+  await saveZooDb(db);
+  return { ok: true, n };
+}
+
+/**
  * Conferma in blocco gli abbinamenti foto→articolo proposti per nome (nessuna AI):
  * un campo `pick_<nomefile>` per foto, valorizzato con l'id del prodotto scelto
  * (vuoto = nessun abbinamento per quella foto).

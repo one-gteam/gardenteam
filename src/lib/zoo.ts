@@ -179,6 +179,9 @@ export interface VolPage {
   rows: number;
   blocks: VolBlock[];
   sezioni?: VolSection[];
+  /** A chi è dedicata la pagina: guida la disposizione automatica delle offerte. */
+  animale?: string;
+  caratt?: string;
 }
 export interface VolantinoLayout { campaignId: string; pages: VolPage[] }
 
