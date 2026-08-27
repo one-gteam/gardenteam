@@ -12,14 +12,19 @@ export interface PadreLite { id: string; nome: string }
  * (senza ricaricare la pagina ad ogni scelta) e mostrano l'esito accanto.
  */
 export default function ParentQuickEdit({
-  parentId, articoli, padri, foto, urlFoto, onMove, onSetImage,
+  parentId, articoli, padri, foto, fotoBaseUrl, onMove, onSetImage,
 }: {
   parentId: string;
   articoli: ArticoloLite[];
   padri: PadreLite[];
   foto: string[];
-  /** prefisso per costruire l'anteprima di una foto del bucket */
-  urlFoto: (file: string) => string;
+  /**
+   * Prefisso per costruire l'anteprima di una foto del bucket (es.
+   * ".../object/public/academy-gt/zoo-foto/"): una funzione qui non si può
+   * passare da un Server Component a un Client Component, per questo è una
+   * stringa e non — come prima — un callback.
+   */
+  fotoBaseUrl: string;
   onMove: (productId: string, newParentId: string) => Promise<{ ok: boolean }>;
   onSetImage: (fileName: string) => Promise<{ ok: boolean }>;
 }) {
@@ -52,7 +57,7 @@ export default function ParentQuickEdit({
             </select>
             {fotoScelta && (
               /* eslint-disable-next-line @next/next/no-img-element */
-              <img src={urlFoto(fotoScelta)} alt="" style={{ width: 34, height: 34, objectFit: "contain", border: "1px solid #eee", borderRadius: 4, background: "#fff" }} />
+              <img src={`${fotoBaseUrl}${encodeURIComponent(fotoScelta)}`} alt="" style={{ width: 34, height: 34, objectFit: "contain", border: "1px solid #eee", borderRadius: 4, background: "#fff" }} />
             )}
             <button type="button" className="btn btn-outline btn-sm" disabled={!fotoScelta || pending} onClick={usaFoto}>
               Usa questa

@@ -238,7 +238,7 @@ export default async function ZooDatiPage({
                   .map((p) => ({ id: p.id, nome: effectiveParentText(db, scope, p, "nome", academyDb).value }))
                   .sort((a, b) => a.nome.localeCompare(b.nome, "it"))}
                 foto={availablePhotos}
-                urlFoto={(f) => publicUrlFor(`zoo-foto/${f}`)}
+                fotoBaseUrl={publicUrlFor("zoo-foto/__ph__").slice(0, -6)}
                 onMove={moveProductToParent.bind(null, BACK, scopeParam)}
                 onSetImage={setParentImageFromFile.bind(null, activeParent.id)}
               />
