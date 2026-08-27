@@ -8,16 +8,19 @@ import PhotoUploader from "@/components/stampe/PhotoUploader";
 import BulkCheckbox from "@/components/stampe/BulkCheckbox";
 import InlineEdit from "@/components/stampe/InlineEdit";
 import InlineSelect from "@/components/stampe/InlineSelect";
+import ColumnResize from "@/components/stampe/ColumnResize";
+import ParentQuickEdit from "@/components/stampe/ParentQuickEdit";
 import {
   getZooDb, zooImageUrl, effectiveParentText, campagnaInLavorazione, campagnaInCorso, campaignStato,
-  suggestPhotoMatch, buildAbbinamentoIndex, animaliDi, caratteristicheProdottoDi, type ZooProduct, type ZooOffer,
+  suggestPhotoMatch, buildAbbinamentoIndex, animaliDi, caratteristicheProdottoDi, migraVolantinoPages,
+  NO_VOLANTINO, type ZooProduct, type ZooOffer,
 } from "@/lib/zoo";
 import {
   importZooOffers, updateCampaignDates, associaNuoviConAI, finalizeZooPhotoUpload,
   confirmZooPhotoMatches, createZooParent, associaConAI, rigeneraTestiAI, saveParentTexts, setParentImage,
   toggleParentCaratteristica, scioglieParent, chiudiVolantino, riapriVolantino, nuovoVolantino,
   svuotaOfferteVolantino, rimuoviOfferteMarginiamo, updateParentFieldInline, updateOfferFieldInline,
-  setParentTagInline,
+  updateOfferGroupFieldInline, setParentTagInline, moveProductToParent, setParentImageFromFile,
 } from "@/lib/zoo-actions";
 
 // "Associa con AI" può richiedere più dei 10s di default per un lotto di articoli:
@@ -57,8 +60,16 @@ export default async function ZooOffertePage({
   if (!canAccessArea(user, "zoo")) redirect("/studente");
   const sp = await searchParams;
 
-  const db = await getZooDb();
-  const academyDb = await getDb();
+  /*
+   * Le tre letture (blob zoo, database Academy, elenco foto nel bucket) sono
+   * indipendenti: in sequenza sommavano i rispettivi tempi di rete (~0,7 s prima
+   * ancora di iniziare a comporre la pagina), in parallelo pesa solo la più lenta.
+   */
+  const [db, academyDb, tutteLeFoto] = await Promise.all([
+    getZooDb(),
+    getDb(),
+    listStorageFiles("zoo-foto"),
+  ]);
   const scopes = scopesForUser(user, academyDb);
   const scope = resolveScope(user, sp.scope, academyDb);
   const scopeParam = `${scope.type}:${scope.id}`;
@@ -92,7 +103,7 @@ export default async function ZooOffertePage({
 
   // foto già caricate ma non ancora abbinate ad alcun articolo
   const usedPhotos = new Set(db.products.map((p) => (p.image ?? "").split("/").pop()));
-  const availablePhotos = (await listStorageFiles("zoo-foto")).filter(
+  const availablePhotos = tutteLeFoto.filter(
     (f) => /\.(jpg|jpeg|png|webp)$/i.test(f) && !usedPhotos.has(f)
   );
   /*
@@ -118,9 +129,38 @@ export default async function ZooOffertePage({
   const marginiamo = offers.filter((o) => (o.condizioni ?? "").trim().toLowerCase() === "marginiamo");
 
   const fmt = (d?: string) => (d ? new Date(`${d}T00:00:00`).toLocaleDateString("it-IT") : "—");
+
+  /*
+   * Pagine del volantino: la tendina "Pagina" prende le pagine vere del builder
+   * (Crea Volantino), così assegnare qui una pagina la fa già trovare pronta là.
+   */
+  const layout = campaign ? db.volantinoLayouts.find((l) => l.campaignId === campaign.id) : undefined;
+  const pagineVolantino = layout
+    ? migraVolantinoPages(layout.pages).map((p, i) => ({ id: p.id, nome: `${i + 1}. ${p.titolo || `Pagina ${i + 1}`}` }))
+    : [];
+  const nomePagina = new Map(pagineVolantino.map((p) => [p.id, p.nome]));
+
+  // valori disponibili per i filtri, calcolati sulle offerte di questo volantino
+  const parentOf = (o: ZooOffer) => {
+    const pid = prodById.get(o.productId ?? "")?.parentId;
+    return pid ? parentById.get(pid) : undefined;
+  };
+  const marcheList = [...new Set(offerProducts.map((p) => p.marca).filter(Boolean))].sort();
+  const fornitoriList = [...new Set(offerProducts.map((p) => p.fornitore).filter(Boolean))].sort();
+  const tipiPromo = [...new Set(offers.map((o) => (o.condizioni ?? "").trim()).filter(Boolean))].sort();
+
   const q = (sp.q ?? "").toLowerCase();
   const visibili = offers.filter((o) => {
-    if (sp.senzapadre === "1" && prodById.get(o.productId ?? "")?.parentId) return false;
+    const prod = prodById.get(o.productId ?? "");
+    if (sp.senzapadre === "1" && prod?.parentId) return false;
+    if (sp.marca && prod?.marca !== sp.marca) return false;
+    if (sp.fornitore && prod?.fornitore !== sp.fornitore) return false;
+    if (sp.tipopromo && (o.condizioni ?? "").trim() !== sp.tipopromo) return false;
+    if (sp.animale || sp.caratt) {
+      const caratts = parentOf(o)?.caratteristiche ?? [];
+      if (sp.animale && !caratts.includes(sp.animale)) return false;
+      if (sp.caratt && !caratts.includes(sp.caratt)) return false;
+    }
     if (q && !`${o.descrizione} ${o.ean}`.toLowerCase().includes(q)) return false;
     return true;
   });
@@ -147,7 +187,7 @@ export default async function ZooOffertePage({
   const RIGHE_MAX = 300;
   const gruppiVisibili = gruppi.slice(0, RIGHE_MAX);
   const visibiliCap = visibili.slice(0, RIGHE_MAX);
-  const nCols = (consortium ? 1 : 0) + (vistaArticoli ? 9 : 8);
+  const nCols = (consortium ? 1 : 0) + (vistaArticoli ? 12 : 11);
 
   /**
    * Dettaglio del padre aperto: non più una scheda separata in cima alla
@@ -237,12 +277,19 @@ export default async function ZooOffertePage({
                 </form>
               </div>
             )}
-            <div style={{ marginTop: 12 }}>
-              <strong style={{ fontSize: 12.5 }}>Articoli del padre ({parentChildren.length})</strong>
-              <ul style={{ margin: "4px 0 0", paddingLeft: 18, fontSize: 12.5 }}>
-                {parentChildren.map((c) => <li key={c.id}>{c.descrizione} — EAN {c.ean}</li>)}
-              </ul>
-            </div>
+            {consortium && (
+              <ParentQuickEdit
+                parentId={activeParent.id}
+                articoli={parentChildren.map((c) => ({ id: c.id, ean: c.ean, descrizione: c.descrizione }))}
+                padri={db.parents
+                  .map((p) => ({ id: p.id, nome: effectiveParentText(db, scope, p, "nome", academyDb).value }))
+                  .sort((a, b) => a.nome.localeCompare(b.nome, "it"))}
+                foto={availablePhotos}
+                urlFoto={(f) => publicUrlFor(`zoo-foto/${f}`)}
+                onMove={moveProductToParent.bind(null, BACK, scopeParam)}
+                onSetImage={setParentImageFromFile.bind(null, activeParent.id)}
+              />
+            )}
           </div>
         </div>
       </td>
@@ -554,16 +601,60 @@ export default async function ZooOffertePage({
                   Vista articoli singoli ({visibili.length})
                 </a>
               </div>
-              <form method="get" style={{ display: "grid", gridTemplateColumns: "2fr auto auto", gap: 10, alignItems: "end" }}>
+              <form method="get" style={{ display: "grid", gridTemplateColumns: "repeat(6, minmax(0, 1fr)) auto", gap: 10, alignItems: "end" }}>
                 <input type="hidden" name="scope" value={scopeParam} />
                 <input type="hidden" name="vista" value={vistaArticoli ? "articoli" : "raggruppata"} />
+                {abbinaAperto && <input type="hidden" name="abbina" value="1" />}
                 <label className="field" style={{ marginBottom: 0 }}>
                   Cerca<input type="text" name="q" defaultValue={sp.q ?? ""} placeholder="descrizione o EAN" />
                 </label>
-                <label style={{ fontSize: 12.5 }}>
-                  <input type="checkbox" name="senzapadre" value="1" defaultChecked={sp.senzapadre === "1"} /> solo senza padre
+                <label className="field" style={{ marginBottom: 0 }}>
+                  Animale
+                  <select name="animale" defaultValue={sp.animale ?? ""}>
+                    <option value="">Tutti</option>
+                    {db.settings.categorieAnimali.map((a) => <option key={a} value={a}>{a}</option>)}
+                  </select>
+                </label>
+                <label className="field" style={{ marginBottom: 0 }}>
+                  Caratteristica
+                  <select name="caratt" defaultValue={sp.caratt ?? ""}>
+                    <option value="">Tutte</option>
+                    {db.settings.caratteristicheProdotto.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </label>
+                <label className="field" style={{ marginBottom: 0 }}>
+                  Marca
+                  <select name="marca" defaultValue={sp.marca ?? ""}>
+                    <option value="">Tutte</option>
+                    {marcheList.map((m) => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                </label>
+                <label className="field" style={{ marginBottom: 0 }}>
+                  Fornitore
+                  <select name="fornitore" defaultValue={sp.fornitore ?? ""}>
+                    <option value="">Tutti</option>
+                    {fornitoriList.map((f) => <option key={f} value={f}>{f}</option>)}
+                  </select>
+                </label>
+                <label className="field" style={{ marginBottom: 0 }}>
+                  Tipo promo
+                  <select name="tipopromo" defaultValue={sp.tipopromo ?? ""}>
+                    <option value="">Tutti</option>
+                    {tipiPromo.map((t) => <option key={t} value={t}>{t}</option>)}
+                  </select>
                 </label>
                 <button className="btn btn-sm" type="submit">Filtra</button>
+                <label style={{ fontSize: 12.5, gridColumn: "1 / -1" }}>
+                  <input type="checkbox" name="senzapadre" value="1" defaultChecked={sp.senzapadre === "1"} /> solo senza padre
+                  {(sp.animale || sp.caratt || sp.marca || sp.fornitore || sp.tipopromo || sp.q) && (
+                    <>
+                      {" · "}
+                      <a href={`${BACK}?${pageQs({}, { scope: scopeParam, vista: vistaArticoli ? "articoli" : undefined })}`}>
+                        azzera filtri
+                      </a>
+                    </>
+                  )}
+                </label>
               </form>
             </div>
 
@@ -586,15 +677,19 @@ export default async function ZooOffertePage({
                 </div>
               )}
               <div className="card table-wrap">
-                <table className="data">
+                <ColumnResize tableId="tab-offerte" />
+                <table className="data" id="tab-offerte">
                   <thead>
                     <tr>
                       {consortium && <th style={{ width: 30 }}><BulkCheckbox name="sel" /></th>}
                       <th style={{ width: 56 }}>Foto</th>
-                      <th><span className="th-resize">{vistaArticoli ? "Offerta" : "Prodotto"}</span></th>
-                      <th className="col-wide"><span className="th-resize">Descrizione</span></th>
-                      <th><span className="th-resize">Animale</span></th>
-                      <th><span className="th-resize">Caratteristica</span></th>
+                      <th>{vistaArticoli ? "Offerta" : "Prodotto"}</th>
+                      <th className="col-wide">Descrizione</th>
+                      <th>Animale</th>
+                      <th>Caratteristica</th>
+                      <th>Pagina</th>
+                      <th>Etichetta</th>
+                      <th>Focus</th>
                       <th>{vistaArticoli ? "EAN" : "Articoli"}</th>
                       <th>Prezzo promo</th>
                       <th>Listino</th>
@@ -619,6 +714,7 @@ export default async function ZooOffertePage({
                       const animali = animaliDi(db, parent?.caratteristiche ?? []);
                       const prodottoCarat = caratteristicheProdottoDi(db, parent?.caratteristiche ?? []);
                       const key = parent?.id ?? `_o_${first.id}`;
+                      const offIds = offs.map((o) => o.id);
                       const aperto = !!parent && activeParent?.id === parent.id;
                       const nome = parent ? effectiveParentText(db, scope, parent, "nome", academyDb).value : first.descrizione;
                       const descr = parent ? effectiveParentText(db, scope, parent, "descVolantino", academyDb).value : (first.condizioni ?? "");
@@ -669,6 +765,35 @@ export default async function ZooOffertePage({
                                 onSave={setParentTagInline.bind(null, parent.id, "prodotto")} />
                             ) : (
                               <span style={{ fontSize: 11.5, color: "var(--muted)" }}>{prodottoCarat.join(", ") || "—"}</span>
+                            )}
+                          </td>
+                          <td>
+                            {consortium ? (
+                              <InlineSelect value={first.paginaId ?? ""}
+                                options={[...pagineVolantino.map((p) => p.id), NO_VOLANTINO]}
+                                etichette={{ ...Object.fromEntries(pagineVolantino.map((p) => [p.id, p.nome])), [NO_VOLANTINO]: "✕ no volantino" }}
+                                vuoto="— da assegnare —"
+                                onSave={updateOfferGroupFieldInline.bind(null, offIds, "paginaId")} />
+                            ) : (
+                              <span style={{ fontSize: 11.5 }}>
+                                {first.paginaId === NO_VOLANTINO ? "no volantino" : (nomePagina.get(first.paginaId ?? "") ?? "—")}
+                              </span>
+                            )}
+                          </td>
+                          <td>
+                            {consortium ? (
+                              <InlineSelect value={first.label ?? ""} options={db.settings.labels}
+                                onSave={updateOfferGroupFieldInline.bind(null, offIds, "label")} />
+                            ) : (
+                              <span style={{ fontSize: 11.5 }}>{first.label || "—"}</span>
+                            )}
+                          </td>
+                          <td>
+                            {consortium ? (
+                              <InlineEdit value={first.focus ?? ""} placeholder="focus…"
+                                onSave={updateOfferGroupFieldInline.bind(null, offIds, "focus")} />
+                            ) : (
+                              <span style={{ fontSize: 11.5 }}>{first.focus || "—"}</span>
                             )}
                           </td>
                           <td style={{ fontSize: 12 }}>
@@ -739,6 +864,35 @@ export default async function ZooOffertePage({
                                 onSave={setParentTagInline.bind(null, parent.id, "prodotto")} />
                             ) : (
                               <span style={{ fontSize: 11.5, color: "var(--muted)" }}>{prodottoCarat.join(", ") || "—"}</span>
+                            )}
+                          </td>
+                          <td>
+                            {consortium ? (
+                              <InlineSelect value={o.paginaId ?? ""}
+                                options={[...pagineVolantino.map((p) => p.id), NO_VOLANTINO]}
+                                etichette={{ ...Object.fromEntries(pagineVolantino.map((p) => [p.id, p.nome])), [NO_VOLANTINO]: "✕ no volantino" }}
+                                vuoto="— da assegnare —"
+                                onSave={updateOfferFieldInline.bind(null, o.id, "paginaId")} />
+                            ) : (
+                              <span style={{ fontSize: 11.5 }}>
+                                {o.paginaId === NO_VOLANTINO ? "no volantino" : (nomePagina.get(o.paginaId ?? "") ?? "—")}
+                              </span>
+                            )}
+                          </td>
+                          <td>
+                            {consortium ? (
+                              <InlineSelect value={o.label ?? ""} options={db.settings.labels}
+                                onSave={updateOfferFieldInline.bind(null, o.id, "label")} />
+                            ) : (
+                              <span style={{ fontSize: 11.5 }}>{o.label || "—"}</span>
+                            )}
+                          </td>
+                          <td>
+                            {consortium ? (
+                              <InlineEdit value={o.focus ?? ""} placeholder="focus…"
+                                onSave={updateOfferFieldInline.bind(null, o.id, "focus")} />
+                            ) : (
+                              <span style={{ fontSize: 11.5 }}>{o.focus || "—"}</span>
                             )}
                           </td>
                           <td style={{ fontSize: 12 }}>{o.ean}</td>

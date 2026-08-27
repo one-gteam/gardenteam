@@ -65,6 +65,9 @@ export default async function CreaVolantinoPage({
             return {
               id: primo.id,
               offerIds: gruppo.map((g) => g.id),
+              paginaId: primo.paginaId,
+              focus: primo.focus,
+              gruppoGrafico: primo.gruppoGrafico,
               descrizione: parent
                 ? effectiveParentText(db, scope, parent, "descVolantino", academyDb).value || parent.nome
                 : primo.descrizione,

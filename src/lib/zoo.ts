@@ -87,7 +87,18 @@ export interface ZooOffer {
   gruppoDescrizione?: string;
   tieniVicinoA?: string; // id di un'altra offerta da tenere adiacente
   ordine?: number;
+  /**
+   * Pagina del volantino a cui l'offerta è destinata (id di una VolPage), decisa
+   * già da Import offerte: Crea Volantino la trova poi pronta da collocare in
+   * quella pagina. `NO_VOLANTINO` = scartata, non andrà sul volantino.
+   */
+  paginaId?: string;
+  focus?: string; // tema/angolo di comunicazione (campo libero)
+  gruppoGrafico?: string; // offerte da impaginare vicine (stesso valore = stesso riquadro)
 }
+
+/** Valore di `paginaId` per le offerte escluse dal volantino. */
+export const NO_VOLANTINO = "__no__";
 
 /** Voto/segnalazione di un responsabile PV su un'offerta candidata al volantino. */
 export interface ZooVote {

@@ -41,8 +41,12 @@ export default async function ZooDatiPage({
   if (!canAccessArea(user, "zoo")) redirect("/studente");
   const sp = await searchParams;
 
-  const db = await getZooDb();
-  const academyDb = await getDb();
+  // letture indipendenti: in parallelo pesa solo la più lenta, non la somma
+  const [db, academyDb, tutteLeFoto] = await Promise.all([
+    getZooDb(),
+    getDb(),
+    listStorageFiles("zoo-foto"),
+  ]);
   const scopes = scopesForUser(user, academyDb);
   const scope = resolveScope(user, sp.scope, academyDb);
   const scopeParam = `${scope.type}:${scope.id}`;
@@ -67,7 +71,7 @@ export default async function ZooDatiPage({
 
   // foto disponibili non ancora abbinate (per l'associazione manuale)
   const usedPhotos = new Set(db.products.map((p) => (p.image ?? "").split("/").pop()));
-  const availablePhotos = (await listStorageFiles("zoo-foto")).filter(
+  const availablePhotos = tutteLeFoto.filter(
     (f) => /\.(jpg|jpeg|png|webp)$/i.test(f) && !usedPhotos.has(f)
   );
   /*

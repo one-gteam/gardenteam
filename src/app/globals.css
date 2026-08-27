@@ -126,6 +126,8 @@ h3 { font-size: 16px; margin: 0 0 6px; }
 .pill-red { background: var(--red-bg); color: var(--red); }
 .pill-blue { background: var(--blue-bg); color: var(--blue); }
 .pill-gray { background: #eef1ee; color: var(--muted); }
+/* usata in più pagine ma mai definita: senza questa regola restava senza colore */
+.pill-orange { background: #fdebd8; color: #9a4f0f; }
 
 /* ---------- Course cards ---------- */
 .course-card { display: flex; flex-direction: column; gap: 10px; transition: transform 0.12s; }
@@ -181,12 +183,16 @@ table.data td { padding: 10px; border-bottom: 1px solid var(--line); }
 table.data tr:last-child td { border-bottom: none; }
 .table-wrap { overflow-x: auto; }
 
-/* colonne allargabili/stringibili trascinando l'angolo (nessun JS): l'utente
-   regola la larghezza di una colonna quando il contenuto non ci sta */
-.th-resize {
-  display: inline-block; resize: horizontal; overflow: auto;
-  min-width: 30px; max-width: 640px; padding-right: 2px;
+/* maniglia per allargare/stringere la colonna, sul bordo destro dell'intestazione
+   (vedi ColumnResize.tsx: il resize del CSS non funziona sulle celle di tabella) */
+.col-grip {
+  position: absolute; top: 0; right: -3px; width: 7px; height: 100%;
+  cursor: col-resize; touch-action: none; user-select: none; z-index: 3;
 }
+.col-grip:hover { background: var(--green-500); opacity: 0.35; }
+table.data th { position: relative; }
+/* con table-layout fixed il testo delle celle deve poter andare a capo */
+table.data td { overflow-wrap: anywhere; }
 
 /* colonna visibile solo su schermi larghi, dove c'è spazio da riempire */
 .col-wide { display: none; }
@@ -398,6 +404,7 @@ table.data tr:last-child td { border-bottom: none; }
 .alert { padding: 12px 16px; border-radius: 10px; font-size: 14px; margin-bottom: 18px; }
 .alert-green { background: var(--green-100); color: var(--green-900); }
 .alert-amber { background: var(--amber-bg); color: #92400e; }
+.alert-red { background: #fde8e8; color: #9b1c1c; border: 1px solid #f5c2c2; }
 
 .empty { color: var(--muted); font-size: 14px; font-style: italic; padding: 8px 0; }
 

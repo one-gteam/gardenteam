@@ -5,7 +5,7 @@ import { requireUser } from "./auth";
 import { getDb } from "./db";
 import { canAccessStampe, isZooEditor, resolveScope } from "./stampe";
 import {
-  getZooDb, saveZooDb, ZooDB, ZooParent, campagnaInLavorazione, campagnaInCorso, campaignStato,
+  getZooDb, saveZooDb, ZooDB, ZooParent, campagnaInLavorazione, campagnaInCorso, campaignStato, NO_VOLANTINO,
 } from "./zoo";
 import { groupAndDescribe, groupAndDescribeBatched } from "./zoo-ai";
 import { uploadPublicFile, publicUrlFor, listStorageFiles } from "./supabase";
@@ -383,7 +383,7 @@ export async function setParentTagInline(
 
 /** Modifica in linea di un campo dell'offerta (autosalvataggio, nessun redirect). */
 export async function updateOfferFieldInline(
-  offerId: string, field: "descrizione" | "prezzoPromo" | "prezzoListino", value: string
+  offerId: string, field: "descrizione" | "prezzoPromo" | "prezzoListino" | "focus" | "label" | "paginaId", value: string
 ): Promise<{ ok: boolean }> {
   const user = await requireZooUser();
   if (!isZooEditor(user)) return { ok: false };
@@ -392,7 +392,63 @@ export async function updateOfferFieldInline(
   if (!o) return { ok: false };
   const v = value.trim();
   if (field === "descrizione") o.descrizione = v || o.descrizione;
-  else o[field] = v;
+  else if (field === "prezzoPromo") o.prezzoPromo = v; // sempre valorizzato: vuoto = nessun prezzo
+  else if (field === "paginaId") {
+    o.paginaId = v || undefined;
+    // assegnare una pagina significa sceglierla per il volantino; "no volantino" la scarta
+    o.selezionata = Boolean(v) && v !== NO_VOLANTINO;
+  } else o[field] = v || undefined;
+  await saveZooDb(db);
+  return { ok: true };
+}
+
+/**
+ * Come sopra ma su tutte le offerte di un prodotto padre: nella vista
+ * raggruppata la riga rappresenta il padre, quindi pagina/etichetta/focus si
+ * applicano a tutte le sue varianti insieme.
+ */
+export async function updateOfferGroupFieldInline(
+  offerIds: string[], field: "focus" | "label" | "paginaId", value: string
+): Promise<{ ok: boolean }> {
+  const user = await requireZooUser();
+  if (!isZooEditor(user)) return { ok: false };
+  const db = await getZooDb();
+  const v = value.trim();
+  for (const o of db.offers) {
+    if (!offerIds.includes(o.id)) continue;
+    if (field === "paginaId") {
+      o.paginaId = v || undefined;
+      o.selezionata = Boolean(v) && v !== NO_VOLANTINO;
+    } else o[field] = v || undefined;
+  }
+  await saveZooDb(db);
+  return { ok: true };
+}
+
+/** Sposta un articolo sotto un altro prodotto padre (o lo lascia senza padre). */
+export async function moveProductToParent(
+  back: string, scopeParam: string, productId: string, newParentId: string
+): Promise<{ ok: boolean }> {
+  const user = await requireZooUser();
+  if (!isZooEditor(user)) return { ok: false };
+  const db = await getZooDb();
+  const p = db.products.find((x) => x.id === productId);
+  if (!p) return { ok: false };
+  if (newParentId && !db.parents.some((x) => x.id === newParentId)) return { ok: false };
+  if (newParentId) p.parentId = newParentId;
+  else delete p.parentId;
+  await saveZooDb(db);
+  return { ok: true };
+}
+
+/** Assegna al padre una delle foto già caricate nel bucket. */
+export async function setParentImageFromFile(parentId: string, fileName: string): Promise<{ ok: boolean }> {
+  const user = await requireZooUser();
+  if (!isZooEditor(user)) return { ok: false };
+  const db = await getZooDb();
+  const parent = db.parents.find((p) => p.id === parentId);
+  if (!parent || !fileName) return { ok: false };
+  parent.image = publicUrlFor(`zoo-foto/${fileName}`);
   await saveZooDb(db);
   return { ok: true };
 }

@@ -18,7 +18,13 @@ export interface OffLite {
   padre?: string; // nome del prodotto padre, se la voce ne rappresenta uno
   offerIds?: string[]; // offerte racchiuse dalla voce (assente = solo `id`)
   articoli: ArtLite[]; // articoli (gusti/formati) racchiusi dalla voce
+  paginaId?: string; // pagina decisa in Import offerte (NO_VOLANTINO = scartata)
+  focus?: string;
+  gruppoGrafico?: string; // stesso valore = da impaginare vicine
 }
+
+/** Deve combaciare con NO_VOLANTINO di lib/zoo (qui è un client component). */
+const NO_VOLANTINO = "__no__";
 
 const uid = (p: string) => `${p}_${Math.random().toString(36).slice(2, 9)}`;
 
@@ -88,6 +94,7 @@ export default function VolantinoBuilder({
   const [avviso, setAvviso] = useState("");
   const [f, setF] = useState({ animale: "", caratt: "", label: "", minVoti: "", minNon: "", marca: "", fornitore: "" });
   const [filtroChiuso, setFiltroChiuso] = useState(false);
+  const [mostraScartate, setMostraScartate] = useState(false);
   const primoRender = useRef(true);
 
   /* --- offerte già collocate: spariscono dall'elenco a sinistra --- */
@@ -104,6 +111,8 @@ export default function VolantinoBuilder({
    * per rimetterne una in una seconda cella (es. la stessa offerta su due pagine).
    */
   const disponibili = useMemo(() => offers.filter((o) => {
+    // le offerte marcate "no volantino" restano fuori, salvo richiesta esplicita
+    if (o.paginaId === NO_VOLANTINO && !mostraScartate) return false;
     if (f.animale && !o.caratts.includes(f.animale)) return false;
     if (f.caratt && !o.caratts.includes(f.caratt)) return false;
     if (f.label && o.label !== f.label) return false;
@@ -112,8 +121,30 @@ export default function VolantinoBuilder({
     if (f.marca && o.marca !== f.marca) return false;
     if (f.fornitore && o.fornitore !== f.fornitore) return false;
     return true;
-  }).sort((a, b) => Number(inserite.has(a.id)) - Number(inserite.has(b.id))), [offers, f, inserite]);
+  }).sort((a, b) => Number(inserite.has(a.id)) - Number(inserite.has(b.id))), [offers, f, inserite, mostraScartate]);
   const daCollocare = disponibili.filter((o) => !inserite.has(o.id)).length;
+
+  /*
+   * Offerte con una pagina assegnata da Import offerte ma non ancora collocate:
+   * "Disponi per pagina" le mette nelle celle libere della loro pagina; quelle
+   * che non ci stanno restano qui e vengono segnalate, perché è una scelta di
+   * chi impagina (allargare la griglia, unire celle, spostarne altre).
+   */
+  const daDisporre = useMemo(
+    () => offers.filter((o) => o.paginaId && o.paginaId !== NO_VOLANTINO && !inserite.has(o.id)),
+    [offers, inserite]
+  );
+  const eccedenze = useMemo(() => {
+    const libere = new Map<string, number>();
+    for (const p of pages) libere.set(p.id, p.blocks.filter(vuoto).length);
+    const fuori: OffLite[] = [];
+    for (const o of daDisporre) {
+      const n = libere.get(o.paginaId!) ?? 0;
+      if (n > 0) libere.set(o.paginaId!, n - 1);
+      else fuori.push(o);
+    }
+    return fuori;
+  }, [daDisporre, pages]);
 
   const upd = (fn: (p: VolPage[]) => VolPage[]) => setPages((prev) => fn(structuredClone(prev)).map(normalizza));
   const offer = (id?: string) => offers.find((o) => o.id === id);
@@ -137,6 +168,86 @@ export default function VolantinoBuilder({
   }, [pages, salva]);
 
   const flash = (m: string) => { setAvviso(m); setTimeout(() => setAvviso(""), 3500); };
+
+  /**
+   * Ordina le offerte da collocare tenendo insieme quelle che vanno impaginate
+   * vicine: prima il "raggruppamento grafico" indicato nel file di selezione,
+   * poi l'etichetta e il focus in comune.
+   */
+  const chiaveVicinanza = (o: OffLite) => `${o.gruppoGrafico ?? ""}|${o.label ?? ""}|${o.focus ?? ""}`;
+  const ordinaPerVicinanza = (lista: OffLite[]) => {
+    const ordineChiavi: string[] = [];
+    for (const o of lista) {
+      const k = chiaveVicinanza(o);
+      if (!ordineChiavi.includes(k)) ordineChiavi.push(k);
+    }
+    return [...lista].sort((a, b) => {
+      const ka = ordineChiavi.indexOf(chiaveVicinanza(a));
+      const kb = ordineChiavi.indexOf(chiaveVicinanza(b));
+      return ka - kb;
+    });
+  };
+
+  /** Riempie le celle libere di ogni pagina con le offerte assegnate a quella pagina. */
+  const disponiPerPagina = () => {
+    if (daDisporre.length === 0) return flash("Nessuna offerta con una pagina assegnata da collocare.");
+    let messe = 0;
+    upd((ps) => {
+      for (const page of ps) {
+        const perQuesta = ordinaPerVicinanza(daDisporre.filter((o) => o.paginaId === page.id));
+        if (perQuesta.length === 0) continue;
+        // celle libere in ordine di lettura, così i gruppi restano adiacenti
+        const libere = page.blocks
+          .filter((b) => !b.offerIds?.length && !b.testo && !b.imageUrl && !b.label)
+          .sort((a, b) => a.r - b.r || a.c - b.c);
+        for (let i = 0; i < Math.min(libere.length, perQuesta.length); i++) {
+          libere[i].offerIds = [perQuesta[i].id];
+          messe++;
+        }
+      }
+      return ps;
+    });
+    const fuori = daDisporre.length - messe;
+    flash(fuori > 0
+      ? `Collocate ${messe} offerte. ${fuori} non ci stanno nelle pagine assegnate: restano nell'elenco a sinistra.`
+      : `Collocate ${messe} offerte nelle pagine assegnate.`);
+  };
+
+  /**
+   * Riordina le offerte GIÀ collocate in ciascuna pagina in modo che quelle con
+   * stessa etichetta o stesso focus finiscano in celle adiacenti, mantenendo
+   * ogni offerta nella sua pagina e senza toccare testi, immagini e sezioni.
+   */
+  const avvicinaSimili = () => {
+    let toccate = 0;
+    upd((ps) => {
+      for (const page of ps) {
+        const conOfferta = page.blocks
+          .filter((b) => b.offerIds?.length)
+          .sort((a, b) => a.r - b.r || a.c - b.c);
+        if (conOfferta.length < 2) continue;
+        const contenuti = conOfferta.map((b) => ({
+          offerIds: b.offerIds, descrizione: b.descrizione, prezzo: b.prezzo, label: b.label, commento: b.commento,
+        }));
+        const ordinati = contenuti
+          .map((c) => ({ c, o: offers.find((x) => x.id === (c.offerIds ?? [])[0]) }))
+          .sort((a, b) => {
+            const ka = a.o ? chiaveVicinanza(a.o) : "";
+            const kb = b.o ? chiaveVicinanza(b.o) : "";
+            return ka.localeCompare(kb, "it");
+          })
+          .map((x) => x.c);
+        conOfferta.forEach((b, i) => {
+          Object.assign(b, { offerIds: undefined, descrizione: undefined, prezzo: undefined, label: undefined, commento: undefined }, ordinati[i]);
+        });
+        toccate += conOfferta.length;
+      }
+      return ps;
+    });
+    flash(toccate > 0
+      ? `Riordinate ${toccate} celle: le offerte con stessa etichetta o focus sono ora vicine.`
+      : "Non ci sono ancora offerte collocate da avvicinare.");
+  };
 
   /**
    * Le barre in alto restano visibili una sotto l'altra mentre si scorre: qui
@@ -411,6 +522,10 @@ export default function VolantinoBuilder({
                   {fornitori.map((x) => <option key={x} value={x}>{x}</option>)}
                 </select>
               </label>
+              <label style={{ fontSize: 11.5, display: "block", marginBottom: 8 }}>
+                <input type="checkbox" checked={mostraScartate} onChange={(e) => setMostraScartate(e.target.checked)} />{" "}
+                mostra offerte non selezionate (&quot;no volantino&quot;)
+              </label>
               <button className="btn btn-outline btn-sm" type="button" style={{ width: "100%" }}
                 onClick={() => setF({ animale: "", caratt: "", label: "", minVoti: "", minNon: "", marca: "", fornitore: "" })}>
                 Azzera filtri
@@ -450,9 +565,16 @@ export default function VolantinoBuilder({
                   <div style={{ fontSize: 10.5, color: "var(--muted)", display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
                     € {o.prezzo}
                     {usata && <span className="pill pill-gray">già usata</span>}
+                    {o.paginaId === NO_VOLANTINO && <span className="pill pill-red">no volantino</span>}
+                    {o.paginaId && o.paginaId !== NO_VOLANTINO && !usata && (
+                      <span className="pill pill-amber" title="pagina assegnata da Import offerte">
+                        → {pages.findIndex((p) => p.id === o.paginaId) + 1 || "?"}
+                      </span>
+                    )}
                     {o.voti > 0 && <span className="pill pill-green">{o.voti} voti</span>}
                     {o.nonTrattati > 0 && <span className="pill pill-red">{o.nonTrattati} n.t.</span>}
                     {o.label && <span className="pill pill-blue">{o.label}</span>}
+                    {o.focus && <span className="pill pill-gray" title="focus">{o.focus}</span>}
                   </div>
                 </div>
               </div>
@@ -511,6 +633,16 @@ export default function VolantinoBuilder({
             >
               <ImageDown size={14} style={{ verticalAlign: -2 }} />
             </a>
+            {daDisporre.length > 0 && (
+              <button className="btn btn-sm" type="button" onClick={disponiPerPagina}
+                title="Colloca nelle pagine le offerte a cui è già stata assegnata una pagina in Import offerte">
+                Disponi per pagina ({daDisporre.length})
+              </button>
+            )}
+            <button className="btn btn-outline btn-sm" type="button" onClick={avvicinaSimili}
+              title="Riordina le offerte già collocate mettendo vicine quelle con stessa etichetta o focus">
+              Avvicina simili
+            </button>
             <button className="btn btn-outline btn-sm" title="Aggiungi pagina" aria-label="Aggiungi pagina" onClick={() => upd((ps) => [...ps, pagina("")])}>
               <Plus size={14} style={{ verticalAlign: -2 }} />
             </button>
@@ -518,6 +650,21 @@ export default function VolantinoBuilder({
         </div>
 
         {avviso && <div className="alert alert-amber no-print">{avviso}</div>}
+
+        {/* eccedenze: offerte assegnate a una pagina che non ha più celle libere */}
+        {eccedenze.length > 0 && (
+          <div className="alert alert-red no-print" style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <strong>{eccedenze.length} offerte non ci stanno nella pagina assegnata.</strong>
+            <span style={{ fontSize: 12.5 }}>
+              Restano nell&apos;elenco a sinistra: allarga la griglia della pagina, unisci meno celle o spostane
+              qualcuna su un&apos;altra pagina.
+            </span>
+            <span style={{ fontSize: 11.5, color: "var(--muted)", width: "100%" }}>
+              {[...new Set(eccedenze.map((o) => o.padre ?? o.descrizione))].slice(0, 6).join(" · ")}
+              {eccedenze.length > 6 ? " …" : ""}
+            </span>
+          </div>
+        )}
 
         <div className="vol-spread">{spreadCorrente.map((pi) => renderPage(pi))}</div>
 

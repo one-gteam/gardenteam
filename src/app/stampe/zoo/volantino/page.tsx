@@ -22,8 +22,8 @@ export default async function ZooVolantinoPage({
   if (!canAccessArea(user, "zoo")) redirect("/studente");
   const sp = await searchParams;
 
-  const db = await getZooDb();
-  const academyDb = await getDb();
+  // letture indipendenti: in parallelo pesa solo la più lenta, non la somma
+  const [db, academyDb] = await Promise.all([getZooDb(), getDb()]);
   const scopes = scopesForUser(user, academyDb);
   const scope = resolveScope(user, sp.scope, academyDb);
   const scopeParam = `${scope.type}:${scope.id}`;
