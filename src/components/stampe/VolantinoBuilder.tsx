@@ -494,36 +494,44 @@ export default function VolantinoBuilder({
     if (!page) return null;
     return (
       <div key={page.id} className="vol-page-wrap">
+        {/* due righe volute: sopra numero + nome, sotto tipologia e griglia — così
+            i controlli non vanno mai a capo a metà su una colonna da 430px */}
         <div className="no-print vol-page-tools">
-          <span className="vol-numero">Pag. {pi + 1}</span>
-          <input value={page.titolo ?? ""} placeholder="nome pagina"
-            onChange={(e) => upd((ps) => { ps[pi].titolo = e.target.value; return ps; })}
-            style={{ marginTop: 0, width: 108, fontWeight: 700, fontSize: 12 }} />
-          {/* tipologia della pagina: guida la disposizione automatica delle offerte */}
-          <select value={page.animale ?? ""} title="Tipologia di animale della pagina"
-            onChange={(e) => upd((ps) => { ps[pi].animale = e.target.value || undefined; return ps; })}
-            style={{ marginTop: 0, width: 82, fontSize: 11 }}>
-            <option value="">animale…</option>
-            {animali.map((a) => <option key={a} value={a}>{a}</option>)}
-          </select>
-          <select value={page.caratt ?? ""} title="Caratteristica di prodotto della pagina"
-            onChange={(e) => upd((ps) => { ps[pi].caratt = e.target.value || undefined; return ps; })}
-            style={{ marginTop: 0, width: 88, fontSize: 11 }}>
-            <option value="">caratt…</option>
-            {caratts.map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
-          <span style={{ fontSize: 10.5, color: "var(--muted)" }}>griglia</span>
-          <select value={page.cols} onChange={(e) => upd((ps) => { ps[pi].cols = Number(e.target.value); return ps; })} style={{ marginTop: 0, width: 46, fontSize: 11 }}>
-            {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}
-          </select>
-          <span style={{ fontSize: 10.5 }}>×</span>
-          <select value={page.rows} onChange={(e) => upd((ps) => { ps[pi].rows = Number(e.target.value); return ps; })} style={{ marginTop: 0, width: 46, fontSize: 11 }}>
-            {[1, 2, 3, 4, 5, 6].map((n) => <option key={n} value={n}>{n}</option>)}
-          </select>
-          {pages.length > 1 && (
-            <button className="mini-btn" style={{ color: "var(--red)" }} title="Elimina pagina"
-              onClick={() => confirm(`Eliminare la pagina ${pi + 1}?`) && upd((ps) => ps.filter((_, i) => i !== pi))}>✕</button>
-          )}
+          <div className="vol-page-tools-riga">
+            <span className="vol-numero">Pag. {pi + 1}</span>
+            <input value={page.titolo ?? ""} placeholder="nome pagina"
+              onChange={(e) => upd((ps) => { ps[pi].titolo = e.target.value; return ps; })}
+              style={{ marginTop: 0, flex: 1, minWidth: 0, fontWeight: 700, fontSize: 12 }} />
+            {pages.length > 1 && (
+              <button className="mini-btn" style={{ color: "var(--red)" }} title="Elimina pagina"
+                onClick={() => confirm(`Eliminare la pagina ${pi + 1}?`) && upd((ps) => ps.filter((_, i) => i !== pi))}>✕</button>
+            )}
+          </div>
+          <div className="vol-page-tools-riga">
+            {/* tipologia della pagina: guida la disposizione automatica delle offerte */}
+            <select value={page.animale ?? ""} title="Tipologia di animale della pagina"
+              onChange={(e) => upd((ps) => { ps[pi].animale = e.target.value || undefined; return ps; })}
+              style={{ marginTop: 0, flex: 1, minWidth: 0, fontSize: 11 }}>
+              <option value="">— animale —</option>
+              {animali.map((a) => <option key={a} value={a}>{a}</option>)}
+            </select>
+            <select value={page.caratt ?? ""} title="Caratteristica di prodotto della pagina"
+              onChange={(e) => upd((ps) => { ps[pi].caratt = e.target.value || undefined; return ps; })}
+              style={{ marginTop: 0, flex: 1, minWidth: 0, fontSize: 11 }}>
+              <option value="">— caratteristica —</option>
+              {caratts.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <span className="vol-griglia">
+              <span style={{ fontSize: 10.5, color: "var(--muted)" }}>griglia</span>
+              <select value={page.cols} onChange={(e) => upd((ps) => { ps[pi].cols = Number(e.target.value); return ps; })} style={{ marginTop: 0, fontSize: 11 }}>
+                {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
+              <span style={{ fontSize: 10.5 }}>×</span>
+              <select value={page.rows} onChange={(e) => upd((ps) => { ps[pi].rows = Number(e.target.value); return ps; })} style={{ marginTop: 0, fontSize: 11 }}>
+                {[1, 2, 3, 4, 5, 6].map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </span>
+          </div>
         </div>
 
         <div className="vol-page" style={{ gridTemplateColumns: `repeat(${page.cols}, 1fr)`, gridTemplateRows: `repeat(${page.rows}, 1fr)` }}>

@@ -575,7 +575,11 @@ table.data td { overflow-wrap: anywhere; }
 
 .vol-spread { display: flex; gap: 18px; align-items: flex-start; justify-content: center; flex-wrap: wrap; }
 .vol-page-wrap { width: 430px; max-width: 100%; }
-.vol-page-tools { display: flex; gap: 5px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
+/* due righe fisse: numero+nome sopra, tipologia+griglia sotto (niente a-capo casuali) */
+.vol-page-tools { display: grid; gap: 4px; margin-bottom: 6px; }
+.vol-page-tools-riga { display: flex; gap: 5px; align-items: center; }
+.vol-griglia { display: inline-flex; gap: 4px; align-items: center; white-space: nowrap; flex-shrink: 0; }
+.vol-griglia select { width: 44px; }
 .vol-numero {
   background: var(--green-700); color: #fff; font-weight: 800; font-size: 11px;
   padding: 2px 8px; border-radius: 99px;
