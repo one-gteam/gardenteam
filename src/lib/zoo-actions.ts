@@ -1403,49 +1403,51 @@ function sanitizeZooLayoutItems(raw: unknown, isKnownField: (fieldId: string) =>
  * dell'Arredo, permette più layout collegati a tag diversi (es. uno per
  * "Gatto", uno per "Cane") invece di uno solo per formato.
  */
+/**
+ * Salva un layout zoo: se `layoutId` esiste già (nel proprio ambito) lo
+ * aggiorna, altrimenti ne crea uno nuovo — stesso formato, più layout
+ * ciascuno con un nome. Ritorna l'id: il client lo tiene per i salvataggi
+ * successivi (l'autosalvataggio aggiorna sempre lo stesso, non duplica).
+ */
 export async function saveZooLayout(
-  formatId: string, scopeParam: string, tipologieCsv: string, itemsJson: string, borderJson: string, itemsNoPhotoJson: string
-) {
+  layoutId: string, formatId: string, scopeParam: string, nome: string, tipologieCsv: string,
+  itemsJson: string, marginRaw: string, itemsNoPhotoJson: string
+): Promise<{ ok: boolean; id?: string }> {
   const user = await requireZooUser();
   const db = await getZooDb();
   const academyDb = await getDb();
   const scope = resolveScope(user, scopeParam, academyDb);
-  if (scope.type === "system" && !isZooEditor(user)) return;
+  if (scope.type === "system" && !isZooEditor(user)) return { ok: false };
   let items: unknown;
-  try { items = JSON.parse(itemsJson); } catch { return; }
-  if (!Array.isArray(items)) return;
+  try { items = JSON.parse(itemsJson); } catch { return { ok: false }; }
+  if (!Array.isArray(items)) return { ok: false };
   const { ZOO_FIELDS } = await import("./zoo");
   const isKnownField = (fieldId: string) => ZOO_FIELDS.some((f) => f.id === fieldId);
   const clean = sanitizeZooLayoutItems(items, isKnownField);
   let itemsNoPhotoRaw: unknown;
   try { itemsNoPhotoRaw = JSON.parse(itemsNoPhotoJson); } catch { itemsNoPhotoRaw = []; }
   const cleanNoPhoto = sanitizeZooLayoutItems(itemsNoPhotoRaw, isKnownField);
-
-  let borderRaw: unknown;
-  try { borderRaw = JSON.parse(borderJson); } catch { borderRaw = null; }
-  const b = (borderRaw && typeof borderRaw === "object" ? borderRaw : {}) as Record<string, unknown>;
-  const border = {
-    on: b.on === true,
-    width: Math.max(0.25, Math.min(6, Number(b.width) || 1)),
-    color: typeof b.color === "string" && /^#[0-9a-fA-F]{3,8}$/.test(b.color) ? b.color : "#111111",
-    style: b.style === "dashed" ? ("dashed" as const) : ("solid" as const),
-  };
+  const margin = Math.max(0, Math.min(30, Number(marginRaw) || 0));
   const tipologie = tipologieCsv.split(",").map((t) => t.trim()).filter(Boolean);
-  const existing = db.zooLayouts.find(
-    (l) => l.formatId === formatId && l.scopeType === scope.type && l.scopeId === scope.id && l.tipologie.join(",") === tipologie.join(",")
-  );
+  const nomePulito = nome.trim().slice(0, 60);
+
+  const existing = db.zooLayouts.find((l) => l.id === layoutId && l.scopeType === scope.type && l.scopeId === scope.id);
   if (existing) {
     existing.items = clean;
     existing.itemsNoPhoto = cleanNoPhoto;
     existing.tipologie = tipologie;
-    existing.border = border;
-  } else {
-    db.zooLayouts.push({
-      id: `zl_${Date.now()}`, formatId, scopeType: scope.type, scopeId: scope.id,
-      tipologie, items: clean, itemsNoPhoto: cleanNoPhoto, border,
-    });
+    existing.margin = margin;
+    existing.nome = nomePulito || undefined;
+    await saveZooDb(db);
+    return { ok: true, id: existing.id };
   }
+  const nuovo = {
+    id: `zl_${Date.now()}`, formatId, scopeType: scope.type, scopeId: scope.id,
+    nome: nomePulito || undefined, tipologie, items: clean, itemsNoPhoto: cleanNoPhoto, margin,
+  };
+  db.zooLayouts.push(nuovo);
   await saveZooDb(db);
+  return { ok: true, id: nuovo.id };
 }
 
 /** Elimina un layout cartello zoo salvato (solo nel proprio ambito). */

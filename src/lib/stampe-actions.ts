@@ -668,29 +668,37 @@ function sanitizeLayoutItems(raw: unknown, isKnownField: (fieldId: string) => bo
     }));
 }
 
-/** Salva il layout per formato+ambito (items in JSON dal client editor). */
+/**
+ * Salva un layout: se `layoutId` esiste già (nel proprio ambito) lo aggiorna,
+ * altrimenti ne crea uno nuovo — così lo stesso formato può avere più layout,
+ * ciascuno con un nome, invece di uno solo per formato+ambito. Ritorna l'id
+ * (nuovo o esistente): il client lo tiene per i salvataggi successivi, così
+ * l'autosalvataggio aggiorna sempre lo stesso layout invece di duplicarlo.
+ */
 export async function saveLayout(
+  layoutId: string,
   formatId: string,
   scopeParam: string,
+  nome: string,
   tipologieCsv: string,
   itemsJson: string,
-  borderJson: string,
+  marginRaw: string,
   itemsNoPhotoJson: string
-) {
+): Promise<{ ok: boolean; id?: string }> {
   const user = await requireStampeUser();
   const db = await getStampeDb();
   const academyDb = await getDb();
   const scope = resolveScope(user, scopeParam, academyDb);
-  if (scope.type === "system" && !isConsortiumEditor(user)) return;
+  if (scope.type === "system" && !isConsortiumEditor(user)) return { ok: false };
 
   let items: unknown;
   try {
     items = JSON.parse(itemsJson);
   } catch {
-    return;
+    return { ok: false };
   }
-  if (!Array.isArray(items)) return;
-  if (isStoreBlocked(db, scope)) return;
+  if (!Array.isArray(items)) return { ok: false };
+  if (isStoreBlocked(db, scope)) return { ok: false };
   const isKnownField = (fieldId: string) => db.fields.some((f) => f.id === fieldId);
   const clean = sanitizeLayoutItems(items, isKnownField);
   let itemsNoPhotoRaw: unknown;
@@ -700,40 +708,27 @@ export async function saveLayout(
     itemsNoPhotoRaw = [];
   }
   const cleanNoPhoto = sanitizeLayoutItems(itemsNoPhotoRaw, isKnownField);
-
-  let borderRaw: unknown;
-  try {
-    borderRaw = JSON.parse(borderJson);
-  } catch {
-    borderRaw = null;
-  }
-  const b = (borderRaw && typeof borderRaw === "object" ? borderRaw : {}) as Record<string, unknown>;
-  const border = {
-    on: b.on === true,
-    width: Math.max(0.25, Math.min(6, Number(b.width) || 1)),
-    color: typeof b.color === "string" && /^#[0-9a-fA-F]{3,8}$/.test(b.color) ? b.color : "#111111",
-    style: b.style === "dashed" ? ("dashed" as const) : ("solid" as const),
-  };
-
+  const margin = Math.max(0, Math.min(30, Number(marginRaw) || 0));
   const tipologie = tipologieCsv.split(",").map((t) => t.trim()).filter(Boolean);
-  let layout = db.layouts.find(
-    (l) =>
-      l.formatId === formatId &&
-      l.scopeType === scope.type &&
-      l.scopeId === scope.id &&
-      l.tipologie.join(",") === tipologie.join(",")
-  );
+  const nomePulito = nome.trim().slice(0, 60);
+
+  let layout = db.layouts.find((l) => l.id === layoutId && l.scopeType === scope.type && l.scopeId === scope.id);
   if (!layout) {
-    layout = { id: `l_${Date.now()}`, formatId, scopeType: scope.type as ScopeType, scopeId: scope.id, tipologie, items: clean, itemsNoPhoto: cleanNoPhoto, border };
+    layout = {
+      id: `l_${Date.now()}`, formatId, scopeType: scope.type as ScopeType, scopeId: scope.id,
+      nome: nomePulito || undefined, tipologie, items: clean, itemsNoPhoto: cleanNoPhoto, margin,
+    };
     db.layouts.push(layout);
   } else {
     layout.items = clean;
     layout.itemsNoPhoto = cleanNoPhoto;
     layout.tipologie = tipologie;
-    layout.border = border;
+    layout.margin = margin;
+    layout.nome = nomePulito || undefined;
   }
   await saveStampeDb(db);
   revalidatePath("/stampe/arredo/layout");
+  return { ok: true, id: layout.id };
 }
 
 export async function deleteLayout(layoutId: string, scopeParam: string) {

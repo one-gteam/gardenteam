@@ -547,7 +547,7 @@ export function caratteristicheProdottoDi(db: ZooDB, caratteristiche: string[]):
 
 /* ================== Cartelli Zoo: campi, formati e layout per ambito ================== */
 
-import type { PrintField, PrintFormat, LayoutItem, LayoutBorder } from "./stampe";
+import type { PrintField, PrintFormat, LayoutItem } from "./stampe";
 
 /** Campi disponibili sul cartello di un'offerta zoo (stessa meccanica dell'Arredo). */
 export const ZOO_FIELDS: PrintField[] = [
@@ -578,11 +578,14 @@ export interface ZooLayout {
   formatId: string;
   scopeType: ScopeType;
   scopeId: string;
+  /** Nome scelto per riconoscerlo quando ce n'è più di uno per lo stesso formato. */
+  nome?: string;
   tipologie: string[]; // tag (animale/caratteristica) a cui è legato — vuoto = vale per tutti i prodotti
   items: LayoutItem[];
   /** Versione alternativa usata in stampa quando il padre non ha una foto caricata. */
   itemsNoPhoto?: LayoutItem[];
-  border?: LayoutBorder;
+  /** Margine dai bordi del foglio (mm): spazio che i campi non devono occupare. */
+  margin?: number;
 }
 
 /**

@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import StampeHeader from "@/components/stampe/StampeHeader";
 import LayoutEditor from "@/components/stampe/LayoutEditor";
+import AutoSubmitSelect from "@/components/stampe/AutoSubmitSelect";
 import {
   getStampeDb,
   canAccessArea,
@@ -37,26 +38,32 @@ export default async function LayoutPage({
   const formatId = sp.formato ?? db.formats[0]?.id;
   const format = db.formats.find((f) => f.id === formatId) ?? db.formats[0];
   const tipologie = [...new Set(db.products.map((p) => p.tipologia))].sort();
-  // quale dei layout collegabili allo stesso formato si sta modificando (vuoto = quello generico)
-  const editingTipologie = (sp.tipologie ?? "").split(",").map((t) => t.trim()).filter(Boolean);
 
-  // layout dell'ambito corrente, altrimenti si parte dal layout del Consorzio come base
-  const own = db.layouts.find(
-    (l) => l.formatId === format.id && l.scopeType === scope.type && l.scopeId === scope.id
-      && l.tipologie.join(",") === editingTipologie.join(",")
-  );
-  const systemLayout = db.layouts.find(
-    (l) => l.formatId === format.id && l.scopeType === "system" && l.tipologie.join(",") === editingTipologie.join(",")
-  );
-  const current = own ?? systemLayout;
+  // layout selezionabili per questo formato: i propri, più quelli del Consorzio come base
+  const scopeLayouts = db.layouts.filter((l) => l.formatId === format.id && l.scopeType === scope.type && l.scopeId === scope.id);
+  const systemLayouts = db.layouts.filter((l) => l.formatId === format.id && l.scopeType === "system");
+  const selectableLayouts = scope.type === "system" ? scopeLayouts : [...scopeLayouts, ...systemLayouts];
+  /*
+   * ?layout="" = "nuovo layout" scelto apposta, resta vuoto. Un id che non è tra i layout di
+   * QUESTO formato (tipico se si è appena cambiato formato: la tendina "Layout" porta ancora il
+   * valore di quello precedente) si ignora e si torna al primo disponibile.
+   */
+  const matchedByParam = sp.layout ? selectableLayouts.find((l) => l.id === sp.layout) : undefined;
+  const current = matchedByParam ?? (sp.layout === "" ? undefined : (scopeLayouts[0] ?? systemLayouts[0]));
+  const isOwnCopy = !!current && current.scopeType === scope.type && current.scopeId === scope.id;
 
   // prodotto di esempio per l'anteprima
   const sample = db.products[0];
   const sampleValues: Record<string, string> = sample ? cartelloValues(db, scope, sample, academyDb) : {};
 
-  const otherLayouts = db.layouts.filter(
-    (l) => l.scopeType === scope.type && l.scopeId === scope.id
-  );
+  const layoutOptions = [
+    { value: "", label: "+ Nuovo layout" },
+    ...selectableLayouts.map((l) => ({
+      value: l.id,
+      label: (l.nome || (l.tipologie.length ? l.tipologie.join(", ") : "Senza nome"))
+        + (l.scopeType === "system" && scope.type !== "system" ? " (Consorzio)" : ""),
+    })),
+  ];
 
   return (
     <div>
@@ -71,14 +78,19 @@ export default async function LayoutPage({
                   ? "Stai modificando il layout del Consorzio (comune a tutti)."
                   : `Stai personalizzando il layout di ${scope.label} — parte da quello del Consorzio.`
                 : "Layout del Consorzio in sola lettura."}
+              {" "}Puoi avere più layout per lo stesso formato: scegli o creane uno qui sotto, e duplicalo dal pannello
+              a destra per farne una variante.
             </p>
           </div>
           <form method="get" style={{ display: "flex", gap: 8, alignItems: "end" }}>
             <label className="field" style={{ marginBottom: 0 }}>
               Formato
-              <select name="formato" defaultValue={format.id}>
-                {db.formats.map((f) => <option key={f.id} value={f.id}>{f.name} ({f.w}×{f.h} mm)</option>)}
-              </select>
+              <AutoSubmitSelect name="formato" defaultValue={format.id}
+                options={db.formats.map((f) => ({ value: f.id, label: `${f.name} (${f.w}×${f.h} mm)` }))} />
+            </label>
+            <label className="field" style={{ marginBottom: 0 }}>
+              Layout
+              <AutoSubmitSelect name="layout" defaultValue={current?.id ?? ""} options={layoutOptions} />
             </label>
             <label className="field" style={{ marginBottom: 0 }}>
               Insegna / PV
@@ -90,27 +102,23 @@ export default async function LayoutPage({
           </form>
         </div>
 
-        {!own && scope.type !== "system" && (
+        {!isOwnCopy && scope.type !== "system" && (
           <div className="alert alert-amber no-print">
             Stai vedendo il layout del Consorzio: qualsiasi modifica salvata creerà la versione personalizzata di {scope.label}.
           </div>
         )}
-        {editingTipologie.length > 0 && (
-          <div className="alert alert-green no-print" style={{ marginBottom: 12 }}>
-            Stai modificando il layout collegato a: <strong>{editingTipologie.join(", ")}</strong>.{" "}
-            <a href={`/stampe/arredo/layout?formato=${format.id}&scope=${scopeParam}`}>Torna al layout generico</a>
-          </div>
-        )}
 
         <LayoutEditor
-          key={`${format.id}_${scopeParam}_${editingTipologie.join(",")}_${current?.id ?? "new"}`}
+          key={`${format.id}_${scopeParam}_${current?.id ?? "new"}`}
           format={{ ...format, background: backgroundFor(db, format, scope, academyDb) }}
           fields={db.fields}
+          initialLayoutId={isOwnCopy ? current?.id : undefined}
+          initialNome={current?.nome}
           initialItems={current?.items ?? []}
           initialItemsNoPhoto={current?.itemsNoPhoto}
-          initialBorder={current?.border}
+          initialMargin={current?.margin}
           scopeParam={scopeParam}
-          initialTipologie={editingTipologie}
+          initialTipologie={current?.tipologie ?? []}
           tipologieDisponibili={tipologie}
           sampleValues={sampleValues}
           canEdit={canEdit}
@@ -153,23 +161,22 @@ export default async function LayoutPage({
           </div>
         )}
 
-        {otherLayouts.length > 0 && (
+        {scopeLayouts.length > 0 && (
           <div className="section">
-            <div className="section-head"><h2>Layout salvati in questo ambito</h2></div>
+            <div className="section-head"><h2>I tuoi layout salvati</h2></div>
             <div className="card table-wrap">
               <table className="data">
-                <thead><tr><th>Formato</th><th>Tipologie collegate</th><th>Campi</th><th></th></tr></thead>
+                <thead><tr><th>Formato</th><th>Nome</th><th>Tipologie collegate</th><th>Campi</th><th></th></tr></thead>
                 <tbody>
-                  {otherLayouts.map((l) => {
+                  {db.layouts.filter((l) => l.scopeType === scope.type && l.scopeId === scope.id).map((l) => {
                     const f = db.formats.find((x) => x.id === l.formatId);
                     return (
                       <tr key={l.id}>
                         <td>
-                          <a href={`?formato=${l.formatId}&tipologie=${encodeURIComponent(l.tipologie.join(","))}&scope=${scopeParam}`}>
-                            {f?.name}
-                          </a>
+                          <a href={`?formato=${l.formatId}&layout=${l.id}&scope=${scopeParam}`}>{f?.name}</a>
                         </td>
-                        <td style={{ fontSize: 13 }}>{l.tipologie.length ? l.tipologie.join(", ") : "Tutte (generico)"}</td>
+                        <td style={{ fontSize: 13 }}>{l.nome || "—"}</td>
+                        <td style={{ fontSize: 13 }}>{l.tipologie.length ? l.tipologie.join(", ") : "Tutte"}</td>
                         <td>{l.items.length}</td>
                         <td>
                           <form action={deleteLayout.bind(null, l.id, scopeParam)}>

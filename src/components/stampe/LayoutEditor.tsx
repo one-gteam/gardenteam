@@ -1,21 +1,21 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
-import type { LayoutBorder, LayoutItem, PrintField, PrintFormat, StickerStyle } from "@/lib/stampe";
+import { useEffect, useRef, useState, useTransition } from "react";
+import type { LayoutItem, PrintField, PrintFormat, StickerStyle } from "@/lib/stampe";
 import { LAYOUT_FONTS, layoutFontCss } from "@/lib/layout-fonts";
 import { saveLayout } from "@/lib/stampe-actions";
 import { saveZooLayout } from "@/lib/zoo-actions";
 import { stickerShapeStyle } from "./stickerStyle";
 
-const DEFAULT_BORDER: LayoutBorder = { on: false, width: 1, color: "#111111", style: "solid" };
-
-/** Editor drag & drop del layout cartello: trascina i campi, ridimensionali dall'angolo. */
+/** Editor drag & drop del layout cartello: trascina i campi, ridimensionali dall'angolo, si salva da solo. */
 export default function LayoutEditor({
   format,
   fields,
+  initialLayoutId,
+  initialNome,
   initialItems,
   initialItemsNoPhoto,
-  initialBorder,
+  initialMargin,
   scopeParam,
   initialTipologie,
   tipologieDisponibili,
@@ -26,10 +26,14 @@ export default function LayoutEditor({
 }: {
   format: PrintFormat;
   fields: PrintField[];
+  /** Id del layout aperto: assente = non ancora salvato, il primo salvataggio ne crea uno. */
+  initialLayoutId?: string;
+  initialNome?: string;
   initialItems: LayoutItem[];
   /** Foglio alternativo per quando manca la foto: se assente si parte da una copia del foglio normale. */
   initialItemsNoPhoto?: LayoutItem[];
-  initialBorder?: LayoutBorder;
+  /** Margine dai bordi del foglio, in mm. */
+  initialMargin?: number;
   scopeParam: string;
   initialTipologie: string[];
   tipologieDisponibili: string[];
@@ -38,13 +42,16 @@ export default function LayoutEditor({
   images?: { name: string; url: string }[];
   area?: "arredo" | "zoo"; // dove salvare il layout (default: arredo)
 }) {
+  const [layoutId, setLayoutId] = useState(initialLayoutId ?? "");
+  const [nome, setNome] = useState(initialNome ?? "");
+  const [dupName, setDupName] = useState("");
   const [items, setItems] = useState<LayoutItem[]>(initialItems);
   const [itemsNoPhoto, setItemsNoPhoto] = useState<LayoutItem[]>(initialItemsNoPhoto ?? initialItems);
   // due fogli, due modalità: quello che si vede/trascina è sempre quello attivo
   const [mode, setMode] = useState<"normal" | "noPhoto">("normal");
   const activeItems = mode === "normal" ? items : itemsNoPhoto;
   const setActiveItems = mode === "normal" ? setItems : setItemsNoPhoto;
-  const [border, setBorder] = useState<LayoutBorder>(initialBorder ?? DEFAULT_BORDER);
+  const [margin, setMargin] = useState(initialMargin ?? 0);
   const [tipologie, setTipologie] = useState<string[]>(initialTipologie);
   const [selected, setSelected] = useState<number | null>(null);
   const [saved, setSaved] = useState(false);
@@ -206,13 +213,55 @@ export default function LayoutEditor({
     setSelected(null);
   };
 
+  const layoutUrlBase = `/stampe/${area}/layout?formato=${format.id}&scope=${scopeParam}`;
+
   const doSave = () => {
+    if (!canEdit) return;
     startTransition(async () => {
-      await (area === "zoo" ? saveZooLayout : saveLayout)(
-        format.id, scopeParam, tipologie.join(","), JSON.stringify(items), JSON.stringify(border), JSON.stringify(itemsNoPhoto)
+      const save = area === "zoo" ? saveZooLayout : saveLayout;
+      const res = await save(
+        layoutId, format.id, scopeParam, nome, tipologie.join(","), JSON.stringify(items), String(margin), JSON.stringify(itemsNoPhoto)
       );
+      if (res.ok && res.id && res.id !== layoutId) {
+        setLayoutId(res.id);
+        // il primo salvataggio di un layout nuovo gli dà un id: si aggiorna l'URL senza ricaricare,
+        // così un aggiornamento della pagina ritrova lo stesso layout invece di crederlo assente
+        if (typeof window !== "undefined") {
+          const url = new URL(window.location.href);
+          url.searchParams.set("layout", res.id);
+          window.history.replaceState(null, "", url.toString());
+        }
+      }
       setSaved(true);
-      setTimeout(() => setSaved(false), 2500);
+      setTimeout(() => setSaved(false), 2000);
+    });
+  };
+
+  // autosalvataggio: ogni modifica si salva da sola poco dopo, niente pulsante da ricordarsi di premere
+  const doSaveRef = useRef(doSave);
+  doSaveRef.current = doSave;
+  const skipFirstSave = useRef(true);
+  useEffect(() => {
+    if (skipFirstSave.current) {
+      skipFirstSave.current = false;
+      return;
+    }
+    if (!canEdit) return;
+    const t = setTimeout(() => doSaveRef.current(), 900);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, itemsNoPhoto, margin, tipologie, nome]);
+
+  /** Crea un nuovo layout a partire dal contenuto attuale (duplica quello aperto, o lo salva con un nuovo nome). */
+  const doDuplicate = () => {
+    if (!canEdit) return;
+    startTransition(async () => {
+      const save = area === "zoo" ? saveZooLayout : saveLayout;
+      const finalName = dupName.trim() || `${nome || format.name} (copia)`;
+      const res = await save(
+        "", format.id, scopeParam, finalName, tipologie.join(","), JSON.stringify(items), String(margin), JSON.stringify(itemsNoPhoto)
+      );
+      if (res.ok && res.id) window.location.href = `${layoutUrlBase}&layout=${res.id}`;
     });
   };
 
@@ -296,13 +345,17 @@ export default function LayoutEditor({
             width: W, height: H,
             backgroundImage: format.background ? `url(${format.background})` : undefined, backgroundSize: "cover",
             boxSizing: "border-box",
-            border: border.on ? `${border.width * scale}px ${border.style} ${border.color}` : undefined,
+            padding: margin > 0 ? margin * scale : undefined,
           }}
           onMouseMove={onMouseMove}
           onMouseUp={endDrag}
           onMouseLeave={endDrag}
           onMouseDown={() => setSelected(null)}
         >
+          {margin > 0 && (
+            // guida visiva del margine: i campi sono già posizionati rispetto a quest'area (vedi il padding sopra)
+            <div style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", outline: "1px dashed #274b7a", pointerEvents: "none", boxSizing: "border-box" }} />
+          )}
           {activeItems.map((item, i) => {
             const meta = fields.find((f) => f.id === item.fieldId);
             if (item.sticker) {
@@ -400,39 +453,37 @@ export default function LayoutEditor({
       </div>
 
       <div className="card" style={{ padding: 14 }}>
+        {/* identità del layout: nome, e come farne una copia */}
+        {canEdit && (
+          <div style={{ borderBottom: "1.5px dashed var(--line)", paddingBottom: 12, marginBottom: 12 }}>
+            <h3 style={{ marginTop: 0 }}>Layout</h3>
+            <label className="field" style={{ marginBottom: 8 }}>
+              Nome
+              <input type="text" value={nome} onChange={(e) => setNome(e.target.value)} placeholder="es. Cartello Gatto" />
+            </label>
+            <label className="field" style={{ marginBottom: 4 }}>
+              Duplica come nuovo layout
+              <input type="text" value={dupName} onChange={(e) => setDupName(e.target.value)} placeholder={`${nome || format.name} (copia)`} />
+            </label>
+            <button type="button" className="btn btn-outline btn-sm" style={{ width: "100%" }} onClick={doDuplicate} disabled={pending}>
+              Crea copia
+            </button>
+          </div>
+        )}
         {/* proprietà del foglio: valgono per tutto il cartello, non per il campo selezionato */}
         {canEdit && (
           <div style={{ borderBottom: "1.5px dashed var(--line)", paddingBottom: 12, marginBottom: 12 }}>
             <h3 style={{ marginTop: 0 }}>Foglio ({format.w}×{format.h} mm)</h3>
-            <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12.5, marginBottom: 8 }}>
-              <input type="checkbox" checked={border.on} onChange={(e) => setBorder((b) => ({ ...b, on: e.target.checked }))} />
-              Bordo attorno al foglio
+            <label className="field" style={{ marginBottom: 0 }}>
+              Margine dai bordi ({unita})
+              <input
+                type="number" step={passo} min={0} value={inUnita(margin)}
+                onChange={(e) => setMargin(Math.max(0, Math.min(30, daUnita(e.target.value))))}
+              />
             </label>
-            {border.on && (
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                <label className="field" style={{ marginBottom: 0 }}>
-                  Spessore (cm)
-                  <input type="number" step={0.01} min={0.02} max={0.6} value={(border.width / 10).toFixed(2)}
-                    onChange={(e) => setBorder((b) => ({ ...b, width: Math.max(0.25, Math.min(6, (Number(e.target.value) || 0.1) * 10)) }))} />
-                </label>
-                <label className="field" style={{ marginBottom: 0 }}>
-                  Spessore (mm)
-                  <input type="number" step={0.25} min={0.25} max={6} value={border.width}
-                    onChange={(e) => setBorder((b) => ({ ...b, width: Math.max(0.25, Math.min(6, Number(e.target.value) || 1)) }))} />
-                </label>
-                <label className="field" style={{ marginBottom: 0 }}>
-                  Stile
-                  <select value={border.style} onChange={(e) => setBorder((b) => ({ ...b, style: e.target.value as LayoutBorder["style"] }))}>
-                    <option value="solid">Continuo</option>
-                    <option value="dashed">Tratteggiato</option>
-                  </select>
-                </label>
-                <label className="field" style={{ marginBottom: 0 }}>
-                  Colore
-                  <input type="color" value={border.color} onChange={(e) => setBorder((b) => ({ ...b, color: e.target.value }))} style={{ width: "100%", height: 34, padding: 2 }} />
-                </label>
-              </div>
-            )}
+            <p style={{ fontSize: 11.5, color: "var(--muted)", margin: "4px 0 0" }}>
+              Spazio ai bordi del foglio in cui i campi non devono entrare (utile per il taglio della stampa).
+            </p>
           </div>
         )}
         {selItem?.sticker && canEdit && (
@@ -592,10 +643,13 @@ export default function LayoutEditor({
         </div>
         {canEdit ? (
           <>
-            <button type="button" className="btn" style={{ marginTop: 14, width: "100%" }} onClick={doSave} disabled={pending}>
-              {pending ? "Salvataggio…" : "Salva layout"}
+            <p style={{ fontSize: 11.5, color: "var(--muted)", margin: "14px 0 6px", textAlign: "center" }}>
+              Le modifiche si salvano da sole poco dopo ogni cambiamento.
+            </p>
+            <button type="button" className="btn btn-outline btn-sm" style={{ width: "100%" }} onClick={doSave} disabled={pending}>
+              {pending ? "Salvataggio…" : "Salva ora"}
             </button>
-            {saved && <p style={{ color: "var(--green-700)", fontWeight: 700, fontSize: 13, textAlign: "center", margin: "8px 0 0" }}>✓ Layout salvato</p>}
+            {saved && !pending && <p style={{ color: "var(--green-700)", fontWeight: 700, fontSize: 13, textAlign: "center", margin: "8px 0 0" }}>✓ Salvato</p>}
           </>
         ) : (
           <p style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 12 }}>

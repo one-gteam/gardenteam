@@ -85,24 +85,19 @@ export interface LayoutItem {
   font?: string; // chiave di LAYOUT_FONTS (vedi lib/layout-fonts): sovrascrive il carattere del campo
 }
 
-/** Bordo del foglio (cartello intero), scelto nell'editor del layout. */
-export interface LayoutBorder {
-  on: boolean;
-  width: number; // mm
-  color: string;
-  style: "solid" | "dashed";
-}
-
 export interface CardLayout {
   id: string;
   formatId: string;
   scopeType: ScopeType;
   scopeId: string;
+  /** Nome scelto per riconoscerlo quando ce n'è più di uno per lo stesso formato. */
+  nome?: string;
   tipologie: string[]; // vuoto = tutte
   items: LayoutItem[];
   /** Versione alternativa usata in stampa quando il campo foto non ha un'immagine. */
   itemsNoPhoto?: LayoutItem[];
-  border?: LayoutBorder;
+  /** Margine dai bordi del foglio (mm): spazio che i campi non devono occupare. */
+  margin?: number;
 }
 
 export interface ErrorReport {

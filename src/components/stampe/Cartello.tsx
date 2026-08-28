@@ -39,7 +39,7 @@ export default function Cartello({
 }) {
   const W = format.w * scale;
   const H = format.h * scale;
-  const border = layout?.border;
+  const margin = layout?.margin ?? 0;
   /*
    * Se il layout ha un campo foto e per questo prodotto manca (values vuoto per
    * quel campo), si stampa il foglio "senza foto" al suo posto — se ne esiste
@@ -63,7 +63,7 @@ export default function Cartello({
         backgroundImage: format.background ? `url("${format.background}")` : undefined,
         backgroundSize: "100% 100%",
         boxSizing: "border-box",
-        border: border?.on ? `${border.width * scale}px ${border.style} ${border.color}` : undefined,
+        padding: margin > 0 ? margin * scale : undefined,
       }}
     >
       {!layout && (
