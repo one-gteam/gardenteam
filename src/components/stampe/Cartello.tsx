@@ -5,18 +5,20 @@ import { stickerShapeStyle } from "./stickerStyle";
 const FONT_CN = '"Avenir Next LT Pro Cn", "Avenir Next LT Pro", "Segoe UI", sans-serif';
 
 /**
- * Prezzo come nel template: intero grande + centesimi in apice ("109,00" → 109 ⁰⁰).
- * I centesimi stanno in un <sup>, non in uno span con vertical-align: dentro un
- * contenitore flex l'allineamento verticale veniva ignorato e in stampa i
- * centesimi finivano in basso invece che in alto.
+ * Prezzo come nel template: intero grande + centesimi più piccoli allineati in
+ * alto ("109,00" → 109 ⁰⁰). Non un <sup> con vertical-align: quel calcolo
+ * dipende dai metrici del font, e sia dentro un contenitore flex sia in stampa
+ * (motore di rasterizzazione diverso da quello a schermo) i centesimi
+ * finivano in basso invece che in alto. Un flex "allineati in alto" non
+ * dipende dal motore di rendering: è pura disposizione dei riquadri.
  */
 function Prezzo({ value, size, scale, font }: { value: string; size: number; scale: number; font?: string }) {
   const [int, cent] = value.split(",");
   const fs = (size * scale) / 2.4;
   return (
-    <span style={{ fontFamily: font ?? FONT_CN, fontWeight: 800, lineHeight: 0.95, whiteSpace: "nowrap", fontSize: fs }}>
-      {int}
-      {cent !== undefined && <sup style={{ fontSize: "0.5em", lineHeight: 0 }}>,{cent}</sup>}
+    <span style={{ fontFamily: font ?? FONT_CN, fontWeight: 800, lineHeight: 0.95, whiteSpace: "nowrap", fontSize: fs, display: "inline-flex", alignItems: "flex-start" }}>
+      <span>{int}</span>
+      {cent !== undefined && <span style={{ fontSize: "0.5em", marginLeft: "0.05em" }}>,{cent}</span>}
     </span>
   );
 }
@@ -38,6 +40,20 @@ export default function Cartello({
   const W = format.w * scale;
   const H = format.h * scale;
   const border = layout?.border;
+  /*
+   * Se il layout ha un campo foto e per questo prodotto manca (values vuoto per
+   * quel campo), si stampa il foglio "senza foto" al suo posto — se ne esiste
+   * uno. "__img" non conta: è un'immagine libera scelta dall'operatore, non la
+   * foto del prodotto.
+   */
+  const mancaLaFoto = (layout?.items ?? []).some((it) => {
+    if (it.fieldId === "__img") return false;
+    const meta = fields.find((f) => f.id === it.fieldId);
+    return isImageField(meta, it.fieldId) && !values[it.fieldId];
+  });
+  const activeItems = (mancaLaFoto && layout?.itemsNoPhoto && layout.itemsNoPhoto.length > 0)
+    ? layout.itemsNoPhoto
+    : layout?.items;
   return (
     <div
       className="cartello"
@@ -55,7 +71,7 @@ export default function Cartello({
           Nessun layout definito per questo formato: crealo nella pagina Layout.
         </div>
       )}
-      {layout?.items.map((item, i) => {
+      {activeItems?.map((item, i) => {
         const box: React.CSSProperties = {
           position: "absolute",
           left: `${item.x}%`,

@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
-import { Inter, Nunito, Poppins, Quicksand } from "next/font/google";
+import {
+  Inter, Nunito, Poppins, Quicksand,
+  Oswald, Bebas_Neue, Playfair_Display, Montserrat, Roboto_Condensed,
+} from "next/font/google";
 import { getDb } from "@/lib/db";
 import "./globals.css";
 
@@ -16,6 +19,21 @@ const poppinsHeading = Poppins({
 // Font alternativi selezionabili dall'amministratore per il testo del portale.
 const nunito = Nunito({ variable: "--font-alt", subsets: ["latin"], display: "swap" });
 const quicksand = Quicksand({ variable: "--font-alt", subsets: ["latin"], display: "swap" });
+
+/**
+ * Font scegliibili nell'editor dei layout cartelli (Stampe → Layout): caricati qui,
+ * una volta sola per tutto il sito, con next/font (nessuna chiamata a Google in
+ * pagina, il file resta servito dal nostro dominio). Le variabili CSS sono
+ * globali, quindi valgono anche nella pagina di stampa vera e propria.
+ */
+const tagPoppins = Poppins({ variable: "--font-tag-poppins", subsets: ["latin"], weight: ["400", "600", "700", "800"], display: "swap" });
+const tagOswald = Oswald({ variable: "--font-tag-oswald", subsets: ["latin"], weight: ["400", "500", "600", "700"], display: "swap" });
+const tagBebas = Bebas_Neue({ variable: "--font-tag-bebas", subsets: ["latin"], weight: "400", display: "swap" });
+const tagPlayfair = Playfair_Display({ variable: "--font-tag-playfair", subsets: ["latin"], weight: ["400", "700", "800"], display: "swap" });
+const tagMontserrat = Montserrat({ variable: "--font-tag-montserrat", subsets: ["latin"], weight: ["400", "600", "700", "800"], display: "swap" });
+const tagRobotoCond = Roboto_Condensed({ variable: "--font-tag-robotocond", subsets: ["latin"], weight: ["400", "700"], display: "swap" });
+const TAG_FONT_VARS = [tagPoppins, tagOswald, tagBebas, tagPlayfair, tagMontserrat, tagRobotoCond]
+  .map((f) => f.variable).join(" ");
 
 const ALT_FONT_CLASSES: Record<string, string> = {
   nunito: nunito.variable,
@@ -50,7 +68,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const altFont = ALT_FONT_CLASSES[settings.font ?? ""] ?? "";
   const fontVars = altFont ? `:root { --font-app-sans: var(--font-alt); }` : "";
   return (
-    <html lang="it" className={`${interSans.variable} ${poppinsHeading.variable} ${altFont}`}>
+    <html lang="it" className={`${interSans.variable} ${poppinsHeading.variable} ${altFont} ${TAG_FONT_VARS}`}>
       <head>
         <style dangerouslySetInnerHTML={{ __html: themeVars + fontVars }} />
       </head>

@@ -578,17 +578,36 @@ export interface ZooLayout {
   formatId: string;
   scopeType: ScopeType;
   scopeId: string;
+  tipologie: string[]; // tag (animale/caratteristica) a cui è legato — vuoto = vale per tutti i prodotti
   items: LayoutItem[];
+  /** Versione alternativa usata in stampa quando il padre non ha una foto caricata. */
+  itemsNoPhoto?: LayoutItem[];
   border?: LayoutBorder;
 }
 
-/** Layout effettivo: quello dell'ambito, altrimenti la versione del Consorzio. */
-export function effectiveZooLayout(db: ZooDB, scope: Scope, formatId: string): ZooLayout {
-  return (
-    db.zooLayouts.find((l) => l.formatId === formatId && l.scopeType === scope.type && l.scopeId === scope.id) ??
-    db.zooLayouts.find((l) => l.formatId === formatId && l.scopeType === "system") ??
-    { id: "default", formatId, scopeType: "system", scopeId: "", items: DEFAULT_ZOO_ITEMS }
-  );
+/**
+ * Layout effettivo per formato+ambito(+tag): personalizzato se esiste, altrimenti
+ * quello del Consorzio. Stessa logica di `effectiveLayout` (Arredo), ma qui i
+ * "tipologie" sono i tag animale/caratteristica del padre — un prodotto ne può
+ * avere più di uno insieme (es. "Gatto" e "Umido"), per questo si passano come
+ * lista e basta che il layout ne colleghi almeno uno.
+ */
+export function effectiveZooLayout(
+  db: ZooDB, scope: Scope, formatId: string, academyDb: DB, tags: string[] = []
+): ZooLayout {
+  const candidates = db.zooLayouts.filter((l) => l.formatId === formatId);
+  const match = (l: ZooLayout) => l.tipologie.length === 0 || l.tipologie.some((t) => tags.includes(t));
+  for (const s of chainFor(scope, academyDb)) {
+    const specific = candidates.find(
+      (l) => l.scopeType === s.type && l.scopeId === s.id && l.tipologie.length > 0 && l.tipologie.some((t) => tags.includes(t))
+    );
+    if (specific) return specific;
+    const generic = candidates.find((l) => l.scopeType === s.type && l.scopeId === s.id && match(l));
+    if (generic) return generic;
+  }
+  return candidates.find((l) => l.scopeType === "system") ?? {
+    id: "default", formatId, scopeType: "system", scopeId: "", tipologie: [], items: DEFAULT_ZOO_ITEMS,
+  };
 }
 
 /** Valori del cartello per un'offerta (con prezzo del PV se caricato). */

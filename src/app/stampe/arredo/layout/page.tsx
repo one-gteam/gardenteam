@@ -37,12 +37,17 @@ export default async function LayoutPage({
   const formatId = sp.formato ?? db.formats[0]?.id;
   const format = db.formats.find((f) => f.id === formatId) ?? db.formats[0];
   const tipologie = [...new Set(db.products.map((p) => p.tipologia))].sort();
+  // quale dei layout collegabili allo stesso formato si sta modificando (vuoto = quello generico)
+  const editingTipologie = (sp.tipologie ?? "").split(",").map((t) => t.trim()).filter(Boolean);
 
   // layout dell'ambito corrente, altrimenti si parte dal layout del Consorzio come base
   const own = db.layouts.find(
-    (l) => l.formatId === format.id && l.scopeType === scope.type && l.scopeId === scope.id && l.tipologie.length === 0
+    (l) => l.formatId === format.id && l.scopeType === scope.type && l.scopeId === scope.id
+      && l.tipologie.join(",") === editingTipologie.join(",")
   );
-  const systemLayout = db.layouts.find((l) => l.formatId === format.id && l.scopeType === "system" && l.tipologie.length === 0);
+  const systemLayout = db.layouts.find(
+    (l) => l.formatId === format.id && l.scopeType === "system" && l.tipologie.join(",") === editingTipologie.join(",")
+  );
   const current = own ?? systemLayout;
 
   // prodotto di esempio per l'anteprima
@@ -90,15 +95,22 @@ export default async function LayoutPage({
             Stai vedendo il layout del Consorzio: qualsiasi modifica salvata creerà la versione personalizzata di {scope.label}.
           </div>
         )}
+        {editingTipologie.length > 0 && (
+          <div className="alert alert-green no-print" style={{ marginBottom: 12 }}>
+            Stai modificando il layout collegato a: <strong>{editingTipologie.join(", ")}</strong>.{" "}
+            <a href={`/stampe/arredo/layout?formato=${format.id}&scope=${scopeParam}`}>Torna al layout generico</a>
+          </div>
+        )}
 
         <LayoutEditor
-          key={`${format.id}_${scopeParam}_${current?.id ?? "new"}`}
+          key={`${format.id}_${scopeParam}_${editingTipologie.join(",")}_${current?.id ?? "new"}`}
           format={{ ...format, background: backgroundFor(db, format, scope, academyDb) }}
           fields={db.fields}
           initialItems={current?.items ?? []}
+          initialItemsNoPhoto={current?.itemsNoPhoto}
           initialBorder={current?.border}
           scopeParam={scopeParam}
-          initialTipologie={own?.tipologie ?? []}
+          initialTipologie={editingTipologie}
           tipologieDisponibili={tipologie}
           sampleValues={sampleValues}
           canEdit={canEdit}
@@ -152,8 +164,12 @@ export default async function LayoutPage({
                     const f = db.formats.find((x) => x.id === l.formatId);
                     return (
                       <tr key={l.id}>
-                        <td><a href={`?formato=${l.formatId}&scope=${scopeParam}`}>{f?.name}</a></td>
-                        <td style={{ fontSize: 13 }}>{l.tipologie.length ? l.tipologie.join(", ") : "Tutte"}</td>
+                        <td>
+                          <a href={`?formato=${l.formatId}&tipologie=${encodeURIComponent(l.tipologie.join(","))}&scope=${scopeParam}`}>
+                            {f?.name}
+                          </a>
+                        </td>
+                        <td style={{ fontSize: 13 }}>{l.tipologie.length ? l.tipologie.join(", ") : "Tutte (generico)"}</td>
                         <td>{l.items.length}</td>
                         <td>
                           <form action={deleteLayout.bind(null, l.id, scopeParam)}>

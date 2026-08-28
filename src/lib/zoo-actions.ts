@@ -1376,20 +1376,11 @@ export async function updateZooOfferQuick(offerId: string, descrizione: string, 
 }
 
 /** Salva il layout cartello zoo per formato+ambito (stessa firma di saveLayout dell'Arredo). */
-export async function saveZooLayout(
-  formatId: string, scopeParam: string, _tipologieCsv: string, itemsJson: string, borderJson: string
-) {
-  const user = await requireZooUser();
-  const db = await getZooDb();
-  const academyDb = await getDb();
-  const scope = resolveScope(user, scopeParam, academyDb);
-  if (scope.type === "system" && !isZooEditor(user)) return;
-  let items: unknown;
-  try { items = JSON.parse(itemsJson); } catch { return; }
-  if (!Array.isArray(items)) return;
-  const { ZOO_FIELDS } = await import("./zoo");
-  const clean = (items as Record<string, unknown>[])
-    .filter((i) => typeof i.fieldId === "string" && (i.fieldId === "__img" ? typeof i.imageUrl === "string" : ZOO_FIELDS.some((f) => f.id === i.fieldId)))
+/** Ripulisce un array di LayoutItem grezzo dal client (stessa validazione per il foglio normale e per quello senza foto). */
+function sanitizeZooLayoutItems(raw: unknown, isKnownField: (fieldId: string) => boolean) {
+  if (!Array.isArray(raw)) return [];
+  return (raw as Record<string, unknown>[])
+    .filter((i) => typeof i.fieldId === "string" && (i.fieldId === "__img" ? typeof i.imageUrl === "string" : isKnownField(i.fieldId as string)))
     .map((i) => ({
       fieldId: i.fieldId as string,
       x: Math.max(0, Math.min(95, Number(i.x) || 0)),
@@ -1405,6 +1396,31 @@ export async function saveZooLayout(
       ...(typeof i.font === "string" && LAYOUT_FONTS.some((f) => f.id === i.font) ? { font: i.font as string } : {}),
       ...(i.sticker && typeof i.sticker === "object" ? { sticker: i.sticker as import("./stampe").StickerStyle } : {}),
     }));
+}
+
+/**
+ * Salva il layout cartello zoo per formato+ambito+tag: come `saveLayout`
+ * dell'Arredo, permette più layout collegati a tag diversi (es. uno per
+ * "Gatto", uno per "Cane") invece di uno solo per formato.
+ */
+export async function saveZooLayout(
+  formatId: string, scopeParam: string, tipologieCsv: string, itemsJson: string, borderJson: string, itemsNoPhotoJson: string
+) {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  if (scope.type === "system" && !isZooEditor(user)) return;
+  let items: unknown;
+  try { items = JSON.parse(itemsJson); } catch { return; }
+  if (!Array.isArray(items)) return;
+  const { ZOO_FIELDS } = await import("./zoo");
+  const isKnownField = (fieldId: string) => ZOO_FIELDS.some((f) => f.id === fieldId);
+  const clean = sanitizeZooLayoutItems(items, isKnownField);
+  let itemsNoPhotoRaw: unknown;
+  try { itemsNoPhotoRaw = JSON.parse(itemsNoPhotoJson); } catch { itemsNoPhotoRaw = []; }
+  const cleanNoPhoto = sanitizeZooLayoutItems(itemsNoPhotoRaw, isKnownField);
+
   let borderRaw: unknown;
   try { borderRaw = JSON.parse(borderJson); } catch { borderRaw = null; }
   const b = (borderRaw && typeof borderRaw === "object" ? borderRaw : {}) as Record<string, unknown>;
@@ -1414,10 +1430,36 @@ export async function saveZooLayout(
     color: typeof b.color === "string" && /^#[0-9a-fA-F]{3,8}$/.test(b.color) ? b.color : "#111111",
     style: b.style === "dashed" ? ("dashed" as const) : ("solid" as const),
   };
-  const existing = db.zooLayouts.find((l) => l.formatId === formatId && l.scopeType === scope.type && l.scopeId === scope.id);
-  if (existing) { existing.items = clean; existing.border = border; }
-  else db.zooLayouts.push({ id: `zl_${Date.now()}`, formatId, scopeType: scope.type, scopeId: scope.id, items: clean, border });
+  const tipologie = tipologieCsv.split(",").map((t) => t.trim()).filter(Boolean);
+  const existing = db.zooLayouts.find(
+    (l) => l.formatId === formatId && l.scopeType === scope.type && l.scopeId === scope.id && l.tipologie.join(",") === tipologie.join(",")
+  );
+  if (existing) {
+    existing.items = clean;
+    existing.itemsNoPhoto = cleanNoPhoto;
+    existing.tipologie = tipologie;
+    existing.border = border;
+  } else {
+    db.zooLayouts.push({
+      id: `zl_${Date.now()}`, formatId, scopeType: scope.type, scopeId: scope.id,
+      tipologie, items: clean, itemsNoPhoto: cleanNoPhoto, border,
+    });
+  }
   await saveZooDb(db);
+}
+
+/** Elimina un layout cartello zoo salvato (solo nel proprio ambito). */
+export async function deleteZooLayout(layoutId: string, scopeParam: string) {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  const l = db.zooLayouts.find((x) => x.id === layoutId);
+  if (l && l.scopeType === scope.type && l.scopeId === scope.id && (scope.type !== "system" || isZooEditor(user))) {
+    db.zooLayouts = db.zooLayouts.filter((x) => x.id !== layoutId);
+    await saveZooDb(db);
+  }
+  redirect(backUrl("/stampe/zoo/layout", scopeParam));
 }
 
 /** Immagine caricata in una cella del volantino (sfondo o elemento grafico). */

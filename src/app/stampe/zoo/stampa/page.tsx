@@ -96,6 +96,12 @@ export default async function ZooStampaPage({
 
   const scalePrint = 3.7795; // 1 mm = 3.7795 px a 96 dpi → stampa a dimensione reale
   const doppio = sp.doppio === "1";
+  // tag del padre (animale + caratteristica insieme): decidono quale layout collegato usare in stampa
+  const tagsFor = (o: (typeof allOffers)[number]) => {
+    const product = db.products.find((p) => p.id === o.productId);
+    const parent = product?.parentId ? db.parents.find((x) => x.id === product.parentId) : undefined;
+    return parent?.caratteristiche ?? [];
+  };
 
   if (sp.print === "1" && selected.length > 0) {
     const toPrint = selected.flatMap((o) => (doppio && formatFor(o.id).id === "za5" ? [o, o] : [o]));
@@ -113,7 +119,7 @@ export default async function ZooStampaPage({
             <div key={`${o.id}_${i}`} style={{ pageBreakInside: "avoid" }}>
               <Cartello
                 format={formatFor(o.id)}
-                layout={{ ...effectiveZooLayout(db, scope, formatFor(o.id).id), tipologie: [] }}
+                layout={effectiveZooLayout(db, scope, formatFor(o.id).id, academyDb, tagsFor(o))}
                 fields={ZOO_FIELDS}
                 values={valuesFor(o)}
                 scale={scalePrint}
@@ -282,7 +288,7 @@ export default async function ZooStampaPage({
               <div key={o.id} style={{ marginBottom: 12 }}>
                 <Cartello
                   format={formatFor(o.id)}
-                  layout={{ ...effectiveZooLayout(db, scope, formatFor(o.id).id), tipologie: [] }}
+                  layout={effectiveZooLayout(db, scope, formatFor(o.id).id, academyDb, tagsFor(o))}
                   fields={ZOO_FIELDS}
                   values={valuesFor(o)}
                   scale={formatFor(o.id).w > 150 ? 1.6 : 2.4}

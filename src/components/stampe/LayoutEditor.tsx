@@ -14,6 +14,7 @@ export default function LayoutEditor({
   format,
   fields,
   initialItems,
+  initialItemsNoPhoto,
   initialBorder,
   scopeParam,
   initialTipologie,
@@ -26,6 +27,8 @@ export default function LayoutEditor({
   format: PrintFormat;
   fields: PrintField[];
   initialItems: LayoutItem[];
+  /** Foglio alternativo per quando manca la foto: se assente si parte da una copia del foglio normale. */
+  initialItemsNoPhoto?: LayoutItem[];
   initialBorder?: LayoutBorder;
   scopeParam: string;
   initialTipologie: string[];
@@ -36,6 +39,11 @@ export default function LayoutEditor({
   area?: "arredo" | "zoo"; // dove salvare il layout (default: arredo)
 }) {
   const [items, setItems] = useState<LayoutItem[]>(initialItems);
+  const [itemsNoPhoto, setItemsNoPhoto] = useState<LayoutItem[]>(initialItemsNoPhoto ?? initialItems);
+  // due fogli, due modalità: quello che si vede/trascina è sempre quello attivo
+  const [mode, setMode] = useState<"normal" | "noPhoto">("normal");
+  const activeItems = mode === "normal" ? items : itemsNoPhoto;
+  const setActiveItems = mode === "normal" ? setItems : setItemsNoPhoto;
   const [border, setBorder] = useState<LayoutBorder>(initialBorder ?? DEFAULT_BORDER);
   const [tipologie, setTipologie] = useState<string[]>(initialTipologie);
   const [selected, setSelected] = useState<number | null>(null);
@@ -43,27 +51,36 @@ export default function LayoutEditor({
   const [pending, startTransition] = useTransition();
   const canvasRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{ index: number; mode: "move" | "resize"; startX: number; startY: number; orig: LayoutItem } | null>(null);
-  // cronologia per annulla/ripristina
+  // cronologia per annulla/ripristina: una per foglio, così non si mescolano
   const history = useRef<LayoutItem[][]>([initialItems]);
   const historyPos = useRef(0);
+  const historyNoPhoto = useRef<LayoutItem[][]>([initialItemsNoPhoto ?? initialItems]);
+  const historyPosNoPhoto = useRef(0);
+  const activeHistory = mode === "normal" ? history : historyNoPhoto;
+  const activeHistoryPos = mode === "normal" ? historyPos : historyPosNoPhoto;
   const [, forceHistory] = useState(0);
 
+  const switchMode = (next: "normal" | "noPhoto") => {
+    setMode(next);
+    setSelected(null);
+  };
+
   const pushHistory = (next: LayoutItem[]) => {
-    history.current = [...history.current.slice(0, historyPos.current + 1), next].slice(-40);
-    historyPos.current = history.current.length - 1;
+    activeHistory.current = [...activeHistory.current.slice(0, activeHistoryPos.current + 1), next].slice(-40);
+    activeHistoryPos.current = activeHistory.current.length - 1;
     forceHistory((n) => n + 1);
   };
   const undo = () => {
-    if (historyPos.current > 0) {
-      historyPos.current -= 1;
-      setItems(history.current[historyPos.current]);
+    if (activeHistoryPos.current > 0) {
+      activeHistoryPos.current -= 1;
+      setActiveItems(activeHistory.current[activeHistoryPos.current]);
       forceHistory((n) => n + 1);
     }
   };
   const redo = () => {
-    if (historyPos.current < history.current.length - 1) {
-      historyPos.current += 1;
-      setItems(history.current[historyPos.current]);
+    if (activeHistoryPos.current < activeHistory.current.length - 1) {
+      activeHistoryPos.current += 1;
+      setActiveItems(activeHistory.current[activeHistoryPos.current]);
       forceHistory((n) => n + 1);
     }
   };
@@ -79,6 +96,10 @@ export default function LayoutEditor({
     return fieldId === "__img" || fieldId === "foto" || fieldId === "logoAzienda" || fieldId === "logoInsegna" || meta?.type === "image";
   };
   const isPriceField = (fieldId: string) => fieldId === "prezzo" || fieldId === "prezzoPromo";
+  // sul foglio "senza foto" l'anteprima non deve mostrare una foto che in stampa non ci sarebbe
+  const previewValues = mode === "noPhoto"
+    ? Object.fromEntries(Object.entries(sampleValues).map(([k, v]) => (isImageField(k) ? [k, ""] : [k, v])))
+    : sampleValues;
 
   // conversione % del cartello ↔ millimetri reali, per mostrare/impostare le misure sul foglio
   const mmX = (pct: number) => (pct / 100) * format.w;
@@ -96,7 +117,7 @@ export default function LayoutEditor({
     e.preventDefault();
     e.stopPropagation();
     setSelected(index);
-    drag.current = { index, mode, startX: e.clientX, startY: e.clientY, orig: { ...items[index] } };
+    drag.current = { index, mode, startX: e.clientX, startY: e.clientY, orig: { ...activeItems[index] } };
   };
 
   const onMouseMove = (e: React.MouseEvent) => {
@@ -104,7 +125,7 @@ export default function LayoutEditor({
     const { index, mode, startX, startY, orig } = drag.current;
     const dx = ((e.clientX - startX) / W) * 100;
     const dy = ((e.clientY - startY) / H) * 100;
-    setItems((prev) =>
+    setActiveItems((prev) =>
       prev.map((it, i) => {
         if (i !== index) return it;
         if (mode === "move") {
@@ -126,30 +147,30 @@ export default function LayoutEditor({
   const endDrag = () => {
     if (drag.current) {
       drag.current = null;
-      pushHistory(items);
+      pushHistory(activeItems);
     }
   };
 
   const addField = (fieldId: string) => {
     if (!canEdit) return;
-    const next = [...items, { fieldId, x: 10, y: 10, w: 40, h: 8 }];
-    setItems(next);
+    const next = [...activeItems, { fieldId, x: 10, y: 10, w: 40, h: 8 }];
+    setActiveItems(next);
     pushHistory(next);
-    setSelected(items.length);
+    setSelected(activeItems.length);
   };
 
   const addImage = (url: string) => {
     if (!canEdit) return;
-    const next = [...items, { fieldId: "__img", imageUrl: url, x: 10, y: 10, w: 25, h: 10 }];
-    setItems(next);
+    const next = [...activeItems, { fieldId: "__img", imageUrl: url, x: 10, y: 10, w: 25, h: 10 }];
+    setActiveItems(next);
     pushHistory(next);
-    setSelected(items.length);
+    setSelected(activeItems.length);
   };
 
   const addSticker = () => {
     if (!canEdit) return;
     const next: LayoutItem[] = [
-      ...items,
+      ...activeItems,
       {
         fieldId: fields.find((f) => f.id === "novita")?.id ?? fields[0].id,
         x: 65, y: 8, w: 22, h: 12,
@@ -157,30 +178,30 @@ export default function LayoutEditor({
         sticker: { shape: "stella", bg: "#e8481c", rotation: -12, size: 16 },
       },
     ];
-    setItems(next);
+    setActiveItems(next);
     pushHistory(next);
-    setSelected(items.length);
+    setSelected(activeItems.length);
   };
 
   const updateSelected = (patch: Partial<LayoutItem> | { sticker: Partial<StickerStyle> }) => {
     if (selected === null) return;
-    const next = items.map((it, i) => {
+    const next = activeItems.map((it, i) => {
       if (i !== selected) return it;
       if ("sticker" in patch && it.sticker) {
         return { ...it, sticker: { ...it.sticker, ...(patch.sticker as Partial<StickerStyle>) } };
       }
       return { ...it, ...(patch as Partial<LayoutItem>) };
     });
-    setItems(next);
+    setActiveItems(next);
     pushHistory(next);
   };
 
-  const selItem = selected !== null ? items[selected] : null;
+  const selItem = selected !== null ? activeItems[selected] : null;
 
   const removeSelected = () => {
     if (selected === null) return;
-    const next = items.filter((_, i) => i !== selected);
-    setItems(next);
+    const next = activeItems.filter((_, i) => i !== selected);
+    setActiveItems(next);
     pushHistory(next);
     setSelected(null);
   };
@@ -188,14 +209,14 @@ export default function LayoutEditor({
   const doSave = () => {
     startTransition(async () => {
       await (area === "zoo" ? saveZooLayout : saveLayout)(
-        format.id, scopeParam, tipologie.join(","), JSON.stringify(items), JSON.stringify(border)
+        format.id, scopeParam, tipologie.join(","), JSON.stringify(items), JSON.stringify(border), JSON.stringify(itemsNoPhoto)
       );
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     });
   };
 
-  const usedFields = new Set(items.map((i) => i.fieldId));
+  const usedFields = new Set(activeItems.map((i) => i.fieldId));
 
   return (
     <div className="layout-editor">
@@ -240,10 +261,19 @@ export default function LayoutEditor({
 
       <div>
         <div style={{ display: "flex", gap: 6, marginBottom: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 4 }}>
+            <button type="button" className={`btn btn-sm ${mode === "normal" ? "" : "btn-outline"}`} onClick={() => switchMode("normal")}>
+              Foglio normale
+            </button>
+            <button type="button" className={`btn btn-sm ${mode === "noPhoto" ? "" : "btn-outline"}`} onClick={() => switchMode("noPhoto")}
+              title="Cosa stampare quando il prodotto non ha una foto caricata">
+              Foglio senza foto
+            </button>
+          </div>
           {canEdit && (
             <>
-              <button type="button" className="btn btn-outline btn-sm" onClick={undo} disabled={historyPos.current === 0} title="Annulla (indietro)">↶ Indietro</button>
-              <button type="button" className="btn btn-outline btn-sm" onClick={redo} disabled={historyPos.current >= history.current.length - 1} title="Ripristina (avanti)">↷ Avanti</button>
+              <button type="button" className="btn btn-outline btn-sm" onClick={undo} disabled={activeHistoryPos.current === 0} title="Annulla (indietro)">↶ Indietro</button>
+              <button type="button" className="btn btn-outline btn-sm" onClick={redo} disabled={activeHistoryPos.current >= activeHistory.current.length - 1} title="Ripristina (avanti)">↷ Avanti</button>
             </>
           )}
           <div style={{ display: "flex", gap: 4, alignItems: "center", marginLeft: canEdit ? 10 : 0 }}>
@@ -252,6 +282,12 @@ export default function LayoutEditor({
             <button type="button" className="btn btn-outline btn-sm" onClick={() => setZoom((z) => Math.min(2.6, +(z + 0.2).toFixed(1)))} title="Ingrandisci">＋</button>
           </div>
         </div>
+        {mode === "noPhoto" && (
+          <p style={{ fontSize: 12, color: "var(--muted)", margin: "0 0 8px" }}>
+            Questo foglio si stampa al posto di quello normale solo quando il prodotto non ha una foto caricata:
+            di solito conviene allargare gli altri campi per riempire lo spazio che lascerebbe libero la foto.
+          </p>
+        )}
         <div style={{ maxHeight: "82vh", overflow: "auto", border: "1px solid var(--line)", borderRadius: 8, padding: 12, background: "#f4f5f2" }}>
         <div
           ref={canvasRef}
@@ -267,7 +303,7 @@ export default function LayoutEditor({
           onMouseLeave={endDrag}
           onMouseDown={() => setSelected(null)}
         >
-          {items.map((item, i) => {
+          {activeItems.map((item, i) => {
             const meta = fields.find((f) => f.id === item.fieldId);
             if (item.sticker) {
               return (
@@ -278,14 +314,14 @@ export default function LayoutEditor({
                   onMouseDown={(e) => onMouseDown(e, i, "move")}
                 >
                   <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", color: item.color ?? "#fff", fontWeight: 800, fontSize: ((item.sticker.size ?? 16) * scale) / 2.4, lineHeight: 1.05, ...stickerShapeStyle(item.sticker) }}>
-                    {sampleValues[item.fieldId] || meta?.label || "Sticker"}
+                    {previewValues[item.fieldId] || meta?.label || "Sticker"}
                   </div>
                   {canEdit && <span className="resize-handle" onMouseDown={(e) => onMouseDown(e, i, "resize")} />}
                 </div>
               );
             }
             const isImage = isImageField(item.fieldId);
-            const imgSrc = item.fieldId === "__img" ? item.imageUrl : sampleValues[item.fieldId];
+            const imgSrc = item.fieldId === "__img" ? item.imageUrl : previewValues[item.fieldId];
             if (isImage) {
               return (
                 <div
@@ -311,9 +347,12 @@ export default function LayoutEditor({
             }
             const isPrice = isPriceField(item.fieldId);
             const fontSize = ((item.size ?? meta?.size ?? 11) * scale) / 2.4;
-            const raw = sampleValues[item.fieldId] ?? "";
+            const raw = previewValues[item.fieldId] ?? "";
             // il valore arriva già con "€" quando previsto (es. offerte Zoo): non va riaggiunto,
-            // basta separare i centesimi per renderli più piccoli e in apice
+            // basta separare i centesimi per renderli più piccoli e allineati in alto. Non un <sup>
+            // con vertical-align: dentro un contenitore posizionato, e soprattutto in stampa, quel
+            // calcolo dipende dai metrici del font e può finire in basso invece che in alto — con
+            // un flex "allineati in alto" la posizione non dipende dal motore di rendering.
             const [intPart, centPart] = raw.split(",");
             return (
               <div
@@ -335,7 +374,12 @@ export default function LayoutEditor({
                 onMouseDown={(e) => onMouseDown(e, i, "move")}
               >
                 {isPrice ? (
-                  raw ? <>{intPart}{centPart !== undefined && <sup style={{ fontSize: "0.5em", lineHeight: 0 }}>,{centPart}</sup>}</> : ""
+                  raw ? (
+                    <span style={{ display: "inline-flex", alignItems: "flex-start" }}>
+                      <span>{intPart}</span>
+                      {centPart !== undefined && <span style={{ fontSize: "0.5em", marginLeft: "0.05em" }}>,{centPart}</span>}
+                    </span>
+                  ) : ""
                 ) : (
                   raw || meta?.label
                 )}

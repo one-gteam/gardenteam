@@ -630,33 +630,14 @@ export async function uploadLayoutImage(scopeParam: string, formData: FormData) 
 
 /* ================== Layout ================== */
 
-/** Salva il layout per formato+ambito (items in JSON dal client editor). */
-export async function saveLayout(
-  formatId: string,
-  scopeParam: string,
-  tipologieCsv: string,
-  itemsJson: string,
-  borderJson: string
-) {
-  const user = await requireStampeUser();
-  const db = await getStampeDb();
-  const academyDb = await getDb();
-  const scope = resolveScope(user, scopeParam, academyDb);
-  if (scope.type === "system" && !isConsortiumEditor(user)) return;
-
-  let items: unknown;
-  try {
-    items = JSON.parse(itemsJson);
-  } catch {
-    return;
-  }
-  if (!Array.isArray(items)) return;
-  if (isStoreBlocked(db, scope)) return;
-  const clean = (items as Record<string, unknown>[])
+/** Ripulisce un array di LayoutItem grezzo dal client: stessa validazione per il foglio normale e per quello senza foto. */
+function sanitizeLayoutItems(raw: unknown, isKnownField: (fieldId: string) => boolean) {
+  if (!Array.isArray(raw)) return [];
+  return (raw as Record<string, unknown>[])
     .filter(
       (i) =>
         typeof i.fieldId === "string" &&
-        (i.fieldId === "__img" ? typeof i.imageUrl === "string" : db.fields.some((f) => f.id === i.fieldId))
+        (i.fieldId === "__img" ? typeof i.imageUrl === "string" : isKnownField(i.fieldId))
     )
     .map((i) => ({
       fieldId: i.fieldId as string,
@@ -685,6 +666,40 @@ export async function saveLayout(
           }
         : {}),
     }));
+}
+
+/** Salva il layout per formato+ambito (items in JSON dal client editor). */
+export async function saveLayout(
+  formatId: string,
+  scopeParam: string,
+  tipologieCsv: string,
+  itemsJson: string,
+  borderJson: string,
+  itemsNoPhotoJson: string
+) {
+  const user = await requireStampeUser();
+  const db = await getStampeDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  if (scope.type === "system" && !isConsortiumEditor(user)) return;
+
+  let items: unknown;
+  try {
+    items = JSON.parse(itemsJson);
+  } catch {
+    return;
+  }
+  if (!Array.isArray(items)) return;
+  if (isStoreBlocked(db, scope)) return;
+  const isKnownField = (fieldId: string) => db.fields.some((f) => f.id === fieldId);
+  const clean = sanitizeLayoutItems(items, isKnownField);
+  let itemsNoPhotoRaw: unknown;
+  try {
+    itemsNoPhotoRaw = JSON.parse(itemsNoPhotoJson);
+  } catch {
+    itemsNoPhotoRaw = [];
+  }
+  const cleanNoPhoto = sanitizeLayoutItems(itemsNoPhotoRaw, isKnownField);
 
   let borderRaw: unknown;
   try {
@@ -709,10 +724,11 @@ export async function saveLayout(
       l.tipologie.join(",") === tipologie.join(",")
   );
   if (!layout) {
-    layout = { id: `l_${Date.now()}`, formatId, scopeType: scope.type as ScopeType, scopeId: scope.id, tipologie, items: clean, border };
+    layout = { id: `l_${Date.now()}`, formatId, scopeType: scope.type as ScopeType, scopeId: scope.id, tipologie, items: clean, itemsNoPhoto: cleanNoPhoto, border };
     db.layouts.push(layout);
   } else {
     layout.items = clean;
+    layout.itemsNoPhoto = cleanNoPhoto;
     layout.tipologie = tipologie;
     layout.border = border;
   }

@@ -100,6 +100,8 @@ export interface CardLayout {
   scopeId: string;
   tipologie: string[]; // vuoto = tutte
   items: LayoutItem[];
+  /** Versione alternativa usata in stampa quando il campo foto non ha un'immagine. */
+  itemsNoPhoto?: LayoutItem[];
   border?: LayoutBorder;
 }
 
