@@ -13,6 +13,7 @@ import {
   cartelloValues,
   backgroundFor,
   isStoreBlocked,
+  layoutMargins,
 } from "@/lib/stampe";
 import { deleteLayout, uploadScopedBackground, removeScopedBackground, uploadLayoutImage } from "@/lib/stampe-actions";
 
@@ -116,7 +117,7 @@ export default async function LayoutPage({
           initialNome={current?.nome}
           initialItems={current?.items ?? []}
           initialItemsNoPhoto={current?.itemsNoPhoto}
-          initialMargin={current?.margin}
+          initialMargins={layoutMargins(current)}
           scopeParam={scopeParam}
           initialTipologie={current?.tipologie ?? []}
           tipologieDisponibili={tipologie}

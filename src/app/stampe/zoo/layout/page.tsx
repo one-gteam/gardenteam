@@ -4,7 +4,7 @@ import { getDb } from "@/lib/db";
 import StampeHeader from "@/components/stampe/StampeHeader";
 import LayoutEditor from "@/components/stampe/LayoutEditor";
 import AutoSubmitSelect from "@/components/stampe/AutoSubmitSelect";
-import { canAccessArea, isZooEditor, scopesForUser, resolveScope } from "@/lib/stampe";
+import { canAccessArea, isZooEditor, scopesForUser, resolveScope, layoutMargins } from "@/lib/stampe";
 import {
   getZooDb, activeCampaign, zooCartelloValues, ZOO_FIELDS, ZOO_FORMATS,
 } from "@/lib/zoo";
@@ -118,7 +118,7 @@ export default async function ZooLayoutPage({
           initialNome={current?.nome}
           initialItems={current?.items ?? []}
           initialItemsNoPhoto={current?.itemsNoPhoto}
-          initialMargin={current?.margin}
+          initialMargins={layoutMargins(current)}
           scopeParam={scopeParam}
           initialTipologie={current?.tipologie ?? []}
           tipologieDisponibili={tipologieDisponibili}

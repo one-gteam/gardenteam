@@ -1,11 +1,29 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import type { LayoutItem, PrintField, PrintFormat, StickerStyle } from "@/lib/stampe";
+import type { LayoutItem, LayoutMargins, PrintField, PrintFormat, StickerStyle } from "@/lib/stampe";
 import { LAYOUT_FONTS, layoutFontCss } from "@/lib/layout-fonts";
 import { saveLayout } from "@/lib/stampe-actions";
 import { saveZooLayout } from "@/lib/zoo-actions";
 import { stickerShapeStyle } from "./stickerStyle";
+
+/** Riquadro del pannello di destra richiudibile, per non dover scorrere fra tante sezioni aperte. */
+function Sezione({
+  titolo, aperta = true, children,
+}: {
+  titolo: string;
+  aperta?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <details open={aperta} style={{ borderBottom: "1.5px dashed var(--line)", paddingBottom: 10, marginBottom: 10 }}>
+      <summary style={{ cursor: "pointer", fontWeight: 700, fontSize: 14, padding: "2px 0", listStyle: "revert" }}>
+        {titolo}
+      </summary>
+      <div style={{ marginTop: 8 }}>{children}</div>
+    </details>
+  );
+}
 
 /** Editor drag & drop del layout cartello: trascina i campi, ridimensionali dall'angolo, si salva da solo. */
 export default function LayoutEditor({
@@ -15,7 +33,7 @@ export default function LayoutEditor({
   initialNome,
   initialItems,
   initialItemsNoPhoto,
-  initialMargin,
+  initialMargins,
   scopeParam,
   initialTipologie,
   tipologieDisponibili,
@@ -32,8 +50,8 @@ export default function LayoutEditor({
   initialItems: LayoutItem[];
   /** Foglio alternativo per quando manca la foto: se assente si parte da una copia del foglio normale. */
   initialItemsNoPhoto?: LayoutItem[];
-  /** Margine dai bordi del foglio, in mm. */
-  initialMargin?: number;
+  /** Margini del foglio, in mm, uno per lato. */
+  initialMargins?: LayoutMargins;
   scopeParam: string;
   initialTipologie: string[];
   tipologieDisponibili: string[];
@@ -51,7 +69,7 @@ export default function LayoutEditor({
   const [mode, setMode] = useState<"normal" | "noPhoto">("normal");
   const activeItems = mode === "normal" ? items : itemsNoPhoto;
   const setActiveItems = mode === "normal" ? setItems : setItemsNoPhoto;
-  const [margin, setMargin] = useState(initialMargin ?? 0);
+  const [margins, setMargins] = useState<LayoutMargins>(initialMargins ?? { top: 0, right: 0, bottom: 0, left: 0 });
   const [tipologie, setTipologie] = useState<string[]>(initialTipologie);
   const [selected, setSelected] = useState<number | null>(null);
   const [saved, setSaved] = useState(false);
@@ -127,6 +145,31 @@ export default function LayoutEditor({
     drag.current = { index, mode, startX: e.clientX, startY: e.clientY, orig: { ...activeItems[index] } };
   };
 
+  /*
+   * Aggancio ai margini: quando un bordo del campo arriva vicino a una guida
+   * (margine o bordo del foglio) ci si appoggia esattamente sopra, così i campi
+   * si allineano da soli senza dover azzeccare il pixel al mouse.
+   */
+  const SOGLIA_MM = 1.5;
+  const guideX = [margins.left, format.w - margins.right, 0, format.w].map(pctFromMmX);
+  const guideY = [margins.top, format.h - margins.bottom, 0, format.h].map(pctFromMmY);
+  const sogliaX = pctFromMmX(SOGLIA_MM);
+  const sogliaY = pctFromMmY(SOGLIA_MM);
+  /** Avvicina `v` alla guida più vicina entro la soglia; `extent` sposta il confronto sul bordo opposto. */
+  const aggancia = (v: number, guide: number[], soglia: number, extent = 0) => {
+    let best = v;
+    let bestDist = soglia;
+    for (const g of guide) {
+      const dInizio = Math.abs(v - g);
+      if (dInizio < bestDist) { bestDist = dInizio; best = g; }
+      if (extent > 0) {
+        const dFine = Math.abs(v + extent - g);
+        if (dFine < bestDist) { bestDist = dFine; best = g - extent; }
+      }
+    }
+    return best;
+  };
+
   const onMouseMove = (e: React.MouseEvent) => {
     if (!drag.current) return;
     const { index, mode, startX, startY, orig } = drag.current;
@@ -136,16 +179,24 @@ export default function LayoutEditor({
       prev.map((it, i) => {
         if (i !== index) return it;
         if (mode === "move") {
+          // si aggancia sia il bordo iniziale sia quello finale (extent = larghezza/altezza)
+          const x = aggancia(Math.max(0, Math.min(100 - it.w, orig.x + dx)), guideX, sogliaX, it.w);
+          const y = aggancia(Math.max(0, Math.min(100 - it.h, orig.y + dy)), guideY, sogliaY, it.h);
           return {
             ...it,
-            x: Math.max(0, Math.min(100 - it.w, orig.x + dx)),
-            y: Math.max(0, Math.min(100 - it.h, orig.y + dy)),
+            x: Math.max(0, Math.min(100 - it.w, x)),
+            y: Math.max(0, Math.min(100 - it.h, y)),
           };
         }
+        // in ridimensionamento si aggancia il bordo che si sta trascinando (destro/inferiore)
+        const wGrezza = Math.max(4, Math.min(100 - it.x, orig.w + dx));
+        const hGrezza = Math.max(2, Math.min(100 - it.y, orig.h + dy));
+        const w = aggancia(it.x + wGrezza, guideX, sogliaX) - it.x;
+        const h = aggancia(it.y + hGrezza, guideY, sogliaY) - it.y;
         return {
           ...it,
-          w: Math.max(4, Math.min(100 - it.x, orig.w + dx)),
-          h: Math.max(2, Math.min(100 - it.y, orig.h + dy)),
+          w: Math.max(4, Math.min(100 - it.x, w)),
+          h: Math.max(2, Math.min(100 - it.y, h)),
         };
       })
     );
@@ -220,7 +271,7 @@ export default function LayoutEditor({
     startTransition(async () => {
       const save = area === "zoo" ? saveZooLayout : saveLayout;
       const res = await save(
-        layoutId, format.id, scopeParam, nome, tipologie.join(","), JSON.stringify(items), String(margin), JSON.stringify(itemsNoPhoto)
+        layoutId, format.id, scopeParam, nome, tipologie.join(","), JSON.stringify(items), JSON.stringify(margins), JSON.stringify(itemsNoPhoto)
       );
       if (res.ok && res.id && res.id !== layoutId) {
         setLayoutId(res.id);
@@ -250,7 +301,7 @@ export default function LayoutEditor({
     const t = setTimeout(() => doSaveRef.current(), 900);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, itemsNoPhoto, margin, tipologie, nome]);
+  }, [items, itemsNoPhoto, margins, tipologie, nome]);
 
   /** Crea un nuovo layout a partire dal contenuto attuale (duplica quello aperto, o lo salva con un nuovo nome). */
   const doDuplicate = () => {
@@ -259,7 +310,7 @@ export default function LayoutEditor({
       const save = area === "zoo" ? saveZooLayout : saveLayout;
       const finalName = dupName.trim() || `${nome || format.name} (copia)`;
       const res = await save(
-        "", format.id, scopeParam, finalName, tipologie.join(","), JSON.stringify(items), String(margin), JSON.stringify(itemsNoPhoto)
+        "", format.id, scopeParam, finalName, tipologie.join(","), JSON.stringify(items), JSON.stringify(margins), JSON.stringify(itemsNoPhoto)
       );
       if (res.ok && res.id) window.location.href = `${layoutUrlBase}&layout=${res.id}`;
     });
@@ -345,16 +396,30 @@ export default function LayoutEditor({
             width: W, height: H,
             backgroundImage: format.background ? `url(${format.background})` : undefined, backgroundSize: "cover",
             boxSizing: "border-box",
-            padding: margin > 0 ? margin * scale : undefined,
           }}
           onMouseMove={onMouseMove}
           onMouseUp={endDrag}
           onMouseLeave={endDrag}
           onMouseDown={() => setSelected(null)}
         >
-          {margin > 0 && (
-            // guida visiva del margine: i campi sono già posizionati rispetto a quest'area (vedi il padding sopra)
-            <div style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", outline: "1px dashed #274b7a", pointerEvents: "none", boxSizing: "border-box" }} />
+          {(margins.top > 0 || margins.right > 0 || margins.bottom > 0 || margins.left > 0) && (
+            /*
+             * Guide dei margini: linee tratteggiate a cui i campi si agganciano.
+             * Sono solo un riferimento visivo — NON spostano i campi da sole (un
+             * padding sul foglio non toccherebbe comunque i campi, che sono
+             * posizionati in modo assoluto: le percentuali si calcolano sul
+             * padding box, non sul contenuto).
+             */
+            <div
+              style={{
+                position: "absolute", pointerEvents: "none", boxSizing: "border-box",
+                left: margins.left * scale,
+                top: margins.top * scale,
+                width: W - (margins.left + margins.right) * scale,
+                height: H - (margins.top + margins.bottom) * scale,
+                outline: "1px dashed #c2410c",
+              }}
+            />
           )}
           {activeItems.map((item, i) => {
             const meta = fields.find((f) => f.id === item.fieldId);
@@ -380,7 +445,12 @@ export default function LayoutEditor({
                 <div
                   key={i}
                   className={`editor-item ${selected === i ? "selected" : ""}`}
-                  style={{ left: `${item.x}%`, top: `${item.y}%`, width: `${item.w}%`, height: `${item.h}%`, cursor: canEdit ? "move" : "default" }}
+                  style={{
+                    left: `${item.x}%`, top: `${item.y}%`, width: `${item.w}%`, height: `${item.h}%`,
+                    cursor: canEdit ? "move" : "default",
+                    background: item.bg,
+                    borderRadius: item.radius ? item.radius * scale : undefined,
+                  }}
                   onMouseDown={(e) => onMouseDown(e, i, "move")}
                 >
                   {imgSrc ? (
@@ -423,6 +493,8 @@ export default function LayoutEditor({
                   color: isPrice ? "#c2410c" : "#1c2b21",
                   textAlign: item.align ?? (isPrice ? "right" : "left"),
                   cursor: canEdit ? "move" : "default",
+                  background: item.bg,
+                  borderRadius: item.radius ? item.radius * scale : undefined,
                 }}
                 onMouseDown={(e) => onMouseDown(e, i, "move")}
               >
@@ -455,8 +527,7 @@ export default function LayoutEditor({
       <div className="card" style={{ padding: 14 }}>
         {/* identità del layout: nome, e come farne una copia */}
         {canEdit && (
-          <div style={{ borderBottom: "1.5px dashed var(--line)", paddingBottom: 12, marginBottom: 12 }}>
-            <h3 style={{ marginTop: 0 }}>Layout</h3>
+          <Sezione titolo="Layout">
             <label className="field" style={{ marginBottom: 8 }}>
               Nome
               <input type="text" value={nome} onChange={(e) => setNome(e.target.value)} placeholder="es. Cartello Gatto" />
@@ -468,27 +539,35 @@ export default function LayoutEditor({
             <button type="button" className="btn btn-outline btn-sm" style={{ width: "100%" }} onClick={doDuplicate} disabled={pending}>
               Crea copia
             </button>
-          </div>
+          </Sezione>
         )}
         {/* proprietà del foglio: valgono per tutto il cartello, non per il campo selezionato */}
         {canEdit && (
-          <div style={{ borderBottom: "1.5px dashed var(--line)", paddingBottom: 12, marginBottom: 12 }}>
-            <h3 style={{ marginTop: 0 }}>Foglio ({format.w}×{format.h} mm)</h3>
-            <label className="field" style={{ marginBottom: 0 }}>
-              Margine dai bordi ({unita})
-              <input
-                type="number" step={passo} min={0} value={inUnita(margin)}
-                onChange={(e) => setMargin(Math.max(0, Math.min(30, daUnita(e.target.value))))}
-              />
-            </label>
-            <p style={{ fontSize: 11.5, color: "var(--muted)", margin: "4px 0 0" }}>
-              Spazio ai bordi del foglio in cui i campi non devono entrare (utile per il taglio della stampa).
+          <Sezione titolo={`Foglio (${format.w}×${format.h} mm)`} aperta={false}>
+            <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 6 }}>Margini ({unita})</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              {([["top", "Alto"], ["bottom", "Basso"], ["left", "Sinistra"], ["right", "Destra"]] as const).map(
+                ([lato, etichetta]) => (
+                  <label key={lato} className="field" style={{ marginBottom: 0 }}>
+                    {etichetta}
+                    <input
+                      type="number" step={passo} min={0} value={inUnita(margins[lato])}
+                      onChange={(e) =>
+                        setMargins((m) => ({ ...m, [lato]: Math.max(0, Math.min(50, daUnita(e.target.value))) }))
+                      }
+                    />
+                  </label>
+                )
+              )}
+            </div>
+            <p style={{ fontSize: 11.5, color: "var(--muted)", margin: "6px 0 0" }}>
+              Compaiono sul foglio come linee tratteggiate: trascinando un campo lì vicino, si aggancia da solo.
+              Servono ad allineare — non spostano i campi già posizionati.
             </p>
-          </div>
+          </Sezione>
         )}
         {selItem?.sticker && canEdit && (
-          <div style={{ borderBottom: "1.5px dashed var(--line)", paddingBottom: 12, marginBottom: 12 }}>
-            <h3 style={{ marginTop: 0 }}>Sticker selezionato</h3>
+          <Sezione titolo="Sticker selezionato">
             <label className="field">
               Campo associato
               <select value={selItem.fieldId} onChange={(e) => updateSelected({ fieldId: e.target.value })}>
@@ -529,11 +608,45 @@ export default function LayoutEditor({
               Dimensione testo: {selItem.sticker.size}
               <input type="range" min={6} max={60} value={selItem.sticker.size} onChange={(e) => updateSelected({ sticker: { size: Number(e.target.value) } })} style={{ width: "100%" }} />
             </label>
-          </div>
+          </Sezione>
+        )}
+        {/* sfondo e angoli: valgono per qualsiasi riquadro selezionato, testo o immagine che sia */}
+        {selItem && !selItem.sticker && canEdit && (
+          <Sezione titolo="Sfondo del riquadro" aperta={false}>
+            <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12.5, marginBottom: 8 }}>
+              <input
+                type="checkbox"
+                checked={selItem.bg !== undefined}
+                onChange={(e) => updateSelected({ bg: e.target.checked ? "#ffffff" : undefined })}
+              />
+              Riquadro con sfondo colorato
+            </label>
+            {selItem.bg !== undefined && (
+              <label className="field" style={{ marginBottom: 10 }}>
+                Colore
+                <input type="color" value={selItem.bg} onChange={(e) => updateSelected({ bg: e.target.value })}
+                  style={{ width: "100%", height: 34, padding: 2 }} />
+              </label>
+            )}
+            <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12.5, marginBottom: 6 }}>
+              <input
+                type="checkbox"
+                checked={(selItem.radius ?? 0) > 0}
+                onChange={(e) => updateSelected({ radius: e.target.checked ? 3 : 0 })}
+              />
+              Angoli arrotondati
+            </label>
+            {(selItem.radius ?? 0) > 0 && (
+              <label className="field" style={{ marginBottom: 0 }}>
+                Raggio: {inUnita(selItem.radius ?? 0)} {unita}
+                <input type="range" min={0} max={20} step={0.5} value={selItem.radius ?? 0}
+                  onChange={(e) => updateSelected({ radius: Number(e.target.value) })} style={{ width: "100%" }} />
+              </label>
+            )}
+          </Sezione>
         )}
         {selItem && !selItem.sticker && !isImageField(selItem.fieldId) && canEdit && (
-          <div style={{ borderBottom: "1.5px dashed var(--line)", paddingBottom: 12, marginBottom: 12 }}>
-            <h3 style={{ marginTop: 0 }}>Campo selezionato</h3>
+          <Sezione titolo="Campo selezionato">
             <label className="field">
               Carattere
               <select value={selItem.font ?? ""} onChange={(e) => updateSelected({ font: e.target.value })}>
@@ -620,27 +733,28 @@ export default function LayoutEditor({
                 <button type="button" className="btn btn-outline btn-sm" title="Basso" onClick={() => updateSelected({ y: 100 - selItem.h })}>⇣ Basso</button>
               </div>
             </label>
-          </div>
+          </Sezione>
         )}
-        <h3 style={{ marginTop: 0 }}>Collega a tipologie</h3>
-        <p style={{ fontSize: 12, color: "var(--muted)", margin: "0 0 8px" }}>
-          Nessuna selezione = layout valido per tutti i prodotti di questo formato.
-        </p>
-        <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 260, overflowY: "auto" }}>
-          {tipologieDisponibili.map((t) => (
-            <label key={t} style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 12.5 }}>
-              <input
-                type="checkbox"
-                checked={tipologie.includes(t)}
-                disabled={!canEdit}
-                onChange={(e) =>
-                  setTipologie((prev) => (e.target.checked ? [...prev, t] : prev.filter((x) => x !== t)))
-                }
-              />
-              {t}
-            </label>
-          ))}
-        </div>
+        <Sezione titolo="Collega a tipologie" aperta={false}>
+          <p style={{ fontSize: 12, color: "var(--muted)", margin: "0 0 8px" }}>
+            Nessuna selezione = layout valido per tutti i prodotti di questo formato.
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 260, overflowY: "auto" }}>
+            {tipologieDisponibili.map((t) => (
+              <label key={t} style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 12.5 }}>
+                <input
+                  type="checkbox"
+                  checked={tipologie.includes(t)}
+                  disabled={!canEdit}
+                  onChange={(e) =>
+                    setTipologie((prev) => (e.target.checked ? [...prev, t] : prev.filter((x) => x !== t)))
+                  }
+                />
+                {t}
+              </label>
+            ))}
+          </div>
+        </Sezione>
         {canEdit ? (
           <>
             <p style={{ fontSize: 11.5, color: "var(--muted)", margin: "14px 0 6px", textAlign: "center" }}>

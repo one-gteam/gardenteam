@@ -83,6 +83,45 @@ export interface LayoutItem {
   italic?: boolean; // corsivo (nessun default: solo per elemento)
   align?: "left" | "center" | "right"; // allineamento del testo nel paragrafo
   font?: string; // chiave di LAYOUT_FONTS (vedi lib/layout-fonts): sovrascrive il carattere del campo
+  bg?: string; // colore di sfondo del riquadro (assente = trasparente)
+  radius?: number; // raggio degli angoli arrotondati, in mm (0/assente = angoli vivi)
+}
+
+/** Margini del foglio, in mm, uno per lato. */
+export interface LayoutMargins {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
+export const NO_MARGINS: LayoutMargins = { top: 0, right: 0, bottom: 0, left: 0 };
+
+/**
+ * Margini di un layout, con compatibilità all'indietro: i primi layout avevano
+ * un unico valore `margin` uguale sui quattro lati.
+ */
+export function layoutMargins(l?: { margins?: LayoutMargins; margin?: number }): LayoutMargins {
+  if (l?.margins) return l.margins;
+  const m = l?.margin ?? 0;
+  return { top: m, right: m, bottom: m, left: m };
+}
+
+/**
+ * Margini per lato (mm) come arrivano dal client, entro limiti ragionevoli.
+ * Vive qui e non in stampe-actions perché quello è un modulo "use server",
+ * dove ogni export deve essere una funzione asincrona.
+ */
+export function sanitizeMargins(json: string): LayoutMargins {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(json);
+  } catch {
+    raw = null;
+  }
+  const m = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const lato = (v: unknown) => Math.max(0, Math.min(50, Number(v) || 0));
+  return { top: lato(m.top), right: lato(m.right), bottom: lato(m.bottom), left: lato(m.left) };
 }
 
 export interface CardLayout {
@@ -96,7 +135,9 @@ export interface CardLayout {
   items: LayoutItem[];
   /** Versione alternativa usata in stampa quando il campo foto non ha un'immagine. */
   itemsNoPhoto?: LayoutItem[];
-  /** Margine dai bordi del foglio (mm): spazio che i campi non devono occupare. */
+  /** Margini del foglio (mm, per lato): guide a cui i campi si agganciano nell'editor. */
+  margins?: LayoutMargins;
+  /** Vecchio margine unico, tenuto solo per leggere i layout salvati prima. */
   margin?: number;
 }
 

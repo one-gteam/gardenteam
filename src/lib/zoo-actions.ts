@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { requireUser } from "./auth";
 import { getDb } from "./db";
-import { canAccessStampe, isZooEditor, resolveScope } from "./stampe";
+import { canAccessStampe, isZooEditor, resolveScope, sanitizeMargins } from "./stampe";
 import { LAYOUT_FONTS } from "./layout-fonts";
 import {
   getZooDb, saveZooDb, ZooDB, ZooParent, campagnaInLavorazione, campagnaInCorso, campaignStato, NO_VOLANTINO,
@@ -1394,6 +1394,8 @@ function sanitizeZooLayoutItems(raw: unknown, isKnownField: (fieldId: string) =>
       ...(typeof i.italic === "boolean" ? { italic: i.italic as boolean } : {}),
       ...(["left", "center", "right"].includes(i.align as string) ? { align: i.align as "left" | "center" | "right" } : {}),
       ...(typeof i.font === "string" && LAYOUT_FONTS.some((f) => f.id === i.font) ? { font: i.font as string } : {}),
+      ...(typeof i.bg === "string" && /^#[0-9a-fA-F]{3,8}$/.test(i.bg) ? { bg: i.bg as string } : {}),
+      ...(Number.isFinite(Number(i.radius)) ? { radius: Math.max(0, Math.min(40, Number(i.radius))) } : {}),
       ...(i.sticker && typeof i.sticker === "object" ? { sticker: i.sticker as import("./stampe").StickerStyle } : {}),
     }));
 }
@@ -1411,7 +1413,7 @@ function sanitizeZooLayoutItems(raw: unknown, isKnownField: (fieldId: string) =>
  */
 export async function saveZooLayout(
   layoutId: string, formatId: string, scopeParam: string, nome: string, tipologieCsv: string,
-  itemsJson: string, marginRaw: string, itemsNoPhotoJson: string
+  itemsJson: string, marginsJson: string, itemsNoPhotoJson: string
 ): Promise<{ ok: boolean; id?: string }> {
   const user = await requireZooUser();
   const db = await getZooDb();
@@ -1427,7 +1429,7 @@ export async function saveZooLayout(
   let itemsNoPhotoRaw: unknown;
   try { itemsNoPhotoRaw = JSON.parse(itemsNoPhotoJson); } catch { itemsNoPhotoRaw = []; }
   const cleanNoPhoto = sanitizeZooLayoutItems(itemsNoPhotoRaw, isKnownField);
-  const margin = Math.max(0, Math.min(30, Number(marginRaw) || 0));
+  const margins = sanitizeMargins(marginsJson);
   const tipologie = tipologieCsv.split(",").map((t) => t.trim()).filter(Boolean);
   const nomePulito = nome.trim().slice(0, 60);
 
@@ -1436,14 +1438,15 @@ export async function saveZooLayout(
     existing.items = clean;
     existing.itemsNoPhoto = cleanNoPhoto;
     existing.tipologie = tipologie;
-    existing.margin = margin;
+    existing.margins = margins;
+    existing.margin = undefined; // sostituito dai margini per lato
     existing.nome = nomePulito || undefined;
     await saveZooDb(db);
     return { ok: true, id: existing.id };
   }
   const nuovo = {
     id: `zl_${Date.now()}`, formatId, scopeType: scope.type, scopeId: scope.id,
-    nome: nomePulito || undefined, tipologie, items: clean, itemsNoPhoto: cleanNoPhoto, margin,
+    nome: nomePulito || undefined, tipologie, items: clean, itemsNoPhoto: cleanNoPhoto, margins,
   };
   db.zooLayouts.push(nuovo);
   await saveZooDb(db);

@@ -14,6 +14,7 @@ import {
   isStoreBlocked,
   effectiveValue,
   ScopeType,
+  sanitizeMargins,
 } from "./stampe";
 import { LAYOUT_FONTS } from "./layout-fonts";
 
@@ -652,6 +653,8 @@ function sanitizeLayoutItems(raw: unknown, isKnownField: (fieldId: string) => bo
       ...(typeof i.italic === "boolean" ? { italic: i.italic } : {}),
       ...(["left", "center", "right"].includes(i.align as string) ? { align: i.align as "left" | "center" | "right" } : {}),
       ...(typeof i.font === "string" && LAYOUT_FONTS.some((f) => f.id === i.font) ? { font: i.font as string } : {}),
+      ...(typeof i.bg === "string" && /^#[0-9a-fA-F]{3,8}$/.test(i.bg) ? { bg: i.bg } : {}),
+      ...(Number.isFinite(Number(i.radius)) ? { radius: Math.max(0, Math.min(40, Number(i.radius))) } : {}),
       ...(i.sticker && typeof i.sticker === "object"
         ? {
             sticker: {
@@ -682,7 +685,7 @@ export async function saveLayout(
   nome: string,
   tipologieCsv: string,
   itemsJson: string,
-  marginRaw: string,
+  marginsJson: string,
   itemsNoPhotoJson: string
 ): Promise<{ ok: boolean; id?: string }> {
   const user = await requireStampeUser();
@@ -708,7 +711,7 @@ export async function saveLayout(
     itemsNoPhotoRaw = [];
   }
   const cleanNoPhoto = sanitizeLayoutItems(itemsNoPhotoRaw, isKnownField);
-  const margin = Math.max(0, Math.min(30, Number(marginRaw) || 0));
+  const margins = sanitizeMargins(marginsJson);
   const tipologie = tipologieCsv.split(",").map((t) => t.trim()).filter(Boolean);
   const nomePulito = nome.trim().slice(0, 60);
 
@@ -716,14 +719,15 @@ export async function saveLayout(
   if (!layout) {
     layout = {
       id: `l_${Date.now()}`, formatId, scopeType: scope.type as ScopeType, scopeId: scope.id,
-      nome: nomePulito || undefined, tipologie, items: clean, itemsNoPhoto: cleanNoPhoto, margin,
+      nome: nomePulito || undefined, tipologie, items: clean, itemsNoPhoto: cleanNoPhoto, margins,
     };
     db.layouts.push(layout);
   } else {
     layout.items = clean;
     layout.itemsNoPhoto = cleanNoPhoto;
     layout.tipologie = tipologie;
-    layout.margin = margin;
+    layout.margins = margins;
+    layout.margin = undefined; // sostituito dai margini per lato
     layout.nome = nomePulito || undefined;
   }
   await saveStampeDb(db);
