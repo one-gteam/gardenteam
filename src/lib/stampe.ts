@@ -120,7 +120,7 @@ export function sanitizeMargins(json: string): LayoutMargins {
     raw = null;
   }
   const m = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
-  const lato = (v: unknown) => Math.max(0, Math.min(50, Number(v) || 0));
+  const lato = (v: unknown) => Math.max(0, Math.min(100, Number(v) || 0));
   return { top: lato(m.top), right: lato(m.right), bottom: lato(m.bottom), left: lato(m.left) };
 }
 

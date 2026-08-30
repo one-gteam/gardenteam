@@ -132,7 +132,7 @@ export default function LayoutEditor({
   const pctFromMmX = (mm: number) => (mm / format.w) * 100;
   const pctFromMmY = (mm: number) => (mm / format.h) * 100;
   // le misure si possono leggere e scrivere in mm o in cm, a scelta
-  const [unita, setUnita] = useState<"mm" | "cm">("mm");
+  const [unita, setUnita] = useState<"mm" | "cm">("cm");
   const inUnita = (mm: number) => (unita === "cm" ? (mm / 10).toFixed(2) : mm.toFixed(1));
   const daUnita = (v: string) => (unita === "cm" ? (Number(v) || 0) * 10 : Number(v) || 0);
   const passo = unita === "cm" ? 0.05 : 0.5;
@@ -553,7 +553,7 @@ export default function LayoutEditor({
                     <input
                       type="number" step={passo} min={0} value={inUnita(margins[lato])}
                       onChange={(e) =>
-                        setMargins((m) => ({ ...m, [lato]: Math.max(0, Math.min(50, daUnita(e.target.value))) }))
+                        setMargins((m) => ({ ...m, [lato]: Math.max(0, Math.min(100, daUnita(e.target.value))) }))
                       }
                     />
                   </label>
