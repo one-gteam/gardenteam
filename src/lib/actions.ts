@@ -201,17 +201,6 @@ async function requireEditableCourse(courseId: string) {
   return { admin, db, course: course! };
 }
 
-export async function login(formData: FormData) {
-  const userId = String(formData.get("userId") ?? "");
-  const db = await getDb();
-  const user = db.users.find((u) => u.id === userId);
-  if (!user) redirect("/login");
-  if (user!.active === false) redirect("/login?disattivato=1");
-  const store = await cookies();
-  store.set(AUTH_COOKIE, user.id, { httpOnly: true, sameSite: "lax", path: "/" });
-  redirect(postLoginPath(user!));
-}
-
 export async function logout() {
   const store = await cookies();
   store.delete(AUTH_COOKIE);

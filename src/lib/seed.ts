@@ -79,8 +79,6 @@ export function buildSeed(): DB {
     { id: "u16", firstName: "Carla", lastName: "Stampini", email: "c.stampini@rosaflor.it", role: "store_admin", tenantId: "t1", storeId: "s1", hireDate: daysAgo(500), points: 0, badges: [], jobTitle: "Addetta ufficio (solo Stampe)", active: true, sites: ["arredo", "zoo", "piante"] },
     { id: "u17", firstName: "Zoe", lastName: "Martini", email: "z.martini@gardenteam.biz", role: "zoo_manager", hireDate: daysAgo(700), points: 0, badges: [], jobTitle: "Gestore Offerte Zoo Consorzio", active: true },
     { id: "u18", firstName: "Pietro", lastName: "Fiori", email: "p.fiori@gardenteam.biz", role: "piante_manager", hireDate: daysAgo(650), points: 0, badges: [], jobTitle: "Gestore Cartelli Piante Consorzio", active: true },
-    // account condiviso per far provare il portale: entra con Test456 / Test456
-    { id: "u_test", firstName: "Utente", lastName: "Test", email: "test456", role: "system_admin", hireDate: daysAgo(100), points: 0, badges: [], jobTitle: "Account di prova", active: true, passwordHash: "617e4b6bc68050f35eed15ac66ccc711:7b56bb863629dc54382eb6ef81427764b01904c2ace56d1bae4028da2d6a3b7d7a61ac0da399f3a8dbe8c36eee01b758c8e7d6f9fc488d0b69cbddd233c12017" },
   ];
 
   const female = new Set(["u2", "u4", "u6", "u8", "u10", "u12", "u14"]);

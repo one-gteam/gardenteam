@@ -1,6 +1,5 @@
 import { getDb } from "@/lib/db";
-import { ROLE_LABELS } from "@/lib/types";
-import { login, loginWithPassword } from "@/lib/actions";
+import { loginWithPassword } from "@/lib/actions";
 
 export default async function LoginPage({
   searchParams,
@@ -9,9 +8,6 @@ export default async function LoginPage({
 }) {
   const { disattivato, errore, attivato } = await searchParams;
   const db = await getDb();
-  const personas = ["u1", "u2", "u3", "u5", "u17", "u18", "u4", "u6", "u7", "u8", "u16"]
-    .map((id) => db.users.find((u) => u.id === id)!)
-    .filter(Boolean);
 
   return (
     <div>
@@ -78,46 +74,6 @@ export default async function LoginPage({
           </div>
         </div>
 
-        <details style={{ marginTop: 26 }}>
-          <summary style={{ cursor: "pointer", fontWeight: 700, color: "var(--muted)" }}>
-            Accesso rapido demo (per provare i vari ruoli senza password)
-          </summary>
-          <div className="grid grid-2" style={{ marginTop: 14 }}>
-            {personas.map((u) => {
-              const tenant = db.tenants.find((t) => t.id === u.tenantId);
-              const store = db.stores.find((s) => s.id === u.storeId);
-              const dept = db.departments.find((d) => d.id === u.departmentId);
-              return (
-                <form key={u.id} action={login}>
-                  <input type="hidden" name="userId" value={u.id} />
-                  <button type="submit" className="persona-btn">
-                    <div className="avatar" style={{ background: tenant?.color ?? "#00652e", color: "#fff", width: 42, height: 42 }}>
-                      {u.firstName[0]}
-                      {u.lastName[0]}
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 700 }}>
-                        {u.firstName} {u.lastName}
-                      </div>
-                      <div className="persona-role">
-                        {ROLE_LABELS[u.role]}
-                        {tenant ? ` · ${tenant.name}` : " · Consorzio"}
-                        {store?.city ? ` (${store.city})` : ""}
-                        {dept ? ` · ${dept.name}` : ""}
-                      </div>
-                    </div>
-                    <span className="pill pill-green">Entra →</span>
-                  </button>
-                </form>
-              );
-            })}
-          </div>
-        </details>
-        <p style={{ textAlign: "center", color: "var(--muted)", fontSize: 13, marginTop: 22 }}>
-          Prototipo dimostrativo — in produzione questo accesso vivrà su <strong>one.gardenteam.biz</strong>{" "}
-          (con SSO da my.rosaflor.it e gestionali delle insegne); academy.gardenteam.biz e stampe.gardenteam.biz
-          entreranno direttamente nella propria macroarea.
-        </p>
       </div>
     </div>
   );
