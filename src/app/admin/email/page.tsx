@@ -9,7 +9,9 @@ import {
   saveCustomTemplate,
   deleteCustomTemplate,
   saveAutomationSettings,
+  sendTestEmail,
 } from "@/lib/actions";
+import { mailerConfig } from "@/lib/mailer";
 import { scopeUsers } from "@/lib/logic";
 import { DEFAULT_REMINDER_RULES, EMAIL_TYPE_LABELS, EmailType, REMINDER_STAGE_LABELS } from "@/lib/types";
 
@@ -28,12 +30,13 @@ const AUTOMATIONS = [
 export default async function EmailPage({
   searchParams,
 }: {
-  searchParams: Promise<{ promemoria?: string; convocazioni?: string; assegnazioni?: string; template?: string }>;
+  searchParams: Promise<{ promemoria?: string; convocazioni?: string; assegnazioni?: string; template?: string; prova?: string }>;
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (user.role === "student") redirect("/studente");
-  const { promemoria, convocazioni, assegnazioni, template } = await searchParams;
+  const { promemoria, convocazioni, assegnazioni, template, prova } = await searchParams;
+  const mailer = mailerConfig();
 
   const db = await getDb();
   const userIds = new Set(scopeUsers(db, user).map((u) => u.id));
@@ -84,10 +87,34 @@ export default async function EmailPage({
       <div className="container">
         <h1>Email e automazioni</h1>
         <p className="subtitle">
-          Le comunicazioni automatiche verso i collaboratori. In questo prototipo le email vengono registrate ma non
-          spedite: in produzione l&apos;invio avverrà tramite un provider transazionale (es. Resend o Brevo) e il
-          controllo promemoria girerà ogni notte in automatico.
+          Le comunicazioni automatiche verso i collaboratori. Ogni messaggio resta registrato nel registro invii qui
+          sotto; la spedizione vera passa da Resend.
         </p>
+
+        {isGlobalEditor && (
+          <div className={`alert ${mailer.enabled ? "alert-green" : "alert-amber"}`}>
+            {mailer.enabled ? (
+              <>
+                ✓ Invio reale attivo — mittente <strong>{mailer.from}</strong>
+                {mailer.replyTo && <> · risposte a <strong>{mailer.replyTo}</strong></>}
+                {mailer.testTo && (
+                  <> · <strong>modalità prova</strong>: tutte le email vengono dirottate su {mailer.testTo} invece che ai destinatari veri.</>
+                )}
+              </>
+            ) : (
+              <>
+                Invio reale non configurato: le email vengono solo registrate (stato «in coda»). Servono le variabili
+                d&apos;ambiente <code>RESEND_API_KEY</code> e <code>EMAIL_FROM</code>.
+              </>
+            )}
+          </div>
+        )}
+
+        {prova && (
+          <div className={`alert ${prova === "ok" ? "alert-green" : "alert-red"}`}>
+            {prova === "ok" ? "✓ Email di prova inviata: controlla la casella (anche nello spam)." : prova}
+          </div>
+        )}
 
         {promemoria !== undefined && (
           <div className={`alert ${Number(promemoria) + Number(convocazioni ?? 0) + Number(assegnazioni ?? 0) > 0 ? "alert-green" : "alert-amber"}`}>
@@ -343,6 +370,24 @@ export default async function EmailPage({
           </div>
         )}
 
+        {isGlobalEditor && mailer.enabled && (
+          <div className="section">
+            <div className="section-head">
+              <h2>Prova di invio</h2>
+              <span className="hint">manda un messaggio di controllo per verificare mittente e DNS</span>
+            </div>
+            <div className="card">
+              <form action={sendTestEmail} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
+                <label className="field" style={{ flex: 1, minWidth: 240, marginBottom: 0 }}>
+                  Indirizzo di destinazione
+                  <input type="email" name="to" required placeholder="tuo.indirizzo@esempio.it" />
+                </label>
+                <button className="btn btn-sm" type="submit">Invia email di prova</button>
+              </form>
+            </div>
+          </div>
+        )}
+
         <div className="section">
           <div className="section-head">
             <h2>Registro invii ({emails.length})</h2>
@@ -377,7 +422,16 @@ export default async function EmailPage({
                         {e.subject}
                         <div style={{ fontSize: 12, color: "var(--muted)" }}>{e.body.slice(0, 90)}{e.body.length > 90 ? "…" : ""}</div>
                       </td>
-                      <td><span className="pill pill-green">✓ {e.status}</span></td>
+                      <td>
+                        {e.status === "inviata" && <span className="pill pill-green">✓ inviata</span>}
+                        {e.status === "in_coda" && <span className="pill pill-gray">in coda</span>}
+                        {e.status === "errore" && (
+                          <>
+                            <span className="pill pill-red">errore</span>
+                            {e.error && <div style={{ fontSize: 12, color: "var(--muted)" }}>{e.error}</div>}
+                          </>
+                        )}
+                      </td>
                     </tr>
                   );
                 })}

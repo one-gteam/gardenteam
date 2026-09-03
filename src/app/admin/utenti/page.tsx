@@ -3,7 +3,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import Header from "@/components/Header";
 import { importUsersCsv, toggleUserActive, approveRegistration, rejectRegistration } from "@/lib/actions";
-import { scopeUsers, coursesForUser, getProgress, isCourseCompleted, isNewHire } from "@/lib/logic";
+import { scopeUsers, coursesForUser, getProgress, isCourseCompleted, isNewHire, canManageUsers } from "@/lib/logic";
 import { ROLE_LABELS } from "@/lib/types";
 
 export default async function UsersPage({
@@ -64,6 +64,9 @@ export default async function UsersPage({
         : db.stores.filter((s) => s.id === user.storeId);
 
   const canImport = ["system_admin", "group_admin", "store_admin"].includes(user.role);
+  // la Gestione Ruoli è l'area trasversale (tutto il portale, non solo Academy): stesso perimetro di /scegli
+  const showRuoliLink =
+    user.role === "system_admin" || user.role === "group_admin" || (user.role === "store_admin" && canManageUsers(db, user));
   const pending = db.registrations.filter((r) => {
     if (r.status !== "pending") return false;
     if (user.role === "system_admin") return true;
@@ -80,6 +83,12 @@ export default async function UsersPage({
         <p className="subtitle">
           {hasFilters ? `${users.length} risultati su ${allUsers.length} persone` : `${allUsers.length} persone nel tuo ambito di gestione`}
         </p>
+        {showRuoliLink && (
+          <p className="hint" style={{ margin: "-4px 0 16px" }}>
+            Qui gestisci anagrafica e formazione. Per cambiare ruolo, aree del portale o stato di un collaboratore
+            (anche fuori da Academy) vai a <a href="/ruoli">Gestione Ruoli</a>.
+          </p>
+        )}
 
         <div className="card" style={{ marginBottom: 20 }}>
           <form method="get" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10, alignItems: "end" }}>

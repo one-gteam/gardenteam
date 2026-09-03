@@ -5,7 +5,7 @@ import { getDb } from "@/lib/db";
 import Header from "@/components/Header";
 import { updateUser, toggleUserActive } from "@/lib/actions";
 import { ROLE_LABELS, Role, userSites } from "@/lib/types";
-import { coursesForUser, getProgress, isCourseCompleted } from "@/lib/logic";
+import { coursesForUser, getProgress, isCourseCompleted, canManageUsers } from "@/lib/logic";
 
 export default async function EditUserPage({
   params,
@@ -47,6 +47,8 @@ export default async function EditUserPage({
   const assigned = coursesForUser(db, u);
   const done = assigned.filter((c) => isCourseCompleted(c, getProgress(db, u.id, c.id)));
   const action = updateUser.bind(null, u.id);
+  const showRuoliLink =
+    admin.role === "system_admin" || admin.role === "group_admin" || (admin.role === "store_admin" && canManageUsers(db, admin));
 
   return (
     <div>
@@ -63,6 +65,11 @@ export default async function EditUserPage({
         <p className="subtitle" style={{ marginTop: 6 }}>
           {ROLE_LABELS[u.role]} · {done.length}/{assigned.length} corsi completati · {u.points} punti
         </p>
+        {showRuoliLink && u.id !== admin.id && (
+          <p className="hint" style={{ margin: "-6px 0 16px" }}>
+            Ruolo, aree del portale e stato si cambiano in <a href={`/ruoli?q=${encodeURIComponent(u.email)}`}>Gestione Ruoli</a>.
+          </p>
+        )}
 
         {salvato && <div className="alert alert-green">✓ Modifiche salvate.</div>}
 

@@ -310,7 +310,9 @@ export interface EmailMessage {
   body: string;
   type: EmailType;
   date: string; // ISO datetime
-  status: "inviata" | "in_coda";
+  /** inviata = consegnata al provider · in_coda = solo registrata (invio reale non configurato) · errore = provider ha rifiutato */
+  status: "inviata" | "in_coda" | "errore";
+  error?: string; // motivo del fallimento, quando status = "errore"
 }
 
 export interface EmailTemplate {

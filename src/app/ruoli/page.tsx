@@ -89,6 +89,13 @@ export default async function RuoliPage({
         <p className="subtitle">
           Chi può fare cosa, in tutte le aree del portale. Ruolo, aree e stato si modificano direttamente in tabella.
         </p>
+        <p className="hint" style={{ margin: "-4px 0 16px" }}>
+          Per anagrafica, reparto e formazione clicca sul nome di un collaboratore
+          {userSites(user).includes("academy") && (
+            <> — oppure vai ai <a href="/admin/utenti">Collaboratori</a> di Academy</>
+          )}
+          .
+        </p>
 
         <form method="get" style={{ display: "flex", gap: 10, alignItems: "end", marginBottom: 16, flexWrap: "wrap" }}>
           <label className="field" style={{ marginBottom: 0, width: 260 }}>

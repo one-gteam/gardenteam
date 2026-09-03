@@ -45,5 +45,5 @@ Le città non pubblicate sui siti sono lasciate vuote: completarle in `src/lib/s
   my.rosaflor.it/Presenze; flag `active` già implementato per bloccare i cessati)
 - Persistenza su file JSON → sostituire con database (PostgreSQL/Supabase)
 - Video/PDF segnaposto → collegare storage reale (Bunny Stream / Vimeo per i video)
-- Email: la pagina Email registra le automazioni ma non spedisce → collegare Resend/Brevo + cron notturno
+- Email: invio reale via Resend collegato (`src/lib/mailer.ts`) — richiede `RESEND_API_KEY` e `EMAIL_FROM` su un dominio/sottodominio verificato; senza queste variabili le email restano solo registrate (stato «in coda»). Resta da fare il cron notturno che lancia il giro promemoria.
 - Niente API esterne / sync HR → previste nella specifica, sezioni 4 e 16

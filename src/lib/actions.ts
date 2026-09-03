@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { randomBytes, scryptSync, timingSafeEqual } from "crypto";
 import { getDb, saveDb } from "./db";
 import { uploadPublicFile } from "./supabase";
+import { mailerConfig, sendMail } from "./mailer";
 import { AUTH_COOKIE, requireUser } from "./auth";
 import { assignableRolesFor, canManageUsers, coursesForUser, courseVisibleTo, dueDate, getProgress, hasStartedCourse, isCourseCompleted, pathsForUser } from "./logic";
 import {
@@ -35,7 +36,13 @@ function renderTemplate(db: DB, user: User, type: EmailType, vars: Record<string
   return { subject: renderText(tpl.subject, user, vars), body: renderText(tpl.body, user, vars) };
 }
 
-function pushEmail(db: DB, user: User, type: EmailType, subject: string, body: string) {
+/**
+ * Spedisce davvero (Resend) e registra sempre nel registro invii: il log interno
+ * resta la fonte di verità dell'applicazione anche quando il provider non è
+ * configurato (stato "in_coda") o rifiuta il messaggio (stato "errore").
+ */
+async function pushEmail(db: DB, user: User, type: EmailType, subject: string, body: string) {
+  const r = await sendMail(user.email, subject, body);
   db.emails.push({
     id: `e_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
     userId: user.id,
@@ -44,23 +51,23 @@ function pushEmail(db: DB, user: User, type: EmailType, subject: string, body: s
     body,
     type,
     date: new Date().toISOString(),
-    status: "inviata",
+    status: r.sent === true ? "inviata" : r.sent === false ? "errore" : "in_coda",
+    ...(r.error ? { error: r.error } : {}),
   });
 }
 
 /**
- * Simula l'invio email: in produzione qui si chiama il provider transazionale (Resend).
  * Invia il modello di sistema (o la personalizzazione insegna/PV) più gli eventuali
  * modelli aggiuntivi collegati alla stessa automazione, se nello scope dell'utente.
  */
-function queueEmail(db: DB, user: User, type: EmailType, vars: Record<string, string> = {}) {
+async function queueEmail(db: DB, user: User, type: EmailType, vars: Record<string, string> = {}) {
   const r = renderTemplate(db, user, type, vars);
-  if (r) pushEmail(db, user, type, r.subject, r.body);
+  if (r) await pushEmail(db, user, type, r.subject, r.body);
   for (const ct of db.customTemplates) {
     if (ct.trigger !== type || !ct.enabled) continue;
     if (ct.storeId && ct.storeId !== user.storeId) continue;
     if (ct.tenantId && !ct.storeId && ct.tenantId !== user.tenantId) continue;
-    pushEmail(db, user, type, renderText(ct.subject, user, vars), renderText(ct.body, user, vars));
+    await pushEmail(db, user, type, renderText(ct.subject, user, vars), renderText(ct.body, user, vars));
   }
 }
 
@@ -70,7 +77,7 @@ function queueEmail(db: DB, user: User, type: EmailType, vars: Record<string, st
  * corso creato...) parte una mail di assegnazione, una volta sola per elemento.
  * Ritorna true se ha inviato qualcosa (utile per contare gli invii dal chiamante).
  */
-function notifyNewAssignments(db: DB, user: User): boolean {
+async function notifyNewAssignments(db: DB, user: User): Promise<boolean> {
   const newCourses = coursesForUser(db, user).filter(
     (c) => c.mandatory && !(user.notifiedCourseIds ?? []).includes(c.id)
   );
@@ -81,7 +88,7 @@ function notifyNewAssignments(db: DB, user: User): boolean {
     ...newCourses.map((c) => `«${c.title}»`),
     ...newPaths.map((p) => `percorso «${p.title}»`),
   ].join(", ");
-  queueEmail(db, user, "assegnazione", { corso: newCourses[0]?.title ?? newPaths[0]?.title ?? "", elenco });
+  await queueEmail(db, user, "assegnazione", { corso: newCourses[0]?.title ?? newPaths[0]?.title ?? "", elenco });
   user.notifiedCourseIds = [...(user.notifiedCourseIds ?? []), ...newCourses.map((c) => c.id)];
   user.notifiedPathIds = [...(user.notifiedPathIds ?? []), ...newPaths.map((p) => p.id)];
   const today = new Date().toISOString().slice(0, 10);
@@ -155,8 +162,8 @@ export async function provisionSsoUser(payload: {
       active: true,
     };
     db.users.push(user);
-    queueEmail(db, user, "benvenuto");
-    notifyNewAssignments(db, user);
+    await queueEmail(db, user, "benvenuto");
+    await notifyNewAssignments(db, user);
     await saveDb(db);
   }
 
@@ -226,7 +233,7 @@ function awardBadges(db: DB, userId: string) {
   if (db.progress.some((p) => p.userId === userId && p.quizScore === 100)) add("quiz_perfetto");
 }
 
-function maybeComplete(db: DB, userId: string, course: Course) {
+async function maybeComplete(db: DB, userId: string, course: Course) {
   const prog = db.progress.find((p) => p.userId === userId && p.courseId === course.id)!;
   if (isCourseCompleted(course, prog) && !prog.completedAt) {
     prog.completedAt = new Date().toISOString();
@@ -239,9 +246,9 @@ function maybeComplete(db: DB, userId: string, course: Course) {
         courseId: course.id,
         issuedAt: new Date().toISOString(),
       });
-      queueEmail(db, user, "certificato", { corso: course.title });
+      await queueEmail(db, user, "certificato", { corso: course.title });
     }
-    queueEmail(db, user, "completamento", { corso: course.title, punti: String(course.points) });
+    await queueEmail(db, user, "completamento", { corso: course.title, punti: String(course.points) });
     awardBadges(db, userId);
   }
 }
@@ -295,7 +302,7 @@ export async function trackLessonView(
       if (u) u.points += 10;
       justCompleted = true;
     }
-    maybeComplete(db, user.id, course);
+    await maybeComplete(db, user.id, course);
   }
   await saveDb(db);
   if (justCompleted) revalidatePath(`/corso/${courseId}`);
@@ -323,7 +330,7 @@ export async function completeLesson(courseId: string, lessonId: string) {
     const u = db.users.find((x) => x.id === user.id)!;
     u.points += 10;
   }
-  maybeComplete(db, user.id, course);
+  await maybeComplete(db, user.id, course);
   await saveDb(db);
   revalidatePath(`/corso/${courseId}`);
   revalidatePath("/studente");
@@ -352,7 +359,7 @@ export async function submitQuiz(courseId: string, formData: FormData) {
     const u = db.users.find((x) => x.id === user.id)!;
     u.points += 30;
   }
-  maybeComplete(db, user.id, course);
+  await maybeComplete(db, user.id, course);
   awardBadges(db, user.id);
   await saveDb(db);
   redirect(`/corso/${courseId}/quiz?esito=${score}`);
@@ -413,8 +420,8 @@ export async function importUsersCsv(formData: FormData) {
       gender: /^f/i.test(genderCol) ? "f" : /^m/i.test(genderCol) ? "m" : undefined,
     };
     db.users.push(newUser);
-    queueEmail(db, newUser, "benvenuto");
-    notifyNewAssignments(db, newUser);
+    await queueEmail(db, newUser, "benvenuto");
+    await notifyNewAssignments(db, newUser);
     imported++;
   }
   await saveDb(db);
@@ -646,7 +653,7 @@ export async function trackScorm(
     const u = db.users.find((x) => x.id === user.id);
     if (u) u.points += 10;
     justCompleted = true;
-    maybeComplete(db, user.id, course);
+    await maybeComplete(db, user.id, course);
   }
   await saveDb(db);
   if (justCompleted) revalidatePath(`/corso/${courseId}`);
@@ -801,11 +808,11 @@ function formatSessionVars(course: Course, s: CourseSession): Record<string, str
 }
 
 /** Invia la convocazione (o il promemoria) a tutti i destinatari dell'edizione. */
-function sendSessionEmails(db: DB, course: Course, s: CourseSession, type: "convocazione" | "promemoria_sessione", quando = "") {
+async function sendSessionEmails(db: DB, course: Course, s: CourseSession, type: "convocazione" | "promemoria_sessione", quando = "") {
   const vars = { ...formatSessionVars(course, s), quando };
   let n = 0;
   for (const u of sessionRecipients(db, course)) {
-    queueEmail(db, u, type, vars);
+    await queueEmail(db, u, type, vars);
     n++;
   }
   return n;
@@ -845,7 +852,7 @@ export async function saveCourseSession(courseId: string, sessionId: string | nu
   // convocazione immediata, se richiesta
   let invited = 0;
   if (formData.get("convoca") === "on") {
-    invited = sendSessionEmails(db, course, session, "convocazione");
+    invited = await sendSessionEmails(db, course, session, "convocazione");
     session.invitedAt = new Date().toISOString();
   }
   await saveDb(db);
@@ -866,7 +873,7 @@ export async function sendSessionInvites(courseId: string, sessionId: string) {
   const { db, course } = await requireEditableCourse(courseId);
   const s = (course.sessions ?? []).find((x) => x.id === sessionId);
   if (!s) return { ok: false as const, invited: 0 };
-  const invited = sendSessionEmails(db, course, s, "convocazione");
+  const invited = await sendSessionEmails(db, course, s, "convocazione");
   s.invitedAt = new Date().toISOString();
   await saveDb(db);
   revalidatePath(`/admin/corsi/${courseId}`);
@@ -885,7 +892,7 @@ export async function runReminders() {
     if (!u.active || (u.role !== "student" && u.role !== "dept_head")) continue;
     // iscrizione automatica per regola: nuovi corsi/percorsi diventati suoi da quando
     // sono stati creati o da quando è cambiato il suo profilo (reparto, insegna, PV...)
-    if (notifyNewAssignments(db, u)) assigned++;
+    if (await notifyNewAssignments(db, u)) assigned++;
 
     const openMandatory = coursesForUser(db, u).filter(
       (c) => c.mandatory && !isCourseCompleted(c, getProgress(db, u.id, c.id))
@@ -924,7 +931,7 @@ export async function runReminders() {
           return due ? `«${c.title}» (entro ${due.toLocaleDateString("it-IT")})` : `«${c.title}»`;
         })
         .join(", ");
-      queueEmail(db, u, type, { elenco: list });
+      await queueEmail(db, u, type, { elenco: list });
       sent++;
     }
   }
@@ -941,7 +948,7 @@ export async function runReminders() {
       if (giorniMancanti > s.reminderDays) continue;
       const quando =
         giorniMancanti <= 0 ? "è oggi" : giorniMancanti === 1 ? "è domani" : `tra ${giorniMancanti} giorni`;
-      reminded += sendSessionEmails(db, course, s, "promemoria_sessione", quando);
+      reminded += await sendSessionEmails(db, course, s, "promemoria_sessione", quando);
       s.reminderSentAt = new Date().toISOString();
     }
   }
@@ -1029,7 +1036,7 @@ export async function submitLessonQuiz(courseId: string, lessonId: string, lesso
       prog.completedLessons.push(lessonId);
       db.users.find((x) => x.id === user.id)!.points += 10;
     }
-    maybeComplete(db, user.id, course!);
+    await maybeComplete(db, user.id, course!);
     await saveDb(db);
   }
   redirect(`/corso/${courseId}?lezione=${lessonIndex}&quizEsito=${score}`);
@@ -1274,9 +1281,34 @@ export async function updateUser(userId: string, formData: FormData) {
   const departmentId = String(formData.get("departmentId") ?? "");
   target!.departmentId = departmentId || undefined;
 
-  notifyNewAssignments(db, target!);
+  await notifyNewAssignments(db, target!);
   await saveDb(db);
   redirect(`/admin/utenti/${userId}?salvato=1`);
+}
+
+/**
+ * Invio di prova: verifica dal browser che chiave, mittente e DNS di Resend
+ * siano a posto, senza aspettare che scatti un'automazione vera. Non finisce
+ * nel registro invii (non è una comunicazione a un collaboratore).
+ */
+export async function sendTestEmail(formData: FormData) {
+  const admin = await requireUser();
+  if (admin.role !== "system_admin" && admin.role !== "course_manager") redirect("/admin/email");
+  const to = String(formData.get("to") ?? "").trim();
+  if (!to.includes("@")) redirect("/admin/email?prova=" + encodeURIComponent("Indirizzo non valido."));
+  const cfg = mailerConfig();
+  if (!cfg.enabled) {
+    redirect("/admin/email?prova=" + encodeURIComponent("Invio reale non configurato: mancano RESEND_API_KEY o EMAIL_FROM."));
+  }
+  const r = await sendMail(
+    to,
+    "Prova di invio da Academy GT",
+    `Se leggi questo messaggio, l'invio email di Academy GT funziona.
+
+Mittente configurato: ${cfg.from}
+Inviata il ${new Date().toLocaleString("it-IT")}.`
+  );
+  redirect("/admin/email?prova=" + encodeURIComponent(r.sent ? "ok" : `Errore dal provider: ${r.error ?? "sconosciuto"}`));
 }
 
 /* ================== Modelli email ================== */
@@ -1682,15 +1714,19 @@ export async function registerRequest(formData: FormData) {
   // notifica all'email di approvazione del PV (o dell'insegna)
   const approvalTo = store!.approvalEmail || tenant.approvalEmail;
   if (approvalTo) {
+    const subject = `🔔 Nuova richiesta di registrazione: ${firstName} ${lastName}`;
+    const body = `${firstName} ${lastName} (${email}) chiede di registrarsi ad Academy GT per ${store!.name}. Approva o rifiuta la richiesta dalla pagina Utenti.`;
+    const r = await sendMail(approvalTo, subject, body);
     db.emails.push({
       id: `e_${Date.now()}_reg`,
       userId: "",
       to: approvalTo,
-      subject: `🔔 Nuova richiesta di registrazione: ${firstName} ${lastName}`,
-      body: `${firstName} ${lastName} (${email}) chiede di registrarsi ad Academy GT per ${store!.name}. Approva o rifiuta la richiesta dalla pagina Utenti.`,
+      subject,
+      body,
       type: "assegnazione",
       date: new Date().toISOString(),
-      status: "inviata",
+      status: r.sent === true ? "inviata" : r.sent === false ? "errore" : "in_coda",
+      ...(r.error ? { error: r.error } : {}),
     });
   }
   await saveDb(db);
@@ -1729,8 +1765,8 @@ export async function approveRegistration(regId: string, formData: FormData) {
   };
   db.users.push(newUser);
   reg!.status = "approved";
-  queueEmail(db, newUser, "benvenuto");
-  notifyNewAssignments(db, newUser);
+  await queueEmail(db, newUser, "benvenuto");
+  await notifyNewAssignments(db, newUser);
   await saveDb(db);
   redirect("/admin/utenti?approvato=1");
 }
