@@ -1205,6 +1205,31 @@ export async function quickToggleActive(userId: string) {
   return { ok: true as const };
 }
 
+/**
+ * Cancellazione definitiva (non la cessazione, che blocca solo l'accesso): rimuove
+ * l'utente e ripulisce i riferimenti nelle tabelle collegate (progressi, certificati,
+ * feedback, iscrizioni automatiche). Il registro invii resta intatto come storico:
+ * la pagina Email già mostra "—" per il destinatario quando l'utente non esiste più.
+ */
+export async function deleteUsers(userIds: string[]) {
+  const admin = await requireUser();
+  const db = await getDb();
+  const targets = db.users.filter((u) => userIds.includes(u.id));
+  const deletable = targets.filter((t) => t.id !== admin.id && canTouchUser(db, admin, t));
+  if (deletable.length === 0) return { ok: false as const, error: "Nessun utente cancellabile nel tuo ambito" };
+  const ids = new Set(deletable.map((t) => t.id));
+  db.users = db.users.filter((u) => !ids.has(u.id));
+  db.progress = db.progress.filter((p) => !ids.has(p.userId));
+  db.assignments = db.assignments.filter((a) => !ids.has(a.userId));
+  db.certificates = db.certificates.filter((c) => !ids.has(c.userId));
+  db.feedback = db.feedback.filter((f) => !ids.has(f.userId));
+  await saveDb(db);
+  revalidatePath("/admin/ruoli");
+  revalidatePath("/admin/utenti");
+  const skipped = targets.length - deletable.length;
+  return { ok: true as const, deleted: deletable.length, skipped };
+}
+
 /** L'insegna concede o revoca ai propri punti vendita la gestione dei loro utenti. */
 export async function setTenantUserDelegation(tenantId: string, allow: boolean) {
   const admin = await requireUser();

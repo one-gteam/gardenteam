@@ -28,3 +28,6 @@ yarn-error.log*
 # editor
 .vscode/*
 !.vscode/extensions.json
+
+.vercel
+.env*
