@@ -14,8 +14,8 @@ export default async function StampeHeader({ user, active, area = "arredo" }: { 
   const links = area === "zoo"
     ? [
         { href: "/stampe/zoo/dati", label: "Database prodotti", key: "dati" },
-        { href: "/stampe/zoo/offerte", label: "Import offerte", key: "offerte" },
-        { href: "/stampe/zoo/volantino", label: "Scelta Offerte", key: "volantino" },
+        { href: "/stampe/zoo/offerte", label: "Offerte in corso", key: "offerte" },
+        { href: "/stampe/zoo/volantino", label: "Scelta offerte Volantino", key: "volantino" },
         ...(["system_admin", "course_manager", "zoo_manager"].includes(user.role)
           ? [{ href: "/stampe/zoo/crea-volantino", label: "Crea Volantino", key: "crea-volantino" }]
           : []),

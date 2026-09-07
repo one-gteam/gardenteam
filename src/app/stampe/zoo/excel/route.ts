@@ -3,7 +3,7 @@ import * as XLSX from "xlsx";
 import { getCurrentUser } from "@/lib/auth";
 import { canAccessArea, resolveScope } from "@/lib/stampe";
 import { getDb } from "@/lib/db";
-import { getZooDb, activeCampaign, pvPriceFor, volantinoExportRows } from "@/lib/zoo";
+import { getZooDb, activeCampaign, pvPriceFor, volantinoExportRows, offerteExportRows } from "@/lib/zoo";
 
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
@@ -51,6 +51,16 @@ export async function GET(req: NextRequest) {
       };
     });
     filename = "prezzi_pv_zoo.xlsx";
+  } else if (sp.offerte === "volantino" || sp.offerte === "fuori") {
+    /*
+     * Offerte di un volantino, dall'Archivio: quelle andate sulla carta oppure
+     * quelle rimaste fuori — comunque in promozione e da esporre in reparto.
+     */
+    const campaign = db.campaigns.find((c) => c.id === sp.campagna) ?? activeCampaign(db);
+    const tipo = sp.offerte === "volantino" ? "volantino" : "fuori";
+    rows = offerteExportRows(db, academyDb, scope, campaign, tipo);
+    const nome = (campaign?.nome ?? "zoo").replace(/\s+/g, "_").toLowerCase();
+    filename = `${tipo === "volantino" ? "offerte_volantino" : "offerte_fuori_volantino"}_${nome}.xlsx`;
   } else if (sp.volantino === "1") {
     // export per il grafico: offerte selezionate con testi e riferimento foto (stessa lista usata dallo ZIP con le foto)
     const campaign = db.campaigns.find((c) => c.id === sp.campagna) ?? activeCampaign(db);

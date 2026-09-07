@@ -7,7 +7,9 @@ import { canAccessStampe, isZooEditor, resolveScope, sanitizeMargins } from "./s
 import { LAYOUT_FONTS } from "./layout-fonts";
 import {
   getZooDb, saveZooDb, ZooDB, ZooParent, campagnaInLavorazione, campagnaInCorso, campaignStato, NO_VOLANTINO,
+  ZOO_FORMATS,
 } from "./zoo";
+import type { LayoutItem } from "./stampe";
 import { groupAndDescribe, groupAndDescribeBatched } from "./zoo-ai";
 import { uploadPublicFile, publicUrlFor, listStorageFiles } from "./supabase";
 
@@ -142,7 +144,7 @@ export async function importZooProducts(scopeParam: string, formData: FormData) 
  * di dimensione del body delle funzioni serverless, che con centinaia di foto
  * in alta risoluzione manda in errore un upload passato dal server). Qui resta
  * solo l'abbinamento automatico per EAN/codice contenuto nel nome file. `back`
- * è la pagina da cui si è partiti (Database prodotti o Import offerte).
+ * è la pagina da cui si è partiti (Database prodotti o Offerte in corso).
  */
 export async function finalizeZooPhotoUpload(back: string, scopeParam: string, fileNames: string[]) {
   await requireZooUser();
@@ -411,7 +413,9 @@ export async function setParentTagInline(
 
 /** Modifica in linea di un campo dell'offerta (autosalvataggio, nessun redirect). */
 export async function updateOfferFieldInline(
-  offerId: string, field: "descrizione" | "prezzoPromo" | "prezzoListino" | "focus" | "label" | "paginaId", value: string
+  offerId: string,
+  field: "descrizione" | "prezzoPromo" | "prezzoListino" | "focus" | "label" | "paginaId" | "meccanica" | "condizioni",
+  value: string
 ): Promise<{ ok: boolean }> {
   const user = await requireZooUser();
   if (!isZooEditor(user)) return { ok: false };
@@ -552,7 +556,7 @@ export async function updateProductFieldInline(
  * applicano a tutte le sue varianti insieme.
  */
 export async function updateOfferGroupFieldInline(
-  offerIds: string[], field: "focus" | "label" | "paginaId", value: string
+  offerIds: string[], field: "focus" | "label" | "paginaId" | "meccanica" | "condizioni", value: string
 ): Promise<{ ok: boolean }> {
   const user = await requireZooUser();
   if (!isZooEditor(user)) return { ok: false };
@@ -615,7 +619,7 @@ export async function mergeZooParents(targetId: string, sourceIds: string[]): Pr
 }
 
 /**
- * Variante per il form di Import offerte: unisce i padri spuntati (checkbox
+ * Variante per il form di Offerte in corso: unisce i padri spuntati (checkbox
  * "selpadre") nel PRIMO spuntato, che dà i testi al gruppo risultante.
  */
 export async function mergeParentsForm(back: string, scopeParam: string, formData: FormData) {
@@ -717,7 +721,7 @@ export async function toggleZooHiddenBulk(back: string, scopeParam: string, form
   redirect(backUrl(back, scopeParam, { nontenuti: String(eans.size) }));
 }
 
-/* ================== 2. Import offerte mensili ================== */
+/* ================== 2. Import Excel offerte mensili ================== */
 
 export async function importZooOffers(scopeParam: string, formData: FormData) {
   const user = await requireZooUser();
@@ -1091,7 +1095,7 @@ export async function voteZooOffersBulk(tipo: "preferita" | "nontrattato", scope
   const academyDb = await getDb();
   const scope = resolveScope(user, scopeParam, academyDb);
   /*
-   * Scelta Offerte presenta un prodotto padre per riga: la spunta porta l'id di
+   * Scelta offerte Volantino presenta un prodotto padre per riga: la spunta porta l'id di
    * una sola offerta del gruppo, quindi qui si estende a tutte le varianti dello
    * stesso padre (nella stessa campagna) — è quello che si aspetta chi spunta
    * la riga "Crocchette Adult", non "solo il gusto pollo".
@@ -1137,7 +1141,7 @@ export async function toggleOfferSelected(offerId: string, scopeParam: string) {
 
 /**
  * Come `toggleOfferSelected`, ma su un intero gruppo di offerte (le varianti di
- * uno stesso padre, presentate come una riga sola in Scelta Offerte): se non
+ * uno stesso padre, presentate come una riga sola in Scelta offerte Volantino): se non
  * sono tutte già nel volantino le aggiunge tutte, altrimenti le toglie tutte.
  */
 export async function toggleOffersGroupSelected(offerIds: string[], scopeParam: string) {
@@ -1297,6 +1301,7 @@ export async function saveZooSettings(scopeParam: string, formData: FormData) {
   db.settings.schedeDefault = list("schedeDefault");
   db.settings.condizioniStandard = String(formData.get("condizioniStandard") ?? "")
     .split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+  db.settings.condizioniConValidita = String(formData.get("condizioniConValidita") ?? "") === "1";
   db.settings.istruzioniVolantino = String(formData.get("istruzioniVolantino") ?? db.settings.istruzioniVolantino);
   db.settings.istruzioniCartello = String(formData.get("istruzioniCartello") ?? db.settings.istruzioniCartello);
   await saveZooDb(db);
@@ -1477,4 +1482,117 @@ export async function uploadVolantinoImage(formData: FormData) {
   const clean = file.name.toLowerCase().replace(/[^a-z0-9._-]/g, "_");
   const url = await uploadPublicFile(`volantino/${Date.now()}_${clean}`, Buffer.from(await file.arrayBuffer()), file.type);
   return { ok: true as const, url };
+}
+
+/* ================== Cartelli da non stampare, immagini e copia dei layout ================== */
+
+/**
+ * Segna (o rimette in stampa) un singolo cartello per l'ambito che sta guardando:
+ * l'offerta resta valida per tutti gli altri, semplicemente questo punto vendita
+ * non la espone. Diverso dal "non tenuto", che vale per l'articolo in ogni volantino.
+ */
+export async function toggleZooNoPrint(offerId: string, scopeParam: string, back: string) {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  if (scope.type === "system") redirect(backUrl(back, scopeParam));
+  const i = db.noPrint.findIndex(
+    (n) => n.scopeType === scope.type && n.scopeId === scope.id && n.offerId === offerId
+  );
+  if (i >= 0) db.noPrint.splice(i, 1);
+  else db.noPrint.push({ scopeType: scope.type, scopeId: scope.id, offerId });
+  await saveZooDb(db);
+  redirect(backUrl(back, scopeParam));
+}
+
+/** Stessa cosa in blocco, sulle offerte spuntate nell'elenco di Stampa cartelli. */
+export async function toggleZooNoPrintBulk(scopeParam: string, back: string, formData: FormData) {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  if (scope.type === "system") redirect(backUrl(back, scopeParam));
+  const ids = (formData.getAll("sel") as string[]).filter(Boolean);
+  for (const offerId of ids) {
+    const gia = db.noPrint.some((n) => n.scopeType === scope.type && n.scopeId === scope.id && n.offerId === offerId);
+    if (!gia) db.noPrint.push({ scopeType: scope.type, scopeId: scope.id, offerId });
+  }
+  await saveZooDb(db);
+  redirect(backUrl(back, scopeParam, { nonstampare: String(ids.length) }));
+}
+
+/** Immagine fissa (testata, cornice, logo) caricata da PC e riutilizzabile su ogni layout. */
+export async function uploadZooLayoutImage(scopeParam: string, formData: FormData) {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  if (scope.type === "system" && !isZooEditor(user)) redirect(backUrl("/stampe/zoo/layout", scopeParam));
+  const file = formData.get("image") as File | null;
+  const formato = String(formData.get("formato") ?? "");
+  if (file && file.size > 0 && file.type.startsWith("image/")) {
+    const ext = (file.name.split(".").pop() || "png").toLowerCase().replace(/[^a-z0-9]/g, "");
+    const nomeFile = `zooimg_${scope.type}_${scope.id || "sys"}_${Date.now()}.${ext}`;
+    const url = await uploadPublicFile(`uploads/zoo-layout/${nomeFile}`, Buffer.from(await file.arrayBuffer()), file.type);
+    if (url) {
+      const name = String(formData.get("name") ?? "").trim() || file.name;
+      db.layoutImages.push({
+        id: `zli_${Date.now()}`, name: name.slice(0, 40), url, scopeType: scope.type, scopeId: scope.id,
+      });
+      await saveZooDb(db);
+    }
+  }
+  redirect(backUrl("/stampe/zoo/layout", scopeParam, { formato }));
+}
+
+export async function deleteZooLayoutImage(imageId: string, scopeParam: string, formato: string) {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  db.layoutImages = db.layoutImages.filter(
+    (i) => !(i.id === imageId && i.scopeType === scope.type && i.scopeId === scope.id)
+  );
+  await saveZooDb(db);
+  redirect(backUrl("/stampe/zoo/layout", scopeParam, { formato }));
+}
+
+/**
+ * Copia un layout su un altro formato. Le posizioni sono già in percentuale e
+ * restano valide; sono i corpi del testo a dover crescere o calare, perché sono
+ * in millimetri: si scalano sulla larghezza del foglio (A6→A4 = il doppio), così
+ * il cartello grande non esce con le scritte da cartellino.
+ */
+export async function copiaZooLayoutSuFormato(layoutId: string, scopeParam: string, formData: FormData) {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  if (scope.type === "system" && !isZooEditor(user)) redirect(backUrl("/stampe/zoo/layout", scopeParam));
+  const sorgente = db.zooLayouts.find((l) => l.id === layoutId);
+  const destFormatId = String(formData.get("formatId") ?? "");
+  const da = ZOO_FORMATS.find((f) => f.id === sorgente?.formatId);
+  const a = ZOO_FORMATS.find((f) => f.id === destFormatId);
+  if (!sorgente || !da || !a || da.id === a.id) redirect(backUrl("/stampe/zoo/layout", scopeParam));
+  const k = a!.w / da!.w;
+  const scala = (items: LayoutItem[] | undefined) =>
+    (items ?? []).map((it) => ({
+      ...it,
+      ...(it.size ? { size: Math.round(it.size * k * 10) / 10 } : {}),
+      ...(it.radius ? { radius: Math.round(it.radius * k * 10) / 10 } : {}),
+      ...(it.sticker ? { sticker: { ...it.sticker, size: Math.round(it.sticker.size * k * 10) / 10 } } : {}),
+    }));
+  db.zooLayouts.push({
+    ...sorgente!,
+    id: `zl_${Date.now()}`,
+    formatId: a!.id,
+    scopeType: scope.type,
+    scopeId: scope.id,
+    nome: `${sorgente!.nome || "Layout"} (${a!.name})`,
+    items: scala(sorgente!.items),
+    itemsNoPhoto: sorgente!.itemsNoPhoto ? scala(sorgente!.itemsNoPhoto) : undefined,
+  });
+  await saveZooDb(db);
+  redirect(backUrl("/stampe/zoo/layout", scopeParam, { formato: a!.id, copiato: "1" }));
 }

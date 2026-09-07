@@ -11,10 +11,10 @@ import {
   getZooDb, effectiveZooLayout, zooCartelloValues, pvPriceFor, isZooHidden,
   campagneStampabili, campagnaInCorso, campagnaInLavorazione, campaignStato,
   effectiveParentText, effectiveParentTag, effectiveOfferText, printedAt, NO_VOLANTINO,
-  ZOO_FIELDS, ZOO_FORMATS,
+  ZOO_FIELDS, ZOO_FORMATS, marcaEffettiva, marcheList, tagsOfferta,
 } from "@/lib/zoo";
 import {
-  importPvPrices, markZooPrinted, resetZooPrinted,
+  importPvPrices, markZooPrinted, resetZooPrinted, toggleZooHidden, toggleZooNoPrint,
   updateParentFieldInline, setParentTagScoped, setOfferTextScoped, setPvPriceInline,
 } from "@/lib/zoo-actions";
 
@@ -53,20 +53,47 @@ export default async function ZooStampaPage({
   const inVolantino = (o: (typeof allOffers)[number]) =>
     Boolean(o.selezionata) || (Boolean(o.paginaId) && o.paginaId !== NO_VOLANTINO);
 
+  /*
+   * "Marca" qui è quella effettiva (marca del listino o, se manca, il fornitore):
+   * i listini dei fornitori quasi mai portano la marca, e senza questo ripiego la
+   * tendina resterebbe vuota — è il motivo per cui le marche non si vedevano.
+   */
+  const marche = [...new Set(
+    allOffers.map((o) => {
+      const p = db.products.find((x) => x.id === o.productId);
+      return p ? marcaEffettiva(p) : "";
+    }).filter(Boolean)
+  )].sort();
+  /*
+   * Più marche insieme: spuntandole arrivano come parametri ripetuti (array),
+   * mentre i link interni le rimettono in una stringa separata da virgole.
+   * Vanno accettate entrambe le forme, altrimenti il filtro salta a seconda di
+   * come si è arrivati alla pagina.
+   */
+  const marcaRaw = sp.marca as unknown as string | string[] | undefined;
+  const marcheScelte = (Array.isArray(marcaRaw) ? marcaRaw : (marcaRaw ?? "").split(","))
+    .map((m) => m.trim()).filter(Boolean);
+  const nonStampare = new Set(
+    db.noPrint.filter((n) => n.scopeType === scope.type && n.scopeId === scope.id).map((n) => n.offerId)
+  );
+  const marcheEscluse = db.hidden
+    .filter((h) => h.scopeType === scope.type && h.scopeId === scope.id && h.kind === "marca")
+    .map((h) => h.value);
+
   const q = (sp.q ?? "").toLowerCase();
   const visible = allOffers.filter((o) => {
     const product = db.products.find((p) => p.id === o.productId);
     if (product && isZooHidden(db, scope, product, academyDb)) return false;
     if (sp.scheda && o.schedaId !== sp.scheda) return false;
-    if (sp.marca && product?.marca !== sp.marca) return false;
+    if (marcheScelte.length > 0 && !marcheScelte.includes(marcaEffettiva(product ?? { marca: "", fornitore: "" }))) return false;
+    if (sp.nonstampabili !== "si" && nonStampare.has(o.id)) return false;
     if (sp.volantino === "si" && !inVolantino(o)) return false;
     if (sp.volantino === "no" && inVolantino(o)) return false;
     if (sp.stampati === "si" && !printedAt(db, scope, o.id)) return false;
     if (sp.stampati === "no" && printedAt(db, scope, o.id)) return false;
-    if (q && !`${o.descrizione} ${o.ean} ${product?.marca ?? ""}`.toLowerCase().includes(q)) return false;
+    if (q && !`${o.descrizione} ${o.ean} ${marcaEffettiva(product ?? { marca: "", fornitore: "" })}`.toLowerCase().includes(q)) return false;
     return true;
   });
-  const marche = [...new Set(allOffers.map((o) => db.products.find((p) => p.id === o.productId)?.marca).filter(Boolean) as string[])].sort();
   const nStampati = allOffers.filter((o) => printedAt(db, scope, o.id)).length;
 
   const selectedIds = (sp.sel ?? "").split(",").filter(Boolean);
@@ -100,7 +127,8 @@ export default async function ZooStampaPage({
   const tagsFor = (o: (typeof allOffers)[number]) => {
     const product = db.products.find((p) => p.id === o.productId);
     const parent = product?.parentId ? db.parents.find((x) => x.id === product.parentId) : undefined;
-    return parent?.caratteristiche ?? [];
+    // il layout si sceglie sia sul tipo di prodotto sia sul tipo di offerta
+    return [...(parent?.caratteristiche ?? []), ...tagsOfferta(o)];
   };
 
   if (sp.print === "1" && selected.length > 0) {
@@ -225,14 +253,50 @@ export default async function ZooStampaPage({
               </select>
             </label>
             <label className="field" style={{ marginBottom: 0 }}>
-              Marca
-              <select name="marca" defaultValue={sp.marca ?? ""}>
-                <option value="">Tutte</option>
-                {marche.map((m) => <option key={m} value={m}>{m}</option>)}
+              Non stampabili
+              <select name="nonstampabili" defaultValue={sp.nonstampabili ?? ""}>
+                <option value="">Nascondi quelli esclusi</option>
+                <option value="si">Mostra anche gli esclusi</option>
               </select>
             </label>
             <button className="btn btn-sm" type="submit">Filtra</button>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <strong style={{ fontSize: 12.5 }}>Marche da stampare</strong>
+              <span className="hint" style={{ marginLeft: 8 }}>
+                spunta una o più marche; nessuna spunta = tutte. La marca è quella del listino o, se manca, il fornitore.
+              </span>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 6 }}>
+                {marche.length === 0 && <span className="hint">Nessuna marca in questo periodo.</span>}
+                {marche.map((m) => (
+                  <label key={m} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12.5 }}>
+                    <input type="checkbox" name="marca" value={m} defaultChecked={marcheScelte.includes(m)} />
+                    {m}
+                  </label>
+                ))}
+              </div>
+            </div>
           </form>
+          {scope.type !== "system" && marche.length > 0 && (
+            <div style={{ marginTop: 12, borderTop: "1px dashed var(--line)", paddingTop: 10 }}>
+              <strong style={{ fontSize: 12.5 }}>Marche che {scope.label} non tratta</strong>
+              <p className="hint" style={{ margin: "2px 0 6px" }}>
+                Escluderle qui vale per questo volantino e per tutti i prossimi: i loro articoli spariscono da stampa
+                cartelli e dal database prodotti, finché non le rimetti.
+              </p>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {marche.map((m) => {
+                  const esclusa = marcheEscluse.includes(m);
+                  return (
+                    <form key={`ex_${m}`} action={toggleZooHidden.bind(null, scopeParam, "marca", m, "/stampe/zoo/stampa")}>
+                      <button type="submit" className={`pill ${esclusa ? "pill-gray" : "pill-green"}`} style={{ cursor: "pointer", border: "none" }}>
+                        {esclusa ? "✕ " : ""}{m}
+                      </button>
+                    </form>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           {campaign && nStampati > 0 && (
             <form action={resetZooPrinted.bind(null, "/stampe/zoo/stampa", scopeParam, campaign.id)} style={{ marginTop: 10 }}>
               <span style={{ fontSize: 12.5, color: "var(--muted)", marginRight: 8 }}>
@@ -255,13 +319,13 @@ export default async function ZooStampaPage({
                 titolo: o.descrizione,
                 codice: o.ean,
                 prezzo: pvPriceFor(db, scope, o.ean, academyDb) ?? o.prezzoPromo,
-                tipologia: product?.marca ?? "",
+                tipologia: product ? marcaEffettiva(product) : "",
               };
             })}
             formats={ZOO_FORMATS.map((f) => ({ id: f.id, name: f.name }))}
             scopeParam={scopeParam}
             filters={{
-              q: sp.q ?? "", scheda: sp.scheda ?? "", marca: sp.marca ?? "",
+              q: sp.q ?? "", scheda: sp.scheda ?? "", marca: marcheScelte.join(","),
               volantino: sp.volantino ?? "", stampati: sp.stampati ?? "", campagna: campaign?.id ?? "",
             }}
             printed={Object.fromEntries(
@@ -322,6 +386,7 @@ export default async function ZooStampaPage({
                     <th>Caratteristica</th>
                     <th>Prezzo</th>
                     <th>Condizioni</th>
+                    {scope.type !== "system" && <th className="no-print">Stampa</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -397,6 +462,18 @@ export default async function ZooStampaPage({
                             onSave={setOfferTextScoped.bind(null, o.id, "condizioni", scopeParam)} />
                           {cond.custom && <span className="pill pill-orange">personalizzate</span>}
                         </td>
+                        {scope.type !== "system" && (
+                          <td className="no-print" style={{ whiteSpace: "nowrap" }}>
+                            <form action={toggleZooNoPrint.bind(null, o.id, scopeParam, "/stampe/zoo/stampa")}>
+                              <button className="btn btn-outline btn-sm" type="submit"
+                                title={nonStampare.has(o.id)
+                                  ? "Rimettilo fra i cartelli da stampare"
+                                  : "Escludi questo cartello: l'offerta resta valida per gli altri punti vendita"}>
+                                {nonStampare.has(o.id) ? "Escluso ✕" : "Non stampare"}
+                              </button>
+                            </form>
+                          </td>
+                        )}
                       </tr>
                     );
                   })}

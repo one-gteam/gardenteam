@@ -8,13 +8,13 @@ import PhotoUploader from "@/components/stampe/PhotoUploader";
 import BulkCheckbox from "@/components/stampe/BulkCheckbox";
 import InlineEdit from "@/components/stampe/InlineEdit";
 import InlineSelect from "@/components/stampe/InlineSelect";
-import ColumnResize from "@/components/stampe/ColumnResize";
+import ColumnTools from "@/components/stampe/ColumnTools";
 import ParentQuickEdit from "@/components/stampe/ParentQuickEdit";
 import PhotoMatcher from "@/components/stampe/PhotoMatcher";
 import {
   getZooDb, zooImageUrl, effectiveParentText, campagnaInLavorazione, campagnaInCorso, campaignStato,
   suggestPhotoMatch, buildAbbinamentoIndex, animaliDi, caratteristicheProdottoDi, migraVolantinoPages,
-  NO_VOLANTINO, type ZooProduct, type ZooOffer,
+  NO_VOLANTINO, marcaEffettiva, type ZooProduct, type ZooOffer,
 } from "@/lib/zoo";
 import {
   importZooOffers, updateCampaignDates, associaNuoviConAI, finalizeZooPhotoUpload,
@@ -47,7 +47,7 @@ function vistaQs(sp: Record<string, string | undefined>, scopeParam: string, vis
 }
 
 /**
- * Import offerte: la pagina di partenza del volantino IN LAVORAZIONE. Qui dentro
+ * Offerte in corso: la pagina di partenza del volantino IN LAVORAZIONE. Qui dentro
  * si fa tutto quello che serve a quel volantino — caricare l'Excel, caricare le
  * foto, raggruppare gli articoli in prodotti padre (a mano o con l'AI) e scrivere
  * i testi — senza dover passare dal database prodotti generale.
@@ -158,7 +158,7 @@ export default async function ZooOffertePage({
     const pid = prodById.get(o.productId ?? "")?.parentId;
     return pid ? parentById.get(pid) : undefined;
   };
-  const marcheList = [...new Set(offerProducts.map((p) => p.marca).filter(Boolean))].sort();
+  const marcheList = [...new Set(offerProducts.map(marcaEffettiva).filter(Boolean))].sort();
   const fornitoriList = [...new Set(offerProducts.map((p) => p.fornitore).filter(Boolean))].sort();
   const tipiPromo = [...new Set(offers.map((o) => (o.condizioni ?? "").trim()).filter(Boolean))].sort();
 
@@ -166,7 +166,7 @@ export default async function ZooOffertePage({
   const visibili = offers.filter((o) => {
     const prod = prodById.get(o.productId ?? "");
     if (sp.senzapadre === "1" && prod?.parentId) return false;
-    if (sp.marca && prod?.marca !== sp.marca) return false;
+    if (sp.marca && (!prod || marcaEffettiva(prod) !== sp.marca)) return false;
     if (sp.fornitore && prod?.fornitore !== sp.fornitore) return false;
     if (sp.tipopromo && (o.condizioni ?? "").trim() !== sp.tipopromo) return false;
     if (sp.animale || sp.caratt) {
@@ -200,7 +200,7 @@ export default async function ZooOffertePage({
   const RIGHE_MAX = 300;
   const gruppiVisibili = gruppi.slice(0, RIGHE_MAX);
   const visibiliCap = visibili.slice(0, RIGHE_MAX);
-  const nCols = (consortium ? 1 : 0) + (vistaArticoli ? 12 : 11);
+  const nCols = (consortium ? 1 : 0) + (vistaArticoli ? 14 : 13);
 
   /**
    * Dettaglio del padre aperto: non più una scheda separata in cima alla
@@ -315,7 +315,7 @@ export default async function ZooOffertePage({
       <div className="container">
         <div style={{ display: "flex", gap: 14, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 12 }}>
           <div style={{ flex: 1 }}>
-            <h1 style={{ margin: 0 }}>Import offerte — volantino in lavorazione</h1>
+            <h1 style={{ margin: 0 }}>Offerte in corso — volantino in lavorazione</h1>
             <p className="subtitle" style={{ margin: "4px 0 0" }}>
               L&apos;Excel delle promo viene confrontato con il database per EAN: dati e foto già presenti vengono
               riutilizzati, i prodotti nuovi entrano nel database.
@@ -670,7 +670,7 @@ export default async function ZooOffertePage({
                 </div>
               )}
               <div className="card table-wrap">
-                <ColumnResize tableId="tab-offerte" />
+                <ColumnTools tableId="tab-offerte" />
                 <table className="data" id="tab-offerte">
                   <thead>
                     <tr>
@@ -682,6 +682,8 @@ export default async function ZooOffertePage({
                       <th>Caratteristica</th>
                       <th>Pagina</th>
                       <th>Etichetta</th>
+                      <th title="Offerte a meccanica: 3x2, 1+1, -50% sul secondo…">Meccanica</th>
+                      <th title="Condizioni stampate sul cartello">Condizioni</th>
                       <th>Focus</th>
                       <th>{vistaArticoli ? "EAN" : "Articoli"}</th>
                       <th>Prezzo promo</th>
@@ -787,6 +789,22 @@ export default async function ZooOffertePage({
                           </td>
                           <td>
                             {consortium ? (
+                              <InlineEdit value={first.meccanica ?? ""} placeholder="es. 3x2"
+                                onSave={updateOfferGroupFieldInline.bind(null, offIds, "meccanica")} />
+                            ) : (
+                              <span style={{ fontSize: 11.5 }}>{first.meccanica || "—"}</span>
+                            )}
+                          </td>
+                          <td>
+                            {consortium ? (
+                              <InlineEdit value={first.condizioni ?? ""} placeholder="condizioni…"
+                                onSave={updateOfferGroupFieldInline.bind(null, offIds, "condizioni")} />
+                            ) : (
+                              <span style={{ fontSize: 11.5 }}>{first.condizioni || "—"}</span>
+                            )}
+                          </td>
+                          <td>
+                            {consortium ? (
                               <InlineEdit value={first.focus ?? ""} placeholder="focus…"
                                 onSave={updateOfferGroupFieldInline.bind(null, offIds, "focus")} />
                             ) : (
@@ -882,6 +900,22 @@ export default async function ZooOffertePage({
                                 onSave={updateOfferFieldInline.bind(null, o.id, "label")} />
                             ) : (
                               <span style={{ fontSize: 11.5 }}>{o.label || "—"}</span>
+                            )}
+                          </td>
+                          <td>
+                            {consortium ? (
+                              <InlineEdit value={o.meccanica ?? ""} placeholder="es. 3x2"
+                                onSave={updateOfferFieldInline.bind(null, o.id, "meccanica")} />
+                            ) : (
+                              <span style={{ fontSize: 11.5 }}>{o.meccanica || "—"}</span>
+                            )}
+                          </td>
+                          <td>
+                            {consortium ? (
+                              <InlineEdit value={o.condizioni ?? ""} placeholder="condizioni…"
+                                onSave={updateOfferFieldInline.bind(null, o.id, "condizioni")} />
+                            ) : (
+                              <span style={{ fontSize: 11.5 }}>{o.condizioni || "—"}</span>
                             )}
                           </td>
                           <td>

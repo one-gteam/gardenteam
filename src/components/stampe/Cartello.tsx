@@ -130,7 +130,14 @@ export default function Cartello({
             <img key={i} src={value} alt="" style={{ ...box, objectFit: "contain", objectPosition: "left top", mixBlendMode: "multiply" }} />
           );
         }
-        const color = item.color ?? "#111";
+        /*
+         * Il prezzo promo e la meccanica (3x2, 1+1…) sono l'informazione che deve
+         * saltare all'occhio a scaffale: rossi salvo diverso colore scelto nel
+         * layout. Gli altri campi restano neri, compreso il prezzo dell'Arredo,
+         * che segue tutte altre regole grafiche.
+         */
+        const rossoDiDefault = item.fieldId === "prezzoPromo" || item.fieldId === "meccanica";
+        const color = item.color ?? (rossoDiDefault ? "#c8161d" : "#111");
         if (item.fieldId === "prezzo" || item.fieldId === "prezzoPromo") {
           const justify = item.align === "left" ? "flex-start" : item.align === "center" ? "center" : "flex-end";
           return (
@@ -140,6 +147,13 @@ export default function Cartello({
             </div>
           );
         }
+        /*
+         * Il listino va barrato — è quello che rende leggibile lo sconto — ma solo
+         * quando è davvero un prezzo: quando manca il prezzo di partenza al suo
+         * posto compare la dicitura "A SOLI", che introduce il prezzo promo e
+         * sbarrata non avrebbe senso.
+         */
+        const barrato = item.fieldId === "prezzoListino" && value.trim().startsWith("€");
         return (
           <div
             key={i}
@@ -153,6 +167,7 @@ export default function Cartello({
               color,
               textAlign: item.align ?? "left",
               whiteSpace: "pre-line",
+              textDecoration: barrato ? "line-through" : undefined,
             }}
           >
             {/* la regola Garden Team "a capo con due spazi" viene rispettata */}

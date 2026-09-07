@@ -184,7 +184,7 @@ table.data tr:last-child td { border-bottom: none; }
 .table-wrap { overflow-x: auto; }
 
 /* maniglia per allargare/stringere la colonna, sul bordo destro dell'intestazione
-   (vedi ColumnResize.tsx: il resize del CSS non funziona sulle celle di tabella) */
+   (vedi ColumnTools.tsx: il resize del CSS non funziona sulle celle di tabella) */
 .col-grip {
   position: absolute; top: 0; right: -3px; width: 7px; height: 100%;
   cursor: col-resize; touch-action: none; user-select: none; z-index: 3;

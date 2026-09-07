@@ -383,10 +383,27 @@ export default function LayoutEditor({
           </div>
         </div>
         {mode === "noPhoto" && (
-          <p style={{ fontSize: 12, color: "var(--muted)", margin: "0 0 8px" }}>
-            Questo foglio si stampa al posto di quello normale solo quando il prodotto non ha una foto caricata:
-            di solito conviene allargare gli altri campi per riempire lo spazio che lascerebbe libero la foto.
-          </p>
+          <>
+            <p style={{ fontSize: 12, color: "var(--muted)", margin: "0 0 8px" }}>
+              Questo foglio si stampa al posto di quello normale solo quando il prodotto non ha una foto caricata:
+              di solito conviene allargare gli altri campi per riempire lo spazio che lascerebbe libero la foto.
+            </p>
+            {canEdit && (
+              <button
+                type="button" className="btn btn-outline btn-sm" style={{ marginBottom: 8 }}
+                title="Riparte dal foglio con foto invece di ridisegnare tutto da capo"
+                onClick={() => {
+                  // la foto in stampa qui non c'è comunque: portarsela dietro confonderebbe soltanto
+                  const copia = items.filter((it) => !isImageField(it.fieldId));
+                  setItemsNoPhoto(copia);
+                  pushHistory(copia);
+                  setSelected(null);
+                }}
+              >
+                Copia dal foglio con foto
+              </button>
+            )}
+          </>
         )}
         <div style={{ maxHeight: "82vh", overflow: "auto", border: "1px solid var(--line)", borderRadius: 8, padding: 12, background: "#f4f5f2" }}>
         <div

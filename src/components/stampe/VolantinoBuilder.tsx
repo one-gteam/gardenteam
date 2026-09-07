@@ -21,7 +21,7 @@ export interface OffLite {
   padreId?: string; // id del padre (serve per unire più padri in uno)
   offerIds?: string[]; // offerte racchiuse dalla voce (assente = solo `id`)
   articoli: ArtLite[]; // articoli (gusti/formati) racchiusi dalla voce
-  paginaId?: string; // pagina decisa in Import offerte (NO_VOLANTINO = scartata)
+  paginaId?: string; // pagina decisa in Offerte in corso (NO_VOLANTINO = scartata)
   focus?: string;
   gruppoGrafico?: string; // stesso valore = da impaginare vicine
 }
@@ -154,7 +154,7 @@ export default function VolantinoBuilder({
   const daCollocare = disponibili.filter((o) => !inserite.has(o.id)).length;
 
   /*
-   * Offerte con una pagina assegnata da Import offerte ma non ancora collocate:
+   * Offerte con una pagina assegnata da Offerte in corso ma non ancora collocate:
    * "Disponi per pagina" le mette nelle celle libere della loro pagina; quelle
    * che non ci stanno restano qui e vengono segnalate, perché è una scelta di
    * chi impagina (allargare la griglia, unire celle, spostarne altre).
@@ -742,7 +742,7 @@ export default function VolantinoBuilder({
                     {usata && <span className="pill pill-gray">già usata</span>}
                     {o.paginaId === NO_VOLANTINO && <span className="pill pill-red">no volantino</span>}
                     {o.paginaId && o.paginaId !== NO_VOLANTINO && !usata && (
-                      <span className="pill pill-amber" title="pagina assegnata da Import offerte">
+                      <span className="pill pill-amber" title="pagina assegnata da Offerte in corso">
                         → {pages.findIndex((p) => p.id === o.paginaId) + 1 || "?"}
                       </span>
                     )}
@@ -812,7 +812,7 @@ export default function VolantinoBuilder({
             </button>
             {daDisporre.length > 0 && (
               <button className="btn btn-sm" type="button" onClick={disponiPerPagina}
-                title="Colloca nelle pagine le offerte a cui è già stata assegnata una pagina in Import offerte">
+                title="Colloca nelle pagine le offerte a cui è già stata assegnata una pagina in Offerte in corso">
                 Disponi per pagina ({daDisporre.length})
               </button>
             )}

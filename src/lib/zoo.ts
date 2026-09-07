@@ -75,7 +75,7 @@ export interface ZooScheda {
 
 /**
  * Ciclo di vita di un volantino:
- *  - lavorazione → ci si sta lavorando: Import offerte, Scelta Offerte e Crea
+ *  - lavorazione → ci si sta lavorando: Offerte in corso, Scelta offerte Volantino e Crea
  *    Volantino agiscono SOLO su questo, su pagine pulite;
  *  - chiusa → lavoro finito, offerte in corso nei punti vendita: non si compone
  *    più, ma i cartelli si stampano ancora (è il volantino "vivo" a scaffale);
@@ -108,6 +108,12 @@ export interface ZooOffer {
   prezzoPromo: string;
   prezzoListino?: string;
   condizioni?: string;
+  /**
+   * Offerta a meccanica invece che a prezzo secco: "3x2", "1+1", "-50% sul secondo".
+   * Convive col prezzo (3x2 con il pezzo a € 4,99) o lo sostituisce, a seconda di
+   * come è composto il layout del cartello.
+   */
+  meccanica?: string;
   nuovo?: boolean; // prodotto creato da questo import (non era nel DB base)
   // scelte del Consorzio per il volantino:
   selezionata?: boolean;
@@ -119,7 +125,7 @@ export interface ZooOffer {
   ordine?: number;
   /**
    * Pagina del volantino a cui l'offerta è destinata (id di una VolPage), decisa
-   * già da Import offerte: Crea Volantino la trova poi pronta da collocare in
+   * già da Offerte in corso: Crea Volantino la trova poi pronta da collocare in
    * quella pagina. `NO_VOLANTINO` = scartata, non andrà sul volantino.
    */
   paginaId?: string;
@@ -129,6 +135,26 @@ export interface ZooOffer {
 
 /** Valore di `paginaId` per le offerte escluse dal volantino. */
 export const NO_VOLANTINO = "__no__";
+
+/**
+ * Tipologie di offerta a cui si può agganciare un layout, esattamente come si fa
+ * con animale e caratteristica: un cartello con il prezzo barrato ha bisogno di
+ * un'impaginazione diversa da un 3x2 o da un "A SOLI". Sono stringhe leggibili
+ * perché finiscono tali e quali fra i tag del layout.
+ */
+export const TIPO_BARRATO = "Promo con prezzo barrato";
+export const TIPO_A_SOLI = "Promo senza prezzo barrato";
+export const TIPO_MECCANICA = "Promo a meccanica (3x2)";
+export const ZOO_TIPI_OFFERTA = [TIPO_BARRATO, TIPO_A_SOLI, TIPO_MECCANICA];
+
+/** Tipologie che descrivono questa offerta: guidano la scelta del layout in stampa. */
+export function tagsOfferta(offer: ZooOffer): string[] {
+  const tags: string[] = [];
+  if (offer.meccanica) tags.push(TIPO_MECCANICA);
+  if (offer.prezzoListino) tags.push(TIPO_BARRATO);
+  else if (offer.prezzoPromo) tags.push(TIPO_A_SOLI);
+  return tags;
+}
 
 /** Voto/segnalazione di un responsabile PV su un'offerta candidata al volantino. */
 export interface ZooVote {
@@ -265,6 +291,24 @@ export interface ZooSettings {
   apiKey?: string; // chiave API Claude — impostabile SOLO dall'amministratore di sistema
   formatoRegole: { caratteristica: string; formatId: string }[]; // formato consigliato per caratteristica
   condizioniStandard: string[]; // condizioni pronte del Consorzio, riusabili sui cartelli
+  /** Aggiunge la validità del volantino ("dal… al…") in coda alle condizioni del cartello. */
+  condizioniConValidita?: boolean;
+}
+
+/** Cartello che un'insegna/PV ha deciso di non stampare (l'offerta resta per gli altri). */
+export interface ZooNoPrint {
+  scopeType: ScopeType;
+  scopeId: string;
+  offerId: string;
+}
+
+/** Immagine fissa caricata da PC (testata, cornice, logo) da posare sui layout. */
+export interface ZooLayoutImage {
+  id: string;
+  name: string;
+  url: string;
+  scopeType: ScopeType;
+  scopeId: string;
 }
 
 export interface ZooDB {
@@ -283,6 +327,8 @@ export interface ZooDB {
   suggestions: ZooSuggestion[];
   volantinoLayouts: VolantinoLayout[];
   zooLayouts: ZooLayout[];
+  noPrint: ZooNoPrint[];
+  layoutImages: ZooLayoutImage[];
 }
 
 /* ================== Persistenza ================== */
@@ -310,10 +356,11 @@ export async function getZooDb(): Promise<ZooDB> {
     products: [], parents: [], textOverrides: [], tagOverrides: [], offerOverrides: [], printed: [],
     campaigns: [], offers: [],
     votes: [], hidden: [], pvPrices: [], suggestions: [], volantinoLayouts: [], zooLayouts: [],
+    noPrint: [], layoutImages: [],
   };
   const db = await readDomain<ZooDB>("zoo", empty);
   db.settings = { ...DEFAULT_SETTINGS, ...(db.settings ?? {}) };
-  for (const k of ["products", "parents", "textOverrides", "tagOverrides", "offerOverrides", "printed", "campaigns", "offers", "votes", "hidden", "pvPrices", "suggestions", "volantinoLayouts", "zooLayouts"] as const) {
+  for (const k of ["products", "parents", "textOverrides", "tagOverrides", "offerOverrides", "printed", "campaigns", "offers", "votes", "hidden", "pvPrices", "suggestions", "volantinoLayouts", "zooLayouts", "noPrint", "layoutImages"] as const) {
     if (!db[k]) (db as unknown as Record<string, unknown>)[k] = [];
   }
   return db;
@@ -400,7 +447,7 @@ export function isZooHidden(db: ZooDB, scope: Scope, p: ZooProduct, academyDb: D
     const hit = db.hidden.some(
       (h) => h.scopeType === s.type && h.scopeId === s.id &&
         ((h.kind === "fornitore" && h.value === p.fornitore) ||
-         (h.kind === "marca" && h.value === p.marca) ||
+         (h.kind === "marca" && h.value === marcaEffettiva(p)) ||
          (h.kind === "articolo" && h.value === p.ean))
     );
     if (hit) return true;
@@ -521,7 +568,74 @@ export function campagneArchiviate(db: ZooDB): ZooCampaign[] {
 }
 
 /**
- * Campagna delle pagine di lavoro (Import offerte, Scelta Offerte, Crea Volantino):
+ * Storia commerciale di un articolo: in quali volantini è stato in promozione e
+ * in quali è finito davvero sulla carta. Sono due cose diverse — di tutte le
+ * offerte trattate solo una parte va sul volantino, le altre restano promozioni
+ * esposte in reparto col cartello.
+ */
+export interface ZooStoricoVoce {
+  campaign: ZooCampaign;
+  /** Pagina del volantino su cui è finito (le pagine portano il tema: Gatto, Cane, Acquariologia…). */
+  pagina?: string;
+}
+
+export interface ZooStoricoProdotto {
+  promo: ZooStoricoVoce[]; // volantini in cui l'articolo era in offerta
+  volantino: ZooStoricoVoce[]; // ...e quelli in cui l'offerta è stata scelta per la stampa
+}
+
+/**
+ * Storico di tutti gli articoli in una passata sola sulle offerte: con qualche
+ * migliaio di offerte, cercarle articolo per articolo costerebbe un tempo
+ * quadratico ad ogni caricamento del Database prodotti.
+ */
+export function storicoOfferteByEan(db: ZooDB): Map<string, ZooStoricoProdotto> {
+  const perId = new Map(db.campaigns.map((c) => [c.id, c]));
+  // dal più recente al più vecchio: in tabella si mostrano prima gli ultimi volantini
+  const peso = new Map(
+    [...db.campaigns].sort((a, b) => (b.dal ?? "").localeCompare(a.dal ?? "")).map((c, i) => [c.id, i])
+  );
+  // titolo della pagina di destinazione, per dire su QUALE parte del volantino è finito
+  const titoloPagina = new Map<string, string>();
+  for (const layout of db.volantinoLayouts) {
+    layout.pages.forEach((p, i) => titoloPagina.set(p.id, p.titolo || `Pagina ${i + 1}`));
+  }
+  const out = new Map<string, ZooStoricoProdotto>();
+  const visti = new Map<string, Set<string>>(); // ean → campagne già contate (una riga per volantino)
+  for (const o of db.offers) {
+    const campaign = perId.get(o.campaignId);
+    if (!campaign || !o.ean) continue;
+    const storico = out.get(o.ean) ?? { promo: [], volantino: [] };
+    const chiaviViste = visti.get(o.ean) ?? new Set<string>();
+    if (!chiaviViste.has(`p_${o.campaignId}`)) {
+      storico.promo.push({ campaign });
+      chiaviViste.add(`p_${o.campaignId}`);
+    }
+    if (o.selezionata && !chiaviViste.has(`v_${o.campaignId}`)) {
+      const pagina = o.paginaId && o.paginaId !== NO_VOLANTINO ? titoloPagina.get(o.paginaId) : undefined;
+      storico.volantino.push({ campaign, pagina });
+      chiaviViste.add(`v_${o.campaignId}`);
+    }
+    visti.set(o.ean, chiaviViste);
+    out.set(o.ean, storico);
+  }
+  const ordina = (vs: ZooStoricoVoce[]) =>
+    vs.sort((a, b) => (peso.get(a.campaign.id) ?? 0) - (peso.get(b.campaign.id) ?? 0));
+  for (const s of out.values()) {
+    ordina(s.promo);
+    ordina(s.volantino);
+  }
+  return out;
+}
+
+/** Periodo di validità di un volantino in forma breve, per le colonne strette. */
+export function periodoBreve(c: ZooCampaign): string {
+  const g = (d?: string) => (d ? new Date(`${d}T00:00:00`).toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit" }) : "");
+  return c.dal && c.al ? `${g(c.dal)}–${g(c.al)}` : c.nome;
+}
+
+/**
+ * Campagna delle pagine di lavoro (Offerte in corso, Scelta offerte Volantino, Crea Volantino):
  * quella in lavorazione. Se non ce n'è una si ripiega sulla chiusa più recente, così
  * le pagine mostrano comunque qualcosa finché non si apre il volantino successivo.
  */
@@ -533,8 +647,18 @@ export function fornitoriList(db: ZooDB): string[] {
   return Array.from(new Set(db.products.map((p) => p.fornitore).filter(Boolean))).sort();
 }
 
+/**
+ * Marca da mostrare ovunque (elenchi, filtri, cartelli): i listini dei fornitori
+ * quasi mai hanno una colonna MARCA — in quel caso vale il fornitore, altrimenti
+ * la colonna "Marca" resterebbe vuota su tutto il catalogo e non ci si potrebbe
+ * né filtrare né escludere quello che non si tratta.
+ */
+export function marcaEffettiva(p: Pick<ZooProduct, "marca" | "fornitore">): string {
+  return p.marca || p.fornitore || "";
+}
+
 export function marcheList(db: ZooDB): string[] {
-  return Array.from(new Set(db.products.map((p) => p.marca).filter(Boolean))).sort();
+  return Array.from(new Set(db.products.map(marcaEffettiva).filter(Boolean))).sort();
 }
 
 /** Le "caratteristiche" di un padre sono un elenco unico (animale + prodotto insieme): queste due funzioni separano le due dimensioni per mostrarle in colonne distinte. */
@@ -557,19 +681,22 @@ export const ZOO_FIELDS: PrintField[] = [
   { id: "descrizioneArticolo", label: "Descrizione articolo", size: 14, bold: false },
   { id: "marca", label: "Marca", size: 14, bold: false },
   { id: "prezzoPromo", label: "Prezzo promo", size: 46, bold: true, font: "cn" },
-  { id: "prezzoListino", label: "Prezzo listino (barrato)", size: 16, bold: false },
+  { id: "prezzoListino", label: "Prezzo listino (barrato) / «A SOLI»", size: 16, bold: false },
+  { id: "meccanica", label: "Meccanica promo (3x2, 1+1…)", size: 30, bold: true, font: "cn" },
   { id: "label", label: "Etichetta (SOTTOCOSTO, NOVITÀ…)", size: 16, bold: true, font: "cn" },
   { id: "condizioni", label: "Condizioni", size: 11, bold: false },
+  { id: "validita", label: "Validità dell'offerta (dal… al…)", size: 11, bold: false },
   { id: "eanLista", label: "EAN (tutti gli articoli del padre)", size: 9, bold: false },
   { id: "animale", label: "Tipologia animale", size: 12, bold: false },
   { id: "caratteristica", label: "Caratteristica prodotto", size: 12, bold: false },
   { id: "immagine", label: "Foto prodotto", size: 12, bold: false, type: "image" },
 ];
 
+/** A4 per primo: è il formato usato di default in Layout e in Stampa cartelli. */
 export const ZOO_FORMATS: PrintFormat[] = [
-  { id: "za6", name: "A6 (scaffale)", w: 105, h: 148 },
-  { id: "za5", name: "A5", w: 148, h: 210 },
   { id: "za4", name: "A4", w: 210, h: 297 },
+  { id: "za5", name: "A5", w: 148, h: 210 },
+  { id: "za6", name: "A6 (scaffale)", w: 105, h: 148 },
 ];
 
 /** Layout cartello zoo salvato per formato+ambito (Consorzio come base). */
@@ -615,6 +742,18 @@ export function effectiveZooLayout(
   };
 }
 
+/**
+ * Frase di validità costruita dalle date del volantino, in forma leggibile:
+ * "Promozione valida dal 17 settembre al 18 ottobre". Se manca una delle due
+ * date non si inventa nulla e la frase resta vuota.
+ */
+export function testoValidita(campaign?: ZooCampaign): string {
+  if (!campaign?.dal || !campaign?.al) return "";
+  const giorno = (d: string) =>
+    new Date(`${d}T00:00:00`).toLocaleDateString("it-IT", { day: "numeric", month: "long" });
+  return `Promozione valida dal ${giorno(campaign.dal)} al ${giorno(campaign.al)}`;
+}
+
 /** Valori del cartello per un'offerta (con prezzo del PV se caricato). */
 export function zooCartelloValues(
   db: ZooDB, offer: ZooOffer, scope?: Scope, academyDb?: DB
@@ -636,16 +775,37 @@ export function zooCartelloValues(
   const testoOfferta = (field: "descrizione" | "condizioni") =>
     perScope ? effectiveOfferText(db, scope, offer, field, academyDb).value : offer[field] ?? "";
   const foto = zooImageUrl(product, parent);
+  const campaign = db.campaigns.find((c) => c.id === offer.campaignId);
+  const validita = testoValidita(campaign);
+  /*
+   * Le condizioni possono portarsi dietro la validità del volantino: così i
+   * cartelli già impaginati la mostrano senza rifare il layout. Chi preferisce
+   * tenerla in un riquadro suo usa il campo "validita", che resta separato.
+   */
+  const condizioniSalvate = testoOfferta("condizioni");
+  const condizioni = (db.settings.condizioniConValidita ?? true) && validita
+    ? [condizioniSalvate, validita].filter(Boolean).join(" · ")
+    : condizioniSalvate;
   return {
     titolo: testoPadre("nome"),
     descCartello: testoPadre("descCartello"),
     descrizione: testoOfferta("descrizione"),
     descrizioneArticolo: product?.descrizione ?? "",
-    marca: product?.marca ?? "",
+    // i listini dei fornitori spesso non hanno la marca: meglio il fornitore che un campo vuoto
+    marca: product?.marca || product?.fornitore || "",
     prezzoPromo: offer.prezzoPromo ? `€ ${offer.prezzoPromo}` : "",
-    prezzoListino: offer.prezzoListino ? `€ ${offer.prezzoListino}` : "",
+    /*
+     * Senza prezzo di partenza non c'è niente da barrare: al suo posto va la
+     * dicitura "A SOLI", che introduce il prezzo promo (Cartello.tsx barra solo
+     * i valori che sono davvero un prezzo).
+     */
+    prezzoListino: offer.prezzoListino
+      ? `€ ${offer.prezzoListino}`
+      : offer.prezzoPromo ? "A SOLI" : "",
+    meccanica: offer.meccanica ?? "",
     label: offer.label ?? "",
-    condizioni: testoOfferta("condizioni"),
+    condizioni,
+    validita,
     eanLista: fratelli.map((p) => p.ean).join(" · "),
     animale: tagPadre("animale"),
     caratteristica: tagPadre("prodotto"),
@@ -691,6 +851,65 @@ export function volantinoExportRows(
         CONDIZIONI: o.condizioni ?? "",
         FOTO: zooImageUrl(p, parent),
         "VALIDITA'": campaign ? `${campaign.dal} - ${campaign.al}` : "",
+      };
+    });
+}
+
+/**
+ * Export delle offerte di un volantino, in due tagli:
+ *  - "volantino": quelle scelte, cioè finite sulla carta;
+ *  - "fuori": quelle trattate come promozione ma non scelte per la stampa. Sono
+ *    la maggioranza (di un migliaio di offerte ne va a volantino qualche
+ *    centinaio) e servono lo stesso, perché in reparto vengono esposte col
+ *    cartello: chi le esporta le usa per preparare cartelli e ordini.
+ */
+export function offerteExportRows(
+  db: ZooDB, academyDb: DB, scope: Scope, campaign: ZooCampaign | undefined,
+  tipo: "volantino" | "fuori"
+): Record<string, string>[] {
+  if (!campaign) return [];
+  const pagine = new Map(
+    (db.volantinoLayouts.find((l) => l.campaignId === campaign.id)?.pages ?? []).map((p, i) => [p.id, p.titolo || `Pagina ${i + 1}`])
+  );
+  const offers = db.offers.filter(
+    (o) => o.campaignId === campaign.id && (tipo === "volantino" ? o.selezionata : !o.selezionata)
+  );
+  return offers
+    .sort((a, b) => (a.descrizione ?? "").localeCompare(b.descrizione ?? "", "it"))
+    .map((o) => {
+      const p = db.products.find((x) => x.id === o.productId) ?? db.products.find((x) => x.ean === o.ean);
+      const parent = p?.parentId ? db.parents.find((x) => x.id === p.parentId) : undefined;
+      const base: Record<string, string> = {
+        EAN: o.ean,
+        "CODICE FORNITORE": p?.codice ?? "",
+        DESCRIZIONE: o.descrizione || (p?.descrizione ?? ""),
+        MARCA: p?.marca ?? "",
+        FORNITORE: p?.fornitore ?? "",
+        "PRODOTTO PADRE": parent ? effectiveParentText(db, scope, parent, "nome", academyDb).value : "",
+        "PREZZO PROMO": o.prezzoPromo,
+        "PREZZO LISTINO": o.prezzoListino ?? "",
+        CONDIZIONI: o.condizioni ?? "",
+        VOLANTINO: campaign.nome,
+        "VALIDITA'": `${campaign.dal} - ${campaign.al}`,
+      };
+      if (tipo === "volantino") {
+        return {
+          ...base,
+          PAGINA: o.paginaId && o.paginaId !== NO_VOLANTINO ? (pagine.get(o.paginaId) ?? "") : "",
+          SCHEDA: campaign.schede.find((s) => s.id === o.schedaId)?.nome ?? "",
+          ETICHETTA: o.label ?? "",
+          "AREA TEMATICA": o.gruppo ?? "",
+          FOCUS: o.focus ?? "",
+          "RAGGRUPPAMENTO GRAFICO": o.gruppoGrafico ?? "",
+          "DESCRIZIONE VOLANTINO": parent ? effectiveParentText(db, scope, parent, "descVolantino", academyDb).value : "",
+          FOTO: zooImageUrl(p, parent),
+        };
+      }
+      return {
+        ...base,
+        "SCARTATA DAL VOLANTINO": o.paginaId === NO_VOLANTINO ? "sì" : "",
+        "DESCRIZIONE CARTELLO": parent ? effectiveParentText(db, scope, parent, "descCartello", academyDb).value : "",
+        FOTO: zooImageUrl(p, parent),
       };
     });
 }
@@ -780,7 +999,15 @@ export const DEFAULT_ZOO_ITEMS: LayoutItem[] = [
   { fieldId: "label", x: 62, y: 6, w: 34, h: 10 },
   { fieldId: "descrizione", x: 5, y: 48, w: 90, h: 18 },
   { fieldId: "marca", x: 5, y: 67, w: 45, h: 7 },
-  { fieldId: "prezzoListino", x: 55, y: 66, w: 40, h: 7 },
+  { fieldId: "prezzoListino", x: 55, y: 66, w: 40, h: 7, align: "right" },
+  { fieldId: "meccanica", x: 5, y: 74, w: 33, h: 12 },
   { fieldId: "prezzoPromo", x: 40, y: 74, w: 55, h: 18 },
-  { fieldId: "condizioni", x: 5, y: 93, w: 90, h: 5 },
+  /*
+   * La validità non ha un riquadro suo nel layout predefinito: arriva in coda
+   * alle condizioni (impostazione "Aggiungi alle condizioni la validità"), che
+   * è il modo che funziona anche sui layout già disegnati. Chi la vuole su una
+   * riga separata aggiunge il campo "Validità" e toglie quell'impostazione,
+   * altrimenti la frase comparirebbe due volte.
+   */
+  { fieldId: "condizioni", x: 5, y: 92, w: 90, h: 6 },
 ];

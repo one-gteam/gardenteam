@@ -37,7 +37,30 @@ export default async function ZooArchivioPage({
   const fmt = (d?: string) => (d ? new Date(`${d}T00:00:00`).toLocaleDateString("it-IT") : "—");
   const fmtTs = (d?: string) => (d ? new Date(d).toLocaleDateString("it-IT") : "—");
   const conta = (id: string) => db.offers.filter((o) => o.campaignId === id).length;
+  const contaSuVolantino = (id: string) => db.offers.filter((o) => o.campaignId === id && o.selezionata).length;
   const pagine = (id: string) => db.volantinoLayouts.find((l) => l.campaignId === id)?.pages.length ?? 0;
+
+  /**
+   * Export Excel delle offerte di un volantino, nei due tagli che servono davvero:
+   * quelle andate sulla carta e quelle rimaste fuori — che restano promozioni
+   * vere, esposte in reparto col cartello, e sono sempre la maggioranza.
+   */
+  const esportaOfferte = (id: string) => {
+    const suVolantino = contaSuVolantino(id);
+    const fuori = conta(id) - suVolantino;
+    return (
+      <>
+        <a className="btn btn-outline btn-sm" href={`/stampe/zoo/excel?offerte=volantino&campagna=${id}&scope=${scopeParam}`}
+          title="Le offerte scelte per la stampa, con pagina, etichetta e testi">
+          Excel offerte a volantino ({suVolantino})
+        </a>
+        <a className="btn btn-outline btn-sm" href={`/stampe/zoo/excel?offerte=fuori&campagna=${id}&scope=${scopeParam}`}
+          title="Le offerte non scelte per il volantino: in promozione lo stesso, da esporre in reparto">
+          Excel offerte fuori volantino ({fuori})
+        </a>
+      </>
+    );
+  };
 
   return (
     <div>
@@ -46,7 +69,9 @@ export default async function ZooArchivioPage({
         <h1 style={{ margin: 0 }}>Archivio volantini</h1>
         <p className="subtitle" style={{ margin: "4px 0 14px" }}>
           Ogni volantino passa da <strong>in lavorazione</strong> a <strong>chiuso</strong> (offerte in corso, cartelli
-          ancora stampabili) e infine <strong>archiviato</strong>, quando se ne apre uno nuovo.
+          ancora stampabili) e infine <strong>archiviato</strong>, quando se ne apre uno nuovo. Di ognuno si esportano
+          in Excel le offerte andate sul volantino e, separatamente, quelle rimaste fuori — in promozione lo stesso e
+          da esporre in reparto.
         </p>
 
         {sp.recuperato && <div className="alert alert-green">✓ Volantino recuperato: torna disponibile in Stampa cartelli.</div>}
@@ -64,10 +89,11 @@ export default async function ZooArchivioPage({
                 <span style={{ fontSize: 12.5, color: "var(--muted)" }}>
                   {fmt(inLavorazione.dal)} → {fmt(inLavorazione.al)} · {conta(inLavorazione.id)} offerte
                 </span>
+                {esportaOfferte(inLavorazione.id)}
               </div>
             ) : (
               <div style={{ fontSize: 13, color: "var(--muted)" }}>
-                Nessun volantino in lavorazione: aprine uno da <a href="/stampe/zoo/offerte">Import offerte</a>.
+                Nessun volantino in lavorazione: aprine uno da <a href="/stampe/zoo/offerte">Offerte in corso</a>.
               </div>
             )}
             {inCorso && (
@@ -77,6 +103,7 @@ export default async function ZooArchivioPage({
                 <span style={{ fontSize: 12.5, color: "var(--muted)" }}>
                   {fmt(inCorso.dal)} → {fmt(inCorso.al)} · {conta(inCorso.id)} offerte · chiuso il {fmtTs(inCorso.chiusaIl)}
                 </span>
+                {esportaOfferte(inCorso.id)}
                 <form action={archiviaVolantino.bind(null, inCorso.id, scopeParam)}>
                   <button className="btn btn-outline btn-sm" type="submit">Archivia adesso</button>
                 </form>
@@ -95,7 +122,7 @@ export default async function ZooArchivioPage({
                 <th>Offerte</th>
                 <th>Schema pagine</th>
                 <th>Archiviato il</th>
-                <th style={{ width: 320 }}>Azioni</th>
+                <th style={{ width: 460 }}>Azioni</th>
               </tr>
             </thead>
             <tbody>
@@ -121,6 +148,7 @@ export default async function ZooArchivioPage({
                     <td style={{ fontSize: 12.5 }}>{fmtTs(c.archiviataIl)}</td>
                     <td style={{ whiteSpace: "nowrap" }}>
                       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        {!svuotato && n > 0 && esportaOfferte(c.id)}
                         {!svuotato && (
                           <form action={recuperaVolantino.bind(null, c.id, scopeParam)}>
                             <button className="btn btn-outline btn-sm" type="submit" title="Torna fra i volantini stampabili">

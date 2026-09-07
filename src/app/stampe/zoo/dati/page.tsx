@@ -8,12 +8,13 @@ import PhotoUploader from "@/components/stampe/PhotoUploader";
 import BulkCheckbox from "@/components/stampe/BulkCheckbox";
 import InlineEdit from "@/components/stampe/InlineEdit";
 import InlineSelect from "@/components/stampe/InlineSelect";
-import ColumnResize from "@/components/stampe/ColumnResize";
+import ColumnTools from "@/components/stampe/ColumnTools";
 import ParentQuickEdit from "@/components/stampe/ParentQuickEdit";
 import PhotoMatcher from "@/components/stampe/PhotoMatcher";
 import {
-  getZooDb, zooImageUrl, effectiveParentText, isZooHidden, hiddenEntriesFor, fornitoriList, marcheList,
-  suggestPhotoMatch, buildAbbinamentoIndex, animaliDi, caratteristicheProdottoDi, type ZooProduct, type ZooParent,
+  getZooDb, zooImageUrl, effectiveParentText, isZooHidden, hiddenEntriesFor, fornitoriList, marcheList, marcaEffettiva,
+  suggestPhotoMatch, buildAbbinamentoIndex, animaliDi, caratteristicheProdottoDi, storicoOfferteByEan,
+  periodoBreve, type ZooProduct, type ZooParent, type ZooStoricoVoce,
 } from "@/lib/zoo";
 import {
   importZooProducts, finalizeZooPhotoUpload, confirmZooPhotoTargets, createZooParent, associaConAI,
@@ -25,7 +26,7 @@ import {
 // "Associa con AI" può richiedere più dei 10s di default per un lotto di articoli.
 export const maxDuration = 60;
 
-/** Pagina a cui tornano le azioni su foto e prodotti padre (le stesse servono a Import offerte). */
+/** Pagina a cui tornano le azioni su foto e prodotti padre (le stesse servono a Offerte in corso). */
 const BACK = "/stampe/zoo/dati";
 
 /** Ricostruisce la query string corrente, con delle sovrascritture (undefined = togli il parametro). */
@@ -69,14 +70,14 @@ export default async function ZooDatiPage({
   const soloSenzaPadre = sp.senzapadre === "1";
   let products = db.products.filter((p) => {
     if (sp.fornitore && p.fornitore !== sp.fornitore) return false;
-    if (sp.marca && p.marca !== sp.marca) return false;
+    if (sp.marca && marcaEffettiva(p) !== sp.marca) return false;
     if (soloSenzaPadre && p.parentId) return false;
     if (sp.animale || sp.caratt) {
       const caratts = (p.parentId ? parentById.get(p.parentId) : undefined)?.caratteristiche ?? [];
       if (sp.animale && !caratts.includes(sp.animale)) return false;
       if (sp.caratt && !caratts.includes(sp.caratt)) return false;
     }
-    if (q && !`${p.descrizione} ${p.ean} ${p.codice} ${p.marca}`.toLowerCase().includes(q)) return false;
+    if (q && !`${p.descrizione} ${p.ean} ${p.codice} ${marcaEffettiva(p)}`.toLowerCase().includes(q)) return false;
     return true;
   });
   const hiddenHere = hiddenEntriesFor(db, scope);
@@ -114,7 +115,7 @@ export default async function ZooDatiPage({
 
   /*
    * Vista raggruppata (default): una riga per padre invece che per articolo,
-   * come in Import offerte — molto più leggera da caricare con l'intero
+   * come in Offerte in corso — molto più leggera da caricare con l'intero
    * catalogo, ed è il modo naturale di navigare i prodotti padre.
    */
   const vistaArticoli = sp.vista === "articoli";
@@ -132,8 +133,49 @@ export default async function ZooDatiPage({
   const RIGHE_MAX = 400;
   const gruppiVisibili = gruppi.slice(0, RIGHE_MAX);
   const productsVisibili = products.slice(0, RIGHE_MAX);
-  const nCols = (consortium || scope.type !== "system" ? 1 : 0) + (vistaArticoli ? 8 : 7)
+  const nCols = (consortium || scope.type !== "system" ? 1 : 0) + (vistaArticoli ? 10 : 9)
     + (scope.type !== "system" ? 1 : 0);
+
+  /*
+   * Storia commerciale dell'articolo, per le colonne "Volantino" e "Promo":
+   * in quali volantini è finito sulla carta e in quali periodi è comunque stato
+   * in promozione (esposto in reparto col cartello, anche senza andare a volantino).
+   */
+  const storico = storicoOfferteByEan(db);
+  const storicoDi = (prods: ZooProduct[]) => {
+    const promo = new Map<string, ZooStoricoVoce>();
+    const volantino = new Map<string, ZooStoricoVoce>();
+    for (const p of prods) {
+      const s = storico.get(p.ean);
+      s?.promo.forEach((v) => promo.set(v.campaign.id, v));
+      // fra più articoli dello stesso padre tiene la voce che dice anche la pagina
+      s?.volantino.forEach((v) => {
+        if (!volantino.get(v.campaign.id)?.pagina) volantino.set(v.campaign.id, v);
+      });
+    }
+    return { promo: [...promo.values()], volantino: [...volantino.values()] };
+  };
+  /**
+   * Elenco compatto: i due volantini più recenti, il resto contato e nel tooltip.
+   * Sulla colonna Volantino la pastiglia porta la pagina (Gatto, Cane…) quando c'è,
+   * che è l'informazione utile a colpo d'occhio; su Promo porta il periodo.
+   */
+  const cellaCampagne = (voci: ZooStoricoVoce[], mostra: "volantino" | "promo") => {
+    if (voci.length === 0) return <span style={{ fontSize: 11.5, color: "var(--muted)" }}>—</span>;
+    const titolo = voci
+      .map((v) => `${v.campaign.nome} (${periodoBreve(v.campaign)})${v.pagina ? ` — ${v.pagina}` : ""}`)
+      .join("\n");
+    return (
+      <span title={titolo} style={{ display: "inline-flex", flexWrap: "wrap", gap: 3 }}>
+        {voci.slice(0, 2).map((v) => (
+          <span key={v.campaign.id} className={mostra === "volantino" ? "pill pill-blue" : "pill pill-gray"} style={{ fontSize: 10.5 }}>
+            {mostra === "volantino" ? (v.pagina ?? v.campaign.nome) : periodoBreve(v.campaign)}
+          </span>
+        ))}
+        {voci.length > 2 && <span className="pill pill-gray" style={{ fontSize: 10.5 }}>+{voci.length - 2}</span>}
+      </span>
+    );
+  };
 
   /** Catalogo su cui cerca l'abbinamento manuale delle foto: articoli e prodotti padre. */
   const catalogoAbbinabile = abbinaAperto
@@ -449,7 +491,7 @@ export default async function ZooDatiPage({
             </div>
           )}
           <div className="card table-wrap">
-            <ColumnResize tableId="tab-dati" />
+            <ColumnTools tableId="tab-dati" />
             <table className="data" id="tab-dati">
               <thead>
                 <tr>
@@ -461,6 +503,8 @@ export default async function ZooDatiPage({
                   <th>Caratteristica</th>
                   <th>{vistaArticoli ? "EAN" : "Articoli"}</th>
                   <th>Marca · Fornitore</th>
+                  <th title="Volantini su cui l'articolo è stato stampato">Volantino</th>
+                  <th title="Periodi in cui l'articolo è stato in promozione, anche senza andare a volantino">Promo</th>
                   {vistaArticoli && <th>Padre</th>}
                   {scope.type !== "system" && <th className="no-print">Visibilità</th>}
                 </tr>
@@ -481,6 +525,7 @@ export default async function ZooDatiPage({
                   const nome = parent ? effectiveParentText(db, scope, parent, "nome", academyDb).value : first.descrizione;
                   const descr = parent ? effectiveParentText(db, scope, parent, "descVolantino", academyDb).value : "";
                   const hidden = scope.type !== "system" && prods.length === 1 && isZooHidden(db, scope, first, academyDb);
+                  const st = storicoDi(prods);
                   return [
                     <tr key={key} style={hidden ? { opacity: 0.45 } : undefined}>
                       {(consortium || scope.type !== "system") && (
@@ -547,8 +592,10 @@ export default async function ZooDatiPage({
                         )}
                       </td>
                       <td style={{ fontSize: 12.5 }}>
-                        {first.marca}<div style={{ color: "var(--muted)", fontSize: 11.5 }}>{first.fornitore}</div>
+                        {marcaEffettiva(first)}<div style={{ color: "var(--muted)", fontSize: 11.5 }}>{first.fornitore}</div>
                       </td>
+                      <td>{cellaCampagne(st.volantino, "volantino")}</td>
+                      <td>{cellaCampagne(st.promo, "promo")}</td>
                       {scope.type !== "system" && (
                         <td className="no-print" style={{ whiteSpace: "nowrap" }}>
                           {prods.length === 1 ? (
@@ -605,7 +652,9 @@ export default async function ZooDatiPage({
                         )}
                       </td>
                       <td style={{ fontSize: 12 }}>{p.ean}<div style={{ color: "var(--muted)" }}>{p.codice}</div></td>
-                      <td style={{ fontSize: 12.5 }}>{p.marca}<div style={{ color: "var(--muted)", fontSize: 11.5 }}>{p.fornitore}</div></td>
+                      <td style={{ fontSize: 12.5 }}>{marcaEffettiva(p)}<div style={{ color: "var(--muted)", fontSize: 11.5 }}>{p.fornitore}</div></td>
+                      <td>{cellaCampagne(storico.get(p.ean)?.volantino ?? [], "volantino")}</td>
+                      <td>{cellaCampagne(storico.get(p.ean)?.promo ?? [], "promo")}</td>
                       <td>
                         {parent ? (
                           <a className="pill pill-blue" href={`${BACK}?${pageQs(sp, { scope: scopeParam, padre: aperto ? undefined : parent.id })}`} style={{ textDecoration: "none" }}>

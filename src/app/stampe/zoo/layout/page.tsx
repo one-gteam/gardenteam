@@ -6,9 +6,11 @@ import LayoutEditor from "@/components/stampe/LayoutEditor";
 import AutoSubmitSelect from "@/components/stampe/AutoSubmitSelect";
 import { canAccessArea, isZooEditor, scopesForUser, resolveScope, layoutMargins } from "@/lib/stampe";
 import {
-  getZooDb, activeCampaign, zooCartelloValues, ZOO_FIELDS, ZOO_FORMATS,
+  getZooDb, activeCampaign, zooCartelloValues, ZOO_FIELDS, ZOO_FORMATS, ZOO_TIPI_OFFERTA,
 } from "@/lib/zoo";
-import { deleteZooLayout } from "@/lib/zoo-actions";
+import {
+  deleteZooLayout, uploadZooLayoutImage, deleteZooLayoutImage, copiaZooLayoutSuFormato,
+} from "@/lib/zoo-actions";
 
 /** Layout dei cartelli Offerte Zoo: stessa meccanica dell'Arredo, campi delle offerte. */
 export default async function ZooLayoutPage({
@@ -29,7 +31,14 @@ export default async function ZooLayoutPage({
   const canEdit = scope.type !== "system" || isZooEditor(user);
 
   const format = ZOO_FORMATS.find((f) => f.id === sp.formato) ?? ZOO_FORMATS[0];
-  const tipologieDisponibili = [...db.settings.categorieAnimali, ...db.settings.caratteristicheProdotto];
+  /*
+   * A un layout si aggancia sia il tipo di prodotto (Cane, Umido…) sia il tipo di
+   * offerta (prezzo barrato, "A SOLI", 3x2): serve un'impaginazione diversa per
+   * ciascuno, e in stampa vince il layout che combacia con l'offerta in corso.
+   */
+  const tipologieDisponibili = [
+    ...db.settings.categorieAnimali, ...db.settings.caratteristicheProdotto, ...ZOO_TIPI_OFFERTA,
+  ];
 
   // layout selezionabili per questo formato: i propri, più quelli del Consorzio come base
   const scopeLayouts = db.zooLayouts.filter((l) => l.formatId === format.id && l.scopeType === scope.type && l.scopeId === scope.id);
@@ -104,6 +113,8 @@ export default async function ZooLayoutPage({
           </form>
         </div>
 
+        {sp.copiato && <div className="alert alert-green no-print">✓ Layout copiato sul nuovo formato: controlla le dimensioni dei testi e salva.</div>}
+
         {!isOwnCopy && scope.type !== "system" && (
           <div className="alert alert-amber no-print">
             Stai vedendo il layout del Consorzio: qualsiasi modifica salvata creerà la versione personalizzata di {scope.label}.
@@ -125,7 +136,41 @@ export default async function ZooLayoutPage({
           sampleValues={sampleValues}
           canEdit={canEdit}
           area="zoo"
+          images={db.layoutImages
+            .filter((li) => li.scopeType === scope.type && li.scopeId === scope.id)
+            .map((li) => ({ name: li.name, url: li.url }))}
         />
+
+        {canEdit && (
+          <div className="card" style={{ marginTop: 14, padding: 14 }}>
+            <h3 style={{ marginTop: 0 }}>Immagini fisse da riusare sui cartelli</h3>
+            <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 8px" }}>
+              Carica una volta la testata, la cornice o un logo: poi lo trovi fra i pulsanti
+              «Immagini» dell&apos;editor e lo posi su qualsiasi layout, di qualsiasi formato.
+            </p>
+            <form action={uploadZooLayoutImage.bind(null, scopeParam)} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <input type="hidden" name="formato" value={format.id} />
+              <input type="file" name="image" accept="image/*" required />
+              <input type="text" name="name" placeholder="Nome (es. Testata offerte)" style={{ width: 220 }} />
+              <button className="btn btn-sm" type="submit">Carica immagine</button>
+            </form>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 10 }}>
+              {db.layoutImages.filter((li) => li.scopeType === scope.type && li.scopeId === scope.id).map((li) => (
+                <div key={li.id} style={{ border: "1px solid #eee", borderRadius: 8, padding: 6, textAlign: "center" }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={li.url} alt="" style={{ height: 44, maxWidth: 130, objectFit: "contain", display: "block" }} />
+                  <div style={{ fontSize: 11, margin: "4px 0" }}>{li.name}</div>
+                  <form action={deleteZooLayoutImage.bind(null, li.id, scopeParam, format.id)}>
+                    <button className="btn btn-outline btn-sm" type="submit">Elimina</button>
+                  </form>
+                </div>
+              ))}
+              {db.layoutImages.filter((li) => li.scopeType === scope.type && li.scopeId === scope.id).length === 0 && (
+                <span className="hint">Nessuna immagine caricata.</span>
+              )}
+            </div>
+          </div>
+        )}
 
         {scopeLayouts.length > 0 && (
           <div className="section">
@@ -145,9 +190,24 @@ export default async function ZooLayoutPage({
                         <td style={{ fontSize: 13 }}>{l.tipologie.length ? l.tipologie.join(", ") : "Tutti"}</td>
                         <td>{l.items.length}</td>
                         <td>
-                          <form action={deleteZooLayout.bind(null, l.id, scopeParam)}>
-                            <button className="btn btn-outline btn-sm" type="submit" style={{ color: "var(--red)", borderColor: "var(--red)" }}>Elimina</button>
-                          </form>
+                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                            <form action={copiaZooLayoutSuFormato.bind(null, l.id, scopeParam)}
+                              style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                              <select name="formatId" defaultValue="" style={{ fontSize: 12 }} required>
+                                <option value="" disabled>Copia su…</option>
+                                {ZOO_FORMATS.filter((f) => f.id !== l.formatId).map((f) => (
+                                  <option key={f.id} value={f.id}>{f.name}</option>
+                                ))}
+                              </select>
+                              <button className="btn btn-outline btn-sm" type="submit"
+                                title="Crea una copia sul formato scelto, con i corpi del testo riproporzionati">
+                                Copia
+                              </button>
+                            </form>
+                            <form action={deleteZooLayout.bind(null, l.id, scopeParam)}>
+                              <button className="btn btn-outline btn-sm" type="submit" style={{ color: "var(--red)", borderColor: "var(--red)" }}>Elimina</button>
+                            </form>
+                          </div>
                         </td>
                       </tr>
                     );

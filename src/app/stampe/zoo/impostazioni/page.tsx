@@ -81,6 +81,21 @@ export default async function ZooImpostazioniPage({
                   </span>
                 </label>
                 <label className="field" style={{ marginBottom: 0 }}>
+                  Validità sui cartelli
+                  <span style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
+                    <input type="checkbox" name="condizioniConValidita" value="1"
+                      defaultChecked={db.settings.condizioniConValidita ?? true} />
+                    <span style={{ fontSize: 13 }}>
+                      Aggiungi alle condizioni la validità del volantino
+                    </span>
+                  </span>
+                  <span className="hint">
+                    Es. «Promozione valida dal 17 settembre al 18 ottobre», costruita dalle date del volantino in
+                    corso. In alternativa si può posizionare il campo <strong>Validità</strong> in un riquadro suo,
+                    dalla pagina Layout.
+                  </span>
+                </label>
+                <label className="field" style={{ marginBottom: 0 }}>
                   Istruzioni per i testi del VOLANTINO (guidano anche l&apos;AI)
                   <textarea name="istruzioniVolantino" rows={4} defaultValue={db.settings.istruzioniVolantino} />
                 </label>

@@ -127,11 +127,11 @@ export default async function ZooVolantinoPage({
       <div className="container">
         <div style={{ display: "flex", gap: 14, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 12 }}>
           <div style={{ flex: 1 }}>
-            <h1 style={{ margin: 0 }}>Scelta Offerte</h1>
+            <h1 style={{ margin: 0 }}>Scelta offerte Volantino</h1>
             <p className="subtitle" style={{ margin: "4px 0 0" }}>
               {campaign
                 ? `${campaign.nome} (${campaign.dal || "—"} → ${campaign.al || "—"}) · ${selCount} offerte scelte per il volantino`
-                : "Nessun volantino in lavorazione: aprine uno da Import offerte"}
+                : "Nessun volantino in lavorazione: aprine uno da Offerte in corso"}
               {consortium
                 ? " · Tu vedi i voti di tutti i PV e fai la selezione finale."
                 : " · Segna le offerte che ti piacciono: il Consorzio vede i voti di tutti i responsabili."}
@@ -152,7 +152,7 @@ export default async function ZooVolantinoPage({
 
         {!campaign && (
           <div className="card" style={{ padding: 24, textAlign: "center", color: "var(--muted)" }}>
-            Importa prima le offerte mensili nella pagina &quot;Import offerte&quot;.
+            Importa prima le offerte mensili nella pagina &quot;Offerte in corso&quot;.
           </div>
         )}
 
