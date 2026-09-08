@@ -369,7 +369,7 @@ export default function LayoutEditor({
     <div className="layout-editor">
       <div className="card" style={{ padding: 12 }}>
         <h3 style={{ margin: "2px 6px 10px" }}>Campi disponibili</h3>
-        <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+        <div className="editor-fields">
           {fields.map((f) => (
             <button
               key={f.id}
@@ -390,7 +390,7 @@ export default function LayoutEditor({
         {images.length > 0 && (
           <>
             <h3 style={{ margin: "14px 6px 8px" }}>Le tue immagini</h3>
-            <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+            <div className="editor-fields">
               {images.map((img) => (
                 <button key={img.url} type="button" className="btn btn-outline btn-sm" style={{ textAlign: "left" }} onClick={() => addImage(img.url)} disabled={!canEdit}>
                   {img.name}
@@ -588,9 +588,10 @@ export default function LayoutEditor({
         </p>
       </div>
 
-      <div className="card" style={{ padding: 14 }}>
+      <div className="card editor-panel" style={{ padding: 14 }}>
         {/* identità del layout: nome, e come farne una copia */}
         {canEdit && (
+          <div className="panel-layout">
           <Sezione titolo="Layout">
             <label className="field" style={{ marginBottom: 8 }}>
               Nome
@@ -604,9 +605,11 @@ export default function LayoutEditor({
               Crea copia
             </button>
           </Sezione>
+          </div>
         )}
         {/* proprietà del foglio: valgono per tutto il cartello, non per il campo selezionato */}
         {canEdit && (
+          <div className="panel-layout">
           <Sezione titolo={`Foglio (${format.w}×${format.h} mm)`} aperta={false}>
             <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 6 }}>Margini ({unita})</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
@@ -629,8 +632,10 @@ export default function LayoutEditor({
               Servono ad allineare — non spostano i campi già posizionati.
             </p>
           </Sezione>
+          </div>
         )}
         {selItem?.sticker && canEdit && (
+          <div className="panel-campo">
           <Sezione titolo="Sticker selezionato">
             <label className="field">
               Campo associato
@@ -673,9 +678,11 @@ export default function LayoutEditor({
               <input type="range" min={6} max={60} value={selItem.sticker.size} onChange={(e) => updateSelected({ sticker: { size: Number(e.target.value) } })} style={{ width: "100%" }} />
             </label>
           </Sezione>
+          </div>
         )}
         {/* sfondo e angoli: valgono per qualsiasi riquadro selezionato, testo o immagine che sia */}
         {selItem && !selItem.sticker && canEdit && (
+          <div className="panel-campo">
           <Sezione titolo="Sfondo del riquadro" aperta={false}>
             <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12.5, marginBottom: 8 }}>
               <input
@@ -708,8 +715,10 @@ export default function LayoutEditor({
               </label>
             )}
           </Sezione>
+          </div>
         )}
         {selItem && !selItem.sticker && !isImageField(selItem.fieldId) && canEdit && (
+          <div className="panel-campo">
           <Sezione titolo="Campo selezionato">
             <label className="field">
               Carattere
@@ -798,8 +807,10 @@ export default function LayoutEditor({
               </div>
             </label>
           </Sezione>
+          </div>
         )}
-        <Sezione titolo="Quando usare questo layout" aperta>
+        <div className="panel-layout">
+          <Sezione titolo="Quando usare questo layout" aperta>
           <p style={{ fontSize: 12, color: "var(--muted)", margin: "0 0 8px" }}>
             Nessuna spunta = layout valido per tutti i cartelli di questo formato. Spuntando qualcosa il layout
             viene scelto in stampa solo per i cartelli che corrispondono: così un &quot;A SOLI&quot; può essere
@@ -842,8 +853,9 @@ export default function LayoutEditor({
             ))}
           </div>
         </Sezione>
+          </div>
         {canEdit ? (
-          <>
+          <div className="panel-layout">
             <p style={{ fontSize: 11.5, color: "var(--muted)", margin: "14px 0 6px", textAlign: "center" }}>
               Le modifiche si salvano da sole poco dopo ogni cambiamento.
             </p>
@@ -851,7 +863,7 @@ export default function LayoutEditor({
               {pending ? "Salvataggio…" : "Salva ora"}
             </button>
             {saved && !pending && <p style={{ color: "var(--green-700)", fontWeight: 700, fontSize: 13, textAlign: "center", margin: "8px 0 0" }}>✓ Salvato</p>}
-          </>
+          </div>
         ) : (
           <p style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 12 }}>
             Stai vedendo il layout del Consorzio: seleziona la tua insegna/PV in alto per personalizzarlo.

@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { requireUser } from "./auth";
 import { getDb } from "./db";
 import { canAccessStampe, isZooEditor, resolveScope, sanitizeMargins } from "./stampe";
@@ -22,6 +23,16 @@ async function requireZooUser() {
 function backUrl(page: string, scopeParam: string, extra: Record<string, string> = {}) {
   const qs = new URLSearchParams({ scope: scopeParam, ...extra });
   return `${page}?${qs.toString()}`;
+}
+
+/**
+ * Rigenera le pagine dell'area dopo una scrittura. Senza questo, il redirect può
+ * riportare su una versione già in cache: era il motivo per cui un'immagine
+ * appena caricata non compariva fra quelle disponibili finché non si ricaricava
+ * la pagina a mano.
+ */
+function rigeneraZoo() {
+  revalidatePath("/stampe/zoo", "layout");
 }
 
 function cell(row: Record<string, unknown>, ...cols: string[]): string {
@@ -699,6 +710,7 @@ export async function toggleZooHidden(scopeParam: string, kind: "fornitore" | "m
   if (existing) db.hidden = db.hidden.filter((h) => h !== existing);
   else db.hidden.push({ scopeType: scope.type, scopeId: scope.id, kind, value });
   await saveZooDb(db);
+  rigeneraZoo();
   redirect(backUrl(back, scopeParam));
 }
 
@@ -1503,6 +1515,7 @@ export async function toggleZooNoPrint(offerId: string, scopeParam: string, back
   if (i >= 0) db.noPrint.splice(i, 1);
   else db.noPrint.push({ scopeType: scope.type, scopeId: scope.id, offerId });
   await saveZooDb(db);
+  rigeneraZoo();
   redirect(backUrl(back, scopeParam));
 }
 
@@ -1519,6 +1532,7 @@ export async function toggleZooNoPrintBulk(scopeParam: string, back: string, for
     if (!gia) db.noPrint.push({ scopeType: scope.type, scopeId: scope.id, offerId });
   }
   await saveZooDb(db);
+  rigeneraZoo();
   redirect(backUrl(back, scopeParam, { nonstampare: String(ids.length) }));
 }
 
@@ -1543,6 +1557,7 @@ export async function uploadZooLayoutImage(scopeParam: string, formData: FormDat
       await saveZooDb(db);
     }
   }
+  rigeneraZoo();
   redirect(backUrl("/stampe/zoo/layout", scopeParam, { formato }));
 }
 
@@ -1555,6 +1570,7 @@ export async function deleteZooLayoutImage(imageId: string, scopeParam: string, 
     (i) => !(i.id === imageId && i.scopeType === scope.type && i.scopeId === scope.id)
   );
   await saveZooDb(db);
+  rigeneraZoo();
   redirect(backUrl("/stampe/zoo/layout", scopeParam, { formato }));
 }
 
@@ -1594,5 +1610,6 @@ export async function copiaZooLayoutSuFormato(layoutId: string, scopeParam: stri
     itemsNoPhoto: sorgente!.itemsNoPhoto ? scala(sorgente!.itemsNoPhoto) : undefined,
   });
   await saveZooDb(db);
+  rigeneraZoo();
   redirect(backUrl("/stampe/zoo/layout", scopeParam, { formato: a!.id, copiato: "1" }));
 }

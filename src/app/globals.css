@@ -460,6 +460,23 @@ table.data td { overflow-wrap: anywhere; }
 .layout-editor { display: grid; grid-template-columns: 200px 1fr 250px; gap: 16px; align-items: start; }
 @media (max-width: 1000px) { .layout-editor { grid-template-columns: 1fr; } }
 
+/* elenco dei campi da posare: una colonna, due sui monitor larghi */
+.editor-fields { display: grid; grid-template-columns: 1fr; gap: 5px; }
+
+/*
+   Monitor larghi: la tavolozza dei campi e il pannello di destra si sdoppiano,
+   così i comandi stanno sott'occhio invece di richiedere una scorsa lunga. A
+   destra le due colonne separano quello che riguarda il campo selezionato da
+   quello che riguarda tutto il layout.
+*/
+@media (min-width: 1650px) {
+  .layout-editor { grid-template-columns: 330px 1fr 540px; }
+  .editor-fields { grid-template-columns: 1fr 1fr; }
+  .editor-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; align-items: start; grid-auto-flow: dense; }
+  .editor-panel > .panel-campo { grid-column: 1; }  /* comandi del campo selezionato */
+  .editor-panel > .panel-layout { grid-column: 2; } /* comandi di tutto il layout */
+}
+
 /* schede prodotto */
 .tab-chip {
   display: inline-flex; gap: 7px; align-items: center;
