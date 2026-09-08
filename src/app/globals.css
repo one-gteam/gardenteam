@@ -472,9 +472,12 @@ table.data td { overflow-wrap: anywhere; }
 @media (min-width: 1650px) {
   .layout-editor { grid-template-columns: 330px 1fr 540px; }
   .editor-fields { grid-template-columns: 1fr 1fr; }
-  .editor-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; align-items: start; grid-auto-flow: dense; }
-  .editor-panel > .panel-campo { grid-column: 1; }  /* comandi del campo selezionato */
-  .editor-panel > .panel-layout { grid-column: 2; } /* comandi di tutto il layout */
+  /*
+     Due colonne affiancate e indipendenti, non una griglia: con la griglia ogni
+     riquadro occupava una riga propria e accanto a uno alto restava un buco.
+  */
+  .editor-panel { display: flex; align-items: flex-start; gap: 14px; }
+  .editor-panel > .panel-col { flex: 1 1 0; min-width: 0; }
 }
 
 /* schede prodotto */
@@ -650,6 +653,15 @@ table.data td { overflow-wrap: anywhere; }
 }
 
 @media print {
+  /*
+   * Senza questa regola il browser aggiunge i suoi margini di pagina (circa un
+   * centimetro per lato): il cartello, che è disegnato esatto sul formato,
+   * finiva rimpicciolito e spostato, e i bordi scelti nel layout non cadevano
+   * dove dovevano. A margine zero il foglio è tutto a disposizione del cartello
+   * e valgono solo i margini impostati nel layout.
+   */
+  @page { margin: 0; }
+  html, body { margin: 0; padding: 0; }
   .site-header, .no-print { display: none !important; }
   /* volantino composto: una pagina del volantino per foglio, tutte le schede */
   .vol-layout { display: block; }

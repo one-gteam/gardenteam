@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 /**
  * Campo di testo modificabile direttamente in una cella di tabella, con
@@ -9,13 +10,21 @@ import { useState } from "react";
  * componente resta generico e riusabile per qualunque campo.
  */
 export default function InlineEdit({
-  value, onSave, multiline, placeholder,
+  value, onSave, multiline, placeholder, aggiornaPagina,
 }: {
   value: string;
   onSave: (value: string) => Promise<{ ok: boolean }>;
   multiline?: boolean;
   placeholder?: string;
+  /**
+   * Ricarica i dati della pagina dopo il salvataggio. Serve dove accanto al campo
+   * c'è qualcosa che deve seguirlo — l'anteprima del cartello in Stampa — e resta
+   * spento altrove, perché sulle tabelle da centinaia di righe un ricaricamento
+   * ad ogni correzione si sentirebbe.
+   */
+  aggiornaPagina?: boolean;
 }) {
+  const router = useRouter();
   const [v, setV] = useState(value);
   const [stato, setStato] = useState<"" | "salvo" | "ok" | "errore">("");
 
@@ -25,6 +34,7 @@ export default function InlineEdit({
     try {
       const res = await onSave(v);
       setStato(res.ok ? "ok" : "errore");
+      if (res.ok && aggiornaPagina) router.refresh();
     } catch {
       setStato("errore");
     }

@@ -15,7 +15,7 @@ import {
 } from "@/lib/zoo";
 import {
   importPvPrices, markZooPrinted, resetZooPrinted, toggleZooHidden, toggleZooNoPrint,
-  updateParentFieldInline, setParentTagScoped, setOfferTextScoped, setPvPriceInline,
+  updateParentFieldInline, setParentTagScoped, setOfferTextScoped, setPvPriceInline, updateOfferFieldInline,
 } from "@/lib/zoo-actions";
 
 /** Stampa cartelli Offerte Zoo: stesso impianto dell'Arredo (selezione, formati per riga, stampa 1:1). */
@@ -381,10 +381,13 @@ export default async function ZooStampaPage({
                 <thead>
                   <tr>
                     <th>Titolo (padre)</th>
+                    <th className="col-wide">Descrizione offerta</th>
                     <th className="col-wide">Descrizione (cartello)</th>
                     <th>Animale</th>
                     <th>Caratteristica</th>
                     <th>Prezzo</th>
+                    <th>Listino</th>
+                    <th>Meccanica</th>
                     <th>Condizioni</th>
                     {scope.type !== "system" && <th className="no-print">Stampa</th>}
                   </tr>
@@ -398,6 +401,7 @@ export default async function ZooStampaPage({
                     const animale = parent ? effectiveParentTag(db, scope, parent, "animale", academyDb) : undefined;
                     const caratt = parent ? effectiveParentTag(db, scope, parent, "prodotto", academyDb) : undefined;
                     const cond = effectiveOfferText(db, scope, o, "condizioni", academyDb);
+                    const descOfferta = effectiveOfferText(db, scope, o, "descrizione", academyDb);
                     const pv = pvPriceFor(db, scope, o.ean, academyDb);
                     return (
                       <tr key={o.id}>
@@ -405,7 +409,7 @@ export default async function ZooStampaPage({
                           {parent ? (
                             <>
                               <InlineEdit value={nome!.value}
-                                onSave={updateParentFieldInline.bind(null, parent.id, "nome", scopeParam)} />
+                                onSave={updateParentFieldInline.bind(null, parent.id, "nome", scopeParam)} aggiornaPagina />
                               {nome!.custom && <span className="pill pill-orange">personalizzato</span>}
                             </>
                           ) : (
@@ -413,10 +417,16 @@ export default async function ZooStampaPage({
                           )}
                         </td>
                         <td className="col-wide">
+                          {/* è la riga che finisce in grande sul cartello: qui si corregge al volo un refuso */}
+                          <InlineEdit value={descOfferta.value} multiline placeholder="descrizione dell'offerta…"
+                            onSave={setOfferTextScoped.bind(null, o.id, "descrizione", scopeParam)} aggiornaPagina />
+                          {descOfferta.custom && <span className="pill pill-orange">personalizzata</span>}
+                        </td>
+                        <td className="col-wide">
                           {parent ? (
                             <>
                               <InlineEdit value={desc!.value} multiline placeholder="descrizione per il cartello…"
-                                onSave={updateParentFieldInline.bind(null, parent.id, "descCartello", scopeParam)} />
+                                onSave={updateParentFieldInline.bind(null, parent.id, "descCartello", scopeParam)} aggiornaPagina />
                               {desc!.custom && <span className="pill pill-orange">personalizzata</span>}
                             </>
                           ) : <span className="pill pill-gray">—</span>}
@@ -445,11 +455,31 @@ export default async function ZooStampaPage({
                           ) : (
                             <>
                               <InlineEdit value={pv ?? ""} placeholder={o.prezzoPromo}
-                                onSave={setPvPriceInline.bind(null, o.ean, scopeParam)} />
+                                onSave={setPvPriceInline.bind(null, o.ean, scopeParam)} aggiornaPagina />
                               {pv
                                 ? <span className="pill pill-orange">vostro prezzo</span>
                                 : <span className="hint">Consorzio: € {o.prezzoPromo}</span>}
                             </>
+                          )}
+                        </td>
+                        <td>
+                          {/*
+                            Listino e meccanica sono dati dell'offerta, comuni a tutti: li corregge
+                            il Consorzio. Gli altri ambiti li vedono, così sanno cosa verrà stampato.
+                          */}
+                          {scope.type === "system" ? (
+                            <InlineEdit value={o.prezzoListino ?? ""} placeholder="es. 12,99"
+                              onSave={updateOfferFieldInline.bind(null, o.id, "prezzoListino")} aggiornaPagina />
+                          ) : (
+                            <span style={{ fontSize: 12 }}>{o.prezzoListino ? `€ ${o.prezzoListino}` : "A SOLI"}</span>
+                          )}
+                        </td>
+                        <td>
+                          {scope.type === "system" ? (
+                            <InlineEdit value={o.meccanica ?? ""} placeholder="es. 3x2"
+                              onSave={updateOfferFieldInline.bind(null, o.id, "meccanica")} aggiornaPagina />
+                          ) : (
+                            <span style={{ fontSize: 12 }}>{o.meccanica || "—"}</span>
                           )}
                         </td>
                         <td>
@@ -459,7 +489,7 @@ export default async function ZooStampaPage({
                               onSave={setOfferTextScoped.bind(null, o.id, "condizioni", scopeParam)} />
                           )}
                           <InlineEdit value={cond.value} placeholder="oppure scrivi le tue condizioni…"
-                            onSave={setOfferTextScoped.bind(null, o.id, "condizioni", scopeParam)} />
+                            onSave={setOfferTextScoped.bind(null, o.id, "condizioni", scopeParam)} aggiornaPagina />
                           {cond.custom && <span className="pill pill-orange">personalizzate</span>}
                         </td>
                         {scope.type !== "system" && (

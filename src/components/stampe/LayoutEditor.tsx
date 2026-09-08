@@ -540,7 +540,10 @@ export default function LayoutEditor({
             // con vertical-align: dentro un contenitore posizionato, e soprattutto in stampa, quel
             // calcolo dipende dai metrici del font e può finire in basso invece che in alto — con
             // un flex "allineati in alto" la posizione non dipende dal motore di rendering.
-            const [intPart, centPart] = raw.split(",");
+            // stesso trattamento della stampa: valuta e centesimi piccoli e in alto,
+            // altrimenti l'anteprima dell'editor mostrerebbe un prezzo diverso da quello stampato
+            const valuta = /^[€$£]/.test(raw.trim()) ? raw.trim()[0] : "";
+            const [intPart, centPart] = (valuta ? raw.trim().slice(1).trim() : raw).split(",");
             return (
               <div
                 key={i}
@@ -565,6 +568,7 @@ export default function LayoutEditor({
                 {isPrice ? (
                   raw ? (
                     <span style={{ display: "inline-flex", alignItems: "flex-start" }}>
+                      {valuta && <span style={{ fontSize: "0.45em", marginRight: "0.08em" }}>{valuta}</span>}
                       <span>{intPart}</span>
                       {centPart !== undefined && <span style={{ fontSize: "0.5em", marginLeft: "0.05em" }}>,{centPart}</span>}
                     </span>
@@ -589,51 +593,8 @@ export default function LayoutEditor({
       </div>
 
       <div className="card editor-panel" style={{ padding: 14 }}>
-        {/* identità del layout: nome, e come farne una copia */}
-        {canEdit && (
-          <div className="panel-layout">
-          <Sezione titolo="Layout">
-            <label className="field" style={{ marginBottom: 8 }}>
-              Nome
-              <input type="text" value={nome} onChange={(e) => setNome(e.target.value)} placeholder="es. Cartello Gatto" />
-            </label>
-            <label className="field" style={{ marginBottom: 4 }}>
-              Duplica come nuovo layout
-              <input type="text" value={dupName} onChange={(e) => setDupName(e.target.value)} placeholder={`${nome || format.name} (copia)`} />
-            </label>
-            <button type="button" className="btn btn-outline btn-sm" style={{ width: "100%" }} onClick={doDuplicate} disabled={pending}>
-              Crea copia
-            </button>
-          </Sezione>
-          </div>
-        )}
-        {/* proprietà del foglio: valgono per tutto il cartello, non per il campo selezionato */}
-        {canEdit && (
-          <div className="panel-layout">
-          <Sezione titolo={`Foglio (${format.w}×${format.h} mm)`} aperta={false}>
-            <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 6 }}>Margini ({unita})</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-              {([["top", "Alto"], ["bottom", "Basso"], ["left", "Sinistra"], ["right", "Destra"]] as const).map(
-                ([lato, etichetta]) => (
-                  <label key={lato} className="field" style={{ marginBottom: 0 }}>
-                    {etichetta}
-                    <input
-                      type="number" step={passo} min={0} value={inUnita(margins[lato])}
-                      onChange={(e) =>
-                        setMargins((m) => ({ ...m, [lato]: Math.max(0, Math.min(100, daUnita(e.target.value))) }))
-                      }
-                    />
-                  </label>
-                )
-              )}
-            </div>
-            <p style={{ fontSize: 11.5, color: "var(--muted)", margin: "6px 0 0" }}>
-              Compaiono sul foglio come linee tratteggiate: trascinando un campo lì vicino, si aggancia da solo.
-              Servono ad allineare — non spostano i campi già posizionati.
-            </p>
-          </Sezione>
-          </div>
-        )}
+        {/* colonna dei comandi del campo selezionato: vuota finché non se ne sceglie uno */}
+        <div className="panel-col panel-col-campo">
         {selItem?.sticker && canEdit && (
           <div className="panel-campo">
           <Sezione titolo="Sticker selezionato">
@@ -727,13 +688,22 @@ export default function LayoutEditor({
               </select>
             </label>
             <label className="field">
-              Dimensione font: {selItem.size ?? fields.find((f) => f.id === selItem.fieldId)?.size ?? 11}
-              <input
-                type="range" min={6} max={80}
-                value={selItem.size ?? fields.find((f) => f.id === selItem.fieldId)?.size ?? 11}
-                onChange={(e) => updateSelected({ size: Number(e.target.value) })}
-                style={{ width: "100%" }}
-              />
+              Dimensione font
+              <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <input
+                  type="range" min={6} max={200}
+                  value={selItem.size ?? fields.find((f) => f.id === selItem.fieldId)?.size ?? 11}
+                  onChange={(e) => updateSelected({ size: Number(e.target.value) })}
+                  style={{ flex: 1 }}
+                />
+                {/* casella accanto al cursore: sui prezzi grandi serve il numero esatto, non la posizione del cursore */}
+                <input
+                  type="number" min={6} max={400} step={1}
+                  value={selItem.size ?? fields.find((f) => f.id === selItem.fieldId)?.size ?? 11}
+                  onChange={(e) => updateSelected({ size: Math.max(6, Math.min(400, Number(e.target.value) || 6)) })}
+                  style={{ width: 68, marginTop: 0 }}
+                />
+              </span>
             </label>
             <div style={{ display: "flex", gap: 14, marginBottom: 10 }}>
               <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12.5 }}>
@@ -809,6 +779,54 @@ export default function LayoutEditor({
           </Sezione>
           </div>
         )}
+        </div>
+        {/* colonna dei comandi che valgono per tutto il layout */}
+        <div className="panel-col panel-col-layout">
+        {/* identità del layout: nome, e come farne una copia */}
+        {canEdit && (
+          <div className="panel-layout">
+          <Sezione titolo="Layout">
+            <label className="field" style={{ marginBottom: 8 }}>
+              Nome
+              <input type="text" value={nome} onChange={(e) => setNome(e.target.value)} placeholder="es. Cartello Gatto" />
+            </label>
+            <label className="field" style={{ marginBottom: 4 }}>
+              Duplica come nuovo layout
+              <input type="text" value={dupName} onChange={(e) => setDupName(e.target.value)} placeholder={`${nome || format.name} (copia)`} />
+            </label>
+            <button type="button" className="btn btn-outline btn-sm" style={{ width: "100%" }} onClick={doDuplicate} disabled={pending}>
+              Crea copia
+            </button>
+          </Sezione>
+          </div>
+        )}
+        {/* proprietà del foglio: valgono per tutto il cartello, non per il campo selezionato */}
+        {canEdit && (
+          <div className="panel-layout">
+          <Sezione titolo={`Foglio (${format.w}×${format.h} mm)`} aperta={false}>
+            <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 6 }}>Margini ({unita})</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              {([["top", "Alto"], ["bottom", "Basso"], ["left", "Sinistra"], ["right", "Destra"]] as const).map(
+                ([lato, etichetta]) => (
+                  <label key={lato} className="field" style={{ marginBottom: 0 }}>
+                    {etichetta}
+                    <input
+                      type="number" step={passo} min={0} value={inUnita(margins[lato])}
+                      onChange={(e) =>
+                        setMargins((m) => ({ ...m, [lato]: Math.max(0, Math.min(100, daUnita(e.target.value))) }))
+                      }
+                    />
+                  </label>
+                )
+              )}
+            </div>
+            <p style={{ fontSize: 11.5, color: "var(--muted)", margin: "6px 0 0" }}>
+              Compaiono sul foglio come linee tratteggiate: trascinando un campo lì vicino, si aggancia da solo.
+              Servono ad allineare — non spostano i campi già posizionati.
+            </p>
+          </Sezione>
+          </div>
+        )}
         <div className="panel-layout">
           <Sezione titolo="Quando usare questo layout" aperta>
           <p style={{ fontSize: 12, color: "var(--muted)", margin: "0 0 8px" }}>
@@ -869,6 +887,7 @@ export default function LayoutEditor({
             Stai vedendo il layout del Consorzio: seleziona la tua insegna/PV in alto per personalizzarlo.
           </p>
         )}
+        </div>
       </div>
     </div>
   );

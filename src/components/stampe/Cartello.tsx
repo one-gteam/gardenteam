@@ -13,10 +13,18 @@ const FONT_CN = '"Avenir Next LT Pro Cn", "Avenir Next LT Pro", "Segoe UI", sans
  * dipende dal motore di rendering: è pura disposizione dei riquadri.
  */
 function Prezzo({ value, size, scale, font }: { value: string; size: number; scale: number; font?: string }) {
-  const [int, cent] = value.split(",");
+  /*
+   * Il simbolo di valuta va in apice come i centesimi: sul cartello deve saltare
+   * all'occhio il numero, non l'euro. Si stacca dal resto solo se c'è davvero —
+   * i prezzi dell'Arredo arrivano senza simbolo e restano come prima.
+   */
+  const testo = value.trim();
+  const valuta = /^[€$£]/.test(testo) ? testo[0] : "";
+  const [int, cent] = (valuta ? testo.slice(1).trim() : testo).split(",");
   const fs = (size * scale) / 2.4;
   return (
     <span style={{ fontFamily: font ?? FONT_CN, fontWeight: 800, lineHeight: 0.95, whiteSpace: "nowrap", fontSize: fs, display: "inline-flex", alignItems: "flex-start" }}>
+      {valuta && <span style={{ fontSize: "0.45em", marginRight: "0.08em" }}>{valuta}</span>}
       <span>{int}</span>
       {cent !== undefined && <span style={{ fontSize: "0.5em", marginLeft: "0.05em" }}>,{cent}</span>}
     </span>
