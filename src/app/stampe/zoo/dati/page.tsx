@@ -14,7 +14,7 @@ import PhotoMatcher from "@/components/stampe/PhotoMatcher";
 import {
   getZooDb, zooImageUrl, effectiveParentText, isZooHidden, hiddenEntriesFor, fornitoriList, marcheList, marcaEffettiva,
   suggestPhotoMatch, buildAbbinamentoIndex, animaliDi, caratteristicheProdottoDi, storicoOfferteByEan,
-  periodoBreve, type ZooProduct, type ZooParent, type ZooStoricoVoce,
+  periodoBreve, visibleProducts, type ZooProduct, type ZooParent, type ZooStoricoVoce,
 } from "@/lib/zoo";
 import {
   importZooProducts, finalizeZooPhotoUpload, confirmZooPhotoTargets, createZooParent, associaConAI,
@@ -68,7 +68,7 @@ export default async function ZooDatiPage({
   // filtri
   const q = (sp.q ?? "").toLowerCase();
   const soloSenzaPadre = sp.senzapadre === "1";
-  let products = db.products.filter((p) => {
+  let products = visibleProducts(db, scope, academyDb).filter((p) => {
     if (sp.fornitore && p.fornitore !== sp.fornitore) return false;
     if (sp.marca && marcaEffettiva(p) !== sp.marca) return false;
     if (soloSenzaPadre && p.parentId) return false;
@@ -328,6 +328,22 @@ export default async function ZooDatiPage({
         {sp.nontenuti !== undefined && (
           <div className="alert alert-green">
             ✓ {sp.nontenuti} articoli segnati come non tenuti da {scope.label}: non compariranno nella stampa cartelli, ora né in futuro, finché non li rendi di nuovo visibili.
+          </div>
+        )}
+
+        {/* import dei propri articoli per insegna/PV: codici interni, sfusi, private label */}
+        {scope.type !== "system" && (
+          <div className="card" style={{ marginBottom: 14, padding: 14 }}>
+            <strong>I tuoi articoli</strong>
+            <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "4px 0 8px" }}>
+              Carica gli articoli che hai solo tu — codici interni, sfusi, private label — e che nel catalogo del
+              Consorzio non ci sono. Restano <strong>tuoi</strong>: li vedi qui e li stampi, gli altri no.
+              Colonne: EAN, DESCRIZIONE, CODICE FORNITORE, MARCA, FORNITORE, CATEGORIA, PREZZO.
+            </p>
+            <form action={importZooProducts.bind(null, scopeParam)} style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <input type="file" name="file" accept=".xlsx,.xls,.csv" required />
+              <button className="btn btn-sm" type="submit">Importa i miei articoli</button>
+            </form>
           </div>
         )}
 
@@ -632,6 +648,7 @@ export default async function ZooDatiPage({
                       </td>
                       <td>
                         <strong style={{ fontSize: 13 }}>{p.descrizione}</strong>
+                        {p.scopeType && <span className="pill pill-orange" style={{ marginLeft: 6 }}>vostro</span>}
                         {p.prezzo && <div style={{ fontSize: 11.5, color: "var(--muted)" }}>prezzo base € {p.prezzo}</div>}
                       </td>
                       <td className="col-wide" style={{ fontSize: 11.5, color: "var(--muted)" }}>{parentDescr || "—"}</td>

@@ -11,10 +11,11 @@ import {
   getZooDb, effectiveZooLayout, zooCartelloValues, pvPriceFor, isZooHidden,
   campagneStampabili, campagnaInCorso, campagnaInLavorazione, campaignStato,
   effectiveParentText, effectiveParentTag, effectiveOfferText, printedAt, NO_VOLANTINO,
-  ZOO_FIELDS, ZOO_FORMATS, marcaEffettiva, marcheList, tagsOfferta, pvPromoFor,
+  ZOO_FIELDS, ZOO_FORMATS, marcaEffettiva, marcheList, tagsOfferta, pvPromoFor, ownScopeVisible,
 } from "@/lib/zoo";
 import {
   importPvPrices, markZooPrinted, resetZooPrinted, toggleZooHidden, toggleZooNoPrint,
+  creaOffertaPropria, eliminaOffertaPropria,
   updateParentFieldInline, setParentTagScoped, setOfferTextScoped, setPvPriceInline, updateOfferFieldInline,
 } from "@/lib/zoo-actions";
 
@@ -43,7 +44,16 @@ export default async function ZooStampaPage({
   const stampabili = campagneStampabili(db);
   const campaign =
     stampabili.find((c) => c.id === sp.campagna) ?? campagnaInCorso(db) ?? campagnaInLavorazione(db);
-  const allOffers = campaign ? db.offers.filter((o) => o.campaignId === campaign.id) : [];
+  /*
+   * Si stampano le offerte del volantino del Consorzio più quelle proprie di
+   * questa insegna/PV, che vivono fuori dal volantino comune ma vanno a scaffale
+   * insieme alle altre.
+   */
+  const offerteProprie = db.offers.filter((o) => o.scopeType && ownScopeVisible(scope, academyDb, o));
+  const allOffers = [
+    ...(campaign ? db.offers.filter((o) => o.campaignId === campaign.id && !o.scopeType) : []),
+    ...offerteProprie,
+  ];
   const etichettaPeriodo = (c: (typeof stampabili)[number]) => {
     const p = campaignStato(c) === "lavorazione" ? "in preparazione" : "in corso";
     const d = (x: string) => (x ? new Date(`${x}T00:00:00`).toLocaleDateString("it-IT") : "—");
@@ -265,10 +275,12 @@ export default async function ZooStampaPage({
               </select>
             </label>
             <button className="btn btn-sm" type="submit">Filtra</button>
-            <div style={{ gridColumn: "1 / -1" }}>
-              <strong style={{ fontSize: 12.5 }}>Marche da stampare</strong>
-              <span className="hint" style={{ marginLeft: 8 }}>
-                spunta una o più marche; nessuna spunta = tutte. La marca è quella del listino o, se manca, il fornitore.
+            <details style={{ gridColumn: "1 / -1" }} open={marcheScelte.length > 0}>
+              <summary style={{ cursor: "pointer", fontWeight: 700, fontSize: 12.5 }}>
+                Marche da stampare{marcheScelte.length > 0 ? ` — ${marcheScelte.length} selezionate` : " — tutte"}
+              </summary>
+              <span className="hint">
+                Spunta una o più marche; nessuna spunta = tutte. La marca è quella del listino o, se manca, il fornitore.
               </span>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 6 }}>
                 {marche.length === 0 && <span className="hint">Nessuna marca in questo periodo.</span>}
@@ -279,28 +291,86 @@ export default async function ZooStampaPage({
                   </label>
                 ))}
               </div>
-            </div>
+            </details>
           </form>
+          {scope.type !== "system" && (
+            <details style={{ marginTop: 12, borderTop: "1px dashed var(--line)", paddingTop: 10 }} open={sp.offerta === "ok" || offerteProprie.length > 0}>
+              <summary style={{ cursor: "pointer", fontWeight: 700, fontSize: 12.5 }}>
+                Le offerte di {scope.label}{offerteProprie.length > 0 ? ` — ${offerteProprie.length}` : ""}
+              </summary>
+              <p className="hint" style={{ margin: "2px 0 8px" }}>
+                Promozioni vostre, fuori dal volantino del Consorzio: si stampano nei vostri cartelli insieme alle altre.
+                L&apos;articolo dev&apos;essere nel catalogo — il vostro o quello comune.
+              </p>
+              {sp.offerta === "ok" && <div className="alert alert-green">✓ Offerta aggiunta: la trovi nell&apos;elenco qui a sinistra.</div>}
+              {sp.offerta === "eliminata" && <div className="alert alert-green">✓ Offerta eliminata.</div>}
+              {sp.offerta === "dati" && <div className="alert alert-amber">Servono almeno il codice a barre e il prezzo.</div>}
+              {sp.offerta === "sconosciuto" && (
+                <div className="alert alert-amber">
+                  Quel codice a barre non è fra i vostri articoli né in quelli del Consorzio: caricalo prima da Database prodotti.
+                </div>
+              )}
+              <form action={creaOffertaPropria.bind(null, scopeParam)}
+                style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8, alignItems: "end" }}>
+                <label className="field" style={{ marginBottom: 0 }}>Codice a barre<input type="text" name="ean" required placeholder="8001234567890" /></label>
+                <label className="field" style={{ marginBottom: 0 }}>Descrizione<input type="text" name="descrizione" placeholder="(quella dell'articolo)" /></label>
+                <label className="field" style={{ marginBottom: 0 }}>Prezzo promo<input type="text" name="prezzoPromo" required placeholder="4,99" /></label>
+                <label className="field" style={{ marginBottom: 0 }}>Prezzo barrato<input type="text" name="prezzoListino" placeholder="6,99" /></label>
+                <label className="field" style={{ marginBottom: 0 }}>Meccanica<input type="text" name="meccanica" placeholder="es. 3x2" /></label>
+                <label className="field" style={{ marginBottom: 0 }}>Condizioni<input type="text" name="condizioni" placeholder="fino a esaurimento" /></label>
+                <button className="btn btn-sm" type="submit">Aggiungi offerta</button>
+              </form>
+              {offerteProprie.length > 0 && (
+                <div className="table-wrap" style={{ marginTop: 10 }}>
+                  <table className="data">
+                    <thead><tr><th>Articolo</th><th>EAN</th><th>Prezzo</th><th>Barrato</th><th>Meccanica</th><th></th></tr></thead>
+                    <tbody>
+                      {offerteProprie.map((o) => (
+                        <tr key={o.id}>
+                          <td style={{ fontSize: 12.5 }}>{o.descrizione}</td>
+                          <td style={{ fontSize: 12 }}>{o.ean}</td>
+                          <td><strong>€ {o.prezzoPromo}</strong></td>
+                          <td style={{ fontSize: 12 }}>{o.prezzoListino ? `€ ${o.prezzoListino}` : "—"}</td>
+                          <td style={{ fontSize: 12 }}>{o.meccanica || "—"}</td>
+                          <td>
+                            <form action={eliminaOffertaPropria.bind(null, o.id, scopeParam)}>
+                              <button className="btn btn-outline btn-sm" type="submit" style={{ color: "var(--red)", borderColor: "var(--red)" }}>Elimina</button>
+                            </form>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </details>
+          )}
           {scope.type !== "system" && marche.length > 0 && (
-            <div style={{ marginTop: 12, borderTop: "1px dashed var(--line)", paddingTop: 10 }}>
-              <strong style={{ fontSize: 12.5 }}>Marche che {scope.label} non tratta</strong>
+            <details style={{ marginTop: 12, borderTop: "1px dashed var(--line)", paddingTop: 10 }} open={marcheEscluse.length > 0}>
+              <summary style={{ cursor: "pointer", fontWeight: 700, fontSize: 12.5 }}>
+                Marche trattate da {scope.label}
+                {marcheEscluse.length > 0 ? ` — ${marcheEscluse.length} escluse` : " — le tratta tutte"}
+              </summary>
               <p className="hint" style={{ margin: "2px 0 6px" }}>
-                Escluderle qui vale per questo volantino e per tutti i prossimi: i loro articoli spariscono da stampa
-                cartelli e dal database prodotti, finché non le rimetti.
+                Clicca una marca per cambiare stato. <span className="pill pill-green">verde = la trattate</span>{" "}
+                <span className="pill pill-gray">✕ grigio = non la trattate</span> — quelle escluse spariscono da stampa
+                cartelli e dal database prodotti, per questo volantino e per i prossimi, finché non le rimetti.
               </p>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                 {marche.map((m) => {
                   const esclusa = marcheEscluse.includes(m);
                   return (
                     <form key={`ex_${m}`} action={toggleZooHidden.bind(null, scopeParam, "marca", m, "/stampe/zoo/stampa")}>
-                      <button type="submit" className={`pill ${esclusa ? "pill-gray" : "pill-green"}`} style={{ cursor: "pointer", border: "none" }}>
-                        {esclusa ? "✕ " : ""}{m}
+                      <button type="submit" className={`pill ${esclusa ? "pill-gray" : "pill-green"}`}
+                        style={{ cursor: "pointer", border: "none" }}
+                        title={esclusa ? `Rimetti ${m} fra quelle trattate` : `Segna ${m} come non trattata`}>
+                        {esclusa ? `✕ ${m} — non trattata` : `${m}`}
                       </button>
                     </form>
                   );
                 })}
               </div>
-            </div>
+            </details>
           )}
           {campaign && nStampati > 0 && (
             <form action={resetZooPrinted.bind(null, "/stampe/zoo/stampa", scopeParam, campaign.id)} style={{ marginTop: 10 }}>

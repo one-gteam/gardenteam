@@ -15,6 +15,13 @@ export interface ZooProduct {
   prezzo?: string; // prezzo base (non promo)
   image?: string; // /zoo-foto/<file>
   parentId?: string; // prodotto "padre" di cui è variante (gusto/formato)
+  /**
+   * Chi possiede l'articolo. Assente = catalogo del Consorzio, comune a tutti.
+   * Valorizzato = articolo caricato da un'insegna o da un punto vendita (tipico
+   * dei codici interni, es. sfusi e private label): lo vedono solo loro.
+   */
+  scopeType?: ScopeType;
+  scopeId?: string;
 }
 
 /** Prodotto padre: raggruppa articoli simili, con testi per volantino e cartello. */
@@ -131,6 +138,12 @@ export interface ZooOffer {
   paginaId?: string;
   focus?: string; // tema/angolo di comunicazione (campo libero)
   gruppoGrafico?: string; // offerte da impaginare vicine (stesso valore = stesso riquadro)
+  /**
+   * Offerta propria di un'insegna/PV invece che del Consorzio: non entra nel
+   * volantino comune, si stampa solo nei cartelli di chi l'ha creata.
+   */
+  scopeType?: ScopeType;
+  scopeId?: string;
 }
 
 /** Valore di `paginaId` per le offerte escluse dal volantino. */
@@ -695,6 +708,24 @@ export function marcheList(db: ZooDB): string[] {
   return Array.from(new Set(db.products.map(marcaEffettiva).filter(Boolean))).sort();
 }
 
+/**
+ * L'elemento (articolo o offerta) è di competenza di chi sta guardando?
+ * Senza ambito è del Consorzio e lo vedono tutti; con un ambito lo vedono chi
+ * l'ha creato e chi gli sta sotto (gli articoli dell'insegna valgono per i suoi
+ * punti vendita), non gli altri.
+ */
+export function ownScopeVisible(
+  scope: Scope, academyDb: DB, x: { scopeType?: ScopeType; scopeId?: string }
+): boolean {
+  if (!x.scopeType) return true; // roba del Consorzio: comune
+  return chainFor(scope, academyDb).some((s) => s.type === x.scopeType && s.id === x.scopeId);
+}
+
+/** Articoli che questo ambito deve vedere: catalogo comune più i propri. */
+export function visibleProducts(db: ZooDB, scope: Scope, academyDb: DB): ZooProduct[] {
+  return db.products.filter((p) => ownScopeVisible(scope, academyDb, p));
+}
+
 /** Codici promozione dell'ambito (se non ne ha ancora, valgono quelli proposti). */
 export function pvPromoCodesFor(db: ZooDB, scope: Scope): { codice: string; etichetta: string }[] {
   const propri = db.pvPromoCodes.filter((c) => c.scopeType === scope.type && c.scopeId === scope.id);
@@ -849,7 +880,12 @@ export function zooCartelloValues(
     ? [condizioniSalvate, validita].filter(Boolean).join(" · ")
     : condizioniSalvate;
   return {
-    titolo: testoPadre("nome"),
+    /*
+     * Senza prodotto padre il titolo resterebbe vuoto e il cartello uscirebbe
+     * senza nome: succede sugli articoli propri di un punto vendita, che nascono
+     * senza raggruppamento. In quel caso vale la descrizione dell'articolo.
+     */
+    titolo: testoPadre("nome") || product?.descrizione || offer.descrizione,
     descCartello: testoPadre("descCartello"),
     descrizione: testoOfferta("descrizione"),
     descrizioneArticolo: product?.descrizione ?? "",

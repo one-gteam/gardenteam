@@ -8,7 +8,7 @@ import { canAccessStampe, isZooEditor, resolveScope, sanitizeMargins } from "./s
 import { LAYOUT_FONTS } from "./layout-fonts";
 import {
   getZooDb, saveZooDb, ZooDB, ZooParent, campagnaInLavorazione, campagnaInCorso, campaignStato, NO_VOLANTINO,
-  ZOO_FORMATS, PV_PROMO_CODES_DEFAULT,
+  ZOO_FORMATS, PV_PROMO_CODES_DEFAULT, ownScopeVisible,
 } from "./zoo";
 import type { LayoutItem } from "./stampe";
 import { groupAndDescribe, groupAndDescribeBatched } from "./zoo-ai";
@@ -119,7 +119,14 @@ function parseListinoBlocchi(XLSX: typeof import("xlsx"), wb: import("xlsx").Wor
 
 export async function importZooProducts(scopeParam: string, formData: FormData) {
   const user = await requireZooUser();
-  if (!isZooEditor(user)) redirect("/stampe/zoo/dati");
+  const academyDbScope = await getDb();
+  const scopeImport = resolveScope(user, scopeParam, academyDbScope);
+  /*
+   * Il catalogo comune lo carica solo il Consorzio; un'insegna o un punto vendita
+   * carica invece i propri articoli (codici interni, sfusi, private label), che
+   * restano suoi e non finiscono nel catalogo degli altri.
+   */
+  if (scopeImport.type === "system" && !isZooEditor(user)) redirect("/stampe/zoo/dati");
   const file = formData.get("file") as File | null;
   if (!file || file.size === 0) redirect(backUrl("/stampe/zoo/dati", scopeParam, { importati: "0" }));
   const XLSX = await import("xlsx");
@@ -131,10 +138,15 @@ export async function importZooProducts(scopeParam: string, formData: FormData) 
     const ean = cell(row, "EAN", "CODICE EAN", "BARCODE");
     const descrizione = cell(row, "DESCRIZIONE", "DESCRIZIONE ARTICOLO", "ARTICOLO");
     if (!ean || !descrizione) continue;
-    const id = `z_${ean}`;
+    // gli articoli propri hanno un id distinto: lo stesso EAN può esistere sia nel
+    // catalogo comune sia come articolo interno di un punto vendita
+    const id = scopeImport.type === "system" ? `z_${ean}` : `z_${scopeImport.type}_${scopeImport.id}_${ean}`;
     let p = db.products.find((x) => x.id === id);
     if (!p) {
-      p = { id, ean, codice: "", descrizione: "", marca: "", fornitore: "" };
+      p = {
+        id, ean, codice: "", descrizione: "", marca: "", fornitore: "",
+        ...(scopeImport.type === "system" ? {} : { scopeType: scopeImport.type, scopeId: scopeImport.id }),
+      };
       db.products.push(p);
     }
     p.descrizione = descrizione;
@@ -1709,4 +1721,63 @@ export async function rinominaPvPromoCode(codice: string, scopeParam: string, va
   await saveZooDb(db);
   rigeneraZoo();
   return { ok: true };
+}
+
+/* ================== Offerte proprie di insegna / punto vendita ================== */
+
+/**
+ * Offerta creata da un'insegna o da un punto vendita sui propri articoli (o su
+ * quelli del Consorzio): non entra nel volantino comune, ma si stampa nei loro
+ * cartelli insieme alle altre. Serve a chi fa promozioni sue — sfusi, codici
+ * interni, iniziative locali — senza aspettare la campagna del Consorzio.
+ */
+export async function creaOffertaPropria(scopeParam: string, formData: FormData) {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  if (scope.type === "system") redirect(backUrl("/stampe/zoo/stampa", scopeParam, { offerta: "consorzio" }));
+
+  const ean = String(formData.get("ean") ?? "").trim().replace(/\s/g, "");
+  const prezzoPromo = priceOrEmpty(String(formData.get("prezzoPromo") ?? ""));
+  if (!ean || !prezzoPromo) redirect(backUrl("/stampe/zoo/stampa", scopeParam, { offerta: "dati" }));
+
+  // l'articolo dev'essere visibile a questo ambito: il suo, dell'insegna o del Consorzio
+  const prodotto = db.products.find((p) => p.ean === ean && ownScopeVisible(scope, academyDb, p));
+  if (!prodotto) redirect(backUrl("/stampe/zoo/stampa", scopeParam, { offerta: "sconosciuto" }));
+
+  const campaign = campagnaInCorso(db) ?? campagnaInLavorazione(db) ?? db.campaigns[db.campaigns.length - 1];
+  db.offers.push({
+    id: `zo_pv_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    campaignId: campaign?.id ?? "",
+    ean,
+    productId: prodotto.id,
+    descrizione: String(formData.get("descrizione") ?? "").trim() || prodotto.descrizione,
+    prezzoPromo,
+    prezzoListino: priceOrEmpty(String(formData.get("prezzoListino") ?? "")) || undefined,
+    condizioni: String(formData.get("condizioni") ?? "").trim() || undefined,
+    meccanica: String(formData.get("meccanica") ?? "").trim() || undefined,
+    scopeType: scope.type,
+    scopeId: scope.id,
+  });
+  await saveZooDb(db);
+  rigeneraZoo();
+  redirect(backUrl("/stampe/zoo/stampa", scopeParam, { offerta: "ok" }));
+}
+
+/** Elimina un'offerta propria (solo chi l'ha creata, o chi gli sta sopra). */
+export async function eliminaOffertaPropria(offerId: string, scopeParam: string) {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  const o = db.offers.find((x) => x.id === offerId);
+  if (!o || !o.scopeType || !ownScopeVisible(scope, academyDb, o)) {
+    redirect(backUrl("/stampe/zoo/stampa", scopeParam));
+  }
+  db.offers = db.offers.filter((x) => x.id !== offerId);
+  db.votes = db.votes.filter((v) => v.offerId !== offerId);
+  await saveZooDb(db);
+  rigeneraZoo();
+  redirect(backUrl("/stampe/zoo/stampa", scopeParam, { offerta: "eliminata" }));
 }
