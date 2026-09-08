@@ -1,5 +1,6 @@
 import { getDb } from "@/lib/db";
 import { loginWithPassword } from "@/lib/actions";
+import { SITE_NAME } from "@/lib/types";
 
 export default async function LoginPage({
   searchParams,
@@ -14,8 +15,8 @@ export default async function LoginPage({
       <div className="login-hero">
         <div style={{ display: "inline-flex", alignItems: "center", gap: 12, background: "#fff", borderRadius: 14, padding: "10px 18px" }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={db.settings.logoUrl} alt="Garden Team" style={{ height: 44 }} />
-          <span style={{ color: "var(--green-700)", fontWeight: 800, fontSize: 24 }}>Garden Team</span>
+          <img src={db.settings.logoUrl} alt={SITE_NAME} style={{ height: 44 }} />
+          <span style={{ color: "var(--green-700)", fontWeight: 800, fontSize: 24 }}>{SITE_NAME}</span>
         </div>
         <p>
           Il portale unico dei servizi del Consorzio: un solo accesso per tutte le macroaree.

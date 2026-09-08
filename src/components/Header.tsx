@@ -10,14 +10,12 @@ export default async function Header({ user, active }: { user: User; active: str
   const store = db.stores.find((s) => s.id === user.storeId);
   const isAdmin = user.role !== "student";
 
-  const canOrg = ["system_admin", "group_admin", "store_admin"].includes(user.role);
   const links = isAdmin
     ? [
         { href: "/admin", label: "Dashboard", key: "admin" },
         { href: "/admin/utenti", label: "Collaboratori", key: "utenti" },
         { href: "/admin/corsi", label: "Corsi", key: "corsi" },
         { href: "/admin/percorsi", label: "Percorsi", key: "percorsi" },
-        ...(canOrg ? [{ href: "/admin/organizzazione", label: "Organizzazione", key: "organizzazione" }] : []),
         { href: "/admin/email", label: "Email", key: "email" },
         { href: "/admin/report", label: "Report", key: "report" },
         { href: "/studente", label: "Vista studente", key: "studente" },

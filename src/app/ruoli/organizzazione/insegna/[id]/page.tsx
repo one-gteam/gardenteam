@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
-import Header from "@/components/Header";
+import RuoliHeader from "@/components/RuoliHeader";
 import { updateTenant } from "@/lib/actions";
 import { ROLE_LABELS } from "@/lib/types";
 
@@ -31,10 +31,10 @@ export default async function TenantPage({
 
   return (
     <div>
-      <Header user={user} active="organizzazione" />
+      <RuoliHeader user={user} active="organizzazione" />
       <div className="container" style={{ maxWidth: 780 }}>
         <div style={{ marginBottom: 8 }}>
-          <Link href="/admin/organizzazione">← Torna all&apos;organizzazione</Link>
+          <Link href="/ruoli/organizzazione">← Torna all&apos;organizzazione</Link>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           {t.logoUrl ? (
@@ -94,7 +94,7 @@ export default async function TenantPage({
           <div className="section-head"><h2>Punti vendita dell&apos;insegna</h2></div>
           <div className="grid grid-3">
             {stores.map((s) => (
-              <a key={s.id} className="card card-link" href={`/admin/organizzazione/pv/${s.id}`}>
+              <a key={s.id} className="card card-link" href={`/ruoli/organizzazione/pv/${s.id}`}>
                 <strong>{s.name}</strong>
                 <div style={{ fontSize: 12.5, color: "var(--muted)" }}>{s.city || "—"}</div>
               </a>

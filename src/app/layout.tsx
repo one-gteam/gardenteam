@@ -41,7 +41,7 @@ const ALT_FONT_CLASSES: Record<string, string> = {
 };
 
 export const metadata: Metadata = {
-  title: "Academy GT — Formazione Garden Team",
+  title: "GT One — Consorzio Garden Team",
   description: "La piattaforma di formazione del Consorzio Garden Team",
 };
 

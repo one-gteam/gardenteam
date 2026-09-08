@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
-import Header from "@/components/Header";
+import RuoliHeader from "@/components/RuoliHeader";
 import { updateSettings, saveSsoDefaults } from "@/lib/actions";
 import { DEFAULT_HOME_BLOCKS, FONT_OPTIONS } from "@/lib/types";
 import HomeBlocksPanel from "@/components/HomeBlocksPanel";
@@ -22,10 +22,10 @@ export default async function ConsorzioPage({
 
   return (
     <div>
-      <Header user={user} active="organizzazione" />
+      <RuoliHeader user={user} active="organizzazione" />
       <div className="container" style={{ maxWidth: 780 }}>
         <div style={{ marginBottom: 8 }}>
-          <Link href="/admin/organizzazione">← Torna all&apos;organizzazione</Link>
+          <Link href="/ruoli/organizzazione">← Torna all&apos;organizzazione</Link>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}

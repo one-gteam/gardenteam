@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition, type MouseEvent, type ReactNode } from "react";
 import { deleteUsers, quickSetRole, quickSetSites, quickToggleActive, setTenantUserDelegation } from "@/lib/actions";
-import { ROLE_LABELS, Role, SITE_LABELS, SiteId } from "@/lib/types";
+import { ROLE_LABELS, Role, SITE_LABELS_BREVI, SiteId } from "@/lib/types";
 
 const SITES: SiteId[] = ["academy", "arredo", "zoo", "piante"];
 const COLUMN_ORDER_KEY = "agt_ruoli_col_order";
@@ -114,7 +114,7 @@ export default function RolesPanel({
                   disabled={!u.editabile || pending}
                   onChange={() => toggleSite(u, site)}
                 />
-                {SITE_LABELS[site]}
+                {SITE_LABELS_BREVI[site]}
               </label>
             ))}
           </span>

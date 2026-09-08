@@ -1,5 +1,6 @@
 import { getDb } from "@/lib/db";
 import { registerRequest } from "@/lib/actions";
+import { SITE_NAME } from "@/lib/types";
 
 const ERRORS: Record<string, string> = {
   segreta: "Parola segreta non corretta per il punto vendita selezionato. Chiedila al tuo responsabile.",
@@ -22,8 +23,8 @@ export default async function RegisterPage({
       <div className="login-hero">
         <div style={{ display: "inline-flex", alignItems: "center", gap: 12, background: "#fff", borderRadius: 14, padding: "10px 18px" }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={db.settings.logoUrl} alt={db.settings.portalName} style={{ height: 44 }} />
-          <span style={{ color: "var(--green-700)", fontWeight: 800, fontSize: 24 }}>{db.settings.portalName}</span>
+          <img src={db.settings.logoUrl} alt={SITE_NAME} style={{ height: 44 }} />
+          <span style={{ color: "var(--green-700)", fontWeight: 800, fontSize: 24 }}>{SITE_NAME}</span>
         </div>
         <p>Richiesta di registrazione</p>
       </div>

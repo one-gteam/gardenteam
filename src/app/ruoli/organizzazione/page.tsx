@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
-import Header from "@/components/Header";
+import RuoliHeader from "@/components/RuoliHeader";
 import InsegnaLogo from "@/components/InsegnaLogo";
 import {
   saveDepartment,
@@ -66,7 +66,7 @@ export default async function OrgPage({
 
   return (
     <div>
-      <Header user={user} active="organizzazione" />
+      <RuoliHeader user={user} active="organizzazione" />
       <div className="container">
         <h1>Organizzazione</h1>
         <p className="subtitle">
@@ -77,7 +77,7 @@ export default async function OrgPage({
         {salvato && <div className="alert alert-green">✓ Modifiche salvate.</div>}
 
         {user.role === "system_admin" && (
-          <a className="card card-link" href="/admin/organizzazione/consorzio" style={{ marginBottom: 24, display: "flex", alignItems: "center", gap: 14, border: "2px solid var(--green-500)" }}>
+          <a className="card card-link" href="/ruoli/organizzazione/consorzio" style={{ marginBottom: 24, display: "flex", alignItems: "center", gap: 14, border: "2px solid var(--green-500)" }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={db.settings.logoUrl} alt={db.settings.portalName} style={{ height: 40, maxWidth: 130, objectFit: "contain" }} />
             <div style={{ flex: 1 }}>
@@ -100,7 +100,7 @@ export default async function OrgPage({
                 const pvCount = db.stores.filter((s) => s.tenantId === t.id).length;
                 const staff = db.users.filter((u) => u.tenantId === t.id).length;
                 return (
-                  <a key={t.id} className="card card-link" href={`/admin/organizzazione/insegna/${t.id}`}>
+                  <a key={t.id} className="card card-link" href={`/ruoli/organizzazione/insegna/${t.id}`}>
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                       {t.logoUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
@@ -136,7 +136,7 @@ export default async function OrgPage({
               const t = db.tenants.find((x) => x.id === s.tenantId)!;
               const staff = db.users.filter((u) => u.storeId === s.id).length;
               return (
-                <a key={s.id} className="card card-link" href={`/admin/organizzazione/pv/${s.id}`}>
+                <a key={s.id} className="card card-link" href={`/ruoli/organizzazione/pv/${s.id}`}>
                   <strong style={{ display: "flex", alignItems: "center", gap: 7 }}>
                     <InsegnaLogo tenant={t} height={20} /> {s.name}
                   </strong>

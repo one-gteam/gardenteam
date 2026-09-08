@@ -1,5 +1,6 @@
 import { activateAccount } from "@/lib/actions";
 import { getDb } from "@/lib/db";
+import { SITE_NAME } from "@/lib/types";
 
 const ERRORS: Record<string, string> = {
   corta: "La password deve avere almeno 8 caratteri.",
@@ -21,8 +22,8 @@ export default async function ActivatePage({
       <div className="login-hero">
         <div style={{ display: "inline-flex", alignItems: "center", gap: 12, background: "#fff", borderRadius: 14, padding: "10px 18px" }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={settings.logoUrl} alt={settings.portalName} style={{ height: 44 }} />
-          <span style={{ color: "var(--green-700)", fontWeight: 800, fontSize: 24 }}>{settings.portalName}</span>
+          <img src={settings.logoUrl} alt={SITE_NAME} style={{ height: 44 }} />
+          <span style={{ color: "var(--green-700)", fontWeight: 800, fontSize: 24 }}>{SITE_NAME}</span>
         </div>
         <p>Attiva il tuo account</p>
       </div>
@@ -32,7 +33,7 @@ export default async function ActivatePage({
         <div className="card">
           <h2>Attiva utente</h2>
           <p style={{ fontSize: 14, color: "var(--muted)" }}>
-            Il tuo punto vendita ti ha già inserito in Academy GT: inserisci la tua email di lavoro e
+            Il tuo punto vendita ti ha già inserito in GT One: inserisci la tua email di lavoro e
             scegli una password per attivare l&apos;account.
           </p>
           <form action={activateAccount}>

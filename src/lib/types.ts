@@ -88,11 +88,27 @@ export interface User {
 
 export type SiteId = "academy" | "arredo" | "zoo" | "piante";
 
+/**
+ * Nome dell'intero portale, quello che si legge fuori dalle aree (login, scelta
+ * area, registrazione, titolo del browser). "Academy GT" è invece il nome della
+ * sola area della formazione: vive in settings.portalName ed è modificabile
+ * dalla Scheda Consorzio.
+ */
+export const SITE_NAME = "GT One";
+
 export const SITE_LABELS: Record<SiteId, string> = {
   academy: "Academy",
   arredo: "Cartelli Arredo",
   zoo: "Offerte Zoo",
   piante: "Cartelli Piante",
+};
+
+/** Nomi corti delle aree, per le tabelle strette (Utenti e ruoli). */
+export const SITE_LABELS_BREVI: Record<SiteId, string> = {
+  academy: "Academy",
+  arredo: "Arredo",
+  zoo: "Zoo",
+  piante: "Piante",
 };
 
 /**

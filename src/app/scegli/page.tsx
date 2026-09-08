@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { GraduationCap, Armchair, PawPrint, Flower2, Users, HardDrive, ArrowRight } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
-import { userSites, postLoginPath } from "@/lib/types";
+import { userSites, postLoginPath, SITE_NAME } from "@/lib/types";
 import { canManageUsers } from "@/lib/logic";
 import { puoVedereArchivio } from "@/lib/storage-audit";
 import { logout } from "@/lib/actions";
@@ -71,8 +71,8 @@ export default async function ScegliPage() {
       <div className="login-hero" style={{ paddingBottom: 130 }}>
         <div style={{ display: "inline-flex", alignItems: "center", gap: 12, background: "#fff", borderRadius: 14, padding: "10px 18px" }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={settings.logoUrl} alt="Garden Team" style={{ height: 44 }} />
-          <span style={{ color: "var(--green-700)", fontWeight: 800, fontSize: 24 }}>Garden Team</span>
+          <img src={settings.logoUrl} alt={SITE_NAME} style={{ height: 44 }} />
+          <span style={{ color: "var(--green-700)", fontWeight: 800, fontSize: 24 }}>{SITE_NAME}</span>
         </div>
         <p>Ciao {user.firstName}! Dove vuoi andare oggi?</p>
       </div>

@@ -1,12 +1,11 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeft, Users } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import RolesPanel from "@/components/RolesPanel";
+import RuoliHeader from "@/components/RuoliHeader";
+import NuovoUtente from "@/components/NuovoUtente";
 import { assignableRolesFor, canManageUsers, scopeUsers } from "@/lib/logic";
-import { ROLE_LABELS, userSites } from "@/lib/types";
-import { logout } from "@/lib/actions";
+import { userSites } from "@/lib/types";
 
 /**
  * Gestione Ruoli: area a sé, raggiunta dalla scelta area. A cascata:
@@ -56,35 +55,8 @@ export default async function RuoliPage({
 
   return (
     <div>
-      <header className="site-header">
-        <div className="site-header-inner">
-          <div className="header-top">
-            <Link href="/scegli" className="brand">
-              <span className="brand-logo">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={db.settings.logoUrl} alt="Garden Team" />
-              </span>
-              <span className="area-name" style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-                <Users size={16} /> Gestione Ruoli
-              </span>
-            </Link>
-            <Link href="/scegli" style={{ color: "#e8f3ea", fontSize: 13, display: "inline-flex", alignItems: "center", gap: 5 }}>
-              <ArrowLeft size={14} /> Cambia area
-            </Link>
-            <div className="user-chip">
-              <div className="avatar">{user.firstName[0]}{user.lastName[0]}</div>
-              <div>
-                <div style={{ fontWeight: 700 }}>{user.firstName} {user.lastName}</div>
-                <div style={{ opacity: 0.75, fontSize: 11 }}>{ROLE_LABELS[user.role]}</div>
-              </div>
-              <form action={logout}>
-                <button className="logout-btn" type="submit">Esci</button>
-              </form>
-            </div>
-          </div>
-        </div>
-      </header>
-      <div className="container" style={{ maxWidth: 1100 }}>
+      <RuoliHeader user={user} active="ruoli" />
+      <div className="container">
         <h1>Utenti e ruoli</h1>
         <p className="subtitle">
           Chi può fare cosa, in tutte le aree del portale. Ruolo, aree e stato si modificano direttamente in tabella.
@@ -113,6 +85,19 @@ export default async function RuoliPage({
           )}
           <button className="btn btn-sm" type="submit">Filtra</button>
         </form>
+
+        {canManage && (
+          <NuovoUtente
+            ruoli={assignableRolesFor(user)}
+            insegne={db.tenants.map((t) => ({ id: t.id, nome: t.name }))}
+            puntiVendita={db.stores
+              .filter((s) => user.role === "system_admin" || s.tenantId === user.tenantId)
+              .map((s) => ({ id: s.id, nome: s.name, tenantId: s.tenantId }))}
+            reparti={db.departments.map((d) => ({ id: d.id, nome: d.name }))}
+            mostraInsegna={user.role === "system_admin"}
+            mostraPuntoVendita={user.role !== "store_admin"}
+          />
+        )}
 
         <RolesPanel
           users={users}
