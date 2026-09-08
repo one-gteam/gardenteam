@@ -89,8 +89,9 @@ export default async function ZooLayoutPage({
                   ? "Stai modificando il layout del Consorzio (comune a tutti)."
                   : `Stai personalizzando il layout di ${scope.label} — parte da quello del Consorzio.`
                 : "Layout del Consorzio in sola lettura."}
-              {" "}Puoi avere più layout per lo stesso formato: scegli o creane uno qui sotto, e duplicalo dal pannello
-              a destra per farne una variante.
+              {" "}Puoi avere più layout per lo stesso formato — uno per il 3x2, uno per l&apos;«A SOLI», uno per il
+              prezzo barrato: creali qui sotto e, nel pannello a destra, indica in <strong>«Quando usare questo
+              layout»</strong> a quale tipo di promozione (o di prodotto) si applica. In stampa viene scelto da solo.
             </p>
           </div>
           <form method="get" style={{ display: "flex", gap: 8, alignItems: "end" }}>
@@ -133,6 +134,7 @@ export default async function ZooLayoutPage({
           scopeParam={scopeParam}
           initialTipologie={current?.tipologie ?? []}
           tipologieDisponibili={tipologieDisponibili}
+          tipologiePromo={ZOO_TIPI_OFFERTA}
           sampleValues={sampleValues}
           canEdit={canEdit}
           area="zoo"
@@ -192,14 +194,15 @@ export default async function ZooLayoutPage({
                         <td>
                           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
                             <form action={copiaZooLayoutSuFormato.bind(null, l.id, scopeParam)}
-                              style={{ display: "flex", gap: 4, alignItems: "center" }}>
-                              <select name="formatId" defaultValue="" style={{ fontSize: 12 }} required>
+                              style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "nowrap" }}>
+                              <select name="formatId" defaultValue="" style={{ fontSize: 12, width: 130 }} required>
                                 <option value="" disabled>Copia su…</option>
                                 {ZOO_FORMATS.filter((f) => f.id !== l.formatId).map((f) => (
                                   <option key={f.id} value={f.id}>{f.name}</option>
                                 ))}
                               </select>
                               <button className="btn btn-outline btn-sm" type="submit"
+                                style={{ whiteSpace: "nowrap", minWidth: 90 }}
                                 title="Crea una copia sul formato scelto, con i corpi del testo riproporzionati">
                                 Copia
                               </button>

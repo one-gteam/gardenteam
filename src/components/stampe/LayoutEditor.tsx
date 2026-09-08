@@ -37,6 +37,7 @@ export default function LayoutEditor({
   scopeParam,
   initialTipologie,
   tipologieDisponibili,
+  tipologiePromo = [],
   sampleValues,
   canEdit,
   images = [],
@@ -55,6 +56,8 @@ export default function LayoutEditor({
   scopeParam: string;
   initialTipologie: string[];
   tipologieDisponibili: string[];
+  /** Sottoinsieme di `tipologieDisponibili` che descrive il tipo di promozione: mostrato a parte. */
+  tipologiePromo?: string[];
   sampleValues: Record<string, string>;
   canEdit: boolean;
   images?: { name: string; url: string }[];
@@ -240,6 +243,50 @@ export default function LayoutEditor({
     pushHistory(next);
     setSelected(activeItems.length);
   };
+
+  /*
+   * Frecce della tastiera per spostare il campo selezionato: il trascinamento col
+   * mouse va bene per la posa grossolana, ma per allineare due campi al millimetro
+   * serve un passo fisso. Maiusc = passo lungo. La cronologia si aggiorna al
+   * rilascio del tasto, altrimenti tenendo premuta la freccia ogni ripetizione
+   * diventerebbe un passo di "annulla" a sé.
+   */
+  useEffect(() => {
+    if (!canEdit) return;
+    const dentroUnCampo = (el: EventTarget | null) => {
+      const tag = (el as HTMLElement | null)?.tagName;
+      return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+    };
+    const premuto = (e: KeyboardEvent) => {
+      if (selected === null || dentroUnCampo(e.target)) return;
+      const dx = e.key === "ArrowLeft" ? -1 : e.key === "ArrowRight" ? 1 : 0;
+      const dy = e.key === "ArrowUp" ? -1 : e.key === "ArrowDown" ? 1 : 0;
+      if (dx === 0 && dy === 0) return;
+      e.preventDefault(); // altrimenti la pagina scorre invece di spostare il campo
+      const passo = e.shiftKey ? 2 : 0.4;
+      setActiveItems((prev) =>
+        prev.map((it, i) => {
+          if (i !== selected) return it;
+          return {
+            ...it,
+            x: Math.min(100 - it.w, Math.max(0, +(it.x + dx * passo).toFixed(2))),
+            y: Math.min(100 - it.h, Math.max(0, +(it.y + dy * passo).toFixed(2))),
+          };
+        })
+      );
+    };
+    const rilasciato = (e: KeyboardEvent) => {
+      if (selected === null || dentroUnCampo(e.target)) return;
+      if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key)) pushHistory(activeItems);
+    };
+    window.addEventListener("keydown", premuto);
+    window.addEventListener("keyup", rilasciato);
+    return () => {
+      window.removeEventListener("keydown", premuto);
+      window.removeEventListener("keyup", rilasciato);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected, canEdit, mode, activeItems]);
 
   const updateSelected = (patch: Partial<LayoutItem> | { sticker: Partial<StickerStyle> }) => {
     if (selected === null) return;
@@ -752,12 +799,35 @@ export default function LayoutEditor({
             </label>
           </Sezione>
         )}
-        <Sezione titolo="Collega a tipologie" aperta={false}>
+        <Sezione titolo="Quando usare questo layout" aperta>
           <p style={{ fontSize: 12, color: "var(--muted)", margin: "0 0 8px" }}>
-            Nessuna selezione = layout valido per tutti i prodotti di questo formato.
+            Nessuna spunta = layout valido per tutti i cartelli di questo formato. Spuntando qualcosa il layout
+            viene scelto in stampa solo per i cartelli che corrispondono: così un &quot;A SOLI&quot; può essere
+            impaginato diversamente da un 3x2.
           </p>
-          <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 260, overflowY: "auto" }}>
-            {tipologieDisponibili.map((t) => (
+          {tipologiePromo.length > 0 && (
+            <>
+              <strong style={{ fontSize: 12.5 }}>Tipo di promozione</strong>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, margin: "4px 0 10px" }}>
+                {tipologiePromo.map((t) => (
+                  <label key={t} style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 12.5 }}>
+                    <input
+                      type="checkbox"
+                      checked={tipologie.includes(t)}
+                      disabled={!canEdit}
+                      onChange={(e) =>
+                        setTipologie((prev) => (e.target.checked ? [...prev, t] : prev.filter((x) => x !== t)))
+                      }
+                    />
+                    {t}
+                  </label>
+                ))}
+              </div>
+              <strong style={{ fontSize: 12.5 }}>Tipo di prodotto</strong>
+            </>
+          )}
+          <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 4, maxHeight: 220, overflowY: "auto" }}>
+            {tipologieDisponibili.filter((t) => !tipologiePromo.includes(t)).map((t) => (
               <label key={t} style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 12.5 }}>
                 <input
                   type="checkbox"

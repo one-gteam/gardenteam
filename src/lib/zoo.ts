@@ -685,6 +685,7 @@ export const ZOO_FIELDS: PrintField[] = [
   { id: "meccanica", label: "Meccanica promo (3x2, 1+1…)", size: 30, bold: true, font: "cn" },
   { id: "label", label: "Etichetta (SOTTOCOSTO, NOVITÀ…)", size: 16, bold: true, font: "cn" },
   { id: "condizioni", label: "Condizioni", size: 11, bold: false },
+  { id: "condizioniStandard", label: "Condizioni pronte (da Impostazioni)", size: 11, bold: false },
   { id: "validita", label: "Validità dell'offerta (dal… al…)", size: 11, bold: false },
   { id: "eanLista", label: "EAN (tutti gli articoli del padre)", size: 9, bold: false },
   { id: "animale", label: "Tipologia animale", size: 12, bold: false },
@@ -805,6 +806,13 @@ export function zooCartelloValues(
     meccanica: offer.meccanica ?? "",
     label: offer.label ?? "",
     condizioni,
+    /*
+     * Le condizioni pronte del Consorzio (Impostazioni → "Condizioni pronte per i
+     * cartelli"): uguali su tutti i cartelli, indipendenti dalla singola offerta.
+     * Sono un campo a sé perché di solito vanno in un rigo fisso in fondo, accanto
+     * o al posto delle condizioni della promozione.
+     */
+    condizioniStandard: db.settings.condizioniStandard.join(" · "),
     validita,
     eanLista: fratelli.map((p) => p.ean).join(" · "),
     animale: tagPadre("animale"),
