@@ -97,6 +97,15 @@ export default function NuovoUtente({
             {reparti.map((d) => <option key={d.id} value={d.id}>{d.nome}</option>)}
           </select>
         </label>
+        <label className="field" style={{ marginBottom: 0 }}>
+          Genere
+          <select name="gender" defaultValue="">
+            <option value="">— Non specificato —</option>
+            <option value="f">Femminile</option>
+            <option value="m">Maschile</option>
+          </select>
+          <span className="hint">Decide come sono scritte le email: «benvenuta» invece di «benvenuto».</span>
+        </label>
         <label className="field" style={{ marginBottom: 0 }}>Mansione<input type="text" name="jobTitle" placeholder="es. Addetto vendita" /></label>
         <label className="field" style={{ marginBottom: 0 }}>Data di assunzione<input type="date" name="hireDate" /></label>
         <div style={{ gridColumn: "1 / -1" }}>

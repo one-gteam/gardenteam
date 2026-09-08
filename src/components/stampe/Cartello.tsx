@@ -148,8 +148,13 @@ export default function Cartello({
         const color = item.color ?? (rossoDiDefault ? "#c8161d" : "#111");
         if (item.fieldId === "prezzo" || item.fieldId === "prezzoPromo") {
           const justify = item.align === "left" ? "flex-start" : item.align === "center" ? "center" : "flex-end";
+          /*
+           * Niente ritaglio sul prezzo: è scritto in corpo grande e con poco
+           * interlinea, quindi trabocca facilmente dal riquadro — tagliarlo
+           * mangerebbe la parte bassa delle cifre invece di lasciarle uscire.
+           */
           return (
-            <div key={i} style={{ ...box, display: "flex", justifyContent: justify, alignItems: "flex-start", color }}>
+            <div key={i} style={{ ...box, overflow: "visible", display: "flex", justifyContent: justify, alignItems: "flex-start", color }}>
               <Prezzo value={value} size={item.size ?? meta.size} scale={scale}
                 font={item.font !== undefined ? layoutFontCss(item.font) : undefined} />
             </div>

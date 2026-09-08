@@ -8,7 +8,7 @@ import { canAccessStampe, isZooEditor, resolveScope, sanitizeMargins } from "./s
 import { LAYOUT_FONTS } from "./layout-fonts";
 import {
   getZooDb, saveZooDb, ZooDB, ZooParent, campagnaInLavorazione, campagnaInCorso, campaignStato, NO_VOLANTINO,
-  ZOO_FORMATS,
+  ZOO_FORMATS, PV_PROMO_CODES_DEFAULT,
 } from "./zoo";
 import type { LayoutItem } from "./stampe";
 import { groupAndDescribe, groupAndDescribeBatched } from "./zoo-ai";
@@ -1612,4 +1612,101 @@ export async function copiaZooLayoutSuFormato(layoutId: string, scopeParam: stri
   await saveZooDb(db);
   rigeneraZoo();
   redirect(backUrl("/stampe/zoo/layout", scopeParam, { formato: a!.id, copiato: "1" }));
+}
+
+/* ================== Promozioni proprie dell'insegna / punto vendita ================== */
+
+/**
+ * Import del file promozioni del gestionale di un'insegna o punto vendita:
+ * barcode, se il prodotto è in assortimento, il codice promozione applicato e
+ * l'eventuale prezzo fisso. Serve perché insegne e PV fanno promozioni diverse
+ * da quelle del Consorzio, e i cartelli devono seguire le loro.
+ *
+ * Colonne riconosciute (il nome può cambiare fra gestionali):
+ *   barcode | EAN · assortimento (si/no) · cod promo · prezzo fisso · data inizio · data fine
+ */
+export async function importPvPromo(scopeParam: string, formData: FormData) {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  if (scope.type === "system") {
+    redirect(backUrl("/stampe/zoo/impostazioni", scopeParam, { promoerr: "consorzio" }));
+  }
+  const file = formData.get("file") as File | null;
+  if (!file || file.size === 0) redirect(backUrl("/stampe/zoo/impostazioni", scopeParam, { promoerr: "file" }));
+
+  const XLSX = await import("xlsx");
+  const wb = XLSX.read(Buffer.from(await file!.arrayBuffer()), { type: "buffer" });
+  const righe = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[wb.SheetNames[0]], { defval: "" });
+
+  const miei = (x: { scopeType: string; scopeId: string }) => x.scopeType === scope.type && x.scopeId === scope.id;
+  // il file è la fotografia della situazione attuale: si riparte da zero su questo ambito
+  db.pvPromos = db.pvPromos.filter((p) => !miei(p));
+  db.hidden = db.hidden.filter((h) => !(miei(h) && h.kind === "articolo"));
+
+  let conPromo = 0;
+  let nonTenuti = 0;
+  let conPrezzo = 0;
+  const codiciVisti = new Set<string>();
+  for (const row of righe) {
+    const ean = cell(row, "barcode", "ean", "codice ean", "cod. barre").replace(/\s/g, "");
+    if (!ean) continue;
+    const assortimento = cell(row, "assortimento", "in assortimento", "tenuto").trim().toLowerCase();
+    if (assortimento === "no" || assortimento === "n") {
+      // non lo tiene: sparisce dai suoi cartelli, come i "non tenuti" segnati a mano
+      db.hidden.push({ scopeType: scope.type, scopeId: scope.id, kind: "articolo", value: ean });
+      nonTenuti++;
+      continue; // niente promozione su un articolo che non c'è a scaffale
+    }
+    const codice = cell(row, "cod promo", "codice promo", "cod. promo", "promo").trim();
+    if (!codice) continue;
+    const prezzo = priceOrEmpty(cell(row, "prezzo fisso", "prezzo promo", "prezzo"));
+    codiciVisti.add(codice);
+    db.pvPromos.push({
+      scopeType: scope.type, scopeId: scope.id, ean, codice,
+      ...(prezzo ? { prezzo } : {}),
+      dal: cell(row, "data inizio", "dal", "inizio") || undefined,
+      al: cell(row, "data fine", "al", "fine") || undefined,
+    });
+    conPromo++;
+    if (prezzo) {
+      // il prezzo fisso è a tutti gli effetti il prezzo del PV per quell'articolo
+      const esistente = db.pvPrices.find((p) => miei(p) && p.ean === ean);
+      if (esistente) esistente.prezzo = prezzo;
+      else db.pvPrices.push({ scopeType: scope.type, scopeId: scope.id, ean, prezzo });
+      conPrezzo++;
+    }
+  }
+
+  // codici mai visti prima: entrano in tabella con il nome proposto, o col codice stesso
+  for (const codice of codiciVisti) {
+    if (db.pvPromoCodes.some((c) => miei(c) && c.codice === codice)) continue;
+    const proposto = PV_PROMO_CODES_DEFAULT.find((d) => d.codice === codice)?.etichetta ?? codice;
+    db.pvPromoCodes.push({ scopeType: scope.type, scopeId: scope.id, codice, etichetta: proposto });
+  }
+
+  await saveZooDb(db);
+  rigeneraZoo();
+  redirect(backUrl("/stampe/zoo/impostazioni", scopeParam, {
+    promo: String(conPromo), nontenuti: String(nonTenuti), prezzi: String(conPrezzo),
+  }));
+}
+
+/** Rinomina un codice promozione dell'ambito (es. "0003" → "20%"): è il testo che finisce sul cartello. */
+export async function rinominaPvPromoCode(codice: string, scopeParam: string, value: string): Promise<{ ok: boolean }> {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  if (scope.type === "system") return { ok: false };
+  const etichetta = value.trim();
+  const esistente = db.pvPromoCodes.find(
+    (c) => c.scopeType === scope.type && c.scopeId === scope.id && c.codice === codice
+  );
+  if (esistente) esistente.etichetta = etichetta || codice;
+  else db.pvPromoCodes.push({ scopeType: scope.type, scopeId: scope.id, codice, etichetta: etichetta || codice });
+  await saveZooDb(db);
+  rigeneraZoo();
+  return { ok: true };
 }

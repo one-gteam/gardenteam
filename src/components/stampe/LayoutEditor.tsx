@@ -562,6 +562,8 @@ export default function LayoutEditor({
                   cursor: canEdit ? "move" : "default",
                   background: item.bg,
                   borderRadius: item.radius ? item.radius * scale : undefined,
+                  // il prezzo esce dal riquadro invece di essere tagliato, come in stampa
+                  overflow: isPrice ? "visible" : undefined,
                 }}
                 onMouseDown={(e) => onMouseDown(e, i, "move")}
               >

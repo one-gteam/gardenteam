@@ -6,7 +6,7 @@ import LayoutEditor from "@/components/stampe/LayoutEditor";
 import AutoSubmitSelect from "@/components/stampe/AutoSubmitSelect";
 import { canAccessArea, isZooEditor, scopesForUser, resolveScope, layoutMargins } from "@/lib/stampe";
 import {
-  getZooDb, activeCampaign, zooCartelloValues, ZOO_FIELDS, ZOO_FORMATS, ZOO_TIPI_OFFERTA,
+  getZooDb, activeCampaign, zooCartelloValues, ZOO_FIELDS, ZOO_FORMATS, ZOO_TIPI_OFFERTA, pvPromoCodesFor,
 } from "@/lib/zoo";
 import {
   deleteZooLayout, uploadZooLayoutImage, deleteZooLayoutImage, copiaZooLayoutSuFormato,
@@ -36,8 +36,10 @@ export default async function ZooLayoutPage({
    * offerta (prezzo barrato, "A SOLI", 3x2): serve un'impaginazione diversa per
    * ciascuno, e in stampa vince il layout che combacia con l'offerta in corso.
    */
+  // le promozioni proprie dell'insegna/PV valgono come tipologia: un "20%" può avere il suo layout
+  const promoPv = scope.type === "system" ? [] : pvPromoCodesFor(db, scope).map((c) => c.etichetta);
   const tipologieDisponibili = [
-    ...db.settings.categorieAnimali, ...db.settings.caratteristicheProdotto, ...ZOO_TIPI_OFFERTA,
+    ...db.settings.categorieAnimali, ...db.settings.caratteristicheProdotto, ...ZOO_TIPI_OFFERTA, ...promoPv,
   ];
 
   // layout selezionabili per questo formato: i propri, più quelli del Consorzio come base
@@ -134,7 +136,7 @@ export default async function ZooLayoutPage({
           scopeParam={scopeParam}
           initialTipologie={current?.tipologie ?? []}
           tipologieDisponibili={tipologieDisponibili}
-          tipologiePromo={ZOO_TIPI_OFFERTA}
+          tipologiePromo={[...ZOO_TIPI_OFFERTA, ...promoPv]}
           sampleValues={sampleValues}
           canEdit={canEdit}
           area="zoo"

@@ -44,13 +44,16 @@ export default async function RuoliHeader({ user, active }: { user: User; active
             </form>
           </div>
         </div>
-        <nav className="header-nav">
-          {voci.map((v) => (
-            <Link key={v.key} href={v.href} className={`nav-link ${active === v.key ? "active" : ""}`}>
-              {v.label}
-            </Link>
-          ))}
-        </nav>
+        {/* stessa struttura della barra Academy: .header-nav-row > nav.nav, altrimenti i link restano senza stile */}
+        <div className="header-nav-row">
+          <nav className="nav">
+            {voci.map((v) => (
+              <Link key={v.key} href={v.href} className={active === v.key ? "active" : ""}>
+                {v.label}
+              </Link>
+            ))}
+          </nav>
+        </div>
       </div>
     </header>
   );

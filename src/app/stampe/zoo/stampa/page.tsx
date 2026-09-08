@@ -11,7 +11,7 @@ import {
   getZooDb, effectiveZooLayout, zooCartelloValues, pvPriceFor, isZooHidden,
   campagneStampabili, campagnaInCorso, campagnaInLavorazione, campaignStato,
   effectiveParentText, effectiveParentTag, effectiveOfferText, printedAt, NO_VOLANTINO,
-  ZOO_FIELDS, ZOO_FORMATS, marcaEffettiva, marcheList, tagsOfferta,
+  ZOO_FIELDS, ZOO_FORMATS, marcaEffettiva, marcheList, tagsOfferta, pvPromoFor,
 } from "@/lib/zoo";
 import {
   importPvPrices, markZooPrinted, resetZooPrinted, toggleZooHidden, toggleZooNoPrint,
@@ -127,8 +127,13 @@ export default async function ZooStampaPage({
   const tagsFor = (o: (typeof allOffers)[number]) => {
     const product = db.products.find((p) => p.id === o.productId);
     const parent = product?.parentId ? db.parents.find((x) => x.id === product.parentId) : undefined;
-    // il layout si sceglie sia sul tipo di prodotto sia sul tipo di offerta
-    return [...(parent?.caratteristiche ?? []), ...tagsOfferta(o)];
+    /*
+     * Il layout si sceglie sul tipo di prodotto, sul tipo di offerta e — se
+     * l'insegna/PV ha caricato le sue promozioni — sul nome della sua promo
+     * ("20%", "A SOLI"), che può essere diversa da quella del Consorzio.
+     */
+    const promoPv = pvPromoFor(db, scope, o.ean, academyDb);
+    return [...(parent?.caratteristiche ?? []), ...tagsOfferta(o), ...(promoPv ? [promoPv.etichetta] : [])];
   };
 
   if (sp.print === "1" && selected.length > 0) {

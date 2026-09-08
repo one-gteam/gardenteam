@@ -3,8 +3,11 @@ import { getCurrentUser } from "@/lib/auth";
 import StampeHeader from "@/components/stampe/StampeHeader";
 import { canAccessArea, isZooEditor, scopesForUser, resolveScope } from "@/lib/stampe";
 import { getDb } from "@/lib/db";
-import { getZooDb, hiddenEntriesFor } from "@/lib/zoo";
-import { saveZooSettings, saveZooApiKey, saveFormatoRegola, toggleZooHidden } from "@/lib/zoo-actions";
+import { getZooDb, hiddenEntriesFor, pvPromoCodesFor } from "@/lib/zoo";
+import InlineEdit from "@/components/stampe/InlineEdit";
+import {
+  saveZooSettings, saveZooApiKey, saveFormatoRegola, toggleZooHidden, importPvPromo, rinominaPvPromoCode,
+} from "@/lib/zoo-actions";
 
 export default async function ZooImpostazioniPage({
   searchParams,
@@ -24,6 +27,13 @@ export default async function ZooImpostazioniPage({
   const scopeParam = `${scope.type}:${scope.id}`;
   const consortium = isZooEditor(user);
   const hiddenHere = hiddenEntriesFor(db, scope);
+  // codici promozione dell'ambito e quanti articoli ne hanno uno
+  const codiciPromo = scope.type === "system" ? [] : pvPromoCodesFor(db, scope);
+  const promoPerCodice = new Map<string, number>();
+  for (const p of db.pvPromos) {
+    if (p.scopeType !== scope.type || p.scopeId !== scope.id) continue;
+    promoPerCodice.set(p.codice, (promoPerCodice.get(p.codice) ?? 0) + 1);
+  }
 
   return (
     <div>
@@ -150,6 +160,60 @@ export default async function ZooImpostazioniPage({
               <input type="password" name="apiKey" placeholder="sk-ant-…  (vuoto per rimuovere)" style={{ flex: 1, maxWidth: 420 }} />
               <button className="btn btn-sm" type="submit">Salva chiave</button>
             </form>
+          </div>
+        )}
+
+        {/* promozioni proprie dell'insegna/PV, caricate dal loro gestionale */}
+        {scope.type !== "system" && (
+          <div className="card" style={{ padding: 14, marginBottom: 14 }}>
+            <h2 style={{ marginTop: 0 }}>Le promozioni di {scope.label}</h2>
+            <p style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 0 }}>
+              Carica il file del tuo gestionale: dice quali articoli tieni in assortimento e che promozione applichi
+              a ciascuno. Le tue promozioni possono essere diverse da quelle del Consorzio — i cartelli seguiranno
+              le tue. Colonne lette: <strong>barcode</strong>, <strong>assortimento</strong> (si/no),
+              {" "}<strong>cod promo</strong>, <strong>prezzo fisso</strong>, data inizio e data fine.
+            </p>
+            {sp.promo !== undefined && (
+              <div className="alert alert-green">
+                ✓ Caricate {sp.promo} promozioni ({sp.prezzi} con prezzo fisso). {sp.nontenuti} articoli segnati come
+                non tenuti: spariscono dai tuoi cartelli.
+              </div>
+            )}
+            {sp.promoerr === "file" && <div className="alert alert-amber">Nessun file selezionato.</div>}
+            {sp.promoerr === "consorzio" && <div className="alert alert-amber">Scegli prima la tua insegna o il tuo punto vendita qui in alto.</div>}
+            <form action={importPvPromo.bind(null, scopeParam)} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <input type="file" name="file" accept=".xlsx,.xls,.csv" required />
+              <button className="btn btn-sm" type="submit">Carica promozioni</button>
+              <span className="hint">Ogni caricamento sostituisce il precedente: il file è la fotografia di adesso.</span>
+            </form>
+
+            <div style={{ marginTop: 14 }}>
+              <strong style={{ fontSize: 13 }}>Come si chiamano i tuoi codici promozione</strong>
+              <p className="hint" style={{ margin: "2px 0 8px" }}>
+                Il nome è quello che finisce sul cartello, ed è anche la tipologia a cui puoi agganciare un layout
+                dedicato (pagina Layout → «Quando usare questo layout»).
+              </p>
+              <div className="table-wrap">
+                <table className="data">
+                  <thead><tr><th style={{ width: 120 }}>Codice</th><th>Nome sul cartello</th><th style={{ width: 130 }}>Articoli</th></tr></thead>
+                  <tbody>
+                    {codiciPromo.length === 0 && (
+                      <tr><td colSpan={3} className="empty">Nessun codice ancora: carica il file qui sopra.</td></tr>
+                    )}
+                    {codiciPromo.map((c) => (
+                      <tr key={c.codice}>
+                        <td><strong>{c.codice}</strong></td>
+                        <td>
+                          <InlineEdit value={c.etichetta} placeholder="es. 20%"
+                            onSave={rinominaPvPromoCode.bind(null, c.codice, scopeParam)} />
+                        </td>
+                        <td>{promoPerCodice.get(c.codice) ?? 0}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         )}
 

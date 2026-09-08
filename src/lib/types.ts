@@ -357,8 +357,8 @@ export interface CustomTemplate {
  * Declinazione di genere: [maschile|femminile] — es. "[Benvenuto|Benvenuta]".
  */
 export const DEFAULT_TEMPLATES: EmailTemplate[] = [
-  { type: "benvenuto", enabled: true, subject: "[Benvenuto|Benvenuta] in Academy GT, {{nome}}!", body: "Ciao {{nome}}, il tuo account Academy GT è attivo. Nella tua area personale trovi i corsi già assegnati in base al tuo profilo." },
-  { type: "assegnazione", enabled: true, subject: "📬 Nuova formazione assegnata", body: "Ciao {{nome}}, in base al tuo profilo ti è stata assegnata questa formazione: {{elenco}}. La trovi nella tua area personale." },
+  { type: "benvenuto", enabled: true, subject: "[Benvenuto|Benvenuta] in GT One, {{nome}}!", body: "Ciao {{nome}}, il tuo account GT One è attivo: da qui accedi a tutti i servizi del Consorzio a cui sei [abilitato|abilitata]." },
+  { type: "assegnazione", enabled: true, subject: "📬 Nuova formazione assegnata", body: "Ciao {{nome}}, in base al tuo profilo ti è stata assegnata questa formazione:\n\n{{elenco}}\n\nLa trovi nella tua area personale di Academy GT." },
   { type: "mai_iniziato", enabled: true, subject: "👀 Non hai ancora iniziato: {{elenco}}", body: "Ciao {{nome}}, risultano assegnati ma non ancora avviati questi corsi obbligatori: {{elenco}}. Bastano pochi minuti per iniziare, li trovi nella tua area personale." },
   { type: "promemoria", enabled: true, subject: "⏰ Promemoria: hai corsi da completare", body: "Ciao {{nome}}, ti ricordiamo i corsi obbligatori da completare: {{elenco}}." },
   { type: "scadenza", enabled: true, subject: "🚨 Corsi in scadenza: completa la formazione obbligatoria", body: "Ciao {{nome}}, attenzione: questi corsi sono in scadenza o già scaduti: {{elenco}}. Completali al più presto." },

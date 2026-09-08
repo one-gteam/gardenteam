@@ -11,7 +11,7 @@ import { AUTH_COOKIE, requireUser } from "./auth";
 import { assignableRolesFor, canManageUsers, coursesForUser, courseVisibleTo, dueDate, getProgress, hasStartedCourse, isCourseCompleted, pathsForUser } from "./logic";
 import {
   Course, CourseLevel, CourseSession, DB, DEFAULT_HOME_BLOCKS, DEFAULT_REMINDER_RULES, DEFAULT_WATCH_THRESHOLD,
-  EmailType, Lesson, LessonAttachment, LessonType, ReminderRule, ReminderStage, Role, SiteId, User, postLoginPath,
+  EmailType, Lesson, LessonAttachment, LessonType, ReminderRule, ReminderStage, Role, SiteId, User, postLoginPath, userSites,
 } from "./types";
 
 /** Sostituisce variabili {{...}} e declina il genere: [maschile|femminile]. */
@@ -41,14 +41,31 @@ function renderTemplate(db: DB, user: User, type: EmailType, vars: Record<string
  * resta la fonte di verità dell'applicazione anche quando il provider non è
  * configurato (stato "in_coda") o rifiuta il messaggio (stato "errore").
  */
+/** Indirizzo pubblico del portale, per i link dentro le email. */
+function siteUrl(): string {
+  return (process.env.SITE_URL || "https://gardenteam.vercel.app").replace(/\/$/, "");
+}
+
 async function pushEmail(db: DB, user: User, type: EmailType, subject: string, body: string) {
-  const r = await sendMail(user.email, subject, body);
+  /*
+   * Il benvenuto è anche l'invito a entrare: senza il link per scegliere la
+   * password la persona riceveva "il tuo account è attivo" e non sapeva come
+   * accedere. Si aggiunge qui e non nel modello, così vale per tutti i testi,
+   * comprese le personalizzazioni di insegna e punto vendita.
+   */
+  const testo = type === "benvenuto" && !user.passwordHash
+    ? `${body}
+
+Per entrare la prima volta scegli la tua password qui:
+${siteUrl()}/attiva`
+    : body;
+  const r = await sendMail(user.email, subject, testo);
   db.emails.push({
     id: `e_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
     userId: user.id,
     to: user.email,
     subject,
-    body,
+    body: testo,
     type,
     date: new Date().toISOString(),
     status: r.sent === true ? "inviata" : r.sent === false ? "errore" : "in_coda",
@@ -61,6 +78,13 @@ async function pushEmail(db: DB, user: User, type: EmailType, subject: string, b
  * modelli aggiuntivi collegati alla stessa automazione, se nello scope dell'utente.
  */
 async function queueEmail(db: DB, user: User, type: EmailType, vars: Record<string, string> = {}) {
+  /*
+   * Chi non ha l'area Academy (es. un gestore cartelli Zoo) non deve ricevere le
+   * comunicazioni sui corsi: gli arrivava tutto — corsi assegnati, promemoria,
+   * scadenze — pur non avendo alcuna formazione da seguire. Il benvenuto invece
+   * riguarda l'accesso al portale, quindi vale per tutti.
+   */
+  if (type !== "benvenuto" && !userSites(user).includes("academy")) return;
   const r = renderTemplate(db, user, type, vars);
   if (r) await pushEmail(db, user, type, r.subject, r.body);
   for (const ct of db.customTemplates) {
@@ -78,16 +102,18 @@ async function queueEmail(db: DB, user: User, type: EmailType, vars: Record<stri
  * Ritorna true se ha inviato qualcosa (utile per contare gli invii dal chiamante).
  */
 async function notifyNewAssignments(db: DB, user: User): Promise<boolean> {
+  if (!userSites(user).includes("academy")) return false; // non fa formazione: niente corsi né avvisi
   const newCourses = coursesForUser(db, user).filter(
     (c) => c.mandatory && !(user.notifiedCourseIds ?? []).includes(c.id)
   );
   const newPaths = pathsForUser(db, user).filter((p) => !(user.notifiedPathIds ?? []).includes(p.id));
   if (newCourses.length === 0 && newPaths.length === 0) return false;
 
+  // uno per riga: in un elenco di cinque corsi la riga unica separata da virgole era illeggibile
   const elenco = [
-    ...newCourses.map((c) => `«${c.title}»`),
-    ...newPaths.map((p) => `percorso «${p.title}»`),
-  ].join(", ");
+    ...newCourses.map((c) => `• ${c.title}`),
+    ...newPaths.map((p) => `• Percorso ${p.title}`),
+  ].join("\n");
   await queueEmail(db, user, "assegnazione", { corso: newCourses[0]?.title ?? newPaths[0]?.title ?? "", elenco });
   user.notifiedCourseIds = [...(user.notifiedCourseIds ?? []), ...newCourses.map((c) => c.id)];
   user.notifiedPathIds = [...(user.notifiedPathIds ?? []), ...newPaths.map((p) => p.id)];
@@ -1245,6 +1271,8 @@ export async function creaUtente(formData: FormData) {
     jobTitle: String(formData.get("jobTitle") ?? "").trim() || undefined,
     hireDate: String(formData.get("hireDate") ?? "") || new Date().toISOString().slice(0, 10),
     points: 0, badges: [], active: true,
+    // serve alle email, che declinano il testo: "[benvenuto|benvenuta]"
+    ...(["m", "f"].includes(String(formData.get("gender") ?? "")) ? { gender: String(formData.get("gender")) as "m" | "f" } : {}),
     ...(sites.length > 0 ? { sites } : {}),
   };
   db.users.push(newUser);

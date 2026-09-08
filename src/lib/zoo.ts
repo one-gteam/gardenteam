@@ -175,6 +175,38 @@ export interface ZooHidden {
   value: string;
 }
 
+/**
+ * Tabella dei codici promozione dell'insegna/PV: nel gestionale la promozione è
+ * un codice (0006, PP, 0003…) e ogni insegna usa i suoi. Qui il codice prende un
+ * nome leggibile ("A SOLI", "10%") che finisce sul cartello e a cui si può
+ * agganciare un layout dedicato, esattamente come per le tipologie del Consorzio.
+ */
+export interface ZooPvPromoCode {
+  scopeType: ScopeType;
+  scopeId: string;
+  codice: string;
+  etichetta: string;
+}
+
+/** Promozione applicata a un articolo da quell'insegna/PV, come arriva dal loro file. */
+export interface ZooPvPromo {
+  scopeType: ScopeType;
+  scopeId: string;
+  ean: string;
+  codice: string;
+  prezzo?: string; // "prezzo fisso" del file, quando la meccanica è un prezzo secco
+  dal?: string;
+  al?: string;
+}
+
+/** Codici promozione più diffusi, proposti quando un ambito carica il primo file. */
+export const PV_PROMO_CODES_DEFAULT: { codice: string; etichetta: string }[] = [
+  { codice: "0006", etichetta: "A SOLI" },
+  { codice: "0001", etichetta: "10%" },
+  { codice: "PP", etichetta: "15%" },
+  { codice: "0003", etichetta: "20%" },
+];
+
 /** Prezzo proprio del PV (caricato via Excel EAN/cod.fornitore → prezzo). */
 export interface ZooPvPrice {
   scopeType: ScopeType;
@@ -329,6 +361,8 @@ export interface ZooDB {
   zooLayouts: ZooLayout[];
   noPrint: ZooNoPrint[];
   layoutImages: ZooLayoutImage[];
+  pvPromoCodes: ZooPvPromoCode[];
+  pvPromos: ZooPvPromo[];
 }
 
 /* ================== Persistenza ================== */
@@ -356,11 +390,11 @@ export async function getZooDb(): Promise<ZooDB> {
     products: [], parents: [], textOverrides: [], tagOverrides: [], offerOverrides: [], printed: [],
     campaigns: [], offers: [],
     votes: [], hidden: [], pvPrices: [], suggestions: [], volantinoLayouts: [], zooLayouts: [],
-    noPrint: [], layoutImages: [],
+    noPrint: [], layoutImages: [], pvPromoCodes: [], pvPromos: [],
   };
   const db = await readDomain<ZooDB>("zoo", empty);
   db.settings = { ...DEFAULT_SETTINGS, ...(db.settings ?? {}) };
-  for (const k of ["products", "parents", "textOverrides", "tagOverrides", "offerOverrides", "printed", "campaigns", "offers", "votes", "hidden", "pvPrices", "suggestions", "volantinoLayouts", "zooLayouts", "noPrint", "layoutImages"] as const) {
+  for (const k of ["products", "parents", "textOverrides", "tagOverrides", "offerOverrides", "printed", "campaigns", "offers", "votes", "hidden", "pvPrices", "suggestions", "volantinoLayouts", "zooLayouts", "noPrint", "layoutImages", "pvPromoCodes", "pvPromos"] as const) {
     if (!db[k]) (db as unknown as Record<string, unknown>)[k] = [];
   }
   return db;
@@ -661,6 +695,32 @@ export function marcheList(db: ZooDB): string[] {
   return Array.from(new Set(db.products.map(marcaEffettiva).filter(Boolean))).sort();
 }
 
+/** Codici promozione dell'ambito (se non ne ha ancora, valgono quelli proposti). */
+export function pvPromoCodesFor(db: ZooDB, scope: Scope): { codice: string; etichetta: string }[] {
+  const propri = db.pvPromoCodes.filter((c) => c.scopeType === scope.type && c.scopeId === scope.id);
+  return propri.length > 0 ? propri.map((c) => ({ codice: c.codice, etichetta: c.etichetta })) : PV_PROMO_CODES_DEFAULT;
+}
+
+/**
+ * Promozione che quell'insegna/PV applica a un articolo, con l'etichetta leggibile:
+ * è quella che si stampa sul cartello e che sceglie il layout, quando il punto
+ * vendita fa promozioni diverse da quelle del Consorzio.
+ */
+export function pvPromoFor(
+  db: ZooDB, scope: Scope, ean: string, academyDb: DB
+): { codice: string; etichetta: string; prezzo?: string } | undefined {
+  for (const s of chainFor(scope, academyDb)) {
+    if (s.type === "system") continue;
+    const p = db.pvPromos.find((x) => x.scopeType === s.type && x.scopeId === s.id && x.ean === ean);
+    if (p) {
+      const codici = pvPromoCodesFor(db, { ...scope, type: s.type, id: s.id } as Scope);
+      const etichetta = codici.find((c) => c.codice === p.codice)?.etichetta ?? p.codice;
+      return { codice: p.codice, etichetta, prezzo: p.prezzo };
+    }
+  }
+  return undefined;
+}
+
 /** Le "caratteristiche" di un padre sono un elenco unico (animale + prodotto insieme): queste due funzioni separano le due dimensioni per mostrarle in colonne distinte. */
 export function animaliDi(db: ZooDB, caratteristiche: string[]): string[] {
   return caratteristiche.filter((c) => db.settings.categorieAnimali.includes(c));
@@ -683,6 +743,7 @@ export const ZOO_FIELDS: PrintField[] = [
   { id: "prezzoPromo", label: "Prezzo promo", size: 46, bold: true, font: "cn" },
   { id: "prezzoListino", label: "Prezzo listino (barrato) / «A SOLI»", size: 16, bold: false },
   { id: "meccanica", label: "Meccanica promo (3x2, 1+1…)", size: 30, bold: true, font: "cn" },
+  { id: "tipoPromo", label: "Tipo promo del punto vendita (10%, A SOLI…)", size: 20, bold: true, font: "cn" },
   { id: "label", label: "Etichetta (SOTTOCOSTO, NOVITÀ…)", size: 16, bold: true, font: "cn" },
   { id: "condizioni", label: "Condizioni", size: 11, bold: false },
   { id: "condizioniStandard", label: "Condizioni pronte (da Impostazioni)", size: 11, bold: false },
@@ -804,6 +865,8 @@ export function zooCartelloValues(
       ? `€ ${offer.prezzoListino}`
       : offer.prezzoPromo ? "A SOLI" : "",
     meccanica: offer.meccanica ?? "",
+    // promozione applicata dall'insegna/PV (dal loro file): vuota per il Consorzio
+    tipoPromo: perScope ? (pvPromoFor(db, scope, offer.ean, academyDb)?.etichetta ?? "") : "",
     label: offer.label ?? "",
     condizioni,
     /*
