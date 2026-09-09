@@ -3,12 +3,14 @@ import { getCurrentUser } from "@/lib/auth";
 import StampeHeader from "@/components/stampe/StampeHeader";
 import { canAccessArea, isZooEditor, scopesForUser, resolveScope } from "@/lib/stampe";
 import { getDb } from "@/lib/db";
+import { userSites } from "@/lib/types";
 import { listStorageFiles, publicUrlFor } from "@/lib/supabase";
 import PhotoUploader from "@/components/stampe/PhotoUploader";
 import BulkCheckbox from "@/components/stampe/BulkCheckbox";
 import InlineEdit from "@/components/stampe/InlineEdit";
 import InlineSelect from "@/components/stampe/InlineSelect";
 import ColumnTools from "@/components/stampe/ColumnTools";
+import AvvisaColleghi from "@/components/stampe/AvvisaColleghi";
 import ParentQuickEdit from "@/components/stampe/ParentQuickEdit";
 import PhotoMatcher from "@/components/stampe/PhotoMatcher";
 import {
@@ -22,7 +24,7 @@ import {
   toggleParentCaratteristica, scioglieParent, chiudiVolantino, riapriVolantino, nuovoVolantino,
   svuotaOfferteVolantino, rimuoviOfferteMarginiamo, updateParentFieldInline, updateOfferFieldInline,
   updateOfferGroupFieldInline, setParentTagInline, moveProductToParent, setParentImageFromFile,
-  mergeParentsForm,
+  mergeParentsForm, archiviaOfferteSelezionate,
 } from "@/lib/zoo-actions";
 
 // "Associa con AI" può richiedere più dei 10s di default per un lotto di articoli:
@@ -76,6 +78,17 @@ export default async function ZooOffertePage({
   const scope = resolveScope(user, sp.scope, academyDb);
   const scopeParam = `${scope.type}:${scope.id}`;
   const consortium = isZooEditor(user);
+
+  /* chi ha accesso alle Offerte Zoo: sono i destinatari proposti per l'avviso */
+  const colleghiZoo = academyDb.users
+    .filter((u) => u.active !== false && u.email && userSites(u).includes("zoo"))
+    .map((u) => ({
+      email: u.email,
+      nome: `${u.firstName} ${u.lastName}`,
+      ambito: academyDb.stores.find((s) => s.id === u.storeId)?.name
+        ?? academyDb.tenants.find((t) => t.id === u.tenantId)?.name
+        ?? "Consorzio",
+    }));
 
   const campaign = campagnaInLavorazione(db);
   const inCorso = campagnaInCorso(db);
@@ -364,6 +377,15 @@ export default async function ZooOffertePage({
             ✓ Volantino chiuso. Le offerte restano stampabili in Stampa cartelli finché sono in corso; quando sarai
             pronto apri il volantino successivo qui sotto.
           </div>
+        )}
+        {consortium && (
+          <div style={{ marginBottom: 12 }}>
+            <AvvisaColleghi tipo="offerte" scopeParam={scopeParam} colleghi={colleghiZoo} />
+          </div>
+        )}
+
+        {sp.archiviate !== undefined && (
+          <div className="alert alert-green">✓ {sp.archiviate} offerte archiviate: escono dal volantino, articoli e padri restano.</div>
         )}
         {sp.svuotato !== undefined && (
           <div className="alert alert-green">✓ Eliminate {sp.svuotato} offerte: carica di nuovo l&apos;Excel qui sotto.</div>
@@ -662,6 +684,11 @@ export default async function ZooOffertePage({
                       Unisci i padri selezionati
                     </button>
                   )}
+                  <button className="btn btn-outline btn-sm" formAction={archiviaOfferteSelezionate.bind(null, scopeParam)} type="submit"
+                    style={{ color: "var(--red)", borderColor: "var(--red)" }}
+                    title="Toglie dal volantino in lavorazione le offerte spuntate: gli articoli e i padri restano">
+                    Archivia le offerte selezionate
+                  </button>
                   <span className="hint">
                     {db.settings.apiKey
                       ? "chiave API Claude configurata"
@@ -674,7 +701,7 @@ export default async function ZooOffertePage({
                 <table className="data" id="tab-offerte">
                   <thead>
                     <tr>
-                      {consortium && <th style={{ width: 30 }}><BulkCheckbox name="sel" /></th>}
+                      {consortium && <th style={{ width: 30 }}><BulkCheckbox name="sel" also="selpadre" /></th>}
                       <th style={{ width: 56 }}>Foto</th>
                       <th>{vistaArticoli ? "Offerta" : "Prodotto"}</th>
                       <th className="col-wide">Descrizione</th>

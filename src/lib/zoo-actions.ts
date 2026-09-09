@@ -8,11 +8,12 @@ import { canAccessStampe, isZooEditor, resolveScope, sanitizeMargins } from "./s
 import { LAYOUT_FONTS } from "./layout-fonts";
 import {
   getZooDb, saveZooDb, ZooDB, ZooParent, campagnaInLavorazione, campagnaInCorso, campaignStato, NO_VOLANTINO,
-  ZOO_FORMATS, PV_PROMO_CODES_DEFAULT, ownScopeVisible,
+  ZOO_FORMATS, PV_PROMO_CODES_DEFAULT, ownScopeVisible, apiKeyFor,
 } from "./zoo";
 import type { LayoutItem } from "./stampe";
 import { groupAndDescribe, groupAndDescribeBatched } from "./zoo-ai";
 import { uploadPublicFile, publicUrlFor, listStorageFiles } from "./supabase";
+import { sendMail } from "./mailer";
 
 async function requireZooUser() {
   const user = await requireUser();
@@ -308,12 +309,15 @@ export async function createZooParent(back: string, scopeParam: string, formData
  */
 export async function associaConAI(back: string, scopeParam: string, formData: FormData) {
   const user = await requireZooUser();
-  if (!isZooEditor(user)) redirect(backUrl(back, scopeParam));
+  const academyDbAi = await getDb();
+  const scopeAi = resolveScope(user, scopeParam, academyDbAi);
+  // il Consorzio raggruppa il catalogo comune; insegna/PV i propri articoli
+  if (scopeAi.type === "system" && !isZooEditor(user)) redirect(backUrl(back, scopeParam));
   const ids = (formData.getAll("sel") as string[]).filter(Boolean);
   const db = await getZooDb();
   const selected = db.products.filter((p) => ids.includes(p.id));
   if (selected.length === 0) redirect(backUrl(back, scopeParam));
-  const { groups, usedAi, error, restanti } = await groupAndDescribeBatched(db.settings.apiKey, selected, db.settings);
+  const { groups, usedAi, error, restanti } = await groupAndDescribeBatched(apiKeyFor(db, scopeAi), selected, db.settings);
   const created = applyGroups(db, groups, usedAi);
   await saveZooDb(db);
   redirect(backUrl(back, scopeParam, {
@@ -1333,13 +1337,26 @@ export async function saveZooSettings(scopeParam: string, formData: FormData) {
 }
 
 /** La chiave API Claude può essere impostata SOLO dall'amministratore di sistema. */
+/**
+ * Salva la chiave API Claude. Sul Consorzio è quella comune (solo amministratore
+ * di sistema); su un'insegna o punto vendita è la loro, usata al posto di quella
+ * comune quando raggruppano i propri articoli con l'AI.
+ */
 export async function saveZooApiKey(scopeParam: string, formData: FormData) {
   const user = await requireZooUser();
-  if (user.role !== "system_admin") redirect(backUrl("/stampe/zoo/impostazioni", scopeParam));
   const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
   const key = String(formData.get("apiKey") ?? "").trim();
-  db.settings.apiKey = key || undefined;
+  if (scope.type === "system") {
+    if (user.role !== "system_admin") redirect(backUrl("/stampe/zoo/impostazioni", scopeParam));
+    db.settings.apiKey = key || undefined;
+  } else {
+    db.scopeApiKeys = db.scopeApiKeys.filter((k) => !(k.scopeType === scope.type && k.scopeId === scope.id));
+    if (key) db.scopeApiKeys.push({ scopeType: scope.type, scopeId: scope.id, key });
+  }
   await saveZooDb(db);
+  rigeneraZoo();
   redirect(backUrl("/stampe/zoo/impostazioni", scopeParam, { chiave: key ? "1" : "0" }));
 }
 
@@ -1780,4 +1797,172 @@ export async function eliminaOffertaPropria(offerId: string, scopeParam: string)
   await saveZooDb(db);
   rigeneraZoo();
   redirect(backUrl("/stampe/zoo/stampa", scopeParam, { offerta: "eliminata" }));
+}
+
+/**
+ * Archivia le offerte spuntate: escono dal volantino in lavorazione senza
+ * toccare gli articoli né i prodotti padre. Serve a ripulire l'elenco dalle
+ * righe che non interessano, invece di svuotare tutto e ricaricare l'Excel.
+ * Nella vista raggruppata la spunta è sul padre, quindi si archiviano tutte le
+ * offerte dei suoi articoli.
+ */
+export async function archiviaOfferteSelezionate(scopeParam: string, formData: FormData) {
+  const user = await requireZooUser();
+  if (!isZooEditor(user)) redirect(backUrl("/stampe/zoo/offerte", scopeParam));
+  const db = await getZooDb();
+  const campaign = campagnaInLavorazione(db);
+  if (!campaign) redirect(backUrl("/stampe/zoo/offerte", scopeParam));
+
+  const idProdotti = (formData.getAll("sel") as string[]).filter(Boolean);
+  const idPadri = (formData.getAll("selpadre") as string[]).filter(Boolean);
+  const daPadri = db.products.filter((p) => p.parentId && idPadri.includes(p.parentId)).map((p) => p.id);
+  const prodotti = new Set([...idProdotti, ...daPadri]);
+  if (prodotti.size === 0) redirect(backUrl("/stampe/zoo/offerte", scopeParam, { archiviate: "0" }));
+
+  const rimosse = db.offers.filter(
+    (o) => o.campaignId === campaign.id && !o.scopeType && o.productId && prodotti.has(o.productId)
+  );
+  const ids = new Set(rimosse.map((o) => o.id));
+  db.offers = db.offers.filter((o) => !ids.has(o.id));
+  db.votes = db.votes.filter((v) => !ids.has(v.offerId));
+  await saveZooDb(db);
+  rigeneraZoo();
+  redirect(backUrl("/stampe/zoo/offerte", scopeParam, { archiviate: String(ids.size) }));
+}
+
+/* ================== Avvisi ai colleghi ================== */
+
+/**
+ * Avvisa i colleghi per email che c'è qualcosa da guardare: le offerte appena
+ * caricate da scegliere, oppure la bozza del volantino da commentare. Si sceglie
+ * chi avvisare fra chi ha accesso all'area (spuntati), si possono aggiungere
+ * indirizzi a mano, e si indica entro quando rispondere — che è il motivo per
+ * cui l'avviso esiste: senza una data la richiesta resta senza risposta.
+ */
+export async function avvisaColleghi(
+  tipo: "offerte" | "bozza", scopeParam: string, formData: FormData
+): Promise<{ ok: boolean; inviate?: number; error?: string }> {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+
+  const scelti = (formData.getAll("destinatari") as string[]).filter(Boolean);
+  const manuali = String(formData.get("altri") ?? "")
+    .split(/[\s,;]+/).map((x) => x.trim()).filter((x) => x.includes("@"));
+  const destinatari = [...new Set([...scelti, ...manuali])];
+  if (destinatari.length === 0) return { ok: false, error: "Scegli almeno un destinatario" };
+
+  const entro = String(formData.get("entro") ?? "").trim();
+  const nota = String(formData.get("nota") ?? "").trim();
+  const campaign = campagnaInLavorazione(db) ?? campagnaInCorso(db);
+  const base = (process.env.SITE_URL || "https://gardenteam.vercel.app").replace(/\/$/, "");
+  const dataIt = entro ? new Date(`${entro}T00:00:00`).toLocaleDateString("it-IT", { day: "numeric", month: "long" }) : "";
+
+  const oggetto = tipo === "offerte"
+    ? `🛒 Offerte Zoo da scegliere${campaign ? ` — ${campaign.nome}` : ""}`
+    : `📄 Bozza volantino Zoo da rivedere${campaign ? ` — ${campaign.nome}` : ""}`;
+  const link = tipo === "offerte" ? `${base}/stampe/zoo/volantino` : `${base}/stampe/zoo/bozza`;
+  const corpo = [
+    tipo === "offerte"
+      ? `${user.firstName} ${user.lastName} ha caricato le offerte${campaign ? ` del volantino «${campaign.nome}»` : ""}: puoi vederle e segnalare quelle che ti interessano.`
+      : `${user.firstName} ${user.lastName} ha preparato la bozza del volantino${campaign ? ` «${campaign.nome}»` : ""}: puoi sfogliarla e lasciare le tue note.`,
+    nota,
+    entro ? `Rispondi entro il ${dataIt}.` : "",
+    link,
+  ].filter(Boolean).join("\n\n");
+
+  let inviate = 0;
+  for (const to of destinatari) {
+    const r = await sendMail(to, oggetto, corpo);
+    if (r.sent !== false) inviate++;
+  }
+  return { ok: true, inviate };
+}
+
+/* ================== Note sulla bozza del volantino ================== */
+
+/** Lascia una nota sulla bozza: la vedono tutti quelli che la stanno guardando. */
+export async function aggiungiNotaBozza(campaignId: string, scopeParam: string, formData: FormData) {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  const testo = String(formData.get("testo") ?? "").trim();
+  if (!testo) redirect(backUrl("/stampe/zoo/bozza", scopeParam));
+  db.noteBozza.push({
+    id: `nb_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    campaignId,
+    pageId: String(formData.get("pageId") ?? "") || undefined,
+    userId: user.id,
+    userName: `${user.firstName} ${user.lastName}`,
+    scopeLabel: scope.label,
+    testo,
+    date: new Date().toISOString(),
+  });
+  await saveZooDb(db);
+  rigeneraZoo();
+  redirect(backUrl("/stampe/zoo/bozza", scopeParam, { nota: "1" }));
+}
+
+/** Segna una nota come risolta (o la riapre): lo fa chi impagina, o chi l'ha scritta. */
+export async function risolviNotaBozza(notaId: string, scopeParam: string) {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const n = db.noteBozza.find((x) => x.id === notaId);
+  if (n && (isZooEditor(user) || n.userId === user.id)) {
+    n.risolta = !n.risolta;
+    await saveZooDb(db);
+    rigeneraZoo();
+  }
+  redirect(backUrl("/stampe/zoo/bozza", scopeParam));
+}
+
+/* ================== Articoli di altri ambiti: adozione e promozione ================== */
+
+/**
+ * Il Consorzio rende comune un articolo caricato da un'insegna o da un punto
+ * vendita: perde il proprietario e da lì in poi lo vedono tutti. Serve quando un
+ * articolo "locale" si rivela di interesse generale.
+ */
+export async function promuoviProdottoAConsorzio(productId: string, scopeParam: string, back: string) {
+  const user = await requireZooUser();
+  if (!isZooEditor(user)) redirect(backUrl(back, scopeParam));
+  const db = await getZooDb();
+  const p = db.products.find((x) => x.id === productId);
+  if (p) {
+    delete p.scopeType;
+    delete p.scopeId;
+    await saveZooDb(db);
+    rigeneraZoo();
+  }
+  redirect(backUrl(back, scopeParam, { promosso: "1" }));
+}
+
+/**
+ * Un'insegna/PV fa propria la copia di un articolo di qualcun altro: nasce un
+ * articolo suo, modificabile senza toccare l'originale (che resta di chi l'ha
+ * caricato). È il modo per riusare il lavoro degli altri senza sovrascriverlo.
+ */
+export async function adottaProdotto(productId: string, scopeParam: string, back: string) {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  if (scope.type === "system") redirect(backUrl(back, scopeParam));
+  const originale = db.products.find((x) => x.id === productId);
+  if (!originale) redirect(backUrl(back, scopeParam));
+  const id = `z_${scope.type}_${scope.id}_${originale.ean}`;
+  if (!db.products.some((x) => x.id === id)) {
+    db.products.push({
+      ...originale,
+      id,
+      parentId: undefined, // il raggruppamento è di chi l'ha fatto: la copia riparte pulita
+      scopeType: scope.type,
+      scopeId: scope.id,
+    });
+    await saveZooDb(db);
+    rigeneraZoo();
+  }
+  redirect(backUrl(back, scopeParam, { adottato: "1" }));
 }

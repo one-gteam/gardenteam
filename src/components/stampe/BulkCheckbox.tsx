@@ -8,8 +8,16 @@ import { useEffect, useRef } from "react";
  * del sistema operativo): un clic normale seleziona/deseleziona una riga sola,
  * Maiusc+clic estende la selezione dall'ultima riga cliccata a quella corrente.
  */
-export default function BulkCheckbox({ name }: { name: string }) {
+export default function BulkCheckbox({ name, also }: { name: string; also?: string }) {
   const allRef = useRef<HTMLInputElement>(null);
+  /*
+   * Nella vista raggruppata le righe sono prodotti padre (`selpadre`) e articoli
+   * singoli (`sel`) mescolati: "seleziona tutte" deve prenderli entrambi,
+   * altrimenti spunta solo metà elenco.
+   */
+  const selettore = also
+    ? `input[type="checkbox"][name="${name}"], input[type="checkbox"][name="${also}"]`
+    : `input[type="checkbox"][name="${name}"]`;
 
   useEffect(() => {
     const boxes = () =>
@@ -32,8 +40,8 @@ export default function BulkCheckbox({ name }: { name: string }) {
 
   const toggleAll = () => {
     const next = allRef.current?.checked ?? false;
-    for (const b of document.querySelectorAll<HTMLInputElement>(`input[type="checkbox"][name="${name}"]`)) {
-      b.checked = next;
+    for (const b of document.querySelectorAll<HTMLInputElement>(selettore)) {
+      if (!b.disabled) b.checked = next;
     }
   };
 

@@ -29,6 +29,7 @@ export default async function ZooImpostazioniPage({
   const hiddenHere = hiddenEntriesFor(db, scope);
   // codici promozione dell'ambito e quanti articoli ne hanno uno
   const codiciPromo = scope.type === "system" ? [] : pvPromoCodesFor(db, scope);
+  const chiavePropria = db.scopeApiKeys.find((k) => k.scopeType === scope.type && k.scopeId === scope.id)?.key;
   const promoPerCodice = new Map<string, number>();
   for (const p of db.pvPromos) {
     if (p.scopeType !== scope.type || p.scopeId !== scope.id) continue;
@@ -143,6 +144,27 @@ export default async function ZooImpostazioniPage({
               </div>
             </div>
           </>
+        )}
+
+        {/* chiave API propria dell'insegna/PV: per raggruppare i propri articoli con l'AI */}
+        {scope.type !== "system" && (
+          <div className="card" style={{ padding: 14, marginBottom: 14 }}>
+            <h2 style={{ marginTop: 0 }}>Chiave API Claude di {scope.label}</h2>
+            <p style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 0 }}>
+              Serve al pulsante &quot;Associa con AI&quot; per raggruppare i <strong>vostri</strong> articoli in prodotti
+              padre e scriverne i testi, usando il vostro credito invece di quello del Consorzio. Se non la mettete
+              vale quella comune, se configurata. Stato:{" "}
+              {chiavePropria
+                ? <span className="pill pill-green">vostra chiave (…{chiavePropria.slice(-6)})</span>
+                : db.settings.apiKey
+                  ? <span className="pill pill-blue">si usa quella del Consorzio</span>
+                  : <span className="pill pill-gray">nessuna chiave — raggruppamento automatico con testi bozza</span>}
+            </p>
+            <form action={saveZooApiKey.bind(null, scopeParam)} style={{ display: "flex", gap: 8 }}>
+              <input type="password" name="apiKey" placeholder="sk-ant-…  (vuoto per rimuovere)" style={{ flex: 1, maxWidth: 420 }} />
+              <button className="btn btn-sm" type="submit">Salva chiave</button>
+            </form>
+          </div>
         )}
 
         {/* chiave API: SOLO amministratore di sistema */}

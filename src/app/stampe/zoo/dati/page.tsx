@@ -20,7 +20,7 @@ import {
   importZooProducts, finalizeZooPhotoUpload, confirmZooPhotoTargets, createZooParent, associaConAI,
   rigeneraTestiAI, saveParentTexts, setParentImage, toggleParentCaratteristica, scioglieParent, toggleZooHidden,
   toggleZooHiddenBulk, updateParentFieldInline, updateProductFieldInline, setParentTagInline, moveProductToParent,
-  setParentImageFromFile, mergeParentsForm,
+  setParentImageFromFile, mergeParentsForm, promuoviProdottoAConsorzio, adottaProdotto,
 } from "@/lib/zoo-actions";
 
 // "Associa con AI" può richiedere più dei 10s di default per un lotto di articoli.
@@ -68,7 +68,19 @@ export default async function ZooDatiPage({
   // filtri
   const q = (sp.q ?? "").toLowerCase();
   const soloSenzaPadre = sp.senzapadre === "1";
-  let products = visibleProducts(db, scope, academyDb).filter((p) => {
+  /*
+   * Di norma si vede il catalogo comune più i propri articoli. Con "mostra anche
+   * quelli di altri" si guardano quelli caricati dalle altre insegne/PV: il
+   * Consorzio per renderli comuni, gli altri per farne una copia propria.
+   */
+  const mostraAltrui = sp.altrui === "1";
+  const catalogo = mostraAltrui ? db.products : visibleProducts(db, scope, academyDb);
+  const etichettaAmbito = (p: ZooProduct) =>
+    !p.scopeType ? "Consorzio"
+      : p.scopeType === "tenant" ? (academyDb.tenants.find((t) => t.id === p.scopeId)?.name ?? "Insegna")
+        : (academyDb.stores.find((x) => x.id === p.scopeId)?.name ?? "Punto vendita");
+  const proprio = (p: ZooProduct) => !p.scopeType || (p.scopeType === scope.type && p.scopeId === scope.id);
+  let products = catalogo.filter((p) => {
     if (sp.fornitore && p.fornitore !== sp.fornitore) return false;
     if (sp.marca && marcaEffettiva(p) !== sp.marca) return false;
     if (soloSenzaPadre && p.parentId) return false;
@@ -315,6 +327,8 @@ export default async function ZooDatiPage({
           </form>
         </div>
 
+        {sp.promosso && <div className="alert alert-green">✓ Articolo reso comune: ora lo vedono tutte le insegne.</div>}
+        {sp.adottato && <div className="alert alert-green">✓ Copia creata fra i vostri articoli: modificala pure, l&apos;originale resta di chi l&apos;ha caricato.</div>}
         {sp.importati !== undefined && <div className="alert alert-green">✓ Import Excel: {sp.importati} articoli elaborati.</div>}
         {sp.foto !== undefined && <div className="alert alert-green">✓ {sp.foto} foto caricate, {sp.abbinate} abbinate in automatico per EAN/codice.</div>}
         {sp.abbinatenome !== undefined && <div className="alert alert-green">✓ {sp.abbinatenome} foto abbinate per nome.</div>}
@@ -458,6 +472,7 @@ export default async function ZooDatiPage({
             <button className="btn btn-sm" type="submit">Filtra</button>
             <label style={{ fontSize: 12.5, gridColumn: "1 / -1" }}>
               <input type="checkbox" name="senzapadre" value="1" defaultChecked={soloSenzaPadre} /> solo senza padre
+              {" "}<input type="checkbox" name="altrui" value="1" defaultChecked={mostraAltrui} /> mostra anche gli articoli di altre insegne/PV
               {scope.type !== "system" && (
                 <>
                   {" "}<input type="checkbox" name="nascosti" value="1" defaultChecked={showHidden} /> mostra nascosti
@@ -511,7 +526,7 @@ export default async function ZooDatiPage({
             <table className="data" id="tab-dati">
               <thead>
                 <tr>
-                  {(consortium || scope.type !== "system") && <th style={{ width: 30 }}><BulkCheckbox name="sel" /></th>}
+                  {(consortium || scope.type !== "system") && <th style={{ width: 30 }}><BulkCheckbox name="sel" also="selpadre" /></th>}
                   <th style={{ width: 56 }}>Foto</th>
                   <th>{vistaArticoli ? "Articolo" : "Prodotto"}</th>
                   <th className="col-wide">Descrizione</th>
@@ -648,7 +663,31 @@ export default async function ZooDatiPage({
                       </td>
                       <td>
                         <strong style={{ fontSize: 13 }}>{p.descrizione}</strong>
-                        {p.scopeType && <span className="pill pill-orange" style={{ marginLeft: 6 }}>vostro</span>}
+                        {p.scopeType && (
+                          <span className={`pill ${proprio(p) ? "pill-orange" : "pill-gray"}`} style={{ marginLeft: 6 }}>
+                            {proprio(p) ? "vostro" : etichettaAmbito(p)}
+                          </span>
+                        )}
+                        {p.scopeType && !proprio(p) && (
+                          <span style={{ display: "inline-flex", gap: 4, marginLeft: 6 }}>
+                            {consortium && scope.type === "system" && (
+                              <form action={promuoviProdottoAConsorzio.bind(null, p.id, scopeParam, BACK)}>
+                                <button className="btn btn-outline btn-sm" type="submit" style={{ padding: "0 6px", fontSize: 11 }}
+                                  title="Rendilo comune a tutte le insegne">
+                                  Rendi comune
+                                </button>
+                              </form>
+                            )}
+                            {scope.type !== "system" && (
+                              <form action={adottaProdotto.bind(null, p.id, scopeParam, BACK)}>
+                                <button className="btn btn-outline btn-sm" type="submit" style={{ padding: "0 6px", fontSize: 11 }}
+                                  title="Fanne una copia tua, che puoi modificare senza toccare l'originale">
+                                  Copia fra i miei
+                                </button>
+                              </form>
+                            )}
+                          </span>
+                        )}
                         {p.prezzo && <div style={{ fontSize: 11.5, color: "var(--muted)" }}>prezzo base € {p.prezzo}</div>}
                       </td>
                       <td className="col-wide" style={{ fontSize: 11.5, color: "var(--muted)" }}>{parentDescr || "—"}</td>

@@ -347,6 +347,34 @@ export interface ZooNoPrint {
   offerId: string;
 }
 
+/**
+ * Chiave API Claude di un'insegna/PV: serve a far lavorare "Associa con AI" sui
+ * propri articoli senza dover chiedere quella del Consorzio (e senza consumarne
+ * il credito). Se manca, vale quella del Consorzio.
+ */
+export interface ZooScopeApiKey {
+  scopeType: ScopeType;
+  scopeId: string;
+  key: string;
+}
+
+/**
+ * Nota lasciata sulla bozza del volantino da chi la rivede. Sta a parte dal
+ * builder: chi commenta non deve poter spostare le offerte, e chi impagina deve
+ * vedere tutte le note in un posto solo, comprese quelle degli altri.
+ */
+export interface ZooNotaBozza {
+  id: string;
+  campaignId: string;
+  pageId?: string; // nota su una pagina precisa; assente = nota generale
+  userId: string;
+  userName: string;
+  scopeLabel: string;
+  testo: string;
+  date: string; // ISO
+  risolta?: boolean;
+}
+
 /** Immagine fissa caricata da PC (testata, cornice, logo) da posare sui layout. */
 export interface ZooLayoutImage {
   id: string;
@@ -376,6 +404,8 @@ export interface ZooDB {
   layoutImages: ZooLayoutImage[];
   pvPromoCodes: ZooPvPromoCode[];
   pvPromos: ZooPvPromo[];
+  scopeApiKeys: ZooScopeApiKey[];
+  noteBozza: ZooNotaBozza[];
 }
 
 /* ================== Persistenza ================== */
@@ -403,11 +433,11 @@ export async function getZooDb(): Promise<ZooDB> {
     products: [], parents: [], textOverrides: [], tagOverrides: [], offerOverrides: [], printed: [],
     campaigns: [], offers: [],
     votes: [], hidden: [], pvPrices: [], suggestions: [], volantinoLayouts: [], zooLayouts: [],
-    noPrint: [], layoutImages: [], pvPromoCodes: [], pvPromos: [],
+    noPrint: [], layoutImages: [], pvPromoCodes: [], pvPromos: [], scopeApiKeys: [], noteBozza: [],
   };
   const db = await readDomain<ZooDB>("zoo", empty);
   db.settings = { ...DEFAULT_SETTINGS, ...(db.settings ?? {}) };
-  for (const k of ["products", "parents", "textOverrides", "tagOverrides", "offerOverrides", "printed", "campaigns", "offers", "votes", "hidden", "pvPrices", "suggestions", "volantinoLayouts", "zooLayouts", "noPrint", "layoutImages", "pvPromoCodes", "pvPromos"] as const) {
+  for (const k of ["products", "parents", "textOverrides", "tagOverrides", "offerOverrides", "printed", "campaigns", "offers", "votes", "hidden", "pvPrices", "suggestions", "volantinoLayouts", "zooLayouts", "noPrint", "layoutImages", "pvPromoCodes", "pvPromos", "scopeApiKeys", "noteBozza"] as const) {
     if (!db[k]) (db as unknown as Record<string, unknown>)[k] = [];
   }
   return db;
@@ -724,6 +754,12 @@ export function ownScopeVisible(
 /** Articoli che questo ambito deve vedere: catalogo comune più i propri. */
 export function visibleProducts(db: ZooDB, scope: Scope, academyDb: DB): ZooProduct[] {
   return db.products.filter((p) => ownScopeVisible(scope, academyDb, p));
+}
+
+/** Chiave API da usare per questo ambito: la propria se c'è, altrimenti quella del Consorzio. */
+export function apiKeyFor(db: ZooDB, scope: Scope): string | undefined {
+  const propria = db.scopeApiKeys.find((k) => k.scopeType === scope.type && k.scopeId === scope.id);
+  return propria?.key || db.settings.apiKey;
 }
 
 /** Codici promozione dell'ambito (se non ne ha ancora, valgono quelli proposti). */
