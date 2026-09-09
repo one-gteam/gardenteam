@@ -344,7 +344,24 @@ export interface ZooSettings {
 export interface ZooNoPrint {
   scopeType: ScopeType;
   scopeId: string;
-  offerId: string;
+  /** Esclusione del singolo cartello: vale per questa offerta e basta. */
+  offerId?: string;
+  /**
+   * Esclusione per articolo (dall'import Excel dei codici): vale anche sulle
+   * campagne future, perché il codice a barre resta lo stesso mentre l'offerta
+   * cambia id a ogni volantino. Senza questo, la lista caricata sarebbe da
+   * ricaricare ogni mese.
+   */
+  ean?: string;
+}
+
+/** Le due liste di esclusione di un ambito: per offerta e per codice a barre. */
+export function noPrintSets(db: ZooDB, scope: Scope) {
+  const miei = db.noPrint.filter((n) => n.scopeType === scope.type && n.scopeId === scope.id);
+  return {
+    offerIds: new Set(miei.map((n) => n.offerId).filter(Boolean) as string[]),
+    eans: new Set(miei.map((n) => n.ean).filter(Boolean) as string[]),
+  };
 }
 
 /**
@@ -440,6 +457,9 @@ export async function getZooDb(): Promise<ZooDB> {
   for (const k of ["products", "parents", "textOverrides", "tagOverrides", "offerOverrides", "printed", "campaigns", "offers", "votes", "hidden", "pvPrices", "suggestions", "volantinoLayouts", "zooLayouts", "noPrint", "layoutImages", "pvPromoCodes", "pvPromos", "scopeApiKeys", "noteBozza"] as const) {
     if (!db[k]) (db as unknown as Record<string, unknown>)[k] = [];
   }
+  // i layout salvati prima delle tipologie non hanno il campo: senza questo la
+  // stampa va in errore appena incontra uno di quei layout
+  for (const l of db.zooLayouts) if (!l.tipologie) l.tipologie = [];
   return db;
 }
 
@@ -857,10 +877,12 @@ export function effectiveZooLayout(
   db: ZooDB, scope: Scope, formatId: string, academyDb: DB, tags: string[] = []
 ): ZooLayout {
   const candidates = db.zooLayouts.filter((l) => l.formatId === formatId);
-  const match = (l: ZooLayout) => l.tipologie.length === 0 || l.tipologie.some((t) => tags.includes(t));
+  // i layout salvati prima delle tipologie non hanno il campo: valgono per tutti
+  const tip = (l: ZooLayout) => l.tipologie ?? [];
+  const match = (l: ZooLayout) => tip(l).length === 0 || tip(l).some((t) => tags.includes(t));
   for (const s of chainFor(scope, academyDb)) {
     const specific = candidates.find(
-      (l) => l.scopeType === s.type && l.scopeId === s.id && l.tipologie.length > 0 && l.tipologie.some((t) => tags.includes(t))
+      (l) => l.scopeType === s.type && l.scopeId === s.id && tip(l).length > 0 && tip(l).some((t) => tags.includes(t))
     );
     if (specific) return specific;
     const generic = candidates.find((l) => l.scopeType === s.type && l.scopeId === s.id && match(l));

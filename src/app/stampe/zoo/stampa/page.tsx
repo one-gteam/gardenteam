@@ -11,10 +11,11 @@ import {
   getZooDb, effectiveZooLayout, zooCartelloValues, pvPriceFor, isZooHidden,
   campagneStampabili, campagnaInCorso, campagnaInLavorazione, campaignStato,
   effectiveParentText, effectiveParentTag, effectiveOfferText, printedAt, NO_VOLANTINO,
-  ZOO_FIELDS, ZOO_FORMATS, marcaEffettiva, marcheList, tagsOfferta, pvPromoFor, ownScopeVisible,
+  ZOO_FIELDS, ZOO_FORMATS, marcaEffettiva, marcheList, tagsOfferta, pvPromoFor, ownScopeVisible, noPrintSets,
 } from "@/lib/zoo";
 import {
   importPvPrices, markZooPrinted, resetZooPrinted, toggleZooHidden, toggleZooNoPrint,
+  importZooNoPrint, svuotaZooNoPrint,
   creaOffertaPropria, eliminaOffertaPropria,
   updateParentFieldInline, setParentTagScoped, setOfferTextScoped, setPvPriceInline, updateOfferFieldInline,
 } from "@/lib/zoo-actions";
@@ -83,9 +84,12 @@ export default async function ZooStampaPage({
   const marcaRaw = sp.marca as unknown as string | string[] | undefined;
   const marcheScelte = (Array.isArray(marcaRaw) ? marcaRaw : (marcaRaw ?? "").split(","))
     .map((m) => m.trim()).filter(Boolean);
-  const nonStampare = new Set(
-    db.noPrint.filter((n) => n.scopeType === scope.type && n.scopeId === scope.id).map((n) => n.offerId)
-  );
+  /*
+   * Cartelli esclusi: quelli spuntati uno a uno (per offerta) e quelli caricati
+   * con l'Excel dei codici (per articolo, validi anche sui volantini futuri).
+   */
+  const noPrint = noPrintSets(db, scope);
+  const escluso = (o: { id: string; ean: string }) => noPrint.offerIds.has(o.id) || noPrint.eans.has(o.ean);
   const marcheEscluse = db.hidden
     .filter((h) => h.scopeType === scope.type && h.scopeId === scope.id && h.kind === "marca")
     .map((h) => h.value);
@@ -96,7 +100,7 @@ export default async function ZooStampaPage({
     if (product && isZooHidden(db, scope, product, academyDb)) return false;
     if (sp.scheda && o.schedaId !== sp.scheda) return false;
     if (marcheScelte.length > 0 && !marcheScelte.includes(marcaEffettiva(product ?? { marca: "", fornitore: "" }))) return false;
-    if (sp.nonstampabili !== "si" && nonStampare.has(o.id)) return false;
+    if (sp.nonstampabili !== "si" && escluso(o)) return false;
     if (sp.volantino === "si" && !inVolantino(o)) return false;
     if (sp.volantino === "no" && inVolantino(o)) return false;
     if (sp.stampati === "si" && !printedAt(db, scope, o.id)) return false;
@@ -231,6 +235,58 @@ export default async function ZooStampaPage({
               <input type="file" name="file" accept=".xlsx,.xls,.csv" required />
               <button className="btn btn-sm" type="submit">Importa prezzi</button>
             </form>
+          </div>
+        )}
+
+        {sp.noprint !== undefined && (
+          sp.noprint === "consorzio" ? (
+            <div className="alert alert-amber">L&apos;elenco dei cartelli da non stampare è di ogni insegna o punto vendita: scegli il tuo ambito qui sopra.</div>
+          ) : sp.noprint === "file" ? (
+            <div className="alert alert-amber">Non ho ricevuto nessun file: riprova a sceglierlo.</div>
+          ) : sp.noprint === "svuotato" ? (
+            <div className="alert alert-green">✓ Elenco svuotato: tornano stampabili tutti i cartelli, tranne quelli esclusi a mano.</div>
+          ) : (
+            <div className="alert alert-green">
+              ✓ {sp.noprint} {Number(sp.noprint) === 1 ? "codice escluso" : "codici esclusi"} dalla stampa per {scope.label}
+              {Number(sp.rimessi ?? 0) > 0 && (
+                <>, {sp.rimessi} {Number(sp.rimessi) === 1 ? "rimesso" : "rimessi"} fra quelli da stampare</>
+              )}.
+              {Number(sp.sconosciuti ?? 0) > 0 && (
+                <>{" "}
+                  {sp.sconosciuti} {Number(sp.sconosciuti) === 1 ? "codice fornitore non è" : "codici fornitore non sono"} nel
+                  catalogo: caricali da Database prodotti se ti servono.
+                </>
+              )}
+            </div>
+          )
+        )}
+
+        {scope.type !== "system" && (
+          <div className="card" style={{ marginBottom: 16, padding: 14 }}>
+            <strong>Cartelli da non stampare</strong>
+            <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "4px 0 8px" }}>
+              Carica un Excel con i codici a barre (o i CODICE FORNITORE) degli articoli che {scope.label} non espone:
+              spariscono dai cartelli senza toccare l&apos;offerta degli altri. L&apos;esclusione segue l&apos;articolo, quindi vale
+              anche per i volantini successivi. Se aggiungi la colonna NON STAMPARE, un &laquo;no&raquo; rimette il cartello in
+              stampa.{" "}
+              <a href={`/stampe/zoo/excel?nonstampare=1&scope=${scopeParam}`}>Scarica il modello precompilato</a>
+            </p>
+            <form action={importZooNoPrint.bind(null, scopeParam)} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <input type="file" name="file" accept=".xlsx,.xls,.csv" required />
+              <button className="btn btn-sm" type="submit">Importa i codici</button>
+            </form>
+            {noPrint.eans.size > 0 && (
+              <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 10, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 12.5, color: "var(--muted)" }}>
+                  {noPrint.eans.size} {noPrint.eans.size === 1 ? "codice" : "codici"} in elenco,{" "}
+                  {allOffers.filter((o) => noPrint.eans.has(o.ean)).length} sui cartelli di questo periodo.
+                </span>
+                <a className="btn btn-outline btn-sm" href={`/stampe/zoo/stampa?scope=${scopeParam}&nonstampabili=si`}>Vedi gli esclusi</a>
+                <form action={svuotaZooNoPrint.bind(null, scopeParam)}>
+                  <button className="btn btn-outline btn-sm" type="submit">Svuota l&apos;elenco</button>
+                </form>
+              </div>
+            )}
           </div>
         )}
 
@@ -571,10 +627,10 @@ export default async function ZooStampaPage({
                           <td className="no-print" style={{ whiteSpace: "nowrap" }}>
                             <form action={toggleZooNoPrint.bind(null, o.id, scopeParam, "/stampe/zoo/stampa")}>
                               <button className="btn btn-outline btn-sm" type="submit"
-                                title={nonStampare.has(o.id)
+                                title={escluso(o)
                                   ? "Rimettilo fra i cartelli da stampare"
                                   : "Escludi questo cartello: l'offerta resta valida per gli altri punti vendita"}>
-                                {nonStampare.has(o.id) ? "Escluso ✕" : "Non stampare"}
+                                {escluso(o) ? "Escluso ✕" : "Non stampare"}
                               </button>
                             </form>
                           </td>

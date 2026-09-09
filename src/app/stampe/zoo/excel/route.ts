@@ -3,7 +3,7 @@ import * as XLSX from "xlsx";
 import { getCurrentUser } from "@/lib/auth";
 import { canAccessArea, resolveScope } from "@/lib/stampe";
 import { getDb } from "@/lib/db";
-import { getZooDb, activeCampaign, pvPriceFor, volantinoExportRows, offerteExportRows } from "@/lib/zoo";
+import { getZooDb, activeCampaign, pvPriceFor, volantinoExportRows, offerteExportRows, noPrintSets } from "@/lib/zoo";
 
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
@@ -51,6 +51,26 @@ export async function GET(req: NextRequest) {
       };
     });
     filename = "prezzi_pv_zoo.xlsx";
+  } else if (sp.nonstampare === "1") {
+    /*
+     * Modello dei cartelli da non stampare, precompilato con le offerte del
+     * periodo e con lo stato attuale: si scarica, si mette "si" sulle righe che
+     * il punto vendita non espone e si ricarica.
+     */
+    const campaign = activeCampaign(db);
+    const offers = campaign ? db.offers.filter((o) => o.campaignId === campaign.id) : [];
+    const { offerIds, eans } = noPrintSets(db, scope);
+    rows = offers.map((o) => {
+      const p = db.products.find((x) => x.id === o.productId);
+      return {
+        EAN: o.ean,
+        "CODICE FORNITORE": p?.codice ?? "",
+        DESCRIZIONE: o.descrizione,
+        "PREZZO PROMO": o.prezzoPromo,
+        "NON STAMPARE": offerIds.has(o.id) || eans.has(o.ean) ? "si" : "no",
+      };
+    });
+    filename = "cartelli_da_non_stampare.xlsx";
   } else if (sp.offerte === "volantino" || sp.offerte === "fuori") {
     /*
      * Offerte di un volantino, dall'Archivio: quelle andate sulla carta oppure

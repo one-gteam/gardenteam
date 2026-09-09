@@ -1538,11 +1538,19 @@ export async function toggleZooNoPrint(offerId: string, scopeParam: string, back
   const academyDb = await getDb();
   const scope = resolveScope(user, scopeParam, academyDb);
   if (scope.type === "system") redirect(backUrl(back, scopeParam));
-  const i = db.noPrint.findIndex(
-    (n) => n.scopeType === scope.type && n.scopeId === scope.id && n.offerId === offerId
-  );
-  if (i >= 0) db.noPrint.splice(i, 1);
-  else db.noPrint.push({ scopeType: scope.type, scopeId: scope.id, offerId });
+  const ean = db.offers.find((o) => o.id === offerId)?.ean ?? "";
+  /*
+   * L'esclusione può arrivare da qui (una sola offerta) o dall'import Excel dei
+   * codici (vale per l'articolo, anche nei volantini futuri): rimettere in
+   * stampa deve togliere entrambe, altrimenti il pulsante sembra non funzionare.
+   */
+  const miei = (n: (typeof db.noPrint)[number]) => n.scopeType === scope.type && n.scopeId === scope.id;
+  const gia = db.noPrint.some((n) => miei(n) && (n.offerId === offerId || (Boolean(ean) && n.ean === ean)));
+  if (gia) {
+    db.noPrint = db.noPrint.filter((n) => !(miei(n) && (n.offerId === offerId || (Boolean(ean) && n.ean === ean))));
+  } else {
+    db.noPrint.push({ scopeType: scope.type, scopeId: scope.id, offerId });
+  }
   await saveZooDb(db);
   rigeneraZoo();
   redirect(backUrl(back, scopeParam));
@@ -1563,6 +1571,90 @@ export async function toggleZooNoPrintBulk(scopeParam: string, back: string, for
   await saveZooDb(db);
   rigeneraZoo();
   redirect(backUrl(back, scopeParam, { nonstampare: String(ids.length) }));
+}
+
+/**
+ * Import Excel dei cartelli da NON stampare: un elenco di codici a barre o di
+ * codici articolo fornitore. Serve perché un punto vendita che non espone
+ * decine di offerte non può spuntarle una a una a ogni volantino: l'elenco lo
+ * ha già il suo gestionale.
+ *
+ * L'esclusione è registrata sul codice a barre, non sull'offerta, così vale
+ * anche per le campagne successive. La colonna NON STAMPARE (si/no) permette di
+ * rimettere in stampa quello che era escluso: se la colonna manca, ogni riga
+ * del file è un'esclusione.
+ */
+export async function importZooNoPrint(scopeParam: string, formData: FormData) {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  if (scope.type === "system") redirect(backUrl("/stampe/zoo/stampa", scopeParam, { noprint: "consorzio" }));
+  const file = formData.get("file") as File | null;
+  if (!file || file.size === 0) redirect(backUrl("/stampe/zoo/stampa", scopeParam, { noprint: "file" }));
+
+  const XLSX = await import("xlsx");
+  const wb = XLSX.read(Buffer.from(await file!.arrayBuffer()), { type: "buffer" });
+  const righe = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[wb.SheetNames[0]], { defval: "" });
+
+  const miei = (n: (typeof db.noPrint)[number]) => n.scopeType === scope.type && n.scopeId === scope.id;
+  let esclusi = 0;
+  let rimessi = 0;
+  let sconosciuti = 0;
+  for (const row of righe) {
+    let ean = cell(row, "EAN", "CODICE EAN", "BARCODE", "CODICE A BARRE", "COD. BARRE").replace(/\s/g, "");
+    if (!ean) {
+      // il gestionale del PV spesso ha solo il codice del fornitore: si risale all'EAN dal catalogo
+      const codice = cell(row, "CODICE FORNITORE", "COD. FORNITORE", "CODICE ARTICOLO", "CODICE");
+      if (codice) {
+        ean = db.products.find((p) => p.codice === codice)?.ean ?? "";
+        if (!ean) sconosciuti++;
+      }
+    }
+    if (!ean) continue;
+    /*
+     * Il file può essere il semplice elenco dei codici da escludere (nessuna
+     * colonna: ogni riga è un'esclusione), oppure il modello scaricato da qui,
+     * che porta la colonna NON STAMPARE con si/no e serve anche a rimettere in
+     * stampa. Si accetta pure la colonna opposta, STAMPA, che certi gestionali
+     * esportano così.
+     */
+    const colonna = (...nomi: string[]) => Object.keys(row).find((k) => nomi.includes(k.trim().toLowerCase()));
+    const si = (v: unknown) => ["si", "sì", "s", "1", "x", "true"].includes(String(v ?? "").trim().toLowerCase());
+    const kNo = colonna("non stampare", "non stamparlo", "escludi");
+    const kSi = colonna("stampa", "stampare");
+    const escludi = kNo ? si(row[kNo]) : kSi ? !si(row[kSi]) : true;
+    const gia = db.noPrint.some((n) => miei(n) && n.ean === ean);
+    if (escludi && !gia) {
+      db.noPrint.push({ scopeType: scope.type, scopeId: scope.id, ean });
+      esclusi++;
+    } else if (!escludi) {
+      const prima = db.noPrint.length;
+      db.noPrint = db.noPrint.filter((n) => !(miei(n) && n.ean === ean));
+      if (db.noPrint.length < prima) rimessi++;
+    }
+  }
+
+  await saveZooDb(db);
+  rigeneraZoo();
+  redirect(backUrl("/stampe/zoo/stampa", scopeParam, {
+    noprint: String(esclusi), rimessi: String(rimessi), sconosciuti: String(sconosciuti),
+  }));
+}
+
+/** Svuota l'elenco dei codici esclusi caricato da Excel (le spunte singole restano). */
+export async function svuotaZooNoPrint(scopeParam: string) {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  if (scope.type === "system") redirect(backUrl("/stampe/zoo/stampa", scopeParam));
+  db.noPrint = db.noPrint.filter(
+    (n) => !(n.scopeType === scope.type && n.scopeId === scope.id && n.ean)
+  );
+  await saveZooDb(db);
+  rigeneraZoo();
+  redirect(backUrl("/stampe/zoo/stampa", scopeParam, { noprint: "svuotato" }));
 }
 
 /** Immagine fissa (testata, cornice, logo) caricata da PC e riutilizzabile su ogni layout. */
