@@ -338,14 +338,15 @@ export function effectiveLayout(
   db: StampeDB, scope: Scope, formatId: string, academyDb: DB, tipologia?: string
 ): CardLayout | undefined {
   const candidates = db.layouts.filter((l) => l.formatId === formatId);
-  const match = (l: CardLayout) => l.tipologie.length === 0 || (tipologia && l.tipologie.includes(tipologia));
-  for (const s of parentScopes(scope, academyDb)) {
-    // prima layout specifici per tipologia, poi generici
-    const specific = candidates.find(
-      (l) => l.scopeType === s.type && l.scopeId === s.id && l.tipologie.length > 0 && tipologia && l.tipologie.includes(tipologia)
-    );
+  const chain = parentScopes(scope, academyDb);
+  const di = (l: CardLayout, s: { type: ScopeType; id: string }) => l.scopeType === s.type && l.scopeId === s.id;
+  // stessa regola dello Zoo: prima il layout della tipologia giusta, dal più vicino al Consorzio; poi il generico più vicino
+  for (const s of chain) {
+    const specific = candidates.find((l) => di(l, s) && l.tipologie.length > 0 && !!tipologia && l.tipologie.includes(tipologia));
     if (specific) return specific;
-    const generic = candidates.find((l) => l.scopeType === s.type && l.scopeId === s.id && match(l));
+  }
+  for (const s of chain) {
+    const generic = candidates.find((l) => di(l, s) && l.tipologie.length === 0);
     if (generic) return generic;
   }
   return candidates.find((l) => l.scopeType === "system");

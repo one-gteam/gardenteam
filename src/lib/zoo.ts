@@ -879,13 +879,22 @@ export function effectiveZooLayout(
   const candidates = db.zooLayouts.filter((l) => l.formatId === formatId);
   // i layout salvati prima delle tipologie non hanno il campo: valgono per tutti
   const tip = (l: ZooLayout) => l.tipologie ?? [];
-  const match = (l: ZooLayout) => tip(l).length === 0 || tip(l).some((t) => tags.includes(t));
-  for (const s of chainFor(scope, academyDb)) {
-    const specific = candidates.find(
-      (l) => l.scopeType === s.type && l.scopeId === s.id && tip(l).length > 0 && tip(l).some((t) => tags.includes(t))
-    );
+  const chain = chainFor(scope, academyDb);
+  const di = (l: ZooLayout, s: { type: ScopeType; id: string }) => l.scopeType === s.type && l.scopeId === s.id;
+  /*
+   * Prima il layout fatto apposta per questo tipo di offerta, dal più vicino
+   * (punto vendita) al Consorzio; solo se nessuno ne ha uno, quello generico
+   * più vicino. Prima la ricerca si fermava al primo ambito che avesse un
+   * layout qualsiasi: un vecchio layout senza tipologia di un'insegna copriva il
+   * layout "prezzo barrato" del Consorzio, e i cartelli uscivano con
+   * l'impaginazione sbagliata.
+   */
+  for (const s of chain) {
+    const specific = candidates.find((l) => di(l, s) && tip(l).length > 0 && tip(l).some((t) => tags.includes(t)));
     if (specific) return specific;
-    const generic = candidates.find((l) => l.scopeType === s.type && l.scopeId === s.id && match(l));
+  }
+  for (const s of chain) {
+    const generic = candidates.find((l) => di(l, s) && tip(l).length === 0);
     if (generic) return generic;
   }
   return candidates.find((l) => l.scopeType === "system") ?? {
