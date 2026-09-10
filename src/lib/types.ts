@@ -123,6 +123,15 @@ export function userSites(user: User): SiteId[] {
   return ["academy", "arredo", "zoo", "piante"];
 }
 
+/**
+ * Chi ha un ruolo di gestione dentro l'Academy. I gestori delle altre aree
+ * (Offerte Zoo, Cartelli Piante) qui sono corsisti come tutti gli altri: il
+ * loro ruolo vale nella propria area, non sulla formazione.
+ */
+export function isAcademyAdmin(user: User): boolean {
+  return ["system_admin", "course_manager", "group_admin", "store_admin", "dept_head"].includes(user.role);
+}
+
 /** Destinazione dopo il login: diretta se una sola macroarea, pagina di scelta se più di una. */
 export function postLoginPath(user: User): string {
   const sites = userSites(user);
@@ -130,7 +139,7 @@ export function postLoginPath(user: User): string {
   if (sites[0] === "arredo") return "/stampe/arredo/dati";
   if (sites[0] === "zoo") return "/stampe/zoo/dati";
   if (sites[0] === "piante") return "/scegli"; // area in preparazione
-  return user.role === "student" ? "/studente" : "/admin";
+  return isAcademyAdmin(user) ? "/admin" : "/studente";
 }
 
 /**

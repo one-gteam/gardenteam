@@ -17,7 +17,9 @@ export default async function ZooImpostazioniPage({
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (!canAccessArea(user, "zoo")) redirect("/studente");
-  if (!["system_admin", "course_manager", "group_admin", "store_admin"].includes(user.role)) redirect("/stampe/zoo/dati");
+  if (!["system_admin", "course_manager", "group_admin", "store_admin", "zoo_manager"].includes(user.role)) {
+    redirect("/stampe/zoo/dati");
+  }
   const sp = await searchParams;
 
   const db = await getZooDb();

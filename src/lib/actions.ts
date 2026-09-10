@@ -219,6 +219,18 @@ function verifyPassword(password: string, stored: string): boolean {
   return timingSafeEqual(candidate, Buffer.from(hash, "hex"));
 }
 
+/**
+ * Chi può agire dentro l'Academy. Il controllo sulla macroarea sta qui e non
+ * solo nelle pagine: le azioni server sono raggiungibili da sole, e un utente
+ * abilitato alle sole Offerte Zoo non deve poter toccare corsi, lezioni o email
+ * della formazione.
+ */
+async function requireAcademyUser(): Promise<User> {
+  const user = await requireUser();
+  if (!userSites(user).includes("academy")) redirect(postLoginPath(user));
+  return user;
+}
+
 function canEditCourse(admin: User, course: Course): boolean {
   if (admin.role === "system_admin" || admin.role === "course_manager") return true;
   if (admin.role === "group_admin") return course.level !== "sistema" && course.tenantId === admin.tenantId;
@@ -227,7 +239,7 @@ function canEditCourse(admin: User, course: Course): boolean {
 }
 
 async function requireEditableCourse(courseId: string) {
-  const admin = await requireUser();
+  const admin = await requireAcademyUser();
   const db = await getDb();
   const course = db.courses.find((c) => c.id === courseId);
   if (!course || !canEditCourse(admin, course)) redirect("/admin/corsi");
@@ -290,7 +302,7 @@ export async function trackLessonView(
   lessonId: string,
   data: { maxPercent: number; secondsWatched: number; durationSec?: number }
 ) {
-  const user = await requireUser();
+  const user = await requireAcademyUser();
   const db = await getDb();
   const course = db.courses.find((c) => c.id === courseId);
   if (!course || !course.lessons.some((l) => l.id === lessonId)) return { ok: false as const };
@@ -342,7 +354,7 @@ export async function trackLessonView(
 }
 
 export async function completeLesson(courseId: string, lessonId: string) {
-  const user = await requireUser();
+  const user = await requireAcademyUser();
   const db = await getDb();
   const course = db.courses.find((c) => c.id === courseId);
   if (!course) return;
@@ -363,7 +375,7 @@ export async function completeLesson(courseId: string, lessonId: string) {
 }
 
 export async function submitQuiz(courseId: string, formData: FormData) {
-  const user = await requireUser();
+  const user = await requireAcademyUser();
   const db = await getDb();
   const course = db.courses.find((c) => c.id === courseId);
   if (!course || course.quiz.length === 0) redirect(`/corso/${courseId}`);
@@ -392,7 +404,7 @@ export async function submitQuiz(courseId: string, formData: FormData) {
 }
 
 export async function sendFeedback(courseId: string, formData: FormData) {
-  const user = await requireUser();
+  const user = await requireAcademyUser();
   const db = await getDb();
   const rating = Number(formData.get("rating") ?? 0);
   const comment = String(formData.get("comment") ?? "").slice(0, 500);
@@ -411,7 +423,7 @@ export async function sendFeedback(courseId: string, formData: FormData) {
 }
 
 export async function importUsersCsv(formData: FormData) {
-  const admin = await requireUser();
+  const admin = await requireAcademyUser();
   const db = await getDb();
   const raw = String(formData.get("csv") ?? "").trim();
   if (!raw) redirect("/admin/utenti?import=0");
@@ -455,7 +467,7 @@ export async function importUsersCsv(formData: FormData) {
 }
 
 export async function createCourse(formData: FormData) {
-  const admin = await requireUser();
+  const admin = await requireAcademyUser();
   const db = await getDb();
   const title = String(formData.get("title") ?? "").trim();
   if (!title) redirect("/admin/corsi");
@@ -654,7 +666,7 @@ export async function trackScorm(
   lessonId: string,
   data: { status?: string; scorePercent?: number }
 ) {
-  const user = await requireUser();
+  const user = await requireAcademyUser();
   const db = await getDb();
   const course = db.courses.find((c) => c.id === courseId);
   const lesson = course?.lessons.find((l) => l.id === lessonId);
@@ -907,8 +919,9 @@ export async function sendSessionInvites(courseId: string, sessionId: string) {
 }
 
 export async function runReminders() {
-  const admin = await requireUser();
-  if (admin.role === "student") redirect("/studente");
+  const admin = await requireAcademyUser();
+  // le email partono verso tutto il consorzio: non è un pulsante da capo reparto
+  if (admin.role !== "system_admin" && admin.role !== "course_manager") redirect("/admin/email");
   const db = await getDb();
   const today = new Date().toISOString().slice(0, 10);
   let sent = 0;
@@ -1042,7 +1055,7 @@ export async function deleteLessonQuestion(courseId: string, lessonId: string, q
 
 /** Consegna di un quiz intermedio da parte dello studente. */
 export async function submitLessonQuiz(courseId: string, lessonId: string, lessonIndex: number, formData: FormData) {
-  const user = await requireUser();
+  const user = await requireAcademyUser();
   const db = await getDb();
   const course = db.courses.find((c) => c.id === courseId);
   const lesson = course?.lessons.find((l) => l.id === lessonId);
@@ -1154,7 +1167,7 @@ export async function updateSettings(formData: FormData) {
 
 /** Ordine e visibilità dei blocchi della home studente, configurabili senza sviluppo. */
 export async function moveHomeBlock(index: number, dir: number) {
-  const admin = await requireUser();
+  const admin = await requireAcademyUser();
   if (admin.role !== "system_admin") return { ok: false as const };
   const db = await getDb();
   const blocks = db.settings.homeBlocks ?? [...DEFAULT_HOME_BLOCKS];
@@ -1169,7 +1182,7 @@ export async function moveHomeBlock(index: number, dir: number) {
 }
 
 export async function toggleHomeBlock(index: number) {
-  const admin = await requireUser();
+  const admin = await requireAcademyUser();
   if (admin.role !== "system_admin") return { ok: false as const };
   const db = await getDb();
   const blocks = db.settings.homeBlocks ?? [...DEFAULT_HOME_BLOCKS];
@@ -1183,6 +1196,20 @@ export async function toggleHomeBlock(index: number) {
 }
 
 /* ================== Utenti e ruoli (pagina Ruoli, modifiche rapide) ================== */
+
+/**
+ * Aree che un responsabile può dare o togliere: solo quelle che ha lui stesso.
+ * Senza questo limite bastava spuntare le caselle sul proprio profilo per
+ * entrare in un'area che nessuno gli aveva assegnato. Le aree che l'admin non
+ * ha restano come sono: non le può né dare né togliere.
+ */
+function sitesAssegnabili(admin: User, target: User, scelte: SiteId[]): SiteId[] | undefined {
+  if (admin.role === "system_admin") return scelte.length > 0 ? scelte : undefined;
+  const mie = userSites(admin);
+  const restano = (target.sites ?? []).filter((s) => !mie.includes(s));
+  const finali = [...new Set([...scelte.filter((s) => mie.includes(s)), ...restano])];
+  return finali.length > 0 ? finali : undefined;
+}
 
 /** Il bersaglio è nel perimetro dell'admin e l'admin ha la gestione utenti attiva? */
 function canTouchUser(db: DB, admin: User, target: User): boolean {
@@ -1213,7 +1240,7 @@ export async function quickSetSites(userId: string, sites: SiteId[]) {
   const target = db.users.find((u) => u.id === userId);
   if (!target) return { ok: false as const, error: "Utente non trovato" };
   if (!canTouchUser(db, admin, target)) return { ok: false as const, error: "Fuori dal tuo ambito" };
-  target.sites = sites.length > 0 ? sites : undefined;
+  target.sites = sitesAssegnabili(admin, target, sites);
   await saveDb(db);
   revalidatePath("/admin/ruoli");
   return { ok: true as const };
@@ -1353,7 +1380,7 @@ export async function updateUser(userId: string, formData: FormData) {
     if (formData.get("siteArredo") === "on") sites.push("arredo");
     if (formData.get("siteZoo") === "on") sites.push("zoo");
     if (formData.get("sitePiante") === "on") sites.push("piante");
-    target!.sites = sites.length > 0 ? sites : undefined;
+    target!.sites = sitesAssegnabili(admin, target!, sites);
   }
 
   const role = String(formData.get("role") ?? "") as Role;
@@ -1396,7 +1423,7 @@ export async function updateUser(userId: string, formData: FormData) {
  * nel registro invii (non è una comunicazione a un collaboratore).
  */
 export async function sendTestEmail(formData: FormData) {
-  const admin = await requireUser();
+  const admin = await requireAcademyUser();
   if (admin.role !== "system_admin" && admin.role !== "course_manager") redirect("/admin/email");
   const to = String(formData.get("to") ?? "").trim();
   if (!to.includes("@")) redirect("/admin/email?prova=" + encodeURIComponent("Indirizzo non valido."));
@@ -1418,7 +1445,7 @@ Inviata il ${new Date().toLocaleString("it-IT")}.`
 /* ================== Modelli email ================== */
 
 export async function saveTemplate(type: EmailType, formData: FormData) {
-  const admin = await requireUser();
+  const admin = await requireAcademyUser();
   if (admin.role === "student" || admin.role === "dept_head") redirect("/admin");
   const db = await getDb();
   const isGlobal = admin.role === "system_admin" || admin.role === "course_manager";
@@ -1445,7 +1472,7 @@ export async function saveTemplate(type: EmailType, formData: FormData) {
 }
 
 export async function resetTemplate(type: EmailType) {
-  const admin = await requireUser();
+  const admin = await requireAcademyUser();
   if (admin.role === "student" || admin.role === "dept_head") redirect("/admin");
   const db = await getDb();
   if (admin.role === "system_admin" || admin.role === "course_manager") {
@@ -1467,7 +1494,7 @@ export async function resetTemplate(type: EmailType) {
 /* ================== Modelli aggiuntivi e impostazioni automazioni ================== */
 
 export async function saveCustomTemplate(templateId: string | null, formData: FormData) {
-  const admin = await requireUser();
+  const admin = await requireAcademyUser();
   if (!["system_admin", "course_manager", "group_admin", "store_admin"].includes(admin.role)) redirect("/admin");
   const db = await getDb();
   const name = String(formData.get("name") ?? "").trim();
@@ -1508,7 +1535,7 @@ export async function saveCustomTemplate(templateId: string | null, formData: Fo
 }
 
 export async function deleteCustomTemplate(templateId: string) {
-  const admin = await requireUser();
+  const admin = await requireAcademyUser();
   const db = await getDb();
   const ct = db.customTemplates.find((x) => x.id === templateId);
   if (!ct) redirect("/admin/email");
@@ -1524,7 +1551,7 @@ export async function deleteCustomTemplate(templateId: string) {
 }
 
 export async function saveAutomationSettings(formData: FormData) {
-  const admin = await requireUser();
+  const admin = await requireAcademyUser();
   if (admin.role !== "system_admin") redirect("/admin/email");
   const db = await getDb();
   const urgentDays = Number(formData.get("urgentDays"));
@@ -1560,7 +1587,7 @@ function canEditPath(admin: User, level: CourseLevel, tenantId?: string): boolea
 }
 
 export async function savePath(pathId: string | null, formData: FormData) {
-  const admin = await requireUser();
+  const admin = await requireAcademyUser();
   const db = await getDb();
   const title = String(formData.get("title") ?? "").trim();
   if (!title) return { ok: false as const, error: "Il titolo è obbligatorio" };
@@ -1596,7 +1623,7 @@ export async function savePath(pathId: string | null, formData: FormData) {
 }
 
 export async function deletePath(pathId: string) {
-  const admin = await requireUser();
+  const admin = await requireAcademyUser();
   const db = await getDb();
   const p = db.paths.find((x) => x.id === pathId);
   if (!p || !canEditPath(admin, p.level, p.tenantId)) return { ok: false as const };
@@ -1608,7 +1635,7 @@ export async function deletePath(pathId: string) {
 
 /** Aggiunge/toglie un corso dal percorso (usato dai pulsanti +/− nell'editor). */
 export async function togglePathCourse(pathId: string, courseId: string) {
-  const admin = await requireUser();
+  const admin = await requireAcademyUser();
   const db = await getDb();
   const p = db.paths.find((x) => x.id === pathId);
   if (!p || !canEditPath(admin, p.level, p.tenantId)) return { ok: false as const };
@@ -1622,7 +1649,7 @@ export async function togglePathCourse(pathId: string, courseId: string) {
 
 /** Sposta un corso su/giù nell'ordine del percorso. */
 export async function movePathCourse(pathId: string, courseId: string, dir: number) {
-  const admin = await requireUser();
+  const admin = await requireAcademyUser();
   const db = await getDb();
   const p = db.paths.find((x) => x.id === pathId);
   if (!p || !canEditPath(admin, p.level, p.tenantId)) return { ok: false as const };

@@ -1,16 +1,14 @@
 import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/auth";
+import { requireAreaUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import Header from "@/components/Header";
 import InsegnaLogo from "@/components/InsegnaLogo";
 import { kpis, storeRanking, courseStats } from "@/lib/logic";
-import { ROLE_LABELS, userSites } from "@/lib/types";
+import { ROLE_LABELS, isAcademyAdmin } from "@/lib/types";
 
 export default async function AdminDashboard() {
-  const user = await getCurrentUser();
-  if (!user) redirect("/login");
-  if (!userSites(user).includes("academy")) redirect("/stampe");
-  if (user.role === "student") redirect("/studente");
+  const user = await requireAreaUser("academy");
+  if (!isAcademyAdmin(user)) redirect("/studente");
 
   const db = await getDb();
   const k = kpis(db, user);

@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/auth";
+import { requireAreaUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import Header from "@/components/Header";
 import { completeLesson, sendFeedback, submitLessonQuiz } from "@/lib/actions";
-import { courseCompletion, getProgress, isCourseCompleted } from "@/lib/logic";
-import { DEFAULT_WATCH_THRESHOLD, LEVEL_LABELS } from "@/lib/types";
+import { courseCompletion, coursesForUser, getProgress,  isCourseCompleted } from "@/lib/logic";
+import { DEFAULT_WATCH_THRESHOLD, LEVEL_LABELS, isAcademyAdmin } from "@/lib/types";
 import { parseVideoUrl } from "@/lib/video";
 import TrackedVideo from "@/components/TrackedVideo";
 import ScormPlayer from "@/components/ScormPlayer";
@@ -32,14 +32,21 @@ export default async function CoursePage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ lezione?: string; quizEsito?: string }>;
 }) {
-  const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  const user = await requireAreaUser("academy");
   const { id } = await params;
   const { lezione, quizEsito } = await searchParams;
 
   const db = await getDb();
   const course = db.courses.find((c) => c.id === id);
   if (!course) notFound();
+  /*
+   * Il corso si apre solo se è assegnato a chi lo chiede (o se l'ha già
+   * iniziato), oppure se è un responsabile che lo gestisce e lo sta guardando in
+   * anteprima. Senza questo, bastava cambiare l'indirizzo per entrare nei corsi
+   * di un'altra insegna o di un altro punto vendita.
+   */
+  const gestisceCorsi = isAcademyAdmin(user) && user.role !== "dept_head";
+  if (!coursesForUser(db, user).some((c) => c.id === course.id) && !gestisceCorsi) redirect("/studente");
 
   const prog = getProgress(db, user.id, course.id);
   const requestedIdx = Math.min(Math.max(Number(lezione ?? 0) || 0, 0), course.lessons.length - 1);

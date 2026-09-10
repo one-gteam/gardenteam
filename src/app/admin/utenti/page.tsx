@@ -1,10 +1,10 @@
 import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/auth";
+import { requireAreaUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import Header from "@/components/Header";
 import { importUsersCsv, toggleUserActive, approveRegistration, rejectRegistration } from "@/lib/actions";
 import { scopeUsers, coursesForUser, getProgress, isCourseCompleted, isNewHire, canManageUsers } from "@/lib/logic";
-import { ROLE_LABELS } from "@/lib/types";
+import { ROLE_LABELS, isAcademyAdmin } from "@/lib/types";
 
 export default async function UsersPage({
   searchParams,
@@ -25,9 +25,8 @@ export default async function UsersPage({
     stato?: string;
   }>;
 }) {
-  const user = await getCurrentUser();
-  if (!user) redirect("/login");
-  if (user.role === "student") redirect("/studente");
+  const user = await requireAreaUser("academy");
+  if (!isAcademyAdmin(user)) redirect("/studente");
   const sp = await searchParams;
   const { import: imported, approvato, rifiutato } = sp;
 

@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { GraduationCap, Armchair, PawPrint, Flower2, Users, HardDrive, ArrowRight } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
-import { userSites, postLoginPath, SITE_NAME } from "@/lib/types";
+import { userSites, postLoginPath, SITE_NAME, isAcademyAdmin } from "@/lib/types";
 import { canManageUsers } from "@/lib/logic";
 import { puoVedereArchivio } from "@/lib/storage-audit";
 import { logout } from "@/lib/actions";
@@ -21,9 +21,13 @@ export default async function ScegliPage() {
     (user.role === "store_admin" && canManageUsers(db, user));
 
   const showArchivio = puoVedereArchivio(user);
-  if (sites.length === 1 && !showRuoli && !showArchivio) redirect(postLoginPath(user));
+  // con una sola area si entra dritti, ma non se la sua destinazione è questa pagina
+  // (è il caso di "piante", ancora in preparazione): si finirebbe in un rimbalzo infinito
+  const casa = postLoginPath(user);
+  if (sites.length === 1 && !showRuoli && !showArchivio && casa !== "/scegli") redirect(casa);
 
-  const academyHome = user.role === "student" ? "/studente" : "/admin";
+  // chi non gestisce la formazione entra dalla parte del corsista, non dal pannello
+  const academyHome = isAcademyAdmin(user) ? "/admin" : "/studente";
 
   const aree = [
     ...(sites.includes("academy")

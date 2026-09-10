@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/auth";
+import { requireAreaUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import Header from "@/components/Header";
 import { updateUser, toggleUserActive } from "@/lib/actions";
-import { ROLE_LABELS, Role, userSites } from "@/lib/types";
+import { ROLE_LABELS, Role, userSites, isAcademyAdmin } from "@/lib/types";
 import { coursesForUser, getProgress, isCourseCompleted, canManageUsers } from "@/lib/logic";
 
 export default async function EditUserPage({
@@ -14,9 +14,8 @@ export default async function EditUserPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ salvato?: string }>;
 }) {
-  const admin = await getCurrentUser();
-  if (!admin) redirect("/login");
-  if (admin.role === "student") redirect("/studente");
+  const admin = await requireAreaUser("academy");
+  if (!isAcademyAdmin(admin)) redirect("/studente");
   const { id } = await params;
   const { salvato } = await searchParams;
 

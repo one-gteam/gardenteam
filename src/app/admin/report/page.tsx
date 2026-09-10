@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/auth";
+import { requireAreaUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
+import { isAcademyAdmin } from "@/lib/types";
 import Header from "@/components/Header";
 import InsegnaLogo from "@/components/InsegnaLogo";
 import { courseStats, scopeUsers, scopeCourses, storeRanking, coursesForUser, getProgress, isCourseCompleted } from "@/lib/logic";
@@ -11,9 +12,8 @@ export default async function ReportPage({
 }: {
   searchParams: Promise<{ col?: string | string[]; reparto?: string; insegna?: string; corso?: string; stato?: string }>;
 }) {
-  const user = await getCurrentUser();
-  if (!user) redirect("/login");
-  if (user.role === "student") redirect("/studente");
+  const user = await requireAreaUser("academy");
+  if (!isAcademyAdmin(user)) redirect("/studente");
   const sp = await searchParams;
 
   const db = await getDb();

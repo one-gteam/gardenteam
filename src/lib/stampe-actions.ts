@@ -8,7 +8,7 @@ import { uploadPublicFile } from "./supabase";
 import {
   getStampeDb,
   saveStampeDb,
-  canAccessStampe,
+  canAccessArea,
   isConsortiumEditor,
   resolveScope,
   isStoreBlocked,
@@ -16,11 +16,13 @@ import {
   ScopeType,
   sanitizeMargins,
 } from "./stampe";
+import { postLoginPath } from "./types";
 import { LAYOUT_FONTS } from "./layout-fonts";
 
+/* Stesso principio dello Zoo: qui si lavora sui Cartelli Arredo e serve quell'area. */
 async function requireStampeUser() {
   const user = await requireUser();
-  if (!canAccessStampe(user)) redirect("/studente");
+  if (!canAccessArea(user, "arredo")) redirect(postLoginPath(user));
   return user;
 }
 

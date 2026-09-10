@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
+import { userSites } from "@/lib/types";
 import { publicUrlFor } from "@/lib/supabase";
 
 /* Supabase Storage serve gli .html/.js come text/plain per sicurezza: qui
@@ -26,8 +27,9 @@ const TYPES: Record<string, string> = {
  * same-origin e i percorsi relativi interni al pacchetto continuano a funzionare.
  */
 export async function GET(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
+  // contenuto di un corso: lo serve solo a chi ha l'area formazione
   const user = await getCurrentUser();
-  if (!user) return new NextResponse("Non autorizzato", { status: 403 });
+  if (!user || !userSites(user).includes("academy")) return new NextResponse("Non autorizzato", { status: 403 });
 
   const { path } = await ctx.params;
   // deve iniziare con "scorm/…": non si serve altro dal bucket

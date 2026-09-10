@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/auth";
+import { requireAreaUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
+import { isAcademyAdmin } from "@/lib/types";
+import { scopeUsers } from "@/lib/logic";
 import Header from "@/components/Header";
 
 export default async function CertificatePage({ params }: { params: Promise<{ id: string }> }) {
-  const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  const user = await requireAreaUser("academy");
   const { id } = await params;
 
   const db = await getDb();
@@ -17,9 +18,13 @@ export default async function CertificatePage({ params }: { params: Promise<{ id
   const course = db.courses.find((c) => c.id === cert.courseId);
   if (!owner || !course) notFound();
 
-  // visibile al titolare e agli amministratori
-  const isAdmin = user.role !== "student";
-  if (cert.userId !== user.id && !isAdmin) redirect("/studente");
+  /*
+   * Visibile al titolare e a chi ha quella persona nel proprio ambito: prima
+   * bastava non essere uno studente, e così un attestato di un'altra insegna si
+   * apriva conoscendone l'indirizzo.
+   */
+  const nelMioAmbito = isAcademyAdmin(user) && scopeUsers(db, user).some((u) => u.id === cert.userId);
+  if (cert.userId !== user.id && !nelMioAmbito) redirect("/studente");
 
   const tenant = db.tenants.find((t) => t.id === owner.tenantId);
   const prog = db.progress.find((p) => p.userId === owner.id && p.courseId === course.id);

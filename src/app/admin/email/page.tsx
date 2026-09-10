@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/auth";
+import { requireAreaUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import Header from "@/components/Header";
 import {
@@ -13,7 +13,7 @@ import {
 } from "@/lib/actions";
 import { mailerConfig } from "@/lib/mailer";
 import { scopeUsers } from "@/lib/logic";
-import { DEFAULT_REMINDER_RULES, EMAIL_TYPE_LABELS, EmailType, REMINDER_STAGE_LABELS } from "@/lib/types";
+import { DEFAULT_REMINDER_RULES, EMAIL_TYPE_LABELS, EmailType, REMINDER_STAGE_LABELS, isAcademyAdmin } from "@/lib/types";
 
 const AUTOMATIONS = [
   { emoji: "", title: "Email di benvenuto", desc: "Inviata automaticamente quando un collaboratore viene creato o importato da CSV/gestionale.", trigger: "Alla creazione dell'utente" },
@@ -32,9 +32,8 @@ export default async function EmailPage({
 }: {
   searchParams: Promise<{ promemoria?: string; convocazioni?: string; assegnazioni?: string; template?: string; prova?: string }>;
 }) {
-  const user = await getCurrentUser();
-  if (!user) redirect("/login");
-  if (user.role === "student") redirect("/studente");
+  const user = await requireAreaUser("academy");
+  if (!isAcademyAdmin(user)) redirect("/studente");
   const { promemoria, convocazioni, assegnazioni, template, prova } = await searchParams;
   const mailer = mailerConfig();
 
@@ -204,6 +203,8 @@ export default async function EmailPage({
           </div>
         )}
 
+        {/* il controllo manda email a tutto il consorzio: lo fa chi cura la formazione, non ogni responsabile */}
+        {isGlobalEditor && (
         <div className="section">
           <div className="card" style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
             <div style={{ flex: 1, minWidth: 260 }}>
@@ -220,6 +221,7 @@ export default async function EmailPage({
             </form>
           </div>
         </div>
+        )}
 
         {user.role === "system_admin" && (
           <div className="section">

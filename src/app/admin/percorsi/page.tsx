@@ -1,14 +1,15 @@
 import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/auth";
+import { requireAreaUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
+import { isAcademyAdmin } from "@/lib/types";
 import Header from "@/components/Header";
 import PathsPanel from "@/components/PathsPanel";
 import { scopeCourses } from "@/lib/logic";
 
 export default async function AdminPathsPage() {
-  const user = await getCurrentUser();
-  if (!user) redirect("/login");
-  if (user.role === "student" || user.role === "dept_head") redirect("/studente");
+  const user = await requireAreaUser("academy");
+  if (!isAcademyAdmin(user)) redirect("/studente");
+  if (user.role === "dept_head") redirect("/studente");
 
   const db = await getDb();
   const canSystem = user.role === "system_admin" || user.role === "course_manager";

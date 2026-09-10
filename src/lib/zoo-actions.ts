@@ -4,7 +4,8 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "./auth";
 import { getDb } from "./db";
-import { canAccessStampe, isZooEditor, resolveScope, sanitizeMargins } from "./stampe";
+import { canAccessArea, isZooEditor, resolveScope, sanitizeMargins } from "./stampe";
+import { postLoginPath } from "./types";
 import { LAYOUT_FONTS } from "./layout-fonts";
 import {
   getZooDb, saveZooDb, ZooDB, ZooParent, campagnaInLavorazione, campagnaInCorso, campaignStato, NO_VOLANTINO,
@@ -15,9 +16,14 @@ import { groupAndDescribe, groupAndDescribeBatched } from "./zoo-ai";
 import { uploadPublicFile, publicUrlFor, listStorageFiles } from "./supabase";
 import { sendMail } from "./mailer";
 
+/*
+ * Le azioni dello Zoo vogliono l'area Zoo, non un'area qualsiasi delle Stampe:
+ * chi è abilitato ai soli Cartelli Arredo non deve poter caricare offerte o
+ * modificare i cartelli dello Zoo chiamando l'azione da fuori.
+ */
 async function requireZooUser() {
   const user = await requireUser();
-  if (!canAccessStampe(user)) redirect("/studente");
+  if (!canAccessArea(user, "zoo")) redirect(postLoginPath(user));
   return user;
 }
 

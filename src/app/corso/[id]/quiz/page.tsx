@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/auth";
+import { requireAreaUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import Header from "@/components/Header";
 import { submitQuiz } from "@/lib/actions";
@@ -13,8 +13,7 @@ export default async function QuizPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ esito?: string }>;
 }) {
-  const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  const user = await requireAreaUser("academy");
   const { id } = await params;
   const { esito } = await searchParams;
 

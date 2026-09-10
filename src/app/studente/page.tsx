@@ -1,11 +1,10 @@
 import type { ReactNode } from "react";
-import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/auth";
+import { requireAreaUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import Header from "@/components/Header";
 import CourseCard from "@/components/CourseCard";
 import InsegnaLogo from "@/components/InsegnaLogo";
-import { BADGE_DEFS, DEFAULT_HOME_BLOCKS, HomeBlockKind, userSites } from "@/lib/types";
+import { BADGE_DEFS, DEFAULT_HOME_BLOCKS, HomeBlockKind } from "@/lib/types";
 import {
   coursesForUser,
   getProgress,
@@ -21,9 +20,7 @@ import {
 } from "@/lib/logic";
 
 export default async function StudentDashboard() {
-  const user = await getCurrentUser();
-  if (!user) redirect("/login");
-  if (!userSites(user).includes("academy")) redirect("/stampe");
+  const user = await requireAreaUser("academy");
   const db = await getDb();
 
   const myCourses = coursesForUser(db, user);

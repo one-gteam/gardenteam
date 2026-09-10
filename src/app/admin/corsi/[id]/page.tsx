@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/auth";
+import { requireAreaUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import Header from "@/components/Header";
 import LessonsPanel from "@/components/LessonsPanel";
@@ -8,7 +8,7 @@ import SessionsPanel from "@/components/SessionsPanel";
 import CourseShareBar from "@/components/CourseShareBar";
 import { updateCourse, deleteCourse, saveQuestion, deleteQuestion } from "@/lib/actions";
 import { courseVisibleTo } from "@/lib/logic";
-import { DEFAULT_WATCH_THRESHOLD, LEVEL_LABELS } from "@/lib/types";
+import { DEFAULT_WATCH_THRESHOLD, LEVEL_LABELS, isAcademyAdmin } from "@/lib/types";
 
 export default async function EditCoursePage({
   params,
@@ -17,9 +17,8 @@ export default async function EditCoursePage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ salvato?: string; creato?: string }>;
 }) {
-  const user = await getCurrentUser();
-  if (!user) redirect("/login");
-  if (user.role === "student") redirect("/studente");
+  const user = await requireAreaUser("academy");
+  if (!isAcademyAdmin(user)) redirect("/studente");
   const { id } = await params;
   const { salvato, creato } = await searchParams;
 

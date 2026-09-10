@@ -1,19 +1,18 @@
 import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/auth";
+import { requireAreaUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import Header from "@/components/Header";
 import { createCourse } from "@/lib/actions";
 import { courseStats } from "@/lib/logic";
-import { LEVEL_LABELS } from "@/lib/types";
+import { LEVEL_LABELS, isAcademyAdmin } from "@/lib/types";
 
 export default async function AdminCoursesPage({
   searchParams,
 }: {
   searchParams: Promise<{ creato?: string; eliminato?: string }>;
 }) {
-  const user = await getCurrentUser();
-  if (!user) redirect("/login");
-  if (user.role === "student") redirect("/studente");
+  const user = await requireAreaUser("academy");
+  if (!isAcademyAdmin(user)) redirect("/studente");
   const { creato, eliminato } = await searchParams;
 
   const db = await getDb();
