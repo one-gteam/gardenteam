@@ -5,6 +5,7 @@ import StampeHeader from "@/components/stampe/StampeHeader";
 import { canAccessArea, resolveScope, scopesForUser } from "@/lib/stampe";
 import {
   getZooDb, campagnaInLavorazione, campagnaInCorso, migraVolantinoPages, zooImageUrl, effectiveParentText,
+  datiPrezzoOfferta,
 } from "@/lib/zoo";
 import { aggiungiNotaBozza, risolviNotaBozza } from "@/lib/zoo-actions";
 
@@ -144,6 +145,12 @@ export default async function ZooBozzaPage({
                           ? effectiveParentText(db, scope, parent, "nome", academyDb).value
                           : (prod?.descrizione ?? o!.descrizione);
                         const foto = zooImageUrl(prod, parent);
+                        /*
+                         * Prezzo, prezzo di partenza, sconto e tipologia: chi rivede la bozza
+                         * deve poter dire se l'offerta è buona, non solo se è nella pagina
+                         * giusta. Il prezzo del punto vendita, se c'è, vale su quello comune.
+                         */
+                        const dati = datiPrezzoOfferta(db, o!, scope, academyDb, b.prezzo);
                         return (
                           <div key={o!.id} style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 4 }}>
                             {foto !== "/immagini/mancante.jpg" && (
@@ -152,8 +159,21 @@ export default async function ZooBozzaPage({
                             )}
                             <div style={{ minWidth: 0 }}>
                               <div style={{ fontSize: 11.5, fontWeight: 700, lineHeight: 1.15 }}>{nome}</div>
-                              <div style={{ fontSize: 12, color: "#c8161d", fontWeight: 800 }}>
-                                € {b.prezzo || o!.prezzoPromo}
+                              <div style={{ display: "flex", gap: 5, alignItems: "baseline", flexWrap: "wrap" }}>
+                                {dati.prezzo ? (
+                                  <span style={{ fontSize: 12, color: "#c8161d", fontWeight: 800 }}>€ {dati.prezzo}</span>
+                                ) : (
+                                  <span className="pill pill-amber" style={{ fontSize: 10 }}>prezzo da definire</span>
+                                )}
+                                {dati.listino && (
+                                  <span style={{ fontSize: 11, color: "var(--muted)", textDecoration: "line-through" }}>
+                                    € {dati.listino}
+                                  </span>
+                                )}
+                                {dati.sconto && <span className="pill pill-green" style={{ fontSize: 10 }}>{dati.sconto}</span>}
+                                {dati.tipi.map((t) => (
+                                  <span key={t} className="pill pill-blue" style={{ fontSize: 10 }}>{t}</span>
+                                ))}
                               </div>
                             </div>
                           </div>

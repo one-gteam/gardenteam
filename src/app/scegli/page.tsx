@@ -78,9 +78,29 @@ export default async function ScegliPage() {
           <img src={settings.logoUrl} alt={SITE_NAME} style={{ height: 44 }} />
           <span style={{ color: "var(--green-700)", fontWeight: 800, fontSize: 24 }}>{SITE_NAME}</span>
         </div>
-        <p>Ciao {user.firstName}! Dove vuoi andare oggi?</p>
+        <p>
+          {aree.length > 0
+            ? `Ciao ${user.firstName}! Dove vuoi andare oggi?`
+            : `Ciao ${user.firstName}! Non hai ancora nessuna area abilitata.`}
+        </p>
       </div>
       <div className="login-cards" style={{ maxWidth: 1180 }}>
+        {/*
+          * Nessuna area assegnata: si dice cosa fare, invece di lasciare una
+          * pagina vuota. Capita a chi è appena stato creato senza spuntare le
+          * aree, che per sicurezza non entra da nessuna parte.
+          */}
+        {aree.length === 0 && (
+          <div className="card" style={{ padding: 18 }}>
+            <strong>Il tuo accesso non è ancora abilitato</strong>
+            <p style={{ fontSize: 13.5, color: "var(--muted)", margin: "6px 0 0" }}>
+              Chiedi a chi gestisce gli utenti della tua insegna, o al Consorzio, di assegnarti le aree
+              che ti servono (Academy, Cartelli Arredo, Offerte Zoo). Si fa da <strong>Utenti e ruoli</strong>,
+              spuntando le caselle sulla tua riga.
+              {db.settings.supportEmail && <> Per aiuto: {db.settings.supportEmail}.</>}
+            </p>
+          </div>
+        )}
         <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
           {aree.map((a) =>
             a.attiva ? (

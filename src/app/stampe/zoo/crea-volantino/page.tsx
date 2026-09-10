@@ -4,7 +4,9 @@ import StampeHeader from "@/components/stampe/StampeHeader";
 import VolantinoBuilder from "@/components/stampe/VolantinoBuilder";
 import { canAccessArea, isZooEditor, resolveScope, scopesForUser } from "@/lib/stampe";
 import { getDb } from "@/lib/db";
-import { getZooDb, campagnaInLavorazione, zooImageUrl, migraVolantinoPages, effectiveParentText } from "@/lib/zoo";
+import {
+  getZooDb, campagnaInLavorazione, zooImageUrl, migraVolantinoPages, effectiveParentText, datiPrezzoOfferta,
+} from "@/lib/zoo";
 import { saveVolantinoEditors } from "@/lib/zoo-actions";
 import AvvisaColleghi from "@/components/stampe/AvvisaColleghi";
 import { userSites } from "@/lib/types";
@@ -74,6 +76,8 @@ export default async function CreaVolantinoPage({
               : product ? [product] : []
             ).map((p) => ({ ean: p.ean, descrizione: p.descrizione, marca: p.marca }));
             const prezzi = [...new Set(gruppo.map((g) => g.prezzoPromo).filter(Boolean))];
+            // prezzo di partenza, sconto e tipologia: servono anche a chi compone, non solo in stampa
+            const dati = datiPrezzoOfferta(db, primo, scope, academyDb);
             return {
               id: primo.id,
               offerIds: gruppo.map((g) => g.id),
@@ -84,8 +88,10 @@ export default async function CreaVolantinoPage({
                 ? effectiveParentText(db, scope, parent, "descVolantino", academyDb).value || parent.nome
                 : primo.descrizione,
               // con più prezzi diversi nel gruppo si mostra il più basso, con "da"
-              prezzo: prezzi.length > 1 ? `da ${[...prezzi].sort()[0]}` : primo.prezzoPromo,
-              prezzoListino: primo.prezzoListino,
+              prezzo: prezzi.length > 1 ? `da ${[...prezzi].sort()[0]}` : dati.prezzo,
+              prezzoListino: dati.listino || undefined,
+              sconto: dati.sconto || undefined,
+              tipi: dati.tipi,
               foto: zooImageUrl(product, parent),
               voti: votes.filter((v) => v.tipo === "preferita").length,
               nonTrattati: votes.filter((v) => v.tipo === "nontrattato").length,

@@ -178,6 +178,7 @@ export async function provisionSsoUser(payload: {
       lastName: payload.cognome || "",
       email,
       role: "student",
+      sites: ["academy"], // arriva da My Rosaflor per la formazione: quella area, non altre
       tenantId: db.settings.ssoDefaultTenantId,
       storeId: db.settings.ssoDefaultStoreId,
       departmentId: dept?.id,
@@ -447,6 +448,7 @@ export async function importUsersCsv(formData: FormData) {
       lastName,
       email,
       role: "student",
+      sites: ["academy"], // import di corsisti: solo la formazione
       tenantId: admin.tenantId ?? db.tenants[0].id,
       storeId: admin.storeId ?? db.stores.find((s) => s.tenantId === (admin.tenantId ?? db.tenants[0].id))?.id,
       departmentId: dept?.id,
@@ -1203,12 +1205,11 @@ export async function toggleHomeBlock(index: number) {
  * entrare in un'area che nessuno gli aveva assegnato. Le aree che l'admin non
  * ha restano come sono: non le può né dare né togliere.
  */
-function sitesAssegnabili(admin: User, target: User, scelte: SiteId[]): SiteId[] | undefined {
-  if (admin.role === "system_admin") return scelte.length > 0 ? scelte : undefined;
+function sitesAssegnabili(admin: User, target: User, scelte: SiteId[]): SiteId[] {
+  if (admin.role === "system_admin") return scelte;
   const mie = userSites(admin);
   const restano = (target.sites ?? []).filter((s) => !mie.includes(s));
-  const finali = [...new Set([...scelte.filter((s) => mie.includes(s)), ...restano])];
-  return finali.length > 0 ? finali : undefined;
+  return [...new Set([...scelte.filter((s) => mie.includes(s)), ...restano])];
 }
 
 /** Il bersaglio è nel perimetro dell'admin e l'admin ha la gestione utenti attiva? */
@@ -1300,7 +1301,8 @@ export async function creaUtente(formData: FormData) {
     points: 0, badges: [], active: true,
     // serve alle email, che declinano il testo: "[benvenuto|benvenuta]"
     ...(["m", "f"].includes(String(formData.get("gender") ?? "")) ? { gender: String(formData.get("gender")) as "m" | "f" } : {}),
-    ...(sites.length > 0 ? { sites } : {}),
+    // aree sempre scritte: nessuna spunta = nessun accesso, finché non gliele si danno
+    sites: admin.role === "system_admin" ? sites : sites.filter((x) => userSites(admin).includes(x)),
   };
   db.users.push(newUser);
   await queueEmail(db, newUser, "benvenuto");
@@ -1882,6 +1884,7 @@ export async function approveRegistration(regId: string, formData: FormData) {
     lastName: reg!.lastName,
     email: reg!.email,
     role: "student",
+    sites: ["academy"], // registrazione approvata: entra come corsista
     tenantId: reg!.tenantId,
     storeId: reg!.storeId,
     departmentId: departmentId || undefined,

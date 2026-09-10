@@ -15,6 +15,8 @@ export interface ArtLite { ean: string; descrizione: string; marca: string }
  */
 export interface OffLite {
   id: string; descrizione: string; prezzo: string; prezzoListino?: string; foto: string;
+  /** Sconto sul prezzo di partenza, già scritto ("-23%"), e tipologia dell'offerta ("3x2", "sconto"). */
+  sconto?: string; tipi?: string[];
   voti: number; nonTrattati: number; scheda?: string;
   marca: string; fornitore: string; caratts: string[]; label?: string;
   padre?: string; // nome del prodotto padre, se la voce ne rappresenta uno
@@ -550,8 +552,14 @@ export default function VolantinoBuilder({
                 <div style={{ fontWeight: o.padre ? 500 : 600, fontSize: o.padre ? 8.5 : 9.5, lineHeight: 1.15, color: o.padre ? "#555" : undefined }}>
                   {(i === 0 ? b.descrizione : undefined) ?? o.descrizione}
                 </div>
-                <div style={{ color: "#c2410c", fontWeight: 800, fontSize: 12 }}>
-                  € {(i === 0 ? b.prezzo : undefined) ?? o.prezzo}
+                <div style={{ display: "flex", gap: 4, justifyContent: "center", alignItems: "baseline", flexWrap: "wrap" }}>
+                  {((i === 0 ? b.prezzo : undefined) ?? o.prezzo)
+                    ? <span style={{ color: "#c2410c", fontWeight: 800, fontSize: 12 }}>€ {(i === 0 ? b.prezzo : undefined) ?? o.prezzo}</span>
+                    : <span className="no-print" style={{ color: "#b45309", fontSize: 9 }}>prezzo da definire</span>}
+                  {o.prezzoListino && (
+                    <span style={{ fontSize: 9, color: "#777", textDecoration: "line-through" }}>€ {o.prezzoListino}</span>
+                  )}
+                  {o.sconto && <span style={{ fontSize: 9, fontWeight: 700, color: "#15803d" }}>{o.sconto}</span>}
                 </div>
               </div>
             ))}
@@ -738,7 +746,10 @@ export default function VolantinoBuilder({
                     </div>
                   )}
                   <div style={{ fontSize: 10.5, color: "var(--muted)", display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
-                    € {o.prezzo}
+                    {o.prezzo ? `€ ${o.prezzo}` : <span className="pill pill-amber">prezzo da definire</span>}
+                    {o.prezzoListino && <span style={{ textDecoration: "line-through" }}>€ {o.prezzoListino}</span>}
+                    {o.sconto && <span className="pill pill-green">{o.sconto}</span>}
+                    {(o.tipi ?? []).map((t) => <span key={t} className="pill pill-blue">{t}</span>)}
                     {usata && <span className="pill pill-gray">già usata</span>}
                     {o.paginaId === NO_VOLANTINO && <span className="pill pill-red">no volantino</span>}
                     {o.paginaId && o.paginaId !== NO_VOLANTINO && !usata && (

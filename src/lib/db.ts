@@ -1,4 +1,4 @@
-import { DB, DEFAULT_SETTINGS, DEFAULT_TEMPLATES } from "./types";
+import { areeStoriche, DB, DEFAULT_SETTINGS, DEFAULT_TEMPLATES } from "./types";
 import { buildSeed } from "./seed";
 import { readDomain, writeDomain } from "./supabase";
 
@@ -41,6 +41,17 @@ export async function getDb(): Promise<DB> {
     if (u.sites?.some((s) => (s as string) === "stampe")) {
       u.sites = [...u.sites.filter((s) => (s as string) !== "stampe"), "arredo", "zoo", "piante"];
     }
+  }
+  /*
+   * Le macroaree diventano esplicite: da qui in poi chi non ne ha nessuna non
+   * entra da nessuna parte. Una volta sola si scrive su ogni utente quello che
+   * gia' aveva, altrimenti l'irrigidimento toglierebbe l'accesso a tutti quelli
+   * creati quando il campo non c'era.
+   */
+  if (!db.settings.areeEsplicite) {
+    for (const u of db.users) if (!u.sites || u.sites.length === 0) u.sites = areeStoriche(u);
+    db.settings.areeEsplicite = true;
+    await writeDomain("academy", db);
   }
   // le vecchie tipologie "testo" e "slide" confluiscono in "pdf" (Testo / lettura)
   for (const c of db.courses) {

@@ -979,6 +979,53 @@ export function zooCartelloValues(
   };
 }
 
+/* ================== Prezzo di un'offerta fuori dal cartello ================== */
+
+/** Come si legge un'offerta in bozza e in composizione volantino. */
+export interface DatiPrezzoOfferta {
+  /** Prezzo promozionale effettivo, senza simbolo (vuoto se non c'è). */
+  prezzo: string;
+  /** Prezzo di partenza da barrare, senza simbolo. */
+  listino: string;
+  /** Sconto sul prezzo di partenza, già scritto ("-23%"). */
+  sconto: string;
+  /** Tipologia dell'offerta: "3x2", "sconto", "A SOLI", o la promo dell'insegna/PV. */
+  tipi: string[];
+}
+
+/** Numero da un prezzo scritto all'italiana: "1.299,50" → 1299.5. */
+function numeroPrezzo(v: string): number {
+  const n = Number(v.replace(/[^\d,.-]/g, "").replace(/\.(?=\d{3})/g, "").replace(",", "."));
+  return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * Prezzo, prezzo barrato, sconto e tipologia di un'offerta.
+ *
+ * Serve fuori dal cartello — bozza del volantino e composizione — dove finora si
+ * vedeva il solo prezzo promo: senza il prezzo di partenza e senza la tipologia
+ * non si capiva che offerta fosse, e gli articoli con codice interno del punto
+ * vendita (che nel listino del Consorzio non hanno prezzo) mostravano un euro
+ * solitario. Il prezzo dell'insegna/PV, se caricato, vale su quello comune.
+ */
+export function datiPrezzoOfferta(
+  db: ZooDB, offer: ZooOffer, scope?: Scope, academyDb?: DB, override?: string
+): DatiPrezzoOfferta {
+  const pv = scope && academyDb ? pvPriceFor(db, scope, offer.ean, academyDb) : undefined;
+  const prezzo = (override || pv || offer.prezzoPromo || "").trim();
+  const listino = (offer.prezzoListino ?? "").trim();
+  const a = numeroPrezzo(listino);
+  const b = numeroPrezzo(prezzo);
+  const sconto = a > 0 && b > 0 && a > b ? `-${Math.round((1 - b / a) * 100)}%` : "";
+  const promoPv = scope && academyDb ? pvPromoFor(db, scope, offer.ean, academyDb)?.etichetta : undefined;
+  const tipi = [
+    ...(offer.meccanica ? [offer.meccanica] : []),
+    ...(promoPv ? [promoPv] : []),
+    ...(listino ? ["sconto"] : prezzo ? ["A SOLI"] : []),
+  ];
+  return { prezzo, listino, sconto, tipi };
+}
+
 /** Una riga dell'export per il grafico: stesse chiavi delle intestazioni del foglio Excel. */
 export interface VolantinoExportRow {
   SCHEDA: string; EAN: string; MARCA: string; TITOLO: string;

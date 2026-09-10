@@ -112,11 +112,24 @@ export const SITE_LABELS_BREVI: Record<SiteId, string> = {
 };
 
 /**
- * Macroaree accessibili. Default per ruolo: studenti = solo Academy; i gestori
- * di contenuti = Academy + la propria area; tutti gli altri = tutte e quattro.
+ * Macroaree accessibili: quelle assegnate, e nient'altro. Chi non ne ha nessuna
+ * non entra da nessuna parte, così un utente creato in fretta non si ritrova
+ * dentro aree che nessuno gli ha dato.
+ *
+ * Unica eccezione l'amministratore di sistema: è la valvola di sicurezza del
+ * portale (potrebbe comunque assegnarsi qualsiasi area) e senza di lui non ci
+ * sarebbe più modo di rimettere le aree agli altri.
  */
 export function userSites(user: User): SiteId[] {
-  if (user.sites && user.sites.length > 0) return user.sites;
+  if (user.role === "system_admin") return ["academy", "arredo", "zoo", "piante"];
+  return user.sites ?? [];
+}
+
+/**
+ * Aree che valevano prima che diventassero esplicite: servono una volta sola,
+ * per non togliere l'accesso a chi ce l'aveva quando il campo non esisteva.
+ */
+export function areeStoriche(user: User): SiteId[] {
   if (user.role === "student") return ["academy"];
   if (user.role === "zoo_manager") return ["academy", "zoo"];
   if (user.role === "piante_manager") return ["academy", "piante"];
@@ -135,6 +148,8 @@ export function isAcademyAdmin(user: User): boolean {
 /** Destinazione dopo il login: diretta se una sola macroarea, pagina di scelta se più di una. */
 export function postLoginPath(user: User): string {
   const sites = userSites(user);
+  // nessuna area: la pagina di scelta lo dice, invece di rimbalzare all'infinito
+  if (sites.length === 0) return "/scegli";
   if (sites.length > 1) return "/scegli";
   if (sites[0] === "arredo") return "/stampe/arredo/dati";
   if (sites[0] === "zoo") return "/stampe/zoo/dati";
@@ -444,6 +459,8 @@ export interface PortalSettings {
   leaderboardAnonymous?: boolean; // classifica generale: se true, ognuno vede solo la propria posizione
   ssoDefaultTenantId?: string; // insegna assegnata a chi entra via SSO da My Rosaflor
   ssoDefaultStoreId?: string; // punto vendita assegnato a chi entra via SSO da My Rosaflor
+  /** Segna che le macroaree sono state scritte su ogni utente (migrazione fatta una volta sola). */
+  areeEsplicite?: boolean;
 }
 
 /** Uno dei blocchi mostrabili nella home dello studente, in un ordine scelto dall'admin. */

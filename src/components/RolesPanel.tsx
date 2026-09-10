@@ -15,7 +15,7 @@ interface RowUser {
   insegna: string;
   pv: string;
   attivo: boolean;
-  sites: SiteId[]; // aree effettive (default per ruolo già risolto dal server)
+  sites: SiteId[]; // aree assegnate: nessuna = nessun accesso
   editabile: boolean; // dentro il perimetro di chi guarda (e non se stesso)
 }
 
@@ -111,7 +111,10 @@ export default function RolesPanel({
                 <input
                   type="checkbox"
                   checked={u.sites.includes(site)}
-                  disabled={!u.editabile || pending}
+                  // l'amministratore di sistema ha sempre tutte le aree: è la valvola
+                  // di sicurezza del portale, e le caselle non si tolgono
+                  disabled={!u.editabile || pending || u.ruolo === "system_admin"}
+                  title={u.ruolo === "system_admin" ? "L'amministratore di sistema ha sempre tutte le aree" : undefined}
                   onChange={() => toggleSite(u, site)}
                 />
                 {SITE_LABELS_BREVI[site]}
