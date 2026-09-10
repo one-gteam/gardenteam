@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import StampeHeader from "@/components/stampe/StampeHeader";
-import { canAccessArea, isZooEditor, scopesForUser, resolveScope } from "@/lib/stampe";
+import { canAccessArea, gestisceArea, isZooEditor, scopesForUser, resolveScope } from "@/lib/stampe";
 import { getDb } from "@/lib/db";
 import { listStorageFiles, publicUrlFor } from "@/lib/supabase";
 import PhotoUploader from "@/components/stampe/PhotoUploader";
@@ -62,6 +62,8 @@ export default async function ZooDatiPage({
   const scope = resolveScope(user, sp.scope, academyDb);
   const scopeParam = `${scope.type}:${scope.id}`;
   const consortium = isZooEditor(user);
+  // gestione dell'area in questo ambito: articoli propri, adozione, AI sui propri
+  const gestione = gestisceArea(user, "zoo", scope, academyDb);
 
   const parentById = new Map(db.parents.map((p) => [p.id, p]));
 
@@ -346,7 +348,7 @@ export default async function ZooDatiPage({
         )}
 
         {/* import dei propri articoli per insegna/PV: codici interni, sfusi, private label */}
-        {scope.type !== "system" && (
+        {scope.type !== "system" && gestione && (
           <div className="card" style={{ marginBottom: 14, padding: 14 }}>
             <strong>I tuoi articoli</strong>
             <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "4px 0 8px" }}>

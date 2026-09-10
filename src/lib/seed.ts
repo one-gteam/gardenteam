@@ -65,7 +65,7 @@ export function buildSeed(): DB {
     { id: "u2", firstName: "Laura", lastName: "Bianchi", email: "l.bianchi@rosaflor.it", role: "group_admin", tenantId: "t1", hireDate: daysAgo(1800), points: 0, badges: [], jobTitle: "HR Rosàflor", active: true },
     { id: "u3", firstName: "Paolo", lastName: "Ferrari", email: "p.ferrari@rosaflor.it", role: "store_admin", tenantId: "t1", storeId: "s1", hireDate: daysAgo(1500), points: 0, badges: [], jobTitle: "Direttore PV Rosàflor", active: true },
     { id: "u4", firstName: "Anna", lastName: "Moretti", email: "a.moretti@rosaflor.it", role: "dept_head", tenantId: "t1", storeId: "s1", departmentId: "d1", hireDate: daysAgo(1200), points: 320, badges: ["primo_corso", "tre_corsi"], jobTitle: "Capo reparto Piante & Fiori", active: true },
-    { id: "u5", firstName: "Elena", lastName: "Sartori", email: "e.sartori@gardenteam.biz", role: "course_manager", hireDate: daysAgo(900), points: 0, badges: [], jobTitle: "Formatrice Consorzio", active: true },
+    { id: "u5", firstName: "Elena", lastName: "Sartori", email: "e.sartori@gardenteam.biz", role: "manager", manages: ["academy", "arredo", "zoo", "piante"], hireDate: daysAgo(900), points: 0, badges: [], jobTitle: "Formatrice Consorzio", active: true },
     { id: "u6", firstName: "Giulia", lastName: "Rossi", email: "g.rossi@rosaflor.it", role: "student", tenantId: "t1", storeId: "s1", departmentId: "d1", hireDate: daysAgo(25), points: 145, badges: ["primo_corso"], jobTitle: "Addetta vendita (neoassunta)", active: true },
     { id: "u7", firstName: "Luca", lastName: "Verdi", email: "l.verdi@rosaflor.it", role: "student", tenantId: "t1", storeId: "s1", departmentId: "d2", hireDate: daysAgo(700), points: 410, badges: ["primo_corso", "tre_corsi", "quiz_perfetto"], jobTitle: "Addetto reparto Pet", active: true },
     { id: "u8", firstName: "Sara", lastName: "Colombo", email: "s.colombo@rosaflor.it", role: "student", tenantId: "t1", storeId: "s1", departmentId: "d5", hireDate: daysAgo(400), points: 260, badges: ["primo_corso"], jobTitle: "Cassiera", active: true },
@@ -77,8 +77,8 @@ export function buildSeed(): DB {
     { id: "u14", firstName: "Silvia", lastName: "Gasparini", email: "s.gasparini@dichio.it", role: "student", tenantId: "t6", storeId: "s7", departmentId: "d1", hireDate: daysAgo(450), points: 350, badges: ["primo_corso", "tre_corsi"], jobTitle: "Addetta vendita", active: true },
     { id: "u15", firstName: "Giorgio", lastName: "Tonin", email: "g.tonin@iperverde.it", role: "student", tenantId: "t3", storeId: "s4", departmentId: "d2", hireDate: daysAgo(30), points: 60, badges: [], jobTitle: "Addetto Pet (neoassunto)", active: true },
     { id: "u16", firstName: "Carla", lastName: "Stampini", email: "c.stampini@rosaflor.it", role: "store_admin", tenantId: "t1", storeId: "s1", hireDate: daysAgo(500), points: 0, badges: [], jobTitle: "Addetta ufficio (solo Stampe)", active: true, sites: ["arredo", "zoo", "piante"] },
-    { id: "u17", firstName: "Zoe", lastName: "Martini", email: "z.martini@gardenteam.biz", role: "zoo_manager", hireDate: daysAgo(700), points: 0, badges: [], jobTitle: "Gestore Offerte Zoo Consorzio", active: true },
-    { id: "u18", firstName: "Pietro", lastName: "Fiori", email: "p.fiori@gardenteam.biz", role: "piante_manager", hireDate: daysAgo(650), points: 0, badges: [], jobTitle: "Gestore Cartelli Piante Consorzio", active: true },
+    { id: "u17", firstName: "Zoe", lastName: "Martini", email: "z.martini@gardenteam.biz", role: "manager", manages: ["zoo"], hireDate: daysAgo(700), points: 0, badges: [], jobTitle: "Gestore Offerte Zoo Consorzio", active: true },
+    { id: "u18", firstName: "Pietro", lastName: "Fiori", email: "p.fiori@gardenteam.biz", role: "manager", manages: ["piante"], hireDate: daysAgo(650), points: 0, badges: [], jobTitle: "Gestore Cartelli Piante Consorzio", active: true },
   ];
 
   const female = new Set(["u2", "u4", "u6", "u8", "u10", "u12", "u14"]);

@@ -1,4 +1,4 @@
-import { Course, DB, LearningPath, Progress, Role, User } from "./types";
+import { Course, DB, LearningPath, Progress, Role, User, gestisce, gestisceConsorzio, livelloDi } from "./types";
 
 export const NEW_HIRE_DAYS = 90;
 
@@ -128,9 +128,10 @@ export function storeRanking(db: DB) {
 /** Ruoli che un amministratore può assegnare, in base al proprio. */
 export function assignableRolesFor(admin: User): Role[] {
   if (admin.role === "system_admin")
-    return ["system_admin", "group_admin", "store_admin", "dept_head", "course_manager", "zoo_manager", "piante_manager", "student"];
-  if (admin.role === "group_admin") return ["store_admin", "dept_head", "student"];
-  if (admin.role === "store_admin") return ["dept_head", "student"];
+    return ["system_admin", "group_admin", "store_admin", "manager", "dept_head", "student"];
+  // insegna e punto vendita possono nominare un gestore per le aree del loro ambito
+  if (admin.role === "group_admin") return ["store_admin", "manager", "dept_head", "student"];
+  if (admin.role === "store_admin") return ["manager", "dept_head", "student"];
   return [];
 }
 
@@ -149,7 +150,14 @@ export function canManageUsers(db: DB, admin: User): boolean {
 
 /** Ambito visibile a un utente amministrativo. */
 export function scopeUsers(db: DB, admin: User): User[] {
-  if (admin.role === "system_admin" || admin.role === "course_manager") return db.users;
+  if (admin.role === "system_admin") return db.users;
+  // il gestore della formazione vede le persone del suo livello: Consorzio, insegna o PV
+  if (admin.role === "manager" && gestisce(admin, "academy")) {
+    const livello = livelloDi(admin);
+    if (livello === "consorzio") return db.users;
+    if (livello === "insegna") return db.users.filter((u) => u.tenantId === admin.tenantId);
+    return db.users.filter((u) => u.storeId === admin.storeId);
+  }
   if (admin.role === "group_admin") return db.users.filter((u) => u.tenantId === admin.tenantId);
   if (admin.role === "store_admin") return db.users.filter((u) => u.storeId === admin.storeId);
   if (admin.role === "dept_head")
@@ -158,8 +166,8 @@ export function scopeUsers(db: DB, admin: User): User[] {
 }
 
 export function scopeCourses(db: DB, admin: User): Course[] {
-  if (admin.role === "system_admin" || admin.role === "course_manager") return db.courses;
-  if (admin.role === "group_admin")
+  if (gestisceConsorzio(admin, "academy")) return db.courses;
+  if (admin.role === "group_admin" || (admin.role === "manager" && livelloDi(admin) === "insegna"))
     return db.courses.filter((c) => c.level === "sistema" || c.tenantId === admin.tenantId);
   return db.courses.filter(
     (c) => c.level === "sistema" || c.tenantId === admin.tenantId || c.storeId === admin.storeId

@@ -5,7 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import ArchivioPanel from "@/components/ArchivioPanel";
 import { analizzaArchivio, cartelleGestibili, puoVedereArchivio, CARTELLE } from "@/lib/storage-audit";
-import { ROLE_LABELS } from "@/lib/types";
+import { ruoloEsteso } from "@/lib/types";
 import { logout } from "@/lib/actions";
 
 /**
@@ -43,7 +43,7 @@ export default async function ArchivioPage() {
               <div className="avatar">{user.firstName[0]}{user.lastName[0]}</div>
               <div>
                 <div style={{ fontWeight: 700 }}>{user.firstName} {user.lastName}</div>
-                <div style={{ opacity: 0.75, fontSize: 11 }}>{ROLE_LABELS[user.role]}</div>
+                <div style={{ opacity: 0.75, fontSize: 11 }}>{ruoloEsteso(user)}</div>
               </div>
               <form action={logout}>
                 <button className="logout-btn" type="submit">Esci</button>

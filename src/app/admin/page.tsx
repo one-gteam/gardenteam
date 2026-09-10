@@ -4,7 +4,7 @@ import { getDb } from "@/lib/db";
 import Header from "@/components/Header";
 import InsegnaLogo from "@/components/InsegnaLogo";
 import { kpis, storeRanking, courseStats } from "@/lib/logic";
-import { ROLE_LABELS, isAcademyAdmin } from "@/lib/types";
+import { isAcademyAdmin, gestisceConsorzio, ruoloEsteso } from "@/lib/types";
 
 export default async function AdminDashboard() {
   const user = await requireAreaUser("academy");
@@ -15,7 +15,7 @@ export default async function AdminDashboard() {
   const ranking = storeRanking(db).filter(
     (r) =>
       user.role === "system_admin" ||
-      user.role === "course_manager" ||
+      gestisceConsorzio(user, "academy") ||
       (user.role === "group_admin" && r.tenant.id === user.tenantId) ||
       r.store.id === user.storeId
   );
@@ -24,7 +24,7 @@ export default async function AdminDashboard() {
     .sort((a, b) => b.completed / Math.max(b.enrolled, 1) - a.completed / Math.max(a.enrolled, 1));
 
   const scopeLabel =
-    user.role === "system_admin" || user.role === "course_manager"
+    gestisceConsorzio(user, "academy")
       ? "tutto il consorzio"
       : user.role === "group_admin"
         ? db.tenants.find((t) => t.id === user.tenantId)?.name ?? "la tua insegna"
@@ -36,7 +36,7 @@ export default async function AdminDashboard() {
       <div className="container">
         <h1>Dashboard amministratore</h1>
         <p className="subtitle">
-          {ROLE_LABELS[user.role]} — visibilità su <strong>{scopeLabel}</strong>
+          {ruoloEsteso(user)} — visibilità su <strong>{scopeLabel}</strong>
         </p>
 
         <div className="grid grid-4">

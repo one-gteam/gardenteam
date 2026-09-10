@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { getDb } from "@/lib/db";
-import { ROLE_LABELS, User, userSites, isAcademyAdmin } from "@/lib/types";
+import { User, userSites, isAcademyAdmin, ruoloEsteso } from "@/lib/types";
 import { logout } from "@/lib/actions";
 
 export default async function Header({ user, active }: { user: User; active: string }) {
@@ -61,7 +61,7 @@ export default async function Header({ user, active }: { user: User; active: str
               <div style={{ fontWeight: 700 }}>
                 {user.firstName} {user.lastName}
               </div>
-              <div style={{ opacity: 0.75, fontSize: 11 }}>{ROLE_LABELS[user.role]}</div>
+              <div style={{ opacity: 0.75, fontSize: 11 }}>{ruoloEsteso(user)}</div>
             </div>
             <form action={logout}>
               <button className="logout-btn" type="submit">

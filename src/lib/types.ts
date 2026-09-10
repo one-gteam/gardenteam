@@ -1,23 +1,49 @@
+/**
+ * Ruoli. Il ruolo dice il "peso" della persona; a quale livello agisce lo dice
+ * la sua collocazione (senza insegna = Consorzio, con insegna = insegna, con
+ * punto vendita = PV).
+ *
+ *  - amministratori (sistema / insegna / PV): utenti e tutte le aree del loro ambito;
+ *  - gestore: gestisce le aree elencate in `manages`, nel proprio ambito, con gli
+ *    stessi poteri che ha il gestore del Consorzio sulla sua;
+ *  - capo reparto: operativo (consulta, stampa, vota, carica prezzi ed esclusioni
+ *    del suo PV), non tocca layout e impostazioni;
+ *  - studente: solo la formazione.
+ *
+ * I vecchi "gestore corsi / Zoo / Piante" sono diventati "gestore" con l'area
+ * in `manages`: la conversione la fa getDb una volta sola.
+ */
 export type Role =
   | "system_admin"
   | "group_admin"
   | "store_admin"
+  | "manager"
   | "dept_head"
-  | "course_manager"
-  | "zoo_manager"
-  | "piante_manager"
   | "student";
+
+/** Ruoli di prima della riforma, accettati solo per convertirli. */
+export const RUOLI_STORICI: Record<string, { role: Role; manages: SiteId[] }> = {
+  // il gestore corsi era di fatto il responsabile contenuti di tutto il Consorzio
+  course_manager: { role: "manager", manages: ["academy", "arredo", "zoo", "piante"] },
+  zoo_manager: { role: "manager", manages: ["zoo"] },
+  piante_manager: { role: "manager", manages: ["piante"] },
+};
 
 export const ROLE_LABELS: Record<Role, string> = {
   system_admin: "Amministratore di sistema",
   group_admin: "Amministratore di insegna",
   store_admin: "Amministratore punto vendita",
+  manager: "Gestore",
   dept_head: "Capo reparto",
-  course_manager: "Gestore corsi",
-  zoo_manager: "Gestore Offerte Zoo",
-  piante_manager: "Gestore Cartelli Piante",
   student: "Studente",
 };
+
+/** Etichetta del ruolo con, per il gestore, le aree che gestisce. */
+export function ruoloEsteso(user: User): string {
+  if (user.role !== "manager") return ROLE_LABELS[user.role];
+  const aree = (user.manages ?? []).map((s) => SITE_LABELS_BREVI[s]);
+  return aree.length > 0 ? `Gestore ${aree.join(", ")}` : "Gestore (nessuna area)";
+}
 
 export interface Tenant {
   id: string;
@@ -81,7 +107,9 @@ export interface User {
   taxCode?: string;
   groupIds?: string[]; // gruppi di appartenenza
   gender?: "m" | "f"; // per declinare i testi delle email ([benvenuto|benvenuta])
-  sites?: SiteId[]; // macroaree accessibili; assente = default per ruolo
+  sites?: SiteId[]; // macroaree accessibili (nessuna = nessun accesso)
+  /** Per il gestore: le aree su cui ha la gestione (le altre in `sites` le usa da operativo). */
+  manages?: SiteId[];
   notifiedCourseIds?: string[]; // corsi obbligatori per cui è già partita la mail di assegnazione
   notifiedPathIds?: string[]; // percorsi per cui è già partita la mail di assegnazione
 }
@@ -130,19 +158,46 @@ export function userSites(user: User): SiteId[] {
  * per non togliere l'accesso a chi ce l'aveva quando il campo non esisteva.
  */
 export function areeStoriche(user: User): SiteId[] {
-  if (user.role === "student") return ["academy"];
-  if (user.role === "zoo_manager") return ["academy", "zoo"];
-  if (user.role === "piante_manager") return ["academy", "piante"];
+  const ruolo = user.role as string;
+  if (ruolo === "student") return ["academy"];
+  if (ruolo === "zoo_manager") return ["academy", "zoo"];
+  if (ruolo === "piante_manager") return ["academy", "piante"];
+  if (ruolo === "manager") return [...new Set(["academy", ...(user.manages ?? [])])] as SiteId[];
   return ["academy", "arredo", "zoo", "piante"];
 }
 
+/** A che livello agisce la persona: lo dice dove è collocata, non il ruolo. */
+export function livelloDi(user: User): "consorzio" | "insegna" | "pv" {
+  if (user.storeId) return "pv";
+  if (user.tenantId) return "insegna";
+  return "consorzio";
+}
+
 /**
- * Chi ha un ruolo di gestione dentro l'Academy. I gestori delle altre aree
- * (Offerte Zoo, Cartelli Piante) qui sono corsisti come tutti gli altri: il
- * loro ruolo vale nella propria area, non sulla formazione.
+ * Ha la gestione dell'area nel proprio ambito? Gli amministratori su tutte le
+ * aree a cui accedono, il gestore su quelle in `manages`. Chi non ha nemmeno
+ * l'accesso non gestisce niente.
+ */
+export function gestisce(user: User, area: SiteId): boolean {
+  if (user.role === "system_admin") return true;
+  if (!userSites(user).includes(area)) return false;
+  if (user.role === "group_admin" || user.role === "store_admin") return true;
+  return user.role === "manager" && (user.manages ?? []).includes(area);
+}
+
+/** Gestisce l'area a livello di Consorzio (quindi ovunque)? */
+export function gestisceConsorzio(user: User, area: SiteId): boolean {
+  return user.role === "system_admin" || (livelloDi(user) === "consorzio" && gestisce(user, area));
+}
+
+/**
+ * Chi ha un ruolo dentro il pannello dell'Academy: amministratori, capi
+ * reparto (per la loro squadra) e i gestori con la formazione fra le aree
+ * gestite. Un gestore delle sole Offerte Zoo qui è un corsista come gli altri.
  */
 export function isAcademyAdmin(user: User): boolean {
-  return ["system_admin", "course_manager", "group_admin", "store_admin", "dept_head"].includes(user.role);
+  if (["system_admin", "group_admin", "store_admin", "dept_head"].includes(user.role)) return true;
+  return user.role === "manager" && gestisce(user, "academy");
 }
 
 /** Destinazione dopo il login: diretta se una sola macroarea, pagina di scelta se più di una. */

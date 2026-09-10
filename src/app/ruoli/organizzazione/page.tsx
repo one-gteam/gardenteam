@@ -19,7 +19,7 @@ export default async function OrgPage({
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (user.role === "student" || user.role === "dept_head" || user.role === "course_manager") redirect("/admin");
+  if (!["system_admin", "group_admin", "store_admin"].includes(user.role)) redirect("/admin");
   const { salvato } = await searchParams;
 
   const db = await getDb();

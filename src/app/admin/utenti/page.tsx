@@ -4,7 +4,7 @@ import { getDb } from "@/lib/db";
 import Header from "@/components/Header";
 import { importUsersCsv, toggleUserActive, approveRegistration, rejectRegistration } from "@/lib/actions";
 import { scopeUsers, coursesForUser, getProgress, isCourseCompleted, isNewHire, canManageUsers } from "@/lib/logic";
-import { ROLE_LABELS, isAcademyAdmin } from "@/lib/types";
+import { isAcademyAdmin, ruoloEsteso } from "@/lib/types";
 
 export default async function UsersPage({
   searchParams,
@@ -241,7 +241,7 @@ export default async function UsersPage({
                       {isNewHire(u) && <span className="pill pill-blue" style={{ marginLeft: 6 }}>Neoassunto</span>}
                       <div style={{ fontSize: 12, color: "var(--muted)" }}>{u.email}</div>
                     </td>
-                    <td>{ROLE_LABELS[u.role]}</td>
+                    <td>{ruoloEsteso(u)}</td>
                     <td>
                       {tenant ? `${tenant.emoji} ${tenant.name}` : "Consorzio"}
                       {store && <div style={{ fontSize: 12, color: "var(--muted)" }}>{store.name}</div>}

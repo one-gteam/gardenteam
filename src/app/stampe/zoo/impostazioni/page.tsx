@@ -1,12 +1,14 @@
 import { redirect } from "next/navigation";
+import { gestisce } from "@/lib/types";
 import { getCurrentUser } from "@/lib/auth";
 import StampeHeader from "@/components/stampe/StampeHeader";
 import { canAccessArea, isZooEditor, scopesForUser, resolveScope } from "@/lib/stampe";
 import { getDb } from "@/lib/db";
 import { getZooDb, hiddenEntriesFor, pvPromoCodesFor } from "@/lib/zoo";
 import InlineEdit from "@/components/stampe/InlineEdit";
+import ImportExcel from "@/components/stampe/ImportExcel";
 import {
-  saveZooSettings, saveZooApiKey, saveFormatoRegola, toggleZooHidden, importPvPromo, rinominaPvPromoCode,
+  saveZooSettings, saveZooApiKey, saveFormatoRegola, toggleZooHidden, importPvPromoRighe, rinominaPvPromoCode,
 } from "@/lib/zoo-actions";
 
 export default async function ZooImpostazioniPage({
@@ -17,9 +19,8 @@ export default async function ZooImpostazioniPage({
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (!canAccessArea(user, "zoo")) redirect("/studente");
-  if (!["system_admin", "course_manager", "group_admin", "store_admin", "zoo_manager"].includes(user.role)) {
-    redirect("/stampe/zoo/dati");
-  }
+  // le impostazioni sono di chi gestisce l'area: il capo reparto qui non entra
+  if (!gestisce(user, "zoo")) redirect("/stampe/zoo/dati");
   const sp = await searchParams;
 
   const db = await getZooDb();
@@ -204,12 +205,18 @@ export default async function ZooImpostazioniPage({
               </div>
             )}
             {sp.promoerr === "file" && <div className="alert alert-amber">Nessun file selezionato.</div>}
+            {sp.promoerr === "permessi" && <div className="alert alert-amber">Le promozioni le carica chi gestisce le Offerte Zoo per questo ambito.</div>}
             {sp.promoerr === "consorzio" && <div className="alert alert-amber">Scegli prima la tua insegna o il tuo punto vendita qui in alto.</div>}
-            <form action={importPvPromo.bind(null, scopeParam)} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-              <input type="file" name="file" accept=".xlsx,.xls,.csv" required />
-              <button className="btn btn-sm" type="submit">Carica promozioni</button>
-              <span className="hint">Ogni caricamento sostituisce il precedente: il file è la fotografia di adesso.</span>
-            </form>
+            <ImportExcel
+              action={importPvPromoRighe.bind(null, scopeParam)}
+              colonne={[
+                "barcode", "ean", "codice ean", "cod. barre", "assortimento", "in assortimento", "tenuto",
+                "cod promo", "codice promo", "cod. promo", "promo", "prezzo fisso", "prezzo promo", "prezzo",
+                "data inizio", "dal", "inizio", "data fine", "al", "fine",
+              ]}
+              etichetta="Carica promozioni"
+            />
+            <span className="hint">Ogni caricamento sostituisce il precedente: il file è la fotografia di adesso.</span>
 
             <div style={{ marginTop: 14 }}>
               <strong style={{ fontSize: 13 }}>Come si chiamano i tuoi codici promozione</strong>

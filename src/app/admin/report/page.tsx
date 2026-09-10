@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { requireAreaUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
-import { isAcademyAdmin } from "@/lib/types";
+import { isAcademyAdmin, gestisceConsorzio } from "@/lib/types";
 import Header from "@/components/Header";
 import InsegnaLogo from "@/components/InsegnaLogo";
 import { courseStats, scopeUsers, scopeCourses, storeRanking, coursesForUser, getProgress, isCourseCompleted } from "@/lib/logic";
@@ -23,7 +23,7 @@ export default async function ReportPage({
   const ranking = storeRanking(db).filter(
     (r) =>
       user.role === "system_admin" ||
-      user.role === "course_manager" ||
+      gestisceConsorzio(user, "academy") ||
       (user.role === "group_admin" && r.tenant.id === user.tenantId) ||
       r.store.id === user.storeId
   );
@@ -46,7 +46,7 @@ export default async function ReportPage({
   const avgRatingAll = db.feedback.filter((f) => userIds.has(f.userId));
 
   // ---------- report personalizzato ----------
-  const canSystem = user.role === "system_admin" || user.role === "course_manager";
+  const canSystem = gestisceConsorzio(user, "academy");
   const selectedColumns = parseColumns(sp.col);
   const filters = { reparto: sp.reparto, insegna: sp.insegna, corso: sp.corso, stato: sp.stato };
   const reportRows = buildReportRows(db, user, filters);

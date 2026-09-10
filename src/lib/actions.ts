@@ -11,8 +11,7 @@ import { AUTH_COOKIE, requireUser } from "./auth";
 import { assignableRolesFor, canManageUsers, coursesForUser, courseVisibleTo, dueDate, getProgress, hasStartedCourse, isCourseCompleted, pathsForUser } from "./logic";
 import {
   Course, CourseLevel, CourseSession, DB, DEFAULT_HOME_BLOCKS, DEFAULT_REMINDER_RULES, DEFAULT_WATCH_THRESHOLD,
-  EmailType, Lesson, LessonAttachment, LessonType, ReminderRule, ReminderStage, Role, SiteId, User, postLoginPath, userSites,
-} from "./types";
+  EmailType, Lesson, LessonAttachment, LessonType, ReminderRule, ReminderStage, Role, SiteId, User, postLoginPath, userSites, gestisce, gestisceConsorzio, livelloDi, isAcademyAdmin } from "./types";
 
 /** Sostituisce variabili {{...}} e declina il genere: [maschile|femminile]. */
 function renderText(s: string, user: User, vars: Record<string, string>): string {
@@ -233,9 +232,12 @@ async function requireAcademyUser(): Promise<User> {
 }
 
 function canEditCourse(admin: User, course: Course): boolean {
-  if (admin.role === "system_admin" || admin.role === "course_manager") return true;
-  if (admin.role === "group_admin") return course.level !== "sistema" && course.tenantId === admin.tenantId;
-  if (admin.role === "store_admin") return course.level === "punto_vendita" && course.storeId === admin.storeId;
+  if (gestisceConsorzio(admin, "academy")) return true;
+  // il gestore della formazione di un'insegna o di un PV ha gli stessi poteri dell'amministratore, sui corsi del suo ambito
+  const insegna = admin.role === "group_admin" || (admin.role === "manager" && gestisce(admin, "academy") && livelloDi(admin) === "insegna");
+  const pv = admin.role === "store_admin" || (admin.role === "manager" && gestisce(admin, "academy") && livelloDi(admin) === "pv");
+  if (insegna) return course.level !== "sistema" && course.tenantId === admin.tenantId;
+  if (pv) return course.level === "punto_vendita" && course.storeId === admin.storeId;
   return false;
 }
 
@@ -475,7 +477,7 @@ export async function createCourse(formData: FormData) {
   if (!title) redirect("/admin/corsi");
   const level = String(formData.get("level") ?? "sistema") as CourseLevel;
   const dept = String(formData.get("department") ?? "");
-  const canSystem = admin.role === "system_admin" || admin.role === "course_manager";
+  const canSystem = gestisceConsorzio(admin, "academy");
   const course: Course = {
     id: `c_${Date.now()}`,
     title,
@@ -516,7 +518,7 @@ export async function updateCourse(courseId: string, formData: FormData) {
   const emoji = String(formData.get("emoji") ?? "").trim();
   if (emoji) course.emoji = emoji.slice(0, 4);
 
-  const canSystem = admin.role === "system_admin" || admin.role === "course_manager";
+  const canSystem = gestisceConsorzio(admin, "academy");
   const level = String(formData.get("level") ?? course.level) as CourseLevel;
   if (level === "sistema" && canSystem) {
     course.level = "sistema";
@@ -923,7 +925,7 @@ export async function sendSessionInvites(courseId: string, sessionId: string) {
 export async function runReminders() {
   const admin = await requireAcademyUser();
   // le email partono verso tutto il consorzio: non è un pulsante da capo reparto
-  if (admin.role !== "system_admin" && admin.role !== "course_manager") redirect("/admin/email");
+  if (!gestisceConsorzio(admin, "academy")) redirect("/admin/email");
   const db = await getDb();
   const today = new Date().toISOString().slice(0, 10);
   let sent = 0;
@@ -1247,6 +1249,23 @@ export async function quickSetSites(userId: string, sites: SiteId[]) {
   return { ok: true as const };
 }
 
+/** Aree gestite dal gestore (le altre in accesso le usa da operativo). */
+export async function quickSetManages(userId: string, manages: SiteId[]) {
+  const admin = await requireUser();
+  const db = await getDb();
+  const target = db.users.find((u) => u.id === userId);
+  if (!target) return { ok: false as const, error: "Utente non trovato" };
+  if (!canTouchUser(db, admin, target)) return { ok: false as const, error: "Fuori dal tuo ambito" };
+  if (target.role !== "manager") return { ok: false as const, error: "Le aree gestite valgono solo per il gestore" };
+  // si può far gestire solo un'area che si ha, e a cui il gestore ha accesso
+  const ammesse = sitesAssegnabili(admin, { ...target, sites: target.manages ?? [] }, manages)
+    .filter((s) => userSites(target).includes(s));
+  target.manages = ammesse;
+  await saveDb(db);
+  revalidatePath("/ruoli");
+  return { ok: true as const };
+}
+
 export async function quickToggleActive(userId: string) {
   const admin = await requireUser();
   const db = await getDb();
@@ -1303,6 +1322,9 @@ export async function creaUtente(formData: FormData) {
     ...(["m", "f"].includes(String(formData.get("gender") ?? "")) ? { gender: String(formData.get("gender")) as "m" | "f" } : {}),
     // aree sempre scritte: nessuna spunta = nessun accesso, finché non gliele si danno
     sites: admin.role === "system_admin" ? sites : sites.filter((x) => userSites(admin).includes(x)),
+    ...(role === "manager"
+      ? { manages: (formData.getAll("manages") as SiteId[]).filter((x) => sites.includes(x) && (admin.role === "system_admin" || gestisce(admin, x))) }
+      : {}),
   };
   db.users.push(newUser);
   await queueEmail(db, newUser, "benvenuto");
@@ -1386,13 +1408,12 @@ export async function updateUser(userId: string, formData: FormData) {
   }
 
   const role = String(formData.get("role") ?? "") as Role;
-  const assignableRoles: Role[] =
-    admin.role === "system_admin"
-      ? ["system_admin", "group_admin", "store_admin", "dept_head", "course_manager", "student"]
-      : admin.role === "group_admin"
-        ? ["store_admin", "dept_head", "student"]
-        : ["dept_head", "student"];
-  if (role && assignableRoles.includes(role)) target!.role = role;
+  if (role && assignableRolesFor(admin).includes(role)) target!.role = role;
+  // aree gestite (solo per il gestore): come le aree di accesso, si danno solo quelle che si hanno
+  if (formData.get("managesForm") === "1") {
+    const scelte = (formData.getAll("manages") as string[]).filter(Boolean) as SiteId[];
+    target!.manages = target!.role === "manager" ? sitesAssegnabili(admin, { ...target!, sites: target!.manages ?? [] }, scelte) : undefined;
+  }
 
   const storeId = String(formData.get("storeId") ?? "");
   if (storeId) {
@@ -1426,7 +1447,7 @@ export async function updateUser(userId: string, formData: FormData) {
  */
 export async function sendTestEmail(formData: FormData) {
   const admin = await requireAcademyUser();
-  if (admin.role !== "system_admin" && admin.role !== "course_manager") redirect("/admin/email");
+  if (!gestisceConsorzio(admin, "academy")) redirect("/admin/email");
   const to = String(formData.get("to") ?? "").trim();
   if (!to.includes("@")) redirect("/admin/email?prova=" + encodeURIComponent("Indirizzo non valido."));
   const cfg = mailerConfig();
@@ -1450,7 +1471,7 @@ export async function saveTemplate(type: EmailType, formData: FormData) {
   const admin = await requireAcademyUser();
   if (admin.role === "student" || admin.role === "dept_head") redirect("/admin");
   const db = await getDb();
-  const isGlobal = admin.role === "system_admin" || admin.role === "course_manager";
+  const isGlobal = gestisceConsorzio(admin, "academy");
   const isStore = admin.role === "store_admin";
   const tenantId = isGlobal ? undefined : admin.tenantId;
   const storeId = isStore ? admin.storeId : undefined;
@@ -1477,7 +1498,7 @@ export async function resetTemplate(type: EmailType) {
   const admin = await requireAcademyUser();
   if (admin.role === "student" || admin.role === "dept_head") redirect("/admin");
   const db = await getDb();
-  if (admin.role === "system_admin" || admin.role === "course_manager") {
+  if (gestisceConsorzio(admin, "academy")) {
     const { DEFAULT_TEMPLATES } = await import("./types");
     const def = DEFAULT_TEMPLATES.find((t) => t.type === type)!;
     const tpl = db.templates.find((t) => t.type === type && !t.tenantId && !t.storeId)!;
@@ -1497,14 +1518,14 @@ export async function resetTemplate(type: EmailType) {
 
 export async function saveCustomTemplate(templateId: string | null, formData: FormData) {
   const admin = await requireAcademyUser();
-  if (!["system_admin", "course_manager", "group_admin", "store_admin"].includes(admin.role)) redirect("/admin");
+  if (!isAcademyAdmin(admin) || admin.role === "dept_head") redirect("/admin");
   const db = await getDb();
   const name = String(formData.get("name") ?? "").trim();
   const subject = String(formData.get("subject") ?? "").trim();
   const body = String(formData.get("body") ?? "").trim();
   const trigger = String(formData.get("trigger") ?? "benvenuto") as EmailType;
   if (!name || !subject || !body) redirect("/admin/email");
-  const isGlobal = admin.role === "system_admin" || admin.role === "course_manager";
+  const isGlobal = gestisceConsorzio(admin, "academy");
   const scope = {
     tenantId: isGlobal ? undefined : admin.tenantId,
     storeId: admin.role === "store_admin" ? admin.storeId : undefined,
@@ -1541,7 +1562,7 @@ export async function deleteCustomTemplate(templateId: string) {
   const db = await getDb();
   const ct = db.customTemplates.find((x) => x.id === templateId);
   if (!ct) redirect("/admin/email");
-  const isGlobal = admin.role === "system_admin" || admin.role === "course_manager";
+  const isGlobal = gestisceConsorzio(admin, "academy");
   const canTouch =
     isGlobal ||
     (admin.role === "group_admin" && ct!.tenantId === admin.tenantId) ||
@@ -1583,7 +1604,7 @@ export async function saveAutomationSettings(formData: FormData) {
 /* ================== Percorsi formativi ================== */
 
 function canEditPath(admin: User, level: CourseLevel, tenantId?: string): boolean {
-  if (admin.role === "system_admin" || admin.role === "course_manager") return true;
+  if (gestisceConsorzio(admin, "academy")) return true;
   if (admin.role === "group_admin") return level !== "sistema" && tenantId === admin.tenantId;
   return false;
 }

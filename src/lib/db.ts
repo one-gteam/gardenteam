@@ -1,4 +1,4 @@
-import { areeStoriche, DB, DEFAULT_SETTINGS, DEFAULT_TEMPLATES } from "./types";
+import { areeStoriche, DB, DEFAULT_SETTINGS, DEFAULT_TEMPLATES, RUOLI_STORICI } from "./types";
 import { buildSeed } from "./seed";
 import { readDomain, writeDomain } from "./supabase";
 
@@ -36,6 +36,15 @@ export async function getDb(): Promise<DB> {
     oldAssegnazione.body = fresh.body;
   }
   for (const u of db.users) if (u.active === undefined) u.active = true;
+  // i vecchi "gestore corsi / Zoo / Piante" diventano "gestore" con le aree in manages
+  for (const u of db.users) {
+    const storico = RUOLI_STORICI[u.role as string];
+    if (storico) {
+      u.role = storico.role;
+      u.manages = storico.manages;
+      if (u.sites) u.sites = [...new Set([...u.sites, ...storico.manages])];
+    }
+  }
   // la vecchia macroarea unica "stampe" si è divisa in arredo / zoo / piante
   for (const u of db.users) {
     if (u.sites?.some((s) => (s as string) === "stampe")) {

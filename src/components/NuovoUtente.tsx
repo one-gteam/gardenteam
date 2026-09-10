@@ -27,6 +27,7 @@ export default function NuovoUtente({
   const [aperto, setAperto] = useState(false);
   const [errore, setErrore] = useState("");
   const [fatto, setFatto] = useState("");
+  const [ruolo, setRuolo] = useState<Role>("student");
   const [pending, startTransition] = useTransition();
 
   const invia = (formData: FormData) =>
@@ -67,7 +68,7 @@ export default function NuovoUtente({
         <label className="field" style={{ marginBottom: 0 }}>Email<input type="email" name="email" required placeholder="nome@insegna.it" /></label>
         <label className="field" style={{ marginBottom: 0 }}>
           Ruolo
-          <select name="role" defaultValue="student">
+          <select name="role" value={ruolo} onChange={(e) => setRuolo(e.target.value as Role)}>
             {ruoli.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
           </select>
         </label>
@@ -110,7 +111,7 @@ export default function NuovoUtente({
         <label className="field" style={{ marginBottom: 0 }}>Data di assunzione<input type="date" name="hireDate" /></label>
         <div style={{ gridColumn: "1 / -1" }}>
           <strong style={{ fontSize: 12.5 }}>Aree del portale</strong>
-          <span className="hint" style={{ marginLeft: 8 }}>nessuna spunta = quelle previste dal ruolo</span>
+          <span className="hint" style={{ marginLeft: 8 }}>nessuna spunta = nessun accesso finché non gliene dai una</span>
           <div style={{ display: "flex", gap: 14, marginTop: 4, flexWrap: "wrap" }}>
             {SITES.map((s) => (
               <label key={s} style={{ display: "inline-flex", gap: 5, alignItems: "center", fontSize: 12.5 }}>
@@ -118,6 +119,19 @@ export default function NuovoUtente({
               </label>
             ))}
           </div>
+          {ruolo === "manager" && (
+            <div style={{ marginTop: 8 }}>
+              <strong style={{ fontSize: 12.5 }}>Aree che gestisce</strong>
+              <span className="hint" style={{ marginLeft: 8 }}>le altre a cui accede le usa da operativo</span>
+              <div style={{ display: "flex", gap: 14, marginTop: 4, flexWrap: "wrap" }}>
+                {SITES.map((s) => (
+                  <label key={`m_${s}`} style={{ display: "inline-flex", gap: 5, alignItems: "center", fontSize: 12.5 }}>
+                    <input type="checkbox" name="manages" value={s} /> {SITE_LABELS[s]}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
         <div style={{ gridColumn: "1 / -1" }}>
           <button className="btn btn-sm" type="submit" disabled={pending}>

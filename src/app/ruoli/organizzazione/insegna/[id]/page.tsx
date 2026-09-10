@@ -4,7 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import RuoliHeader from "@/components/RuoliHeader";
 import { updateTenant } from "@/lib/actions";
-import { ROLE_LABELS } from "@/lib/types";
+import { ruoloEsteso } from "@/lib/types";
 
 export default async function TenantPage({
   params,
@@ -115,7 +115,7 @@ export default async function TenantPage({
                       <a href={`/admin/utenti/${u.id}`} style={{ color: "inherit" }}><strong>{u.lastName} {u.firstName}</strong></a>
                       <div style={{ fontSize: 12, color: "var(--muted)" }}>{u.email}</div>
                     </td>
-                    <td>{ROLE_LABELS[u.role]}</td>
+                    <td>{ruoloEsteso(u)}</td>
                     <td>{db.stores.find((s) => s.id === u.storeId)?.name ?? "Tutta l'insegna"}</td>
                     <td>{u.active !== false ? <span className="pill pill-green">Attivo</span> : <span className="pill pill-red">Cessato</span>}</td>
                   </tr>

@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition, type MouseEvent, type ReactNode } from "react";
-import { deleteUsers, quickSetRole, quickSetSites, quickToggleActive, setTenantUserDelegation } from "@/lib/actions";
+import { deleteUsers, quickSetManages, quickSetRole, quickSetSites, quickToggleActive, setTenantUserDelegation } from "@/lib/actions";
 import { ROLE_LABELS, Role, SITE_LABELS_BREVI, SiteId } from "@/lib/types";
 
 const SITES: SiteId[] = ["academy", "arredo", "zoo", "piante"];
@@ -16,6 +16,7 @@ interface RowUser {
   pv: string;
   attivo: boolean;
   sites: SiteId[]; // aree assegnate: nessuna = nessun accesso
+  manages: SiteId[]; // per il gestore: aree su cui ha la gestione
   editabile: boolean; // dentro il perimetro di chi guarda (e non se stesso)
 }
 
@@ -64,6 +65,10 @@ export default function RolesPanel({
   const toggleSite = (u: RowUser, site: SiteId) => {
     const next = u.sites.includes(site) ? u.sites.filter((s) => s !== site) : [...u.sites, site];
     run(() => quickSetSites(u.id, next));
+  };
+  const toggleManages = (u: RowUser, site: SiteId) => {
+    const next = u.manages.includes(site) ? u.manages.filter((s) => s !== site) : [...u.manages, site];
+    run(() => quickSetManages(u.id, next));
   };
 
   // ---------- colonne, riordinabili trascinando l'intestazione ----------
@@ -118,6 +123,19 @@ export default function RolesPanel({
                   onChange={() => toggleSite(u, site)}
                 />
                 {SITE_LABELS_BREVI[site]}
+                {/* il gestore: per ogni area a cui accede, dice se la gestisce o la usa da operativo */}
+                {u.ruolo === "manager" && u.sites.includes(site) && (
+                  <button
+                    type="button"
+                    className={`pill ${u.manages.includes(site) ? "pill-green" : "pill-gray"}`}
+                    style={{ cursor: u.editabile ? "pointer" : "default", border: "none", fontSize: 10, padding: "0 6px" }}
+                    disabled={!u.editabile || pending}
+                    title={u.manages.includes(site) ? "Gestisce quest'area: clic per renderlo operativo" : "Operativo: clic per dargli la gestione"}
+                    onClick={() => toggleManages(u, site)}
+                  >
+                    {u.manages.includes(site) ? "gestisce" : "operativo"}
+                  </button>
+                )}
               </label>
             ))}
           </span>

@@ -40,6 +40,7 @@ export default async function RuoliPage({
       pv: db.stores.find((s) => s.id === u.storeId)?.name ?? "—",
       attivo: u.active !== false,
       sites: userSites(u),
+      manages: u.manages ?? [],
       editabile: canManage && u.id !== user.id && (u.role !== "system_admin" || user.role === "system_admin"),
     }));
 

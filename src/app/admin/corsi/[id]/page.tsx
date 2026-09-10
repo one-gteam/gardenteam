@@ -8,7 +8,7 @@ import SessionsPanel from "@/components/SessionsPanel";
 import CourseShareBar from "@/components/CourseShareBar";
 import { updateCourse, deleteCourse, saveQuestion, deleteQuestion } from "@/lib/actions";
 import { courseVisibleTo } from "@/lib/logic";
-import { DEFAULT_WATCH_THRESHOLD, LEVEL_LABELS, isAcademyAdmin } from "@/lib/types";
+import { DEFAULT_WATCH_THRESHOLD, LEVEL_LABELS, isAcademyAdmin, gestisceConsorzio } from "@/lib/types";
 
 export default async function EditCoursePage({
   params,
@@ -26,7 +26,7 @@ export default async function EditCoursePage({
   const course = db.courses.find((c) => c.id === id);
   if (!course) notFound();
 
-  const canSystem = user.role === "system_admin" || user.role === "course_manager";
+  const canSystem = gestisceConsorzio(user, "academy");
   const canEdit =
     canSystem ||
     (user.role === "group_admin" && course.level !== "sistema" && course.tenantId === user.tenantId) ||

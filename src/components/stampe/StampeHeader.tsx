@@ -1,14 +1,19 @@
 import Link from "next/link";
 import { getDb } from "@/lib/db";
-import { ROLE_LABELS, User, userSites } from "@/lib/types";
+import { User, userSites, gestisce, ruoloEsteso } from "@/lib/types";
 import { logout } from "@/lib/actions";
-import { isConsortiumEditor } from "@/lib/stampe";
+import { isConsortiumEditor, isZooEditor } from "@/lib/stampe";
 
 export default async function StampeHeader({ user, active, area = "arredo" }: { user: User; active: string; area?: "arredo" | "zoo" }) {
   const db = await getDb();
   const settings = db.settings;
   const tenant = db.tenants.find((t) => t.id === user.tenantId);
-  const isAdmin = ["system_admin", "course_manager", "group_admin", "store_admin"].includes(user.role);
+  /*
+   * Il menu segue i permessi: chi gestisce l'area vede Layout, Impostazioni e il
+   * resto della gestione; chi è operativo (capo reparto) vede consultazione e stampa.
+   */
+  const gestZoo = gestisce(user, "zoo");
+  const gestArredo = gestisce(user, "arredo");
   const sites = userSites(user);
 
   const links = area === "zoo"
@@ -16,27 +21,23 @@ export default async function StampeHeader({ user, active, area = "arredo" }: { 
         { href: "/stampe/zoo/dati", label: "Database prodotti", key: "dati" },
         { href: "/stampe/zoo/offerte", label: "Offerte in corso", key: "offerte" },
         { href: "/stampe/zoo/volantino", label: "Scelta offerte Volantino", key: "volantino" },
-        ...(["system_admin", "course_manager", "zoo_manager"].includes(user.role)
+        ...(isZooEditor(user)
           ? [{ href: "/stampe/zoo/crea-volantino", label: "Crea Volantino", key: "crea-volantino" }]
           : []),
         { href: "/stampe/zoo/bozza", label: "Bozza volantino", key: "bozza" },
-        { href: "/stampe/zoo/layout", label: "Layout", key: "layout" },
+        ...(gestZoo ? [{ href: "/stampe/zoo/layout", label: "Layout", key: "layout" }] : []),
         { href: "/stampe/zoo/stampa", label: "Stampa cartelli", key: "stampa" },
-        ...(isAdmin || user.role === "zoo_manager"
-          ? [
-              { href: "/stampe/zoo/archivio", label: "Archivio volantini", key: "archivio" },
-              { href: "/stampe/zoo/impostazioni", label: "Impostazioni", key: "impostazioni" },
-            ]
-          : []),
+        ...(isZooEditor(user) ? [{ href: "/stampe/zoo/archivio", label: "Archivio volantini", key: "archivio" }] : []),
+        ...(gestZoo ? [{ href: "/stampe/zoo/impostazioni", label: "Impostazioni", key: "impostazioni" }] : []),
         ...(sites.includes("arredo") ? [{ href: "/stampe/arredo/dati", label: "⇄ Cartelli Arredo", key: "arredo" }] : []),
         ...(sites.length > 1 ? [{ href: "/scegli", label: "⇄ Cambia area", key: "academy" }] : []),
       ]
     : [
         { href: "/stampe/arredo/dati", label: "Dati prodotti", key: "dati" },
-        { href: "/stampe/arredo/layout", label: "Layout", key: "layout" },
+        ...(gestArredo ? [{ href: "/stampe/arredo/layout", label: "Layout", key: "layout" }] : []),
         { href: "/stampe/arredo/stampa", label: "Stampa cartelli", key: "stampa" },
         { href: "/stampe/arredo/linee-guida", label: "Linee guida", key: "linee-guida" },
-        ...(isAdmin ? [{ href: "/stampe/impostazioni", label: "Impostazioni", key: "impostazioni" }] : []),
+        ...(gestArredo ? [{ href: "/stampe/impostazioni", label: "Impostazioni", key: "impostazioni" }] : []),
         ...(sites.includes("zoo") ? [{ href: "/stampe/zoo/dati", label: "⇄ Offerte Zoo", key: "zoo" }] : []),
         ...(sites.length > 1 ? [{ href: "/scegli", label: "⇄ Cambia area", key: "academy" }] : []),
       ];
@@ -71,7 +72,7 @@ export default async function StampeHeader({ user, active, area = "arredo" }: { 
                 {user.firstName} {user.lastName}
               </div>
               <div style={{ opacity: 0.75, fontSize: 11 }}>
-                {isConsortiumEditor(user) ? "Responsabile contenuti Consorzio" : ROLE_LABELS[user.role]}
+                {isConsortiumEditor(user) ? "Responsabile contenuti Consorzio" : ruoloEsteso(user)}
               </div>
             </div>
             <form action={logout}>

@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { requireAreaUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
-import { isAcademyAdmin } from "@/lib/types";
+import { isAcademyAdmin, gestisceConsorzio } from "@/lib/types";
 import Header from "@/components/Header";
 import PathsPanel from "@/components/PathsPanel";
 import { scopeCourses } from "@/lib/logic";
@@ -12,7 +12,7 @@ export default async function AdminPathsPage() {
   if (user.role === "dept_head") redirect("/studente");
 
   const db = await getDb();
-  const canSystem = user.role === "system_admin" || user.role === "course_manager";
+  const canSystem = gestisceConsorzio(user, "academy");
 
   // percorsi visibili nell'ambito dell'amministratore
   const paths = db.paths.filter((p) => canSystem || (user.role === "group_admin" && p.tenantId === user.tenantId));

@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "./auth";
 import { getDb } from "./db";
-import { canAccessArea, isZooEditor, resolveScope, sanitizeMargins } from "./stampe";
+import { canAccessArea, gestisceArea, isZooEditor, resolveScope, sanitizeMargins } from "./stampe";
 import { postLoginPath } from "./types";
 import { LAYOUT_FONTS } from "./layout-fonts";
 import {
@@ -30,6 +30,46 @@ async function requireZooUser() {
 function backUrl(page: string, scopeParam: string, extra: Record<string, string> = {}) {
   const qs = new URLSearchParams({ scope: scopeParam, ...extra });
   return `${page}?${qs.toString()}`;
+}
+
+type Righe = Record<string, unknown>[];
+
+/**
+ * Chi gestisce lo Zoo nell'ambito scelto: il Consorzio sulla versione comune,
+ * un'insegna o un punto vendita sulla propria. Serve alle azioni "di gestione"
+ * (layout, impostazioni, articoli propri, promozioni): quelle operative
+ * (stampa, prezzi, esclusioni, voti, note) restano a tutti.
+ */
+async function requireZooGestione(scopeParam: string, back: string) {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  if (!gestisceArea(user, "zoo", scope, academyDb)) redirect(backUrl(back, scopeParam, { permessi: "no" }));
+  return { user, db, academyDb, scope };
+}
+
+/**
+ * Righe di un Excel arrivato come file. Vale per i file piccoli: su Vercel una
+ * richiesta non può superare i 4,5 MB, e l'assortimento intero di un punto
+ * vendita li supera. Per quelli il file si legge nel browser (ImportExcel) e qui
+ * arrivano solo le colonne che servono, già in JSON: vedi righeDaJson.
+ */
+async function righeDaFile(file: File | null): Promise<Righe | null> {
+  if (!file || file.size === 0) return null;
+  const XLSX = await import("xlsx");
+  const wb = XLSX.read(Buffer.from(await file.arrayBuffer()), { type: "buffer" });
+  return XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[wb.SheetNames[0]], { defval: "" });
+}
+
+/** Righe già lette dal browser (stesso formato di sheet_to_json). */
+function righeDaJson(json: string): Righe | null {
+  try {
+    const r = JSON.parse(json);
+    return Array.isArray(r) && r.length > 0 ? (r as Righe) : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -133,7 +173,7 @@ export async function importZooProducts(scopeParam: string, formData: FormData) 
    * carica invece i propri articoli (codici interni, sfusi, private label), che
    * restano suoi e non finiscono nel catalogo degli altri.
    */
-  if (scopeImport.type === "system" && !isZooEditor(user)) redirect("/stampe/zoo/dati");
+  if (!gestisceArea(user, "zoo", scopeImport, academyDbScope)) redirect("/stampe/zoo/dati");
   const file = formData.get("file") as File | null;
   if (!file || file.size === 0) redirect(backUrl("/stampe/zoo/dati", scopeParam, { importati: "0" }));
   const XLSX = await import("xlsx");
@@ -318,7 +358,7 @@ export async function associaConAI(back: string, scopeParam: string, formData: F
   const academyDbAi = await getDb();
   const scopeAi = resolveScope(user, scopeParam, academyDbAi);
   // il Consorzio raggruppa il catalogo comune; insegna/PV i propri articoli
-  if (scopeAi.type === "system" && !isZooEditor(user)) redirect(backUrl(back, scopeParam));
+  if (!gestisceArea(user, "zoo", scopeAi, academyDbAi)) redirect(backUrl(back, scopeParam));
   const ids = (formData.getAll("sel") as string[]).filter(Boolean);
   const db = await getZooDb();
   const selected = db.products.filter((p) => ids.includes(p.id));
@@ -1240,16 +1280,18 @@ export async function addScheda(campaignId: string, scopeParam: string) {
 
 /** Import Excel prezzi propri del PV: colonne EAN (o CODICE FORNITORE) e PREZZO. */
 export async function importPvPrices(scopeParam: string, formData: FormData) {
+  return importPvPricesCore(scopeParam, await righeDaFile(formData.get("file") as File | null));
+}
+/** Stesso import, con il file letto dal browser (vedi righeDaFile). */
+export async function importPvPricesRighe(scopeParam: string, righeJson: string) {
+  return importPvPricesCore(scopeParam, righeDaJson(righeJson));
+}
+async function importPvPricesCore(scopeParam: string, rows: Righe | null) {
   const user = await requireZooUser();
   const db = await getZooDb();
   const academyDb = await getDb();
   const scope = resolveScope(user, scopeParam, academyDb);
-  if (scope.type === "system") redirect(backUrl("/stampe/zoo/stampa", scopeParam, { prezzi: "0" }));
-  const file = formData.get("file") as File | null;
-  if (!file || file.size === 0) redirect(backUrl("/stampe/zoo/stampa", scopeParam, { prezzi: "0" }));
-  const XLSX = await import("xlsx");
-  const wb = XLSX.read(Buffer.from(await file!.arrayBuffer()), { type: "buffer" });
-  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[wb.SheetNames[0]], { defval: "" });
+  if (scope.type === "system" || !rows) redirect(backUrl("/stampe/zoo/stampa", scopeParam, { prezzi: "0" }));
   let n = 0;
   for (const row of rows) {
     const prezzo = priceStr(cell(row, "PREZZO", "PREZZO VENDITA", "PREZZO PV"));
@@ -1354,6 +1396,7 @@ export async function saveZooApiKey(scopeParam: string, formData: FormData) {
   const academyDb = await getDb();
   const scope = resolveScope(user, scopeParam, academyDb);
   const key = String(formData.get("apiKey") ?? "").trim();
+  if (!gestisceArea(user, "zoo", scope, academyDb)) redirect(backUrl("/stampe/zoo/impostazioni", scopeParam));
   if (scope.type === "system") {
     if (user.role !== "system_admin") redirect(backUrl("/stampe/zoo/impostazioni", scopeParam));
     db.settings.apiKey = key || undefined;
@@ -1471,7 +1514,7 @@ export async function saveZooLayout(
   const db = await getZooDb();
   const academyDb = await getDb();
   const scope = resolveScope(user, scopeParam, academyDb);
-  if (scope.type === "system" && !isZooEditor(user)) return { ok: false };
+  if (!gestisceArea(user, "zoo", scope, academyDb)) return { ok: false };
   let items: unknown;
   try { items = JSON.parse(itemsJson); } catch { return { ok: false }; }
   if (!Array.isArray(items)) return { ok: false };
@@ -1512,7 +1555,7 @@ export async function deleteZooLayout(layoutId: string, scopeParam: string) {
   const academyDb = await getDb();
   const scope = resolveScope(user, scopeParam, academyDb);
   const l = db.zooLayouts.find((x) => x.id === layoutId);
-  if (l && l.scopeType === scope.type && l.scopeId === scope.id && (scope.type !== "system" || isZooEditor(user))) {
+  if (l && l.scopeType === scope.type && l.scopeId === scope.id && gestisceArea(user, "zoo", scope, academyDb)) {
     db.zooLayouts = db.zooLayouts.filter((x) => x.id !== layoutId);
     await saveZooDb(db);
   }
@@ -1591,17 +1634,19 @@ export async function toggleZooNoPrintBulk(scopeParam: string, back: string, for
  * del file è un'esclusione.
  */
 export async function importZooNoPrint(scopeParam: string, formData: FormData) {
+  return importZooNoPrintCore(scopeParam, await righeDaFile(formData.get("file") as File | null));
+}
+/** Stesso import, con il file letto dal browser (vedi righeDaFile). */
+export async function importZooNoPrintRighe(scopeParam: string, righeJson: string) {
+  return importZooNoPrintCore(scopeParam, righeDaJson(righeJson));
+}
+async function importZooNoPrintCore(scopeParam: string, righe: Righe | null) {
   const user = await requireZooUser();
   const db = await getZooDb();
   const academyDb = await getDb();
   const scope = resolveScope(user, scopeParam, academyDb);
   if (scope.type === "system") redirect(backUrl("/stampe/zoo/stampa", scopeParam, { noprint: "consorzio" }));
-  const file = formData.get("file") as File | null;
-  if (!file || file.size === 0) redirect(backUrl("/stampe/zoo/stampa", scopeParam, { noprint: "file" }));
-
-  const XLSX = await import("xlsx");
-  const wb = XLSX.read(Buffer.from(await file!.arrayBuffer()), { type: "buffer" });
-  const righe = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[wb.SheetNames[0]], { defval: "" });
+  if (!righe) redirect(backUrl("/stampe/zoo/stampa", scopeParam, { noprint: "file" }));
 
   const miei = (n: (typeof db.noPrint)[number]) => n.scopeType === scope.type && n.scopeId === scope.id;
   let esclusi = 0;
@@ -1669,7 +1714,7 @@ export async function uploadZooLayoutImage(scopeParam: string, formData: FormDat
   const db = await getZooDb();
   const academyDb = await getDb();
   const scope = resolveScope(user, scopeParam, academyDb);
-  if (scope.type === "system" && !isZooEditor(user)) redirect(backUrl("/stampe/zoo/layout", scopeParam));
+  if (!gestisceArea(user, "zoo", scope, academyDb)) redirect(backUrl("/stampe/zoo/layout", scopeParam));
   const file = formData.get("image") as File | null;
   const formato = String(formData.get("formato") ?? "");
   if (file && file.size > 0 && file.type.startsWith("image/")) {
@@ -1689,10 +1734,7 @@ export async function uploadZooLayoutImage(scopeParam: string, formData: FormDat
 }
 
 export async function deleteZooLayoutImage(imageId: string, scopeParam: string, formato: string) {
-  const user = await requireZooUser();
-  const db = await getZooDb();
-  const academyDb = await getDb();
-  const scope = resolveScope(user, scopeParam, academyDb);
+  const { db, scope } = await requireZooGestione(scopeParam, "/stampe/zoo/layout");
   db.layoutImages = db.layoutImages.filter(
     (i) => !(i.id === imageId && i.scopeType === scope.type && i.scopeId === scope.id)
   );
@@ -1712,7 +1754,7 @@ export async function copiaZooLayoutSuFormato(layoutId: string, scopeParam: stri
   const db = await getZooDb();
   const academyDb = await getDb();
   const scope = resolveScope(user, scopeParam, academyDb);
-  if (scope.type === "system" && !isZooEditor(user)) redirect(backUrl("/stampe/zoo/layout", scopeParam));
+  if (!gestisceArea(user, "zoo", scope, academyDb)) redirect(backUrl("/stampe/zoo/layout", scopeParam));
   const sorgente = db.zooLayouts.find((l) => l.id === layoutId);
   const destFormatId = String(formData.get("formatId") ?? "");
   const da = ZOO_FORMATS.find((f) => f.id === sorgente?.formatId);
@@ -1753,6 +1795,13 @@ export async function copiaZooLayoutSuFormato(layoutId: string, scopeParam: stri
  *   barcode | EAN · assortimento (si/no) · cod promo · prezzo fisso · data inizio · data fine
  */
 export async function importPvPromo(scopeParam: string, formData: FormData) {
+  return importPvPromoCore(scopeParam, await righeDaFile(formData.get("file") as File | null));
+}
+/** Stesso import, con il file letto dal browser (vedi righeDaFile). */
+export async function importPvPromoRighe(scopeParam: string, righeJson: string) {
+  return importPvPromoCore(scopeParam, righeDaJson(righeJson));
+}
+async function importPvPromoCore(scopeParam: string, righe: Righe | null) {
   const user = await requireZooUser();
   const db = await getZooDb();
   const academyDb = await getDb();
@@ -1760,12 +1809,8 @@ export async function importPvPromo(scopeParam: string, formData: FormData) {
   if (scope.type === "system") {
     redirect(backUrl("/stampe/zoo/impostazioni", scopeParam, { promoerr: "consorzio" }));
   }
-  const file = formData.get("file") as File | null;
-  if (!file || file.size === 0) redirect(backUrl("/stampe/zoo/impostazioni", scopeParam, { promoerr: "file" }));
-
-  const XLSX = await import("xlsx");
-  const wb = XLSX.read(Buffer.from(await file!.arrayBuffer()), { type: "buffer" });
-  const righe = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[wb.SheetNames[0]], { defval: "" });
+  if (!gestisceArea(user, "zoo", scope, academyDb)) redirect(backUrl("/stampe/zoo/impostazioni", scopeParam, { promoerr: "permessi" }));
+  if (!righe) redirect(backUrl("/stampe/zoo/impostazioni", scopeParam, { promoerr: "file" }));
 
   const miei = (x: { scopeType: string; scopeId: string }) => x.scopeType === scope.type && x.scopeId === scope.id;
   // il file è la fotografia della situazione attuale: si riparte da zero su questo ambito
@@ -1826,7 +1871,7 @@ export async function rinominaPvPromoCode(codice: string, scopeParam: string, va
   const db = await getZooDb();
   const academyDb = await getDb();
   const scope = resolveScope(user, scopeParam, academyDb);
-  if (scope.type === "system") return { ok: false };
+  if (scope.type === "system" || !gestisceArea(user, "zoo", scope, academyDb)) return { ok: false };
   const etichetta = value.trim();
   const esistente = db.pvPromoCodes.find(
     (c) => c.scopeType === scope.type && c.scopeId === scope.id && c.codice === codice
@@ -1852,6 +1897,7 @@ export async function creaOffertaPropria(scopeParam: string, formData: FormData)
   const academyDb = await getDb();
   const scope = resolveScope(user, scopeParam, academyDb);
   if (scope.type === "system") redirect(backUrl("/stampe/zoo/stampa", scopeParam, { offerta: "consorzio" }));
+  if (!gestisceArea(user, "zoo", scope, academyDb)) redirect(backUrl("/stampe/zoo/stampa", scopeParam, { offerta: "permessi" }));
 
   const ean = String(formData.get("ean") ?? "").trim().replace(/\s/g, "");
   const prezzoPromo = priceOrEmpty(String(formData.get("prezzoPromo") ?? ""));
@@ -2047,7 +2093,7 @@ export async function adottaProdotto(productId: string, scopeParam: string, back
   const db = await getZooDb();
   const academyDb = await getDb();
   const scope = resolveScope(user, scopeParam, academyDb);
-  if (scope.type === "system") redirect(backUrl(back, scopeParam));
+  if (scope.type === "system" || !gestisceArea(user, "zoo", scope, academyDb)) redirect(backUrl(back, scopeParam));
   const originale = db.products.find((x) => x.id === productId);
   if (!originale) redirect(backUrl(back, scopeParam));
   const id = `z_${scope.type}_${scope.id}_${originale.ean}`;

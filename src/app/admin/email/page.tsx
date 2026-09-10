@@ -13,7 +13,7 @@ import {
 } from "@/lib/actions";
 import { mailerConfig } from "@/lib/mailer";
 import { scopeUsers } from "@/lib/logic";
-import { DEFAULT_REMINDER_RULES, EMAIL_TYPE_LABELS, EmailType, REMINDER_STAGE_LABELS, isAcademyAdmin } from "@/lib/types";
+import { DEFAULT_REMINDER_RULES, EMAIL_TYPE_LABELS, EmailType, REMINDER_STAGE_LABELS, isAcademyAdmin, gestisceConsorzio } from "@/lib/types";
 
 const AUTOMATIONS = [
   { emoji: "", title: "Email di benvenuto", desc: "Inviata automaticamente quando un collaboratore viene creato o importato da CSV/gestionale.", trigger: "Alla creazione dell'utente" },
@@ -43,7 +43,7 @@ export default async function EmailPage({
   // e a insegna/PV solo se indirizzate alla loro email di approvazione
   const myApprovalEmails = new Set(
     [
-      ...(user.role === "system_admin" || user.role === "course_manager"
+      ...(gestisceConsorzio(user, "academy")
         ? [...db.tenants.map((t) => t.approvalEmail), ...db.stores.map((s) => s.approvalEmail)]
         : user.role === "group_admin"
           ? [
@@ -58,7 +58,7 @@ export default async function EmailPage({
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, 60);
 
-  const isGlobalEditor = user.role === "system_admin" || user.role === "course_manager";
+  const isGlobalEditor = gestisceConsorzio(user, "academy");
   const isStoreEditor = user.role === "store_admin";
   const canEditTemplates = isGlobalEditor || user.role === "group_admin" || isStoreEditor;
   const myCustomTemplates = db.customTemplates.filter((ct) =>

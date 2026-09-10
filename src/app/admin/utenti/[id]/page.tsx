@@ -4,7 +4,7 @@ import { requireAreaUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import Header from "@/components/Header";
 import { updateUser, toggleUserActive } from "@/lib/actions";
-import { ROLE_LABELS, Role, userSites, isAcademyAdmin } from "@/lib/types";
+import { ROLE_LABELS, Role, userSites, isAcademyAdmin, ruoloEsteso } from "@/lib/types";
 import { coursesForUser, getProgress, isCourseCompleted, canManageUsers } from "@/lib/logic";
 
 export default async function EditUserPage({
@@ -31,7 +31,7 @@ export default async function EditUserPage({
 
   const assignableRoles: Role[] =
     admin.role === "system_admin"
-      ? ["system_admin", "group_admin", "store_admin", "dept_head", "course_manager", "student"]
+      ? ["system_admin", "group_admin", "store_admin", "manager", "dept_head", "student"]
       : admin.role === "group_admin"
         ? ["store_admin", "dept_head", "student"]
         : ["dept_head", "student"];
@@ -62,7 +62,7 @@ export default async function EditUserPage({
           {!u.passwordHash && <span className="pill pill-amber">Account non ancora attivato</span>}
         </div>
         <p className="subtitle" style={{ marginTop: 6 }}>
-          {ROLE_LABELS[u.role]} · {done.length}/{assigned.length} corsi completati · {u.points} punti
+          {ruoloEsteso(u)} · {done.length}/{assigned.length} corsi completati · {u.points} punti
         </p>
         {showRuoliLink && u.id !== admin.id && (
           <p className="hint" style={{ margin: "-6px 0 16px" }}>
@@ -89,7 +89,7 @@ export default async function EditUserPage({
                   {assignableRoles.map((r) => (
                     <option key={r} value={r}>{ROLE_LABELS[r]}</option>
                   ))}
-                  {!assignableRoles.includes(u.role) && <option value={u.role}>{ROLE_LABELS[u.role]}</option>}
+                  {!assignableRoles.includes(u.role) && <option value={u.role}>{ruoloEsteso(u)}</option>}
                 </select>
               </label>
               <label className="field">

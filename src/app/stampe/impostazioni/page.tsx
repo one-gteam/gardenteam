@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { gestisce } from "@/lib/types";
 import { getCurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import StampeHeader from "@/components/stampe/StampeHeader";
@@ -25,7 +26,7 @@ export default async function ImpostazioniPage({
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (!canAccessArea(user, "arredo")) redirect("/stampe");
-  if (!["system_admin", "course_manager", "group_admin", "store_admin"].includes(user.role)) redirect("/stampe");
+  if (!gestisce(user, "arredo")) redirect("/stampe");
   const { salvato, scope: scopeQ, codici } = await searchParams;
 
   const db = await getStampeDb();

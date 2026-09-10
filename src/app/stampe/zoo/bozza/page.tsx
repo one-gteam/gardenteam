@@ -37,6 +37,9 @@ export default async function ZooBozzaPage({
   const layout = campaign ? db.volantinoLayouts.find((l) => l.campaignId === campaign.id) : undefined;
   const pages = layout ? migraVolantinoPages(layout.pages) : [];
   const offerById = new Map(db.offers.map((o) => [o.id, o]));
+  // le doppie pagine, come in Crea Volantino: copertina da sola, poi a coppie
+  const spreads: number[][] = pages.length > 0 ? [[0]] : [];
+  for (let i = 1; i < pages.length; i += 2) spreads.push(pages[i + 1] ? [i, i + 1] : [i]);
 
   const note = campaign ? db.noteBozza.filter((n) => n.campaignId === campaign.id) : [];
   const noteAperte = note.filter((n) => !n.risolta);
@@ -98,118 +101,122 @@ export default async function ZooBozzaPage({
           <div className="card"><p className="empty">Non c&apos;è ancora una bozza: si compone in Crea Volantino.</p></div>
         )}
 
-        {pages.map((page, i) => {
-          const notePagina = notePerPagina(page.id);
-          return (
-            <div key={page.id} className="card" style={{ padding: 14, marginBottom: 16 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8, flexWrap: "wrap" }}>
-                <strong style={{ fontSize: 15 }}>{i + 1}. {page.titolo || `Pagina ${i + 1}`}</strong>
-                {page.animale && <span className="pill pill-blue">{page.animale}</span>}
-                {notePagina.filter((n) => !n.risolta).length > 0 && (
-                  <span className="pill pill-orange">{notePagina.filter((n) => !n.risolta).length} note</span>
-                )}
-                {page.note && <span className="hint">Indicazioni per il grafico: {page.note}</span>}
-              </div>
-
-              <div style={{
-                display: "grid",
-                gridTemplateColumns: `repeat(${page.cols}, 1fr)`,
-                gap: 6,
-                background: "#fafaf7",
-                border: "1px solid var(--line)",
-                borderRadius: 8,
-                padding: 8,
-              }}>
-                {(page.sezioni ?? []).map((s) => (
-                  <div key={s.id} style={{
-                    gridColumn: `${s.c + 1} / span ${s.cs}`, gridRow: `${s.r + 1} / span ${s.rs}`,
-                    background: s.bg, borderRadius: 6, padding: 6, fontSize: 12, fontWeight: 700, opacity: 0.9,
-                  }}>
-                    {s.titolo}
-                    {s.testo && <div style={{ fontWeight: 400, fontSize: 11.5 }}>{s.testo}</div>}
+        {/*
+          * Le pagine si leggono come sul volantino vero: copertina da sola, poi
+          * le doppie pagine affiancate (2-3, 4-5...), ognuna in proporzione A4.
+          * Prima erano una sotto l'altra a tutta larghezza e non si capiva cosa
+          * sarebbe finito accanto a cosa.
+          */}
+        {spreads.map((gruppo, gi) => (
+          <div key={gi} className="vol-spread" style={{ marginBottom: 22 }}>
+            {gruppo.map((i) => {
+              const page = pages[i];
+              const notePagina = notePerPagina(page.id);
+              const aperte = notePagina.filter((n) => !n.risolta).length;
+              return (
+                <div key={page.id} className="vol-page-wrap">
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6, flexWrap: "wrap" }}>
+                    <span className="vol-numero">{i + 1}</span>
+                    <strong style={{ fontSize: 13 }}>{page.titolo || `Pagina ${i + 1}`}</strong>
+                    {page.animale && <span className="pill pill-blue">{page.animale}</span>}
+                    {aperte > 0 && <span className="pill pill-orange">{aperte} note</span>}
                   </div>
-                ))}
-                {page.blocks.filter((b) => (b.offerIds?.length ?? 0) > 0 || b.testo || b.imageUrl).map((b) => {
-                  const offerte = (b.offerIds ?? []).map((id) => offerById.get(id)).filter(Boolean);
-                  return (
-                    <div key={b.id} style={{
-                      gridColumn: `${b.c + 1} / span ${b.cs}`, gridRow: `${b.r + 1} / span ${b.rs}`,
-                      background: "#fff", border: "1px solid #e6e6e6", borderRadius: 6, padding: 6, minHeight: 74,
-                    }}>
-                      {b.label && <span className="pill pill-orange" style={{ fontSize: 10 }}>{b.label}</span>}
-                      {b.testo && <div style={{ fontSize: 12, fontWeight: 700 }}>{b.testo}</div>}
-                      {offerte.map((o) => {
-                        const prod = db.products.find((p) => p.id === o!.productId);
-                        const parent = prod?.parentId ? db.parents.find((x) => x.id === prod.parentId) : undefined;
-                        const nome = parent
-                          ? effectiveParentText(db, scope, parent, "nome", academyDb).value
-                          : (prod?.descrizione ?? o!.descrizione);
-                        const foto = zooImageUrl(prod, parent);
-                        /*
-                         * Prezzo, prezzo di partenza, sconto e tipologia: chi rivede la bozza
-                         * deve poter dire se l'offerta è buona, non solo se è nella pagina
-                         * giusta. Il prezzo del punto vendita, se c'è, vale su quello comune.
-                         */
-                        const dati = datiPrezzoOfferta(db, o!, scope, academyDb, b.prezzo);
-                        return (
-                          <div key={o!.id} style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 4 }}>
-                            {foto !== "/immagini/mancante.jpg" && (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img src={foto} alt="" style={{ width: 34, height: 34, objectFit: "contain" }} />
-                            )}
-                            <div style={{ minWidth: 0 }}>
-                              <div style={{ fontSize: 11.5, fontWeight: 700, lineHeight: 1.15 }}>{nome}</div>
-                              <div style={{ display: "flex", gap: 5, alignItems: "baseline", flexWrap: "wrap" }}>
-                                {dati.prezzo ? (
-                                  <span style={{ fontSize: 12, color: "#c8161d", fontWeight: 800 }}>€ {dati.prezzo}</span>
-                                ) : (
-                                  <span className="pill pill-amber" style={{ fontSize: 10 }}>prezzo da definire</span>
-                                )}
-                                {dati.listino && (
-                                  <span style={{ fontSize: 11, color: "var(--muted)", textDecoration: "line-through" }}>
-                                    € {dati.listino}
-                                  </span>
-                                )}
-                                {dati.sconto && <span className="pill pill-green" style={{ fontSize: 10 }}>{dati.sconto}</span>}
-                                {dati.tipi.map((t) => (
-                                  <span key={t} className="pill pill-blue" style={{ fontSize: 10 }}>{t}</span>
-                                ))}
-                              </div>
-                            </div>
+                  {page.note && <p className="hint" style={{ margin: "0 0 6px" }}>Per il grafico: {page.note}</p>}
+
+                  <div className="vol-page" style={{
+                    gridTemplateColumns: `repeat(${page.cols}, 1fr)`,
+                    gridTemplateRows: `repeat(${page.rows}, 1fr)`,
+                  }}>
+                    {(page.sezioni ?? []).map((sz) => (
+                      <div key={sz.id} style={{
+                        gridColumn: `${sz.c + 1} / span ${sz.cs}`, gridRow: `${sz.r + 1} / span ${sz.rs}`,
+                        background: sz.bg, borderRadius: 6, padding: 4, fontSize: 10, fontWeight: 700, opacity: 0.9,
+                      }}>
+                        {sz.titolo}
+                        {sz.testo && <div style={{ fontWeight: 400, fontSize: 9.5 }}>{sz.testo}</div>}
+                      </div>
+                    ))}
+                    {page.blocks.filter((b) => (b.offerIds?.length ?? 0) > 0 || b.testo || b.imageUrl).map((b) => {
+                      const offerte = (b.offerIds ?? []).map((id) => offerById.get(id)).filter(Boolean);
+                      return (
+                        <div key={b.id} className="vol-cell" style={{
+                          gridColumn: `${b.c + 1} / span ${b.cs}`, gridRow: `${b.r + 1} / span ${b.rs}`,
+                          background: "#fff", border: "1px solid #e6e6e6",
+                        }}>
+                          {b.label && <span className="vol-label">{b.label}</span>}
+                          {b.testo && <div className="vol-testo">{b.testo}</div>}
+                          <div style={{ display: "grid", gap: 2, gridTemplateColumns: offerte.length > 1 ? "1fr 1fr" : "1fr", textAlign: "center" }}>
+                            {offerte.map((o) => {
+                              const prod = db.products.find((pr) => pr.id === o!.productId);
+                              const parent = prod?.parentId ? db.parents.find((x) => x.id === prod.parentId) : undefined;
+                              const nome = parent
+                                ? effectiveParentText(db, scope, parent, "nome", academyDb).value
+                                : (prod?.descrizione ?? o!.descrizione);
+                              const foto = zooImageUrl(prod, parent);
+                              /*
+                               * Prezzo, prezzo di partenza, sconto e tipologia: chi rivede la bozza
+                               * deve poter dire se l'offerta è buona, non solo se è nella pagina
+                               * giusta. Il prezzo del punto vendita, se c'è, vale su quello comune.
+                               */
+                              const dati = datiPrezzoOfferta(db, o!, scope, academyDb, b.prezzo);
+                              return (
+                                <div key={o!.id} style={{ minWidth: 0 }}>
+                                  {foto !== "/immagini/mancante.jpg" && (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img src={foto} alt="" style={{ maxWidth: "100%", height: b.rs > 1 ? 56 : 30, objectFit: "contain" }} />
+                                  )}
+                                  <div style={{ fontSize: 9.5, fontWeight: 700, lineHeight: 1.15 }}>{nome}</div>
+                                  <div style={{ display: "flex", gap: 3, justifyContent: "center", alignItems: "baseline", flexWrap: "wrap" }}>
+                                    {dati.prezzo ? (
+                                      <span style={{ fontSize: 12, color: "#c8161d", fontWeight: 800 }}>€ {dati.prezzo}</span>
+                                    ) : (
+                                      <span style={{ fontSize: 8.5, color: "#b45309", fontWeight: 700 }}>prezzo da definire</span>
+                                    )}
+                                    {dati.listino && (
+                                      <span style={{ fontSize: 9, color: "#777", textDecoration: "line-through" }}>€ {dati.listino}</span>
+                                    )}
+                                    {dati.sconto && <span style={{ fontSize: 9, fontWeight: 800, color: "#15803d" }}>{dati.sconto}</span>}
+                                  </div>
+                                  {dati.tipi.length > 0 && (
+                                    <div style={{ fontSize: 8, color: "#274b7a", fontWeight: 700 }}>{dati.tipi.join(" · ")}</div>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
-                        );
-                      })}
-                    </div>
-                  );
-                })}
-              </div>
+                        </div>
+                      );
+                    })}
+                  </div>
 
-              <form action={aggiungiNotaBozza.bind(null, campaign!.id, scopeParam)}
-                style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
-                <input type="hidden" name="pageId" value={page.id} />
-                <input type="text" name="testo" required placeholder={`Nota su «${page.titolo || `pagina ${i + 1}`}»…`}
-                  style={{ flex: 1, minWidth: 240 }} />
-                <button className="btn btn-outline btn-sm" type="submit">Aggiungi nota a questa pagina</button>
-              </form>
+                  <form action={aggiungiNotaBozza.bind(null, campaign!.id, scopeParam)}
+                    style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                    <input type="hidden" name="pageId" value={page.id} />
+                    <input type="text" name="testo" required placeholder={`Nota su «${page.titolo || `pagina ${i + 1}`}»…`}
+                      style={{ flex: 1, minWidth: 0, fontSize: 12 }} />
+                    <button className="btn btn-outline btn-sm" type="submit">Aggiungi</button>
+                  </form>
 
-              {notePagina.length > 0 && (
-                <ul style={{ margin: "8px 0 0", paddingLeft: 18, fontSize: 13 }}>
-                  {notePagina.map((n) => (
-                    <li key={n.id} style={{ marginBottom: 4, opacity: n.risolta ? 0.5 : 1 }}>
-                      {n.risolta && "✓ "}{n.testo}{" "}
-                      <span style={{ color: "var(--muted)", fontSize: 11.5 }}>— {n.userName} ({n.scopeLabel}), {fmt(n.date)}</span>{" "}
-                      <form action={risolviNotaBozza.bind(null, n.id, scopeParam)} style={{ display: "inline" }}>
-                        <button className="btn btn-outline btn-sm" type="submit" style={{ padding: "0 6px", fontSize: 11 }}>
-                          {n.risolta ? "riapri" : "segna risolta"}
-                        </button>
-                      </form>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          );
-        })}
+                  {notePagina.length > 0 && (
+                    <ul style={{ margin: "6px 0 0", paddingLeft: 16, fontSize: 12 }}>
+                      {notePagina.map((n) => (
+                        <li key={n.id} style={{ marginBottom: 3, opacity: n.risolta ? 0.5 : 1 }}>
+                          {n.risolta && "✓ "}{n.testo}{" "}
+                          <span style={{ color: "var(--muted)", fontSize: 11 }}>— {n.userName} ({n.scopeLabel}), {fmt(n.date)}</span>{" "}
+                          <form action={risolviNotaBozza.bind(null, n.id, scopeParam)} style={{ display: "inline" }}>
+                            <button className="btn btn-outline btn-sm" type="submit" style={{ padding: "0 6px", fontSize: 11 }}>
+                              {n.risolta ? "riapri" : "segna risolta"}
+                            </button>
+                          </form>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ))}
       </div>
     </div>
   );

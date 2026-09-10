@@ -9,6 +9,7 @@ import {
   getStampeDb,
   saveStampeDb,
   canAccessArea,
+  gestisceArea,
   isConsortiumEditor,
   resolveScope,
   isStoreBlocked,
@@ -694,7 +695,7 @@ export async function saveLayout(
   const db = await getStampeDb();
   const academyDb = await getDb();
   const scope = resolveScope(user, scopeParam, academyDb);
-  if (scope.type === "system" && !isConsortiumEditor(user)) return { ok: false };
+  if (!gestisceArea(user, "arredo", scope, academyDb)) return { ok: false };
 
   let items: unknown;
   try {
@@ -744,7 +745,7 @@ export async function deleteLayout(layoutId: string, scopeParam: string) {
   const scope = resolveScope(user, scopeParam, academyDb);
   const l = db.layouts.find((x) => x.id === layoutId);
   if (l && l.scopeType === scope.type && l.scopeId === scope.id) {
-    if (l.scopeType === "system" && !isConsortiumEditor(user)) redirect("/stampe/arredo/layout");
+    if (!gestisceArea(user, "arredo", scope, academyDb)) redirect("/stampe/arredo/layout");
     db.layouts = db.layouts.filter((x) => x.id !== layoutId);
     await saveStampeDb(db);
   }

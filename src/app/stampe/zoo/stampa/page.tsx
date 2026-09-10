@@ -4,7 +4,8 @@ import { getDb } from "@/lib/db";
 import StampeHeader from "@/components/stampe/StampeHeader";
 import Cartello from "@/components/stampe/Cartello";
 import StampaPicker from "@/components/stampe/StampaPicker";
-import { canAccessArea, scopesForUser, resolveScope } from "@/lib/stampe";
+import ImportExcel from "@/components/stampe/ImportExcel";
+import { canAccessArea, gestisceArea, scopesForUser, resolveScope } from "@/lib/stampe";
 import InlineEdit from "@/components/stampe/InlineEdit";
 import InlineSelect from "@/components/stampe/InlineSelect";
 import {
@@ -14,8 +15,8 @@ import {
   ZOO_FIELDS, ZOO_FORMATS, marcaEffettiva, marcheList, tagsOfferta, pvPromoFor, ownScopeVisible, noPrintSets,
 } from "@/lib/zoo";
 import {
-  importPvPrices, markZooPrinted, resetZooPrinted, toggleZooHidden, toggleZooNoPrint,
-  importZooNoPrint, svuotaZooNoPrint,
+  importPvPricesRighe, markZooPrinted, resetZooPrinted, toggleZooHidden, toggleZooNoPrint,
+  importZooNoPrintRighe, svuotaZooNoPrint,
   creaOffertaPropria, eliminaOffertaPropria,
   updateParentFieldInline, setParentTagScoped, setOfferTextScoped, setPvPriceInline, updateOfferFieldInline,
 } from "@/lib/zoo-actions";
@@ -36,6 +37,8 @@ export default async function ZooStampaPage({
   const scopes = scopesForUser(user, academyDb);
   const scope = resolveScope(user, sp.scope, academyDb);
   const scopeParam = `${scope.type}:${scope.id}`;
+  // gestione dell'area in questo ambito (offerte proprie): il capo reparto stampa, carica prezzi ed esclusioni, ma non crea offerte
+  const gestione = gestisceArea(user, "zoo", scope, academyDb);
 
   /*
    * Si stampano i cartelli di due periodi promozionali: quello IN CORSO a scaffale
@@ -239,10 +242,11 @@ export default async function ZooStampaPage({
               FORNITORE) e PREZZO: sostituirà il prezzo promo sui cartelli di questo ambito, articolo per articolo.{" "}
               <a href={`/stampe/zoo/excel?prezzi=1&scope=${scopeParam}`}>Scarica il modello precompilato</a>
             </p>
-            <form action={importPvPrices.bind(null, scopeParam)} style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <input type="file" name="file" accept=".xlsx,.xls,.csv" required />
-              <button className="btn btn-sm" type="submit">Importa prezzi</button>
-            </form>
+            <ImportExcel
+              action={importPvPricesRighe.bind(null, scopeParam)}
+              colonne={["ean", "codice ean", "barcode", "codice fornitore", "cod. fornitore", "codice", "prezzo", "prezzo vendita", "prezzo pv"]}
+              etichetta="Importa prezzi"
+            />
           </div>
         )}
 
@@ -279,10 +283,15 @@ export default async function ZooStampaPage({
               stampa.{" "}
               <a href={`/stampe/zoo/excel?nonstampare=1&scope=${scopeParam}`}>Scarica il modello precompilato</a>
             </p>
-            <form action={importZooNoPrint.bind(null, scopeParam)} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-              <input type="file" name="file" accept=".xlsx,.xls,.csv" required />
-              <button className="btn btn-sm" type="submit">Importa i codici</button>
-            </form>
+            <ImportExcel
+              action={importZooNoPrintRighe.bind(null, scopeParam)}
+              colonne={[
+                "ean", "codice ean", "barcode", "codice a barre", "cod. barre",
+                "codice fornitore", "cod. fornitore", "codice articolo", "codice",
+                "non stampare", "non stamparlo", "escludi", "stampa", "stampare",
+              ]}
+              etichetta="Importa i codici"
+            />
             {noPrint.eans.size > 0 && (
               <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 10, flexWrap: "wrap" }}>
                 <span style={{ fontSize: 12.5, color: "var(--muted)" }}>
@@ -357,7 +366,7 @@ export default async function ZooStampaPage({
               </div>
             </details>
           </form>
-          {scope.type !== "system" && (
+          {scope.type !== "system" && gestione && (
             <details style={{ marginTop: 12, borderTop: "1px dashed var(--line)", paddingTop: 10 }} open={sp.offerta === "ok" || offerteProprie.length > 0}>
               <summary style={{ cursor: "pointer", fontWeight: 700, fontSize: 12.5 }}>
                 Le offerte di {scope.label}{offerteProprie.length > 0 ? ` — ${offerteProprie.length}` : ""}
@@ -369,6 +378,7 @@ export default async function ZooStampaPage({
               {sp.offerta === "ok" && <div className="alert alert-green">✓ Offerta aggiunta: la trovi nell&apos;elenco qui a sinistra.</div>}
               {sp.offerta === "eliminata" && <div className="alert alert-green">✓ Offerta eliminata.</div>}
               {sp.offerta === "dati" && <div className="alert alert-amber">Servono almeno il codice a barre e il prezzo.</div>}
+              {sp.offerta === "permessi" && <div className="alert alert-amber">Le offerte proprie le crea chi gestisce le Offerte Zoo per {scope.label}.</div>}
               {sp.offerta === "sconosciuto" && (
                 <div className="alert alert-amber">
                   Quel codice a barre non è fra i vostri articoli né in quelli del Consorzio: caricalo prima da Database prodotti.

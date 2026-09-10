@@ -2,7 +2,7 @@ import { STORAGE_BUCKET, supabase } from "./supabase";
 import { getDb } from "./db";
 import { getStampeDb } from "./stampe";
 import { getZooDb } from "./zoo";
-import { User } from "./types";
+import { User, gestisceConsorzio, livelloDi } from "./types";
 
 /** Cartelle di primo livello del bucket, con etichetta e chi le può ripulire. */
 export const CARTELLE: { id: string; label: string; nota: string }[] = [
@@ -25,14 +25,15 @@ export interface StoredFile {
 
 /** Cartelle che un utente può ripulire, in base al ruolo. */
 export function cartelleGestibili(user: User): string[] {
-  if (user.role === "system_admin" || user.role === "course_manager") return CARTELLE.map((c) => c.id);
-  if (user.role === "zoo_manager") return ["zoo-foto", "volantino"];
+  if (gestisceConsorzio(user, "academy") && gestisceConsorzio(user, "arredo")) return CARTELLE.map((c) => c.id);
+  if (gestisceConsorzio(user, "zoo")) return ["zoo-foto", "volantino"];
   if (user.role === "group_admin") return ["uploads"];
   return [];
 }
 
 export function puoVedereArchivio(user: User): boolean {
-  return ["system_admin", "course_manager", "zoo_manager", "group_admin"].includes(user.role);
+  return user.role === "system_admin" || user.role === "group_admin"
+    || (user.role === "manager" && livelloDi(user) === "consorzio");
 }
 
 /** Elenca ricorsivamente i file sotto un prefisso (le cartelle hanno id nullo). */

@@ -4,7 +4,7 @@ import { getDb } from "@/lib/db";
 import Header from "@/components/Header";
 import { createCourse } from "@/lib/actions";
 import { courseStats } from "@/lib/logic";
-import { LEVEL_LABELS, isAcademyAdmin } from "@/lib/types";
+import { LEVEL_LABELS, isAcademyAdmin, gestisceConsorzio } from "@/lib/types";
 
 export default async function AdminCoursesPage({
   searchParams,
@@ -17,7 +17,7 @@ export default async function AdminCoursesPage({
 
   const db = await getDb();
   const stats = courseStats(db, user);
-  const canSystem = user.role === "system_admin" || user.role === "course_manager";
+  const canSystem = gestisceConsorzio(user, "academy");
 
   return (
     <div>

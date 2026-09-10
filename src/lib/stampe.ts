@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { DB, User, userSites } from "./types";
+import { DB, SiteId, User, gestisce, gestisceConsorzio, livelloDi, userSites } from "./types";
 import { readDomain, writeDomain } from "./supabase";
 
 /* ================== Tipi del sito Stampe ================== */
@@ -223,19 +223,37 @@ export function canAccessArea(user: User, area: "arredo" | "zoo" | "piante"): bo
   return userSites(user).includes(area);
 }
 
+/**
+ * Gestisce l'area in QUESTO ambito? Chi la gestisce a livello di Consorzio la
+ * gestisce ovunque; chi la gestisce per un'insegna la gestisce anche nei suoi
+ * punti vendita; chi la gestisce per un punto vendita solo lì.
+ */
+export function gestisceArea(user: User, area: SiteId, scope: { type: ScopeType; id: string }, academyDb: DB): boolean {
+  if (user.role === "system_admin") return true;
+  if (!gestisce(user, area)) return false;
+  const livello = livelloDi(user);
+  if (livello === "consorzio") return true;
+  if (scope.type === "system") return false;
+  if (livello === "insegna") {
+    if (scope.type === "tenant") return scope.id === user.tenantId;
+    return academyDb.stores.find((s) => s.id === scope.id)?.tenantId === user.tenantId;
+  }
+  return scope.type === "store" && scope.id === user.storeId;
+}
+
 /** Il responsabile contenuti del Consorzio (area Arredo) modifica la versione comune. */
 export function isConsortiumEditor(user: User): boolean {
-  return user.role === "system_admin" || user.role === "course_manager";
+  return gestisceConsorzio(user, "arredo");
 }
 
 /** Chi cura i contenuti Zoo a livello di Consorzio. */
 export function isZooEditor(user: User): boolean {
-  return isConsortiumEditor(user) || user.role === "zoo_manager";
+  return gestisceConsorzio(user, "zoo");
 }
 
 /** Chi curerà i contenuti Piante a livello di Consorzio (area in preparazione). */
 export function isPianteEditor(user: User): boolean {
-  return isConsortiumEditor(user) || user.role === "piante_manager";
+  return gestisceConsorzio(user, "piante");
 }
 
 export interface Scope {
@@ -250,14 +268,14 @@ export interface Scope {
  * chiamante — evitiamo di ricaricarlo qui per non moltiplicare le chiamate a Supabase.
  */
 export function scopesForUser(user: User, academyDb: DB): Scope[] {
-  // i gestori di contenuti (corsi/zoo/piante) lavorano sulla versione Consorzio
-  if (isConsortiumEditor(user) || user.role === "zoo_manager" || user.role === "piante_manager") {
+  // chi sta al Consorzio (amministratore o gestore) lavora sulla versione comune e vede le insegne
+  if (user.role === "system_admin" || (livelloDi(user) === "consorzio" && user.role === "manager")) {
     return [
       { type: "system" as const, id: "", label: "Consorzio (comune a tutti)" },
       ...academyDb.tenants.map((t) => ({ type: "tenant" as const, id: t.id, label: t.name })),
     ];
   }
-  if (user.role === "group_admin" && user.tenantId) {
+  if (livelloDi(user) === "insegna" && user.tenantId) {
     const tenant = academyDb.tenants.find((t) => t.id === user.tenantId)!;
     const stores = academyDb.stores.filter((s) => s.tenantId === user.tenantId);
     return [

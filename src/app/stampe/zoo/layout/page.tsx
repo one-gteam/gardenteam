@@ -4,7 +4,8 @@ import { getDb } from "@/lib/db";
 import StampeHeader from "@/components/stampe/StampeHeader";
 import LayoutEditor from "@/components/stampe/LayoutEditor";
 import AutoSubmitSelect from "@/components/stampe/AutoSubmitSelect";
-import { canAccessArea, isZooEditor, scopesForUser, resolveScope, layoutMargins } from "@/lib/stampe";
+import { canAccessArea, gestisceArea, scopesForUser, resolveScope, layoutMargins } from "@/lib/stampe";
+import { gestisce } from "@/lib/types";
 import {
   getZooDb, activeCampaign, zooCartelloValues, ZOO_FIELDS, ZOO_FORMATS, ZOO_TIPI_OFFERTA, pvPromoCodesFor,
   pvPromoFor, tagsOfferta,
@@ -29,7 +30,9 @@ export default async function ZooLayoutPage({
   const scopes = scopesForUser(user, academyDb);
   const scope = resolveScope(user, sp.scope, academyDb);
   const scopeParam = `${scope.type}:${scope.id}`;
-  const canEdit = scope.type !== "system" || isZooEditor(user);
+  // il layout è di chi gestisce l'area: il capo reparto non entra proprio (il menu non glielo mostra)
+  if (!gestisce(user, "zoo")) redirect("/stampe/zoo/stampa");
+  const canEdit = gestisceArea(user, "zoo", scope, academyDb);
 
   const format = ZOO_FORMATS.find((f) => f.id === sp.formato) ?? ZOO_FORMATS[0];
   /*
@@ -135,6 +138,7 @@ export default async function ZooLayoutPage({
           </form>
         </div>
 
+        {sp.permessi === "no" && <div className="alert alert-amber">Questo layout lo modifica chi gestisce le Offerte Zoo per l&apos;ambito scelto.</div>}
         {sp.copiato && <div className="alert alert-green no-print">✓ Layout copiato sul nuovo formato: controlla le dimensioni dei testi e salva.</div>}
 
         {!isOwnCopy && scope.type !== "system" && (
