@@ -457,6 +457,10 @@ table.data td { overflow-wrap: anywhere; }
   position: absolute; right: 0; bottom: 0; width: 14px; height: 14px;
   background: var(--green-600); border-radius: 3px 0 0 0; cursor: nwse-resize;
 }
+/* Stampa cartelli: elenco, selezionati, anteprima. minmax(0) evita che la colonna centrale allarghi la pagina */
+.stampa-griglia { display: grid; grid-template-columns: 300px minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
+@media (max-width: 1100px) { .stampa-griglia { grid-template-columns: 1fr; } }
+
 .layout-editor { display: grid; grid-template-columns: 200px 1fr 250px; gap: 16px; align-items: start; }
 @media (max-width: 1000px) { .layout-editor { grid-template-columns: 1fr; } }
 

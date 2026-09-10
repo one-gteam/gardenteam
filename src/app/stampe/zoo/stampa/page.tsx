@@ -3,22 +3,18 @@ import { getCurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import StampeHeader from "@/components/stampe/StampeHeader";
 import Cartello from "@/components/stampe/Cartello";
-import StampaPicker from "@/components/stampe/StampaPicker";
+import StampaWorkspace from "@/components/stampe/StampaWorkspace";
 import ImportExcel from "@/components/stampe/ImportExcel";
 import { canAccessArea, gestisceArea, scopesForUser, resolveScope } from "@/lib/stampe";
-import InlineEdit from "@/components/stampe/InlineEdit";
-import InlineSelect from "@/components/stampe/InlineSelect";
 import {
-  getZooDb, effectiveZooLayout, zooCartelloValues, pvPriceFor, isZooHidden,
+  getZooDb, effectiveZooLayout, pvPriceFor, isZooHidden,
   campagneStampabili, campagnaInCorso, campagnaInLavorazione, campaignStato,
-  effectiveParentText, effectiveParentTag, effectiveOfferText, printedAt, NO_VOLANTINO,
-  ZOO_FIELDS, ZOO_FORMATS, marcaEffettiva, marcheList, tagsOfferta, pvPromoFor, ownScopeVisible, noPrintSets,
+  effectiveParentText, printedAt, NO_VOLANTINO,
+  ZOO_FIELDS, ZOO_FORMATS, marcaEffettiva, noPrintSets, offertePerStampa, tagsPerLayout, valoriPerStampa,
 } from "@/lib/zoo";
 import {
-  importPvPricesRighe, markZooPrinted, resetZooPrinted, toggleZooHidden, toggleZooNoPrint,
-  importZooNoPrintRighe, svuotaZooNoPrint,
+  importPvPricesRighe, markZooPrinted, resetZooPrinted, toggleZooHidden, importZooNoPrintRighe, svuotaZooNoPrint,
   creaOffertaPropria, eliminaOffertaPropria,
-  updateParentFieldInline, setParentTagScoped, setOfferTextScoped, setPvPriceInline, updateOfferFieldInline,
 } from "@/lib/zoo-actions";
 
 /** Stampa cartelli Offerte Zoo: stesso impianto dell'Arredo (selezione, formati per riga, stampa 1:1). */
@@ -53,11 +49,8 @@ export default async function ZooStampaPage({
    * questa insegna/PV, che vivono fuori dal volantino comune ma vanno a scaffale
    * insieme alle altre.
    */
-  const offerteProprie = db.offers.filter((o) => o.scopeType && ownScopeVisible(scope, academyDb, o));
-  const allOffers = [
-    ...(campaign ? db.offers.filter((o) => o.campaignId === campaign.id && !o.scopeType) : []),
-    ...offerteProprie,
-  ];
+  const allOffers = offertePerStampa(db, scope, academyDb, campaign);
+  const offerteProprie = allOffers.filter((o) => o.scopeType);
   const etichettaPeriodo = (c: (typeof stampabili)[number]) => {
     const p = campaignStato(c) === "lavorazione" ? "in preparazione" : "in corso";
     const d = (x: string) => (x ? new Date(`${x}T00:00:00`).toLocaleDateString("it-IT") : "—");
@@ -113,24 +106,55 @@ export default async function ZooStampaPage({
   });
   const nStampati = allOffers.filter((o) => printedAt(db, scope, o.id)).length;
 
+  /*
+   * L'elenco a sinistra è per PRODOTTO PADRE: un cartello vale per tutti i gusti
+   * e formati (elenca i loro codici a barre), quindi si sceglie una volta sola.
+   * Chi vuole può passare alle offerte singole (vista=singole).
+   */
+  const vistaSingole = sp.vista === "singole";
+  const marcaDi = (o: (typeof allOffers)[number]) => {
+    const product = db.products.find((p) => p.id === o.productId);
+    return product ? marcaEffettiva(product) : "";
+  };
+  const voceSingola = (o: (typeof allOffers)[number]) => ({
+    id: o.id,
+    titolo: o.descrizione,
+    codice: o.ean,
+    prezzo: pvPriceFor(db, scope, o.ean, academyDb) ?? o.prezzoPromo,
+    listino: o.prezzoListino,
+    tipologia: marcaDi(o),
+  });
+  const voci = vistaSingole
+    ? visible.map(voceSingola)
+    : (() => {
+        const gruppi = new Map<string, typeof visible>();
+        for (const o of visible) {
+          const product = db.products.find((p) => p.id === o.productId);
+          const key = product?.parentId ? `p:${product.parentId}` : `o:${o.id}`;
+          gruppi.set(key, [...(gruppi.get(key) ?? []), o]);
+        }
+        return [...gruppi.entries()].map(([key, gruppo]) => {
+          const primo = gruppo[0];
+          if (!key.startsWith("p:") || gruppo.length === 0) return voceSingola(primo);
+          const parent = db.parents.find((x) => x.id === key.slice(2));
+          const prezzi = [...new Set(gruppo.map((g) => pvPriceFor(db, scope, g.ean, academyDb) ?? g.prezzoPromo).filter(Boolean))];
+          return {
+            id: primo.id,
+            titolo: parent ? effectiveParentText(db, scope, parent, "nome", academyDb).value || primo.descrizione : primo.descrizione,
+            codice: gruppo.length > 1 ? `${gruppo.length} articoli` : primo.ean,
+            prezzo: prezzi.length > 1 ? `da ${[...prezzi].sort()[0]}` : (prezzi[0] ?? ""),
+            listino: primo.prezzoListino,
+            tipologia: marcaDi(primo),
+          };
+        });
+      })();
+
   const selectedIds = (sp.sel ?? "").split(",").filter(Boolean);
   const selected = selectedIds.map((id) => allOffers.find((o) => o.id === id)).filter(Boolean) as typeof allOffers;
   const globalFormatId = sp.formato ?? ZOO_FORMATS[0].id;
   const formatFor = (oid: string) => ZOO_FORMATS.find((f) => f.id === (sp[`formato_${oid}`] ?? globalFormatId)) ?? ZOO_FORMATS[0];
 
-  const valuesFor = (o: (typeof allOffers)[number]) => {
-    const vals = zooCartelloValues(db, o, scope, academyDb);
-    const pv = pvPriceFor(db, scope, o.ean, academyDb);
-    if (pv) vals.prezzoPromo = `€ ${pv}`;
-    const customPrice = sp[`prezzo_${o.id}`];
-    if (customPrice !== undefined && customPrice !== "") vals.prezzoPromo = `€ ${customPrice}`;
-    if (sp[`noprezzo_${o.id}`] === "1") {
-      delete vals.prezzoPromo;
-      delete vals.prezzoListino;
-    }
-    for (const fid of (sp[`nascondi_${o.id}`] ?? "").split(",").filter(Boolean)) delete vals[fid];
-    return vals;
-  };
+  const valuesFor = (o: (typeof allOffers)[number]) => valoriPerStampa(db, scope, academyDb, o, sp);
 
   const qsBack = () => {
     const params = new URLSearchParams();
@@ -140,18 +164,7 @@ export default async function ZooStampaPage({
 
   const scalePrint = 3.7795; // 1 mm = 3.7795 px a 96 dpi → stampa a dimensione reale
   const doppio = sp.doppio === "1";
-  // tag del padre (animale + caratteristica insieme): decidono quale layout collegato usare in stampa
-  const tagsFor = (o: (typeof allOffers)[number]) => {
-    const product = db.products.find((p) => p.id === o.productId);
-    const parent = product?.parentId ? db.parents.find((x) => x.id === product.parentId) : undefined;
-    /*
-     * Il layout si sceglie sul tipo di prodotto, sul tipo di offerta e — se
-     * l'insegna/PV ha caricato le sue promozioni — sul nome della sua promo
-     * ("20%", "A SOLI"), che può essere diversa da quella del Consorzio.
-     */
-    const promoPv = pvPromoFor(db, scope, o.ean, academyDb);
-    return [...(parent?.caratteristiche ?? []), ...tagsOfferta(o), ...(promoPv ? [promoPv.etichetta] : [])];
-  };
+  const tagsFor = (o: (typeof allOffers)[number]) => tagsPerLayout(db, scope, academyDb, o);
 
   if (sp.print === "1" && selected.length > 0) {
     const toPrint = selected.flatMap((o) => (doppio && formatFor(o.id).id === "za5" ? [o, o] : [o]));
@@ -312,7 +325,7 @@ export default async function ZooStampaPage({
         )}
 
         <div className="card" style={{ marginBottom: 16, padding: 14 }}>
-          <form method="get" style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr)) auto", gap: 10, alignItems: "end" }}>
+          <form method="get" style={{ display: "grid", gridTemplateColumns: "repeat(6, minmax(0, 1fr)) auto", gap: 10, alignItems: "end" }}>
             <input type="hidden" name="scope" value={scopeParam} />
             <input type="hidden" name="sel" value={sp.sel ?? ""} />
             {campaign && <input type="hidden" name="campagna" value={campaign.id} />}
@@ -338,6 +351,13 @@ export default async function ZooStampaPage({
                 <option value="">Tutti</option>
                 <option value="no">Solo da stampare</option>
                 <option value="si">Solo già stampati</option>
+              </select>
+            </label>
+            <label className="field" style={{ marginBottom: 0 }}>
+              Elenco
+              <select name="vista" defaultValue={sp.vista ?? ""}>
+                <option value="">Per prodotto padre</option>
+                <option value="singole">Offerte singole</option>
               </select>
             </label>
             <label className="field" style={{ marginBottom: 0 }}>
@@ -459,210 +479,39 @@ export default async function ZooStampaPage({
           )}
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "300px 1fr 300px", gap: 16, alignItems: "start" }}>
-          <StampaPicker
-            totale={visible.length}
-            mostraTuttiHref={`/stampe/zoo/stampa?${new URLSearchParams({ ...Object.fromEntries(Object.entries(sp).filter(([, v]) => v) as [string, string][]), tutti: "1" })}`}
-            products={(sp.tutti === "1" ? visible : visible.slice(0, 150)).map((o) => {
-              const product = db.products.find((p) => p.id === o.productId);
-              return {
-                id: o.id,
-                titolo: o.descrizione,
-                codice: o.ean,
-                prezzo: pvPriceFor(db, scope, o.ean, academyDb) ?? o.prezzoPromo,
-                tipologia: product ? marcaEffettiva(product) : "",
-              };
-            })}
-            formats={ZOO_FORMATS.map((f) => ({ id: f.id, name: f.name }))}
-            scopeParam={scopeParam}
-            filters={{
-              q: sp.q ?? "", scheda: sp.scheda ?? "", marca: marcheScelte.join(","),
+        <StampaWorkspace
+          dettagliUrl="/stampe/zoo/stampa/dettagli"
+          fields={ZOO_FIELDS}
+          scopeParam={scopeParam}
+          picker={{
+            totale: voci.length,
+            mostraTuttiHref: `/stampe/zoo/stampa?${new URLSearchParams({ ...Object.fromEntries(Object.entries(sp).filter(([, v]) => v) as [string, string][]), tutti: "1" })}`,
+            products: sp.tutti === "1" ? voci : voci.slice(0, 150),
+            formats: ZOO_FORMATS.map((f) => ({ id: f.id, name: f.name })),
+            scopeParam,
+            filters: {
+              q: sp.q ?? "", scheda: sp.scheda ?? "", marca: marcheScelte.join(","), vista: sp.vista ?? "",
               volantino: sp.volantino ?? "", stampati: sp.stampati ?? "", campagna: campaign?.id ?? "",
-            }}
-            printed={Object.fromEntries(
+            },
+            printed: Object.fromEntries(
               visible.map((o) => [o.id, printedAt(db, scope, o.id) ?? ""]).filter(([, v]) => v)
-            )}
-            onPrint={markZooPrinted.bind(null, scopeParam)}
-            initialSelected={selectedIds}
-            initialFormats={Object.fromEntries(
+            ),
+            onPrint: markZooPrinted.bind(null, scopeParam),
+            initialSelected: selectedIds,
+            initialFormats: Object.fromEntries(
               selectedIds.map((id) => [id, sp[`formato_${id}`] ?? globalFormatId]).filter(([, v]) => v)
-            )}
-            initialPrices={Object.fromEntries(selectedIds.map((id) => [id, sp[`prezzo_${id}`] ?? ""]).filter(([, v]) => v))}
-            initialNoPrice={Object.fromEntries(selectedIds.map((id) => [id, sp[`noprezzo_${id}`] === "1"]))}
-            initialHidden={Object.fromEntries(
+            ),
+            initialPrices: Object.fromEntries(selectedIds.map((id) => [id, sp[`prezzo_${id}`] ?? ""]).filter(([, v]) => v)),
+            initialListini: Object.fromEntries(selectedIds.map((id) => [id, sp[`listino_${id}`] ?? ""]).filter(([, v]) => v)),
+            initialNoPrice: Object.fromEntries(selectedIds.map((id) => [id, sp[`noprezzo_${id}`] === "1"])),
+            initialHidden: Object.fromEntries(
               selectedIds.map((id) => [id, (sp[`nascondi_${id}`] ?? "").split(",").filter(Boolean)])
-            )}
-            fields={ZOO_FIELDS.map((f) => ({ id: f.id, label: f.label }))}
-            globalFormat={globalFormatId}
-            baseUrl="/stampe/zoo/stampa"
-          />
-
-          {/* anteprima */}
-          <div>
-            {selected.slice(0, 2).map((o) => (
-              <div key={o.id} style={{ marginBottom: 12 }}>
-                <Cartello
-                  format={formatFor(o.id)}
-                  layout={effectiveZooLayout(db, scope, formatFor(o.id).id, academyDb, tagsFor(o))}
-                  fields={ZOO_FIELDS}
-                  values={valuesFor(o)}
-                  scale={formatFor(o.id).w > 150 ? 1.6 : 2.4}
-                />
-              </div>
-            ))}
-            {selected.length === 0 && (
-              <div className="card"><p className="empty">L&apos;anteprima appare dopo &quot;Aggiorna anteprima&quot;.</p></div>
-            )}
-          </div>
-        </div>
-
-        {/* personalizzazione dei testi del cartello per questo ambito */}
-        {selected.length > 0 && (
-          <div className="card" style={{ marginTop: 16, padding: 14 }}>
-            <h2 style={{ marginTop: 0 }}>
-              {scope.type === "system" ? "Testi del cartello (versione Consorzio)" : `Personalizza per ${scope.label}`}
-            </h2>
-            <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 10px" }}>
-              {scope.type === "system"
-                ? "Stai modificando i testi comuni a tutte le insegne."
-                : `Le modifiche qui sotto valgono solo per i cartelli di ${scope.label}: la versione del Consorzio resta intatta. Un campo lasciato uguale a quello del Consorzio non crea una personalizzazione.`}
-            </p>
-            <div className="table-wrap">
-              <table className="data">
-                <thead>
-                  <tr>
-                    <th>Titolo (padre)</th>
-                    <th className="col-wide">Descrizione offerta</th>
-                    <th className="col-wide">Descrizione (cartello)</th>
-                    <th>Animale</th>
-                    <th>Caratteristica</th>
-                    <th>Prezzo</th>
-                    <th>Listino</th>
-                    <th>Meccanica</th>
-                    <th>Condizioni</th>
-                    {scope.type !== "system" && <th className="no-print">Stampa</th>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {selected.map((o) => {
-                    const product = db.products.find((p) => p.id === o.productId);
-                    const parent = product?.parentId ? db.parents.find((x) => x.id === product.parentId) : undefined;
-                    const nome = parent ? effectiveParentText(db, scope, parent, "nome", academyDb) : undefined;
-                    const desc = parent ? effectiveParentText(db, scope, parent, "descCartello", academyDb) : undefined;
-                    const animale = parent ? effectiveParentTag(db, scope, parent, "animale", academyDb) : undefined;
-                    const caratt = parent ? effectiveParentTag(db, scope, parent, "prodotto", academyDb) : undefined;
-                    const cond = effectiveOfferText(db, scope, o, "condizioni", academyDb);
-                    const descOfferta = effectiveOfferText(db, scope, o, "descrizione", academyDb);
-                    const pv = pvPriceFor(db, scope, o.ean, academyDb);
-                    return (
-                      <tr key={o.id}>
-                        <td>
-                          {parent ? (
-                            <>
-                              <InlineEdit value={nome!.value}
-                                onSave={updateParentFieldInline.bind(null, parent.id, "nome", scopeParam)} aggiornaPagina />
-                              {nome!.custom && <span className="pill pill-orange">personalizzato</span>}
-                            </>
-                          ) : (
-                            <span style={{ fontSize: 11.5, color: "var(--muted)" }}>{o.descrizione} (senza padre)</span>
-                          )}
-                        </td>
-                        <td className="col-wide">
-                          {/* è la riga che finisce in grande sul cartello: qui si corregge al volo un refuso */}
-                          <InlineEdit value={descOfferta.value} multiline placeholder="descrizione dell'offerta…"
-                            onSave={setOfferTextScoped.bind(null, o.id, "descrizione", scopeParam)} aggiornaPagina />
-                          {descOfferta.custom && <span className="pill pill-orange">personalizzata</span>}
-                        </td>
-                        <td className="col-wide">
-                          {parent ? (
-                            <>
-                              <InlineEdit value={desc!.value} multiline placeholder="descrizione per il cartello…"
-                                onSave={updateParentFieldInline.bind(null, parent.id, "descCartello", scopeParam)} aggiornaPagina />
-                              {desc!.custom && <span className="pill pill-orange">personalizzata</span>}
-                            </>
-                          ) : <span className="pill pill-gray">—</span>}
-                        </td>
-                        <td>
-                          {parent ? (
-                            <>
-                              <InlineSelect value={animale!.value} options={db.settings.categorieAnimali}
-                                onSave={setParentTagScoped.bind(null, parent.id, "animale", scopeParam)} />
-                              {animale!.custom && <span className="pill pill-orange">personalizzato</span>}
-                            </>
-                          ) : <span className="pill pill-gray">—</span>}
-                        </td>
-                        <td>
-                          {parent ? (
-                            <>
-                              <InlineSelect value={caratt!.value} options={db.settings.caratteristicheProdotto}
-                                onSave={setParentTagScoped.bind(null, parent.id, "prodotto", scopeParam)} />
-                              {caratt!.custom && <span className="pill pill-orange">personalizzata</span>}
-                            </>
-                          ) : <span className="pill pill-gray">—</span>}
-                        </td>
-                        <td>
-                          {scope.type === "system" ? (
-                            <strong>€ {o.prezzoPromo}</strong>
-                          ) : (
-                            <>
-                              <InlineEdit value={pv ?? ""} placeholder={o.prezzoPromo}
-                                onSave={setPvPriceInline.bind(null, o.ean, scopeParam)} aggiornaPagina />
-                              {pv
-                                ? <span className="pill pill-orange">vostro prezzo</span>
-                                : <span className="hint">Consorzio: € {o.prezzoPromo}</span>}
-                            </>
-                          )}
-                        </td>
-                        <td>
-                          {/*
-                            Listino e meccanica sono dati dell'offerta, comuni a tutti: li corregge
-                            il Consorzio. Gli altri ambiti li vedono, così sanno cosa verrà stampato.
-                          */}
-                          {scope.type === "system" ? (
-                            <InlineEdit value={o.prezzoListino ?? ""} placeholder="es. 12,99"
-                              onSave={updateOfferFieldInline.bind(null, o.id, "prezzoListino")} aggiornaPagina />
-                          ) : (
-                            <span style={{ fontSize: 12 }}>{o.prezzoListino ? `€ ${o.prezzoListino}` : "A SOLI"}</span>
-                          )}
-                        </td>
-                        <td>
-                          {scope.type === "system" ? (
-                            <InlineEdit value={o.meccanica ?? ""} placeholder="es. 3x2"
-                              onSave={updateOfferFieldInline.bind(null, o.id, "meccanica")} aggiornaPagina />
-                          ) : (
-                            <span style={{ fontSize: 12 }}>{o.meccanica || "—"}</span>
-                          )}
-                        </td>
-                        <td>
-                          {db.settings.condizioniStandard.length > 0 && (
-                            <InlineSelect value={db.settings.condizioniStandard.includes(cond.value) ? cond.value : ""}
-                              options={db.settings.condizioniStandard} vuoto="— scegli una condizione pronta —"
-                              onSave={setOfferTextScoped.bind(null, o.id, "condizioni", scopeParam)} />
-                          )}
-                          <InlineEdit value={cond.value} placeholder="oppure scrivi le tue condizioni…"
-                            onSave={setOfferTextScoped.bind(null, o.id, "condizioni", scopeParam)} aggiornaPagina />
-                          {cond.custom && <span className="pill pill-orange">personalizzate</span>}
-                        </td>
-                        {scope.type !== "system" && (
-                          <td className="no-print" style={{ whiteSpace: "nowrap" }}>
-                            <form action={toggleZooNoPrint.bind(null, o.id, scopeParam, "/stampe/zoo/stampa")}>
-                              <button className="btn btn-outline btn-sm" type="submit"
-                                title={escluso(o)
-                                  ? "Rimettilo fra i cartelli da stampare"
-                                  : "Escludi questo cartello: l'offerta resta valida per gli altri punti vendita"}>
-                                {escluso(o) ? "Escluso ✕" : "Non stampare"}
-                              </button>
-                            </form>
-                          </td>
-                        )}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
+            ),
+            fields: ZOO_FIELDS.map((f) => ({ id: f.id, label: f.label })),
+            globalFormat: globalFormatId,
+            baseUrl: "/stampe/zoo/stampa",
+          }}
+        />
       </div>
     </div>
   );

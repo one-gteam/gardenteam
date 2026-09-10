@@ -660,6 +660,61 @@ export function campagneStampabili(db: ZooDB): ZooCampaign[] {
   return [campagnaInCorso(db), campagnaInLavorazione(db)].filter(Boolean) as ZooCampaign[];
 }
 
+/* ================== Stampa cartelli: offerte, tag e valori ================== */
+
+/** Il periodo promozionale scelto per la stampa, o quello in corso, o quello in preparazione. */
+export function campagnaPerStampa(db: ZooDB, id?: string): ZooCampaign | undefined {
+  return campagneStampabili(db).find((c) => c.id === id) ?? campagnaInCorso(db) ?? campagnaInLavorazione(db);
+}
+
+/**
+ * Le offerte che un ambito può stampare: quelle del volantino del Consorzio più
+ * le proprie, che vivono fuori dal volantino comune ma vanno a scaffale insieme.
+ */
+export function offertePerStampa(db: ZooDB, scope: Scope, academyDb: DB, campaign?: ZooCampaign): ZooOffer[] {
+  const proprie = db.offers.filter((o) => o.scopeType && ownScopeVisible(scope, academyDb, o));
+  return [
+    ...(campaign ? db.offers.filter((o) => o.campaignId === campaign.id && !o.scopeType) : []),
+    ...proprie,
+  ];
+}
+
+/**
+ * Tag con cui la stampa sceglie il layout: tipo di prodotto (dal padre), tipo di
+ * offerta e, se l'insegna/PV ha caricato le sue promozioni, il nome della sua
+ * promo ("20%", "A SOLI"), che può essere diversa da quella del Consorzio.
+ */
+export function tagsPerLayout(db: ZooDB, scope: Scope, academyDb: DB, o: ZooOffer): string[] {
+  const product = db.products.find((p) => p.id === o.productId);
+  const parent = product?.parentId ? db.parents.find((x) => x.id === product.parentId) : undefined;
+  const promoPv = pvPromoFor(db, scope, o.ean, academyDb);
+  return [...(parent?.caratteristiche ?? []), ...tagsOfferta(o), ...(promoPv ? [promoPv.etichetta] : [])];
+}
+
+/**
+ * Valori del cartello con le scelte fatte al momento della stampa: prezzo
+ * scritto a mano, prezzo di partenza scritto a mano, "senza prezzo", campi
+ * nascosti. Arrivano come parametri (prezzo_<id>, listino_<id>, noprezzo_<id>,
+ * nascondi_<id>) sia dall'anteprima di stampa sia dall'anteprima dal vivo.
+ */
+export function valoriPerStampa(
+  db: ZooDB, scope: Scope, academyDb: DB, o: ZooOffer, sp: Record<string, string | undefined>
+): Record<string, string> {
+  const vals = zooCartelloValues(db, o, scope, academyDb);
+  const pv = pvPriceFor(db, scope, o.ean, academyDb);
+  if (pv) vals.prezzoPromo = `€ ${pv}`;
+  const prezzo = sp[`prezzo_${o.id}`];
+  if (prezzo !== undefined && prezzo !== "") vals.prezzoPromo = `€ ${prezzo}`;
+  const listino = sp[`listino_${o.id}`];
+  if (listino !== undefined && listino !== "") vals.prezzoListino = `€ ${listino}`;
+  if (sp[`noprezzo_${o.id}`] === "1") {
+    delete vals.prezzoPromo;
+    delete vals.prezzoListino;
+  }
+  for (const fid of (sp[`nascondi_${o.id}`] ?? "").split(",").filter(Boolean)) delete vals[fid];
+  return vals;
+}
+
 export function campagneArchiviate(db: ZooDB): ZooCampaign[] {
   return db.campaigns.filter((c) => campaignStato(c) === "archiviata").reverse();
 }

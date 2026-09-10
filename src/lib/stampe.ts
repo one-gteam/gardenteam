@@ -410,11 +410,7 @@ export function cartelloValues(db: StampeDB, scope: Scope, product: PrintProduct
   return values;
 }
 
-export const IMAGE_FIELDS = new Set(["foto", "logoAzienda", "logoInsegna"]);
-
-export function isImageField(field: PrintField | undefined, fieldId: string): boolean {
-  return IMAGE_FIELDS.has(fieldId) || field?.type === "image";
-}
+export { IMAGE_FIELDS, isImageField } from "./cartello-campi";
 
 /** Campi visibili in un ambito: campi di sistema + campi personalizzati dell'insegna/PV. */
 export function fieldsForScope(db: StampeDB, scope: Scope, academyDb: DB): PrintField[] {

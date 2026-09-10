@@ -162,7 +162,7 @@ export default async function StampaPage({
           </form>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "300px 1fr 300px", gap: 16, alignItems: "start" }}>
+        <div className="stampa-griglia">
           <StampaPicker
             totale={filtered.length}
             mostraTuttiHref={`/stampe/arredo/stampa?${new URLSearchParams({ ...Object.fromEntries(Object.entries(sp).filter(([, v]) => v) as [string, string][]), tutti: "1" })}`}
@@ -202,7 +202,7 @@ export default async function StampaPage({
                   layout={effectiveLayout(db, scope, formatFor(p.id).id, academyDb, p.tipologia)}
                   fields={db.fields}
                   values={valuesFor(p)}
-                  scale={formatFor(p.id).w > 150 ? 1.35 : 2}
+                  scale={Math.min(2.4, 280 / formatFor(p.id).w)}
                 />
               </div>
             ))}

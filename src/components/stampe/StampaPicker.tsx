@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 interface ProdLite {
@@ -9,6 +9,38 @@ interface ProdLite {
   codice: string;
   prezzo: string;
   tipologia: string;
+  /** Prezzo di partenza dell'offerta (senza €), se c'è. */
+  listino?: string;
+}
+
+export interface StampaPickerProps {
+  products: ProdLite[];
+  /** Quanti prodotti passano i filtri in tutto: l'elenco ne mostra al massimo 150. */
+  totale?: number;
+  /** Indirizzo della stessa pagina senza il limite dei 150, quando ce ne sono di più. */
+  mostraTuttiHref?: string;
+  formats: { id: string; name: string }[];
+  fields: { id: string; label: string }[];
+  scopeParam: string;
+  filters: Record<string, string>;
+  initialSelected: string[];
+  initialFormats: Record<string, string>;
+  initialPrices: Record<string, string>;
+  initialNoPrice: Record<string, boolean>;
+  initialHidden: Record<string, string[]>;
+  globalFormat: string;
+  baseUrl?: string; // pagina di stampa da richiamare (default: arredo)
+  printed?: Record<string, string>; // id → data ISO dell'ultima stampa in questo ambito
+  onPrint?: (ids: string[]) => Promise<{ ok: boolean }>; // segna come stampati al momento della stampa
+  /** Prezzi di partenza (barrati) scritti a mano per il singolo cartello. */
+  initialListini?: Record<string, string>;
+  /**
+   * Chiamato a ogni cambio di selezione o di impostazioni con i parametri
+   * dell'anteprima: chi lo riceve può ridisegnare i cartelli senza ricaricare.
+   */
+  onChange?: (query: string) => void;
+  /** "Aggiorna anteprima": se c'è, sostituisce la navigazione alla stessa pagina. */
+  onPreview?: () => void;
 }
 
 /** Selezione prodotti per la stampa: click per aggiungere, Shift+click per intervalli, formato per riga. */
@@ -29,30 +61,15 @@ export default function StampaPicker({
   baseUrl = "/stampe/arredo/stampa",
   printed,
   onPrint,
-}: {
-  products: ProdLite[];
-  /** Quanti prodotti passano i filtri in tutto: l'elenco ne mostra al massimo 150. */
-  totale?: number;
-  /** Indirizzo della stessa pagina senza il limite dei 150, quando ce ne sono di più. */
-  mostraTuttiHref?: string;
-  formats: { id: string; name: string }[];
-  fields: { id: string; label: string }[];
-  scopeParam: string;
-  filters: Record<string, string>;
-  initialSelected: string[];
-  initialFormats: Record<string, string>;
-  initialPrices: Record<string, string>;
-  initialNoPrice: Record<string, boolean>;
-  initialHidden: Record<string, string[]>;
-  globalFormat: string;
-  baseUrl?: string; // pagina di stampa da richiamare (default: arredo)
-  printed?: Record<string, string>; // id → data ISO dell'ultima stampa in questo ambito
-  onPrint?: (ids: string[]) => Promise<{ ok: boolean }>; // segna come stampati al momento della stampa
-}) {
+  initialListini,
+  onChange,
+  onPreview,
+}: StampaPickerProps) {
   const router = useRouter();
   const [selected, setSelected] = useState<string[]>(initialSelected);
   const [rowFormat, setRowFormat] = useState<Record<string, string>>(initialFormats);
   const [prices, setPrices] = useState<Record<string, string>>(initialPrices);
+  const [listini, setListini] = useState<Record<string, string>>(initialListini ?? {});
   const [noPrice, setNoPrice] = useState<Record<string, boolean>>(initialNoPrice);
   const [hiddenFields, setHiddenFields] = useState<Record<string, string[]>>(initialHidden);
   const [applyAll, setApplyAll] = useState(globalFormat);
@@ -79,6 +96,7 @@ export default function StampaPicker({
     for (const id of selected) {
       if (rowFormat[id] && rowFormat[id] !== applyAll) params.set(`formato_${id}`, rowFormat[id]);
       if (prices[id]) params.set(`prezzo_${id}`, prices[id]);
+      if (listini[id]) params.set(`listino_${id}`, listini[id]);
       if (noPrice[id]) params.set(`noprezzo_${id}`, "1");
       if (hiddenFields[id]?.length) params.set(`nascondi_${id}`, hiddenFields[id].join(","));
     }
@@ -88,6 +106,13 @@ export default function StampaPicker({
   };
 
   const anyA5 = selected.some((id) => ["a5", "za5"].includes(rowFormat[id] ?? applyAll));
+
+  // ogni cambiamento va all'anteprima dal vivo, se la pagina ne ha una
+  const queryAnteprima = selected.length > 0 ? buildUrl(false).split("?")[1] : "";
+  useEffect(() => {
+    onChange?.(queryAnteprima);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queryAnteprima]);
 
   const dataStampa = (id: string) =>
     printed?.[id] ? new Date(printed[id]).toLocaleDateString("it-IT") : undefined;
@@ -182,7 +207,7 @@ export default function StampaPicker({
           <>
             <div className="table-wrap">
               <table className="data">
-                <thead><tr><th>Prodotto</th><th>Formato</th><th>Prezzo cartello</th><th>Prezzo</th><th>Campi</th><th></th></tr></thead>
+                <thead><tr><th>Prodotto</th><th>Formato</th><th>Prezzo cartello</th><th>Prezzo di partenza</th><th>Prezzo</th><th>Campi</th><th></th></tr></thead>
                 <tbody>
                   {selectedProds.map((p) => (
                     <tr key={p.id}>
@@ -204,6 +229,16 @@ export default function StampaPicker({
                           type="text"
                           value={prices[p.id] ?? p.prezzo}
                           onChange={(e) => setPrices((prev) => ({ ...prev, [p.id]: e.target.value }))}
+                          style={{ width: 85, marginTop: 0 }}
+                        />
+                      </td>
+                      <td>
+                        {/* il barrato del solo cartello: vuoto = quello dell'offerta */}
+                        <input
+                          type="text"
+                          value={listini[p.id] ?? p.listino ?? ""}
+                          placeholder="A SOLI"
+                          onChange={(e) => setListini((prev) => ({ ...prev, [p.id]: e.target.value }))}
                           style={{ width: 85, marginTop: 0 }}
                         />
                       </td>
@@ -256,7 +291,7 @@ export default function StampaPicker({
                   A5: stampa ogni cartello 2 volte (foglio A4 pieno)
                 </label>
               )}
-              <button type="button" className="btn btn-outline" onClick={() => router.push(buildUrl(false))}>
+              <button type="button" className="btn btn-outline" onClick={() => (onPreview ? onPreview() : router.push(buildUrl(false)))}>
                 Aggiorna anteprima →
               </button>
               <button type="button" className="btn" onClick={vaiAllaStampa}>

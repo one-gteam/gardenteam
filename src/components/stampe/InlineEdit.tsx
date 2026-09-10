@@ -10,7 +10,7 @@ import { useRouter } from "next/navigation";
  * componente resta generico e riusabile per qualunque campo.
  */
 export default function InlineEdit({
-  value, onSave, multiline, placeholder, aggiornaPagina,
+  value, onSave, multiline, placeholder, aggiornaPagina, onSaved,
 }: {
   value: string;
   onSave: (value: string) => Promise<{ ok: boolean }>;
@@ -23,6 +23,8 @@ export default function InlineEdit({
    * ad ogni correzione si sentirebbe.
    */
   aggiornaPagina?: boolean;
+  /** Chiamato dopo un salvataggio riuscito (per chi ricarica i dati da sé, senza router.refresh). */
+  onSaved?: () => void;
 }) {
   const router = useRouter();
   const [v, setV] = useState(value);
@@ -35,6 +37,7 @@ export default function InlineEdit({
       const res = await onSave(v);
       setStato(res.ok ? "ok" : "errore");
       if (res.ok && aggiornaPagina) router.refresh();
+      if (res.ok) onSaved?.();
     } catch {
       setStato("errore");
     }

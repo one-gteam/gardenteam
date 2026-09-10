@@ -8,7 +8,7 @@ import { useState } from "react";
  * `InlineEdit`, `onSave` è una server action già "legata" ai suoi parametri.
  */
 export default function InlineSelect({
-  value, options, onSave, vuoto = "—", etichette,
+  value, options, onSave, vuoto = "—", etichette, onSaved,
 }: {
   value: string;
   options: string[];
@@ -16,6 +16,8 @@ export default function InlineSelect({
   vuoto?: string;
   /** Testo da mostrare per un valore, quando differisce dal valore stesso (es. id pagina → nome). */
   etichette?: Record<string, string>;
+  /** Chiamato dopo un salvataggio riuscito. */
+  onSaved?: () => void;
 }) {
   const [v, setV] = useState(value);
   const [stato, setStato] = useState<"" | "salvo" | "errore">("");
@@ -26,6 +28,7 @@ export default function InlineSelect({
     try {
       const res = await onSave(next);
       setStato(res.ok ? "" : "errore");
+      if (res.ok) onSaved?.();
     } catch {
       setStato("errore");
     }

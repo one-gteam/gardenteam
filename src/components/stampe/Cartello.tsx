@@ -1,4 +1,6 @@
-import { CardLayout, isImageField, PrintField, PrintFormat } from "@/lib/stampe";
+import type { CardLayout, PrintField, PrintFormat } from "@/lib/stampe";
+import { isImageField } from "@/lib/cartello-campi";
+import FitText from "./FitText";
 import { layoutFontCss } from "@/lib/layout-fonts";
 import {
   Prezzo, coloreCampo, isPrezzoField, justifyPrezzo, stileStickerCartello, stileTestoCartello, testoStampato,
@@ -108,9 +110,9 @@ export default function Cartello({
           );
         }
         return (
-          <div key={i} style={{ ...box, ...stileTestoCartello(item, meta, value, scale) }}>
+          <FitText key={i} style={{ ...box, ...stileTestoCartello(item, meta, value, scale) }}>
             {testoStampato(value)}
-          </div>
+          </FitText>
         );
       })}
     </div>
