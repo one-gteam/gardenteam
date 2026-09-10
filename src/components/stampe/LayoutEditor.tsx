@@ -5,7 +5,9 @@ import type { LayoutItem, LayoutMargins, PrintField, PrintFormat, StickerStyle }
 import { LAYOUT_FONTS, layoutFontCss } from "@/lib/layout-fonts";
 import { saveLayout } from "@/lib/stampe-actions";
 import { saveZooLayout } from "@/lib/zoo-actions";
-import { stickerShapeStyle } from "./stickerStyle";
+import {
+  Prezzo, coloreCampo, isPrezzoField, justifyPrezzo, stileStickerCartello, stileTestoCartello, testoStampato,
+} from "./cartelloStyle";
 
 /** Riquadro del pannello di destra richiudibile, per non dover scorrere fra tante sezioni aperte. */
 function Sezione({
@@ -123,7 +125,6 @@ export default function LayoutEditor({
     const meta = fields.find((f) => f.id === fieldId);
     return fieldId === "__img" || fieldId === "foto" || fieldId === "logoAzienda" || fieldId === "logoInsegna" || meta?.type === "image";
   };
-  const isPriceField = (fieldId: string) => fieldId === "prezzo" || fieldId === "prezzoPromo";
   // sul foglio "senza foto" l'anteprima non deve mostrare una foto che in stampa non ci sarebbe
   const previewValues = mode === "noPhoto"
     ? Object.fromEntries(Object.entries(sampleValues).map(([k, v]) => (isImageField(k) ? [k, ""] : [k, v])))
@@ -458,7 +459,7 @@ export default function LayoutEditor({
           className="cartello editor-canvas"
           style={{
             width: W, height: H,
-            backgroundImage: format.background ? `url(${format.background})` : undefined, backgroundSize: "cover",
+            backgroundImage: format.background ? `url("${format.background}")` : undefined, backgroundSize: "100% 100%",
             boxSizing: "border-box",
           }}
           onMouseMove={onMouseMove}
@@ -495,8 +496,8 @@ export default function LayoutEditor({
                   style={{ left: `${item.x}%`, top: `${item.y}%`, width: `${item.w}%`, height: `${item.h}%`, cursor: canEdit ? "move" : "default", overflow: "visible", transform: `rotate(${item.sticker.rotation}deg)` }}
                   onMouseDown={(e) => onMouseDown(e, i, "move")}
                 >
-                  <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", color: item.color ?? "#fff", fontWeight: 800, fontSize: ((item.sticker.size ?? 16) * scale) / 2.4, lineHeight: 1.05, ...stickerShapeStyle(item.sticker) }}>
-                    {previewValues[item.fieldId] || meta?.label || "Sticker"}
+                  <div style={stileStickerCartello(item, scale)}>
+                    {testoStampato(previewValues[item.fieldId] || meta?.label || "Sticker")}
                   </div>
                   {canEdit && <span className="resize-handle" onMouseDown={(e) => onMouseDown(e, i, "resize")} />}
                 </div>
@@ -532,18 +533,44 @@ export default function LayoutEditor({
                 </div>
               );
             }
-            const isPrice = isPriceField(item.fieldId);
-            const fontSize = ((item.size ?? meta?.size ?? 11) * scale) / 2.4;
+            /*
+             * Da qui in giù il campo si disegna con le stesse regole della stampa
+             * (Cartello): colori, carattere, interlinea, prezzo barrato e a capo
+             * sui due spazi. Quando erano scritte due volte, l'anteprima
+             * dell'editor mostrava un cartello diverso da quello stampato.
+             */
             const raw = previewValues[item.fieldId] ?? "";
-            // il valore arriva già con "€" quando previsto (es. offerte Zoo): non va riaggiunto,
-            // basta separare i centesimi per renderli più piccoli e allineati in alto. Non un <sup>
-            // con vertical-align: dentro un contenitore posizionato, e soprattutto in stampa, quel
-            // calcolo dipende dai metrici del font e può finire in basso invece che in alto — con
-            // un flex "allineati in alto" la posizione non dipende dal motore di rendering.
-            // stesso trattamento della stampa: valuta e centesimi piccoli e in alto,
-            // altrimenti l'anteprima dell'editor mostrerebbe un prezzo diverso da quello stampato
-            const valuta = /^[€$£]/.test(raw.trim()) ? raw.trim()[0] : "";
-            const [intPart, centPart] = (valuta ? raw.trim().slice(1).trim() : raw).split(",");
+            const testo = raw || meta?.label || "";
+            if (isPrezzoField(item.fieldId)) {
+              return (
+                <div
+                  key={i}
+                  className={`editor-item ${selected === i ? "selected" : ""}`}
+                  style={{
+                    left: `${item.x}%`, top: `${item.y}%`, width: `${item.w}%`, height: `${item.h}%`,
+                    cursor: canEdit ? "move" : "default",
+                    background: item.bg,
+                    borderRadius: item.radius ? item.radius * scale : undefined,
+                    // il prezzo esce dal riquadro invece di essere tagliato, come in stampa
+                    overflow: "visible",
+                    display: "flex", justifyContent: justifyPrezzo(item), alignItems: "flex-start",
+                    color: coloreCampo(item),
+                  }}
+                  onMouseDown={(e) => onMouseDown(e, i, "move")}
+                >
+                  {raw && (
+                    <Prezzo value={raw} size={item.size ?? meta?.size ?? 11} scale={scale}
+                      font={item.font !== undefined ? layoutFontCss(item.font) : undefined} />
+                  )}
+                  {canEdit && selected === i && (
+                    <span style={{ position: "absolute", left: 0, top: -18, fontSize: 10.5, color: "#274b7a", background: "#fff", padding: "0 4px", border: "1px solid var(--line)", borderRadius: 3, whiteSpace: "nowrap" }}>
+                      {inUnita(mmX(item.w))} × {inUnita(mmY(item.h))} {unita}
+                    </span>
+                  )}
+                  {canEdit && <span className="resize-handle" onMouseDown={(e) => onMouseDown(e, i, "resize")} />}
+                </div>
+              );
+            }
             return (
               <div
                 key={i}
@@ -553,31 +580,17 @@ export default function LayoutEditor({
                   top: `${item.y}%`,
                   width: `${item.w}%`,
                   height: `${item.h}%`,
-                  fontSize,
-                  fontWeight: (item.bold ?? meta?.bold) ? 800 : 400,
-                  fontStyle: item.italic ? "italic" : "normal",
-                  fontFamily: item.font !== undefined ? layoutFontCss(item.font) : undefined,
-                  color: isPrice ? "#c2410c" : "#1c2b21",
-                  textAlign: item.align ?? (isPrice ? "right" : "left"),
                   cursor: canEdit ? "move" : "default",
                   background: item.bg,
                   borderRadius: item.radius ? item.radius * scale : undefined,
-                  // il prezzo esce dal riquadro invece di essere tagliato, come in stampa
-                  overflow: isPrice ? "visible" : undefined,
+                  ...stileTestoCartello(item, meta, testo, scale),
+                  // campo senza valore d'esempio: si vede il nome del campo, sbiadito,
+                  // perché non venga scambiato per un testo che verrà stampato
+                  opacity: raw ? undefined : 0.45,
                 }}
                 onMouseDown={(e) => onMouseDown(e, i, "move")}
               >
-                {isPrice ? (
-                  raw ? (
-                    <span style={{ display: "inline-flex", alignItems: "flex-start" }}>
-                      {valuta && <span style={{ fontSize: "0.45em", marginRight: "0.08em" }}>{valuta}</span>}
-                      <span>{intPart}</span>
-                      {centPart !== undefined && <span style={{ fontSize: "0.5em", marginLeft: "0.05em" }}>,{centPart}</span>}
-                    </span>
-                  ) : ""
-                ) : (
-                  raw || meta?.label
-                )}
+                {testoStampato(testo)}
                 {canEdit && selected === i && (
                   <span style={{ position: "absolute", left: 0, top: -18, fontSize: 10.5, color: "#274b7a", background: "#fff", padding: "0 4px", border: "1px solid var(--line)", borderRadius: 3, whiteSpace: "nowrap" }}>
                     {inUnita(mmX(item.w))} × {inUnita(mmY(item.h))} {unita}
@@ -728,7 +741,7 @@ export default function LayoutEditor({
                   <button
                     key={a}
                     type="button"
-                    className={`btn btn-sm ${(selItem.align ?? (isPriceField(selItem.fieldId) ? "right" : "left")) === a ? "" : "btn-outline"}`}
+                    className={`btn btn-sm ${(selItem.align ?? (isPrezzoField(selItem.fieldId) ? "right" : "left")) === a ? "" : "btn-outline"}`}
                     style={{ flex: 1 }}
                     onClick={() => updateSelected({ align: a })}
                     title={a === "left" ? "Sinistra" : a === "center" ? "Centro" : "Destra"}

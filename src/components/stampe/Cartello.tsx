@@ -1,35 +1,8 @@
 import { CardLayout, isImageField, PrintField, PrintFormat } from "@/lib/stampe";
 import { layoutFontCss } from "@/lib/layout-fonts";
-import { stickerShapeStyle } from "./stickerStyle";
-
-const FONT_CN = '"Avenir Next LT Pro Cn", "Avenir Next LT Pro", "Segoe UI", sans-serif';
-
-/**
- * Prezzo come nel template: intero grande + centesimi più piccoli allineati in
- * alto ("109,00" → 109 ⁰⁰). Non un <sup> con vertical-align: quel calcolo
- * dipende dai metrici del font, e sia dentro un contenitore flex sia in stampa
- * (motore di rasterizzazione diverso da quello a schermo) i centesimi
- * finivano in basso invece che in alto. Un flex "allineati in alto" non
- * dipende dal motore di rendering: è pura disposizione dei riquadri.
- */
-function Prezzo({ value, size, scale, font }: { value: string; size: number; scale: number; font?: string }) {
-  /*
-   * Il simbolo di valuta va in apice come i centesimi: sul cartello deve saltare
-   * all'occhio il numero, non l'euro. Si stacca dal resto solo se c'è davvero —
-   * i prezzi dell'Arredo arrivano senza simbolo e restano come prima.
-   */
-  const testo = value.trim();
-  const valuta = /^[€$£]/.test(testo) ? testo[0] : "";
-  const [int, cent] = (valuta ? testo.slice(1).trim() : testo).split(",");
-  const fs = (size * scale) / 2.4;
-  return (
-    <span style={{ fontFamily: font ?? FONT_CN, fontWeight: 800, lineHeight: 0.95, whiteSpace: "nowrap", fontSize: fs, display: "inline-flex", alignItems: "flex-start" }}>
-      {valuta && <span style={{ fontSize: "0.45em", marginRight: "0.08em" }}>{valuta}</span>}
-      <span>{int}</span>
-      {cent !== undefined && <span style={{ fontSize: "0.5em", marginLeft: "0.05em" }}>,{cent}</span>}
-    </span>
-  );
-}
+import {
+  Prezzo, coloreCampo, isPrezzoField, justifyPrezzo, stileStickerCartello, stileTestoCartello, testoStampato,
+} from "./cartelloStyle";
 
 /** Anteprima di un cartello: campi posizionati in % sul formato scelto. */
 export default function Cartello({
@@ -109,25 +82,7 @@ export default function Cartello({
                 transform: `rotate(${item.sticker.rotation}deg)`,
               }}
             >
-              <div
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  textAlign: "center",
-                  padding: "6%",
-                  color: item.color ?? "#fff",
-                  fontWeight: 800,
-                  fontFamily: item.sticker.font === "cn" ? FONT_CN : undefined,
-                  fontSize: (item.sticker.size * scale) / 2.4,
-                  lineHeight: 1.05,
-                  ...stickerShapeStyle(item.sticker),
-                }}
-              >
-                {value.replace(/ {2}/g, "\n")}
-              </div>
+              <div style={stileStickerCartello(item, scale)}>{testoStampato(value)}</div>
             </div>
           );
         }
@@ -138,53 +93,23 @@ export default function Cartello({
             <img key={i} src={value} alt="" style={{ ...box, objectFit: "contain", objectPosition: "left top", mixBlendMode: "multiply" }} />
           );
         }
-        /*
-         * Il prezzo promo e la meccanica (3x2, 1+1…) sono l'informazione che deve
-         * saltare all'occhio a scaffale: rossi salvo diverso colore scelto nel
-         * layout. Gli altri campi restano neri, compreso il prezzo dell'Arredo,
-         * che segue tutte altre regole grafiche.
-         */
-        const rossoDiDefault = item.fieldId === "prezzoPromo" || item.fieldId === "meccanica";
-        const color = item.color ?? (rossoDiDefault ? "#c8161d" : "#111");
-        if (item.fieldId === "prezzo" || item.fieldId === "prezzoPromo") {
-          const justify = item.align === "left" ? "flex-start" : item.align === "center" ? "center" : "flex-end";
+        const color = coloreCampo(item);
+        if (isPrezzoField(item.fieldId)) {
           /*
            * Niente ritaglio sul prezzo: è scritto in corpo grande e con poco
            * interlinea, quindi trabocca facilmente dal riquadro — tagliarlo
            * mangerebbe la parte bassa delle cifre invece di lasciarle uscire.
            */
           return (
-            <div key={i} style={{ ...box, overflow: "visible", display: "flex", justifyContent: justify, alignItems: "flex-start", color }}>
+            <div key={i} style={{ ...box, overflow: "visible", display: "flex", justifyContent: justifyPrezzo(item), alignItems: "flex-start", color }}>
               <Prezzo value={value} size={item.size ?? meta.size} scale={scale}
                 font={item.font !== undefined ? layoutFontCss(item.font) : undefined} />
             </div>
           );
         }
-        /*
-         * Il listino va barrato — è quello che rende leggibile lo sconto — ma solo
-         * quando è davvero un prezzo: quando manca il prezzo di partenza al suo
-         * posto compare la dicitura "A SOLI", che introduce il prezzo promo e
-         * sbarrata non avrebbe senso.
-         */
-        const barrato = item.fieldId === "prezzoListino" && value.trim().startsWith("€");
         return (
-          <div
-            key={i}
-            style={{
-              ...box,
-              fontSize: ((item.size ?? meta.size) * scale) / 2.4,
-              fontWeight: (item.bold ?? meta.bold) ? 700 : 400,
-              fontStyle: item.italic ? "italic" : "normal",
-              fontFamily: item.font !== undefined ? layoutFontCss(item.font) : meta.font === "cn" ? FONT_CN : undefined,
-              lineHeight: 1.2,
-              color,
-              textAlign: item.align ?? "left",
-              whiteSpace: "pre-line",
-              textDecoration: barrato ? "line-through" : undefined,
-            }}
-          >
-            {/* la regola Garden Team "a capo con due spazi" viene rispettata */}
-            {value.replace(/ {2}/g, "\n")}
+          <div key={i} style={{ ...box, ...stileTestoCartello(item, meta, value, scale) }}>
+            {testoStampato(value)}
           </div>
         );
       })}

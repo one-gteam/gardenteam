@@ -7,6 +7,7 @@ import AutoSubmitSelect from "@/components/stampe/AutoSubmitSelect";
 import { canAccessArea, isZooEditor, scopesForUser, resolveScope, layoutMargins } from "@/lib/stampe";
 import {
   getZooDb, activeCampaign, zooCartelloValues, ZOO_FIELDS, ZOO_FORMATS, ZOO_TIPI_OFFERTA, pvPromoCodesFor,
+  pvPromoFor, tagsOfferta,
 } from "@/lib/zoo";
 import {
   deleteZooLayout, uploadZooLayoutImage, deleteZooLayoutImage, copiaZooLayoutSuFormato,
@@ -60,12 +61,30 @@ export default async function ZooLayoutPage({
   const campaign = activeCampaign(db);
   const offers = campaign ? db.offers.filter((o) => o.campaignId === campaign.id) : db.offers;
   const layoutTags = current?.tipologie ?? [];
+  /*
+   * L'esempio si sceglie con le stesse tipologie con cui la stampa sceglie il
+   * layout: non solo il tipo di prodotto (Cane, Umido…) ma anche il tipo di
+   * offerta. Guardando solo il prodotto, chi disegnava il layout del 3x2 o
+   * dell'«A SOLI» si ritrovava davanti un'offerta qualunque, con la meccanica
+   * vuota: l'anteprima non mostrava il cartello che poi sarebbe uscito.
+   */
+  const tagsDiOfferta = (o: (typeof offers)[number]) => {
+    const product = db.products.find((p) => p.id === o.productId);
+    const parent = product?.parentId ? db.parents.find((x) => x.id === product.parentId) : undefined;
+    const promoPvOfferta = pvPromoFor(db, scope, o.ean, academyDb);
+    return [
+      ...(parent?.caratteristiche ?? []), ...tagsOfferta(o),
+      ...(promoPvOfferta ? [promoPvOfferta.etichetta] : []),
+    ];
+  };
   const sample = layoutTags.length > 0
     ? offers.find((o) => {
-        const product = db.products.find((p) => p.id === o.productId);
-        const parent = product?.parentId ? db.parents.find((x) => x.id === product.parentId) : undefined;
-        return parent?.caratteristiche.some((c) => layoutTags.includes(c));
-      }) ?? offers[0]
+        const tags = tagsDiOfferta(o);
+        // meglio un'offerta che soddisfa tutte le tipologie del layout (es. Gatto + 3x2)
+        return layoutTags.every((t) => tags.includes(t));
+      })
+      ?? offers.find((o) => tagsDiOfferta(o).some((t) => layoutTags.includes(t)))
+      ?? offers[0]
     : offers[0];
   const sampleValues = sample ? zooCartelloValues(db, sample, scope, academyDb) : {};
 

@@ -14,6 +14,8 @@ interface ProdLite {
 /** Selezione prodotti per la stampa: click per aggiungere, Shift+click per intervalli, formato per riga. */
 export default function StampaPicker({
   products,
+  totale,
+  mostraTuttiHref,
   formats,
   fields,
   scopeParam,
@@ -29,6 +31,10 @@ export default function StampaPicker({
   onPrint,
 }: {
   products: ProdLite[];
+  /** Quanti prodotti passano i filtri in tutto: l'elenco ne mostra al massimo 150. */
+  totale?: number;
+  /** Indirizzo della stessa pagina senza il limite dei 150, quando ce ne sono di più. */
+  mostraTuttiHref?: string;
   formats: { id: string; name: string }[];
   fields: { id: string; label: string }[];
   scopeParam: string;
@@ -102,7 +108,17 @@ export default function StampaPicker({
       {/* elenco con selezione multipla */}
       <div className="card" style={{ padding: 8, maxHeight: 680, overflowY: "auto" }}>
         <div style={{ padding: "4px 10px", fontSize: 12.5, color: "var(--muted)", fontWeight: 700 }}>
-          {products.length} prodotti — clic per selezionare, <kbd>Shift</kbd>+clic per intervalli
+          {totale !== undefined && totale > products.length ? (
+            <>
+              {products.length} prodotti di {totale} — restringi la ricerca, oppure{" "}
+              {mostraTuttiHref
+                ? <a href={mostraTuttiHref}>mostrali tutti</a>
+                : "mostrali tutti"} (la pagina diventa più lenta)
+            </>
+          ) : (
+            <>{products.length} prodotti</>
+          )}{" "}
+          — clic per selezionare, <kbd>Shift</kbd>+clic per intervalli
         </div>
         <div style={{ display: "flex", gap: 6, padding: "0 10px 8px" }}>
           <button

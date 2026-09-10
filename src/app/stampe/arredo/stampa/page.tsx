@@ -77,11 +77,19 @@ export default async function StampaPage({
     );
     return (
       <div>
+        {/*
+          * Due A5 stanno su un foglio solo se il foglio è orizzontale: 148+148 mm
+          * entrano nei 297 mm dell'A4 in orizzontale, non nei 210 dell'A4 in
+          * verticale. Senza questa riga la spunta "foglio A4 pieno" mandava ogni
+          * copia su una pagina sua, cioè il contrario di quello che prometteva.
+          */}
+        {doppio && <style>{`@page { size: 297mm 210mm; margin: 0; }`}</style>}
         <div className="no-print" style={{ padding: 14, display: "flex", gap: 10, alignItems: "center", background: "var(--green-50)", flexWrap: "wrap" }}>
           <strong>Anteprima di stampa — {toPrint.length} cartelli</strong>
           <a className="btn btn-outline btn-sm" href={`/stampe/arredo/stampa?${qsBack()}`}>← Torna alla selezione</a>
           <span style={{ fontSize: 12.5, color: "var(--muted)" }}>
             Usa il pulsante Stampa del browser (Ctrl+P) e scegli &quot;Salva come PDF&quot;.
+            {doppio && " Il foglio esce orizzontale: due A5 affiancati per pagina."}
           </span>
         </div>
         <div style={{ display: "flex", flexWrap: "wrap" }}>
@@ -156,7 +164,9 @@ export default async function StampaPage({
 
         <div style={{ display: "grid", gridTemplateColumns: "300px 1fr 300px", gap: 16, alignItems: "start" }}>
           <StampaPicker
-            products={filtered.slice(0, 150).map((p) => ({
+            totale={filtered.length}
+            mostraTuttiHref={`/stampe/arredo/stampa?${new URLSearchParams({ ...Object.fromEntries(Object.entries(sp).filter(([, v]) => v) as [string, string][]), tutti: "1" })}`}
+            products={(sp.tutti === "1" ? filtered : filtered.slice(0, 150)).map((p) => ({
               id: p.id,
               titolo: p.fields.titolo ?? "",
               codice: p.codice,
