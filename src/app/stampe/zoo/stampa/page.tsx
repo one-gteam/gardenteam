@@ -214,6 +214,85 @@ export default async function ZooStampaPage({
               <strong>{scope.label}</strong>
             </p>
           </div>
+          {scope.type !== "system" && (
+          <details className="strumento" open={sp.prezzi !== undefined}>
+            <summary className="btn btn-outline btn-sm">Carica i tuoi prezzi</summary>
+          <div className="card" style={{ marginTop: 10, padding: 14 }}>
+            <strong>Carica i tuoi prezzi</strong>
+            <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "4px 0 8px" }}>
+              Se i prezzi di {scope.label} differiscono da quelli del Consorzio, carica un Excel con EAN (o CODICE
+              FORNITORE) e PREZZO: sostituirà il prezzo promo sui cartelli di questo ambito, articolo per articolo.{" "}
+              <a href={`/stampe/zoo/excel?prezzi=1&scope=${scopeParam}`}>Scarica il modello precompilato</a>
+            </p>
+            <ImportExcel
+              action={importPvPricesRighe.bind(null, scopeParam)}
+              colonne={["ean", "codice ean", "barcode", "codice fornitore", "cod. fornitore", "codice", "prezzo", "prezzo vendita", "prezzo pv"]}
+              etichetta="Importa prezzi"
+            />
+          </div>
+          </details>
+          )}
+
+        {sp.noprint !== undefined && (
+          sp.noprint === "consorzio" ? (
+            <div className="alert alert-amber">L&apos;elenco dei cartelli da non stampare è di ogni insegna o punto vendita: scegli il tuo ambito qui sopra.</div>
+          ) : sp.noprint === "file" ? (
+            <div className="alert alert-amber">Non ho ricevuto nessun file: riprova a sceglierlo.</div>
+          ) : sp.noprint === "svuotato" ? (
+            <div className="alert alert-green">✓ Elenco svuotato: tornano stampabili tutti i cartelli, tranne quelli esclusi a mano.</div>
+          ) : (
+            <div className="alert alert-green">
+              ✓ {sp.noprint} {Number(sp.noprint) === 1 ? "codice escluso" : "codici esclusi"} dalla stampa per {scope.label}
+              {Number(sp.rimessi ?? 0) > 0 && (
+                <>, {sp.rimessi} {Number(sp.rimessi) === 1 ? "rimesso" : "rimessi"} fra quelli da stampare</>
+              )}.
+              {Number(sp.sconosciuti ?? 0) > 0 && (
+                <>{" "}
+                  {sp.sconosciuti} {Number(sp.sconosciuti) === 1 ? "codice fornitore non è" : "codici fornitore non sono"} nel
+                  catalogo: caricali da Database prodotti se ti servono.
+                </>
+              )}
+            </div>
+          )
+        )}
+
+          {scope.type !== "system" && (
+          <details className="strumento" open={sp.noprint !== undefined}>
+            <summary className="btn btn-outline btn-sm">Cartelli da non stampare</summary>
+          <div className="card" style={{ marginTop: 10, padding: 14 }}>
+            <strong>Cartelli da non stampare</strong>
+            <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "4px 0 8px" }}>
+              Carica un Excel con i codici a barre (o i CODICE FORNITORE) degli articoli che {scope.label} non espone:
+              spariscono dai cartelli senza toccare l&apos;offerta degli altri. L&apos;esclusione segue l&apos;articolo, quindi vale
+              anche per i volantini successivi. Se aggiungi la colonna NON STAMPARE, un &laquo;no&raquo; rimette il cartello in
+              stampa.{" "}
+              <a href={`/stampe/zoo/excel?nonstampare=1&scope=${scopeParam}`}>Scarica il modello precompilato</a>
+            </p>
+            <ImportExcel
+              action={importZooNoPrintRighe.bind(null, scopeParam)}
+              colonne={[
+                "ean", "codice ean", "barcode", "codice a barre", "cod. barre",
+                "codice fornitore", "cod. fornitore", "codice articolo", "codice",
+                "non stampare", "non stamparlo", "escludi", "stampa", "stampare",
+              ]}
+              etichetta="Importa i codici"
+            />
+            {noPrint.eans.size > 0 && (
+              <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 10, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 12.5, color: "var(--muted)" }}>
+                  {noPrint.eans.size} {noPrint.eans.size === 1 ? "codice" : "codici"} in elenco,{" "}
+                  {allOffers.filter((o) => noPrint.eans.has(o.ean)).length} sui cartelli di questo periodo.
+                </span>
+                <a className="btn btn-outline btn-sm" href={`/stampe/zoo/stampa?scope=${scopeParam}&nonstampabili=si`}>Vedi gli esclusi</a>
+                <form action={svuotaZooNoPrint.bind(null, scopeParam)}>
+                  <button className="btn btn-outline btn-sm" type="submit">Svuota l&apos;elenco</button>
+                </form>
+              </div>
+            )}
+          </div>
+          </details>
+          )}
+
           {/* periodo promozionale: quello in corso a scaffale o quello in preparazione */}
           {stampabili.length > 1 && (
             <form method="get" style={{ display: "flex", gap: 8, alignItems: "end" }}>
@@ -244,79 +323,6 @@ export default async function ZooStampaPage({
         {sp.prezzi !== undefined && (
           <div className="alert alert-green">
             ✓ {sp.prezzi} prezzi caricati per {scope.label}: sostituiscono il prezzo promo del Consorzio sui cartelli di questo ambito.
-          </div>
-        )}
-
-        {scope.type !== "system" && (
-          <div className="card" style={{ marginBottom: 16, padding: 14 }}>
-            <strong>Carica i tuoi prezzi</strong>
-            <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "4px 0 8px" }}>
-              Se i prezzi di {scope.label} differiscono da quelli del Consorzio, carica un Excel con EAN (o CODICE
-              FORNITORE) e PREZZO: sostituirà il prezzo promo sui cartelli di questo ambito, articolo per articolo.{" "}
-              <a href={`/stampe/zoo/excel?prezzi=1&scope=${scopeParam}`}>Scarica il modello precompilato</a>
-            </p>
-            <ImportExcel
-              action={importPvPricesRighe.bind(null, scopeParam)}
-              colonne={["ean", "codice ean", "barcode", "codice fornitore", "cod. fornitore", "codice", "prezzo", "prezzo vendita", "prezzo pv"]}
-              etichetta="Importa prezzi"
-            />
-          </div>
-        )}
-
-        {sp.noprint !== undefined && (
-          sp.noprint === "consorzio" ? (
-            <div className="alert alert-amber">L&apos;elenco dei cartelli da non stampare è di ogni insegna o punto vendita: scegli il tuo ambito qui sopra.</div>
-          ) : sp.noprint === "file" ? (
-            <div className="alert alert-amber">Non ho ricevuto nessun file: riprova a sceglierlo.</div>
-          ) : sp.noprint === "svuotato" ? (
-            <div className="alert alert-green">✓ Elenco svuotato: tornano stampabili tutti i cartelli, tranne quelli esclusi a mano.</div>
-          ) : (
-            <div className="alert alert-green">
-              ✓ {sp.noprint} {Number(sp.noprint) === 1 ? "codice escluso" : "codici esclusi"} dalla stampa per {scope.label}
-              {Number(sp.rimessi ?? 0) > 0 && (
-                <>, {sp.rimessi} {Number(sp.rimessi) === 1 ? "rimesso" : "rimessi"} fra quelli da stampare</>
-              )}.
-              {Number(sp.sconosciuti ?? 0) > 0 && (
-                <>{" "}
-                  {sp.sconosciuti} {Number(sp.sconosciuti) === 1 ? "codice fornitore non è" : "codici fornitore non sono"} nel
-                  catalogo: caricali da Database prodotti se ti servono.
-                </>
-              )}
-            </div>
-          )
-        )}
-
-        {scope.type !== "system" && (
-          <div className="card" style={{ marginBottom: 16, padding: 14 }}>
-            <strong>Cartelli da non stampare</strong>
-            <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "4px 0 8px" }}>
-              Carica un Excel con i codici a barre (o i CODICE FORNITORE) degli articoli che {scope.label} non espone:
-              spariscono dai cartelli senza toccare l&apos;offerta degli altri. L&apos;esclusione segue l&apos;articolo, quindi vale
-              anche per i volantini successivi. Se aggiungi la colonna NON STAMPARE, un &laquo;no&raquo; rimette il cartello in
-              stampa.{" "}
-              <a href={`/stampe/zoo/excel?nonstampare=1&scope=${scopeParam}`}>Scarica il modello precompilato</a>
-            </p>
-            <ImportExcel
-              action={importZooNoPrintRighe.bind(null, scopeParam)}
-              colonne={[
-                "ean", "codice ean", "barcode", "codice a barre", "cod. barre",
-                "codice fornitore", "cod. fornitore", "codice articolo", "codice",
-                "non stampare", "non stamparlo", "escludi", "stampa", "stampare",
-              ]}
-              etichetta="Importa i codici"
-            />
-            {noPrint.eans.size > 0 && (
-              <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 10, flexWrap: "wrap" }}>
-                <span style={{ fontSize: 12.5, color: "var(--muted)" }}>
-                  {noPrint.eans.size} {noPrint.eans.size === 1 ? "codice" : "codici"} in elenco,{" "}
-                  {allOffers.filter((o) => noPrint.eans.has(o.ean)).length} sui cartelli di questo periodo.
-                </span>
-                <a className="btn btn-outline btn-sm" href={`/stampe/zoo/stampa?scope=${scopeParam}&nonstampabili=si`}>Vedi gli esclusi</a>
-                <form action={svuotaZooNoPrint.bind(null, scopeParam)}>
-                  <button className="btn btn-outline btn-sm" type="submit">Svuota l&apos;elenco</button>
-                </form>
-              </div>
-            )}
           </div>
         )}
 
