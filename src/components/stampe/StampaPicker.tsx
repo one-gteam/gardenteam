@@ -151,7 +151,9 @@ export default function StampaPicker({
                   ✓ stampato
                 </span>
               )}
-              <div style={{ fontSize: 11, color: "var(--muted)" }}>{p.codice} · € {p.prezzo} · {p.tipologia}</div>
+              <div style={{ fontSize: 11, color: "var(--muted)" }}>
+                {p.codice} · {p.prezzo ? `€ ${p.prezzo}` : <span style={{ color: "#b45309" }}>prezzo da definire</span>} · {p.tipologia}
+              </div>
             </button>
           );
         })}
