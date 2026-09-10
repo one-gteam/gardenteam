@@ -4,7 +4,7 @@ import { requireAreaUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import Header from "@/components/Header";
 import { completeLesson, sendFeedback, submitLessonQuiz } from "@/lib/actions";
-import { courseCompletion, coursesForUser, getProgress,  isCourseCompleted } from "@/lib/logic";
+import { courseCompletion, coursesForUser, getProgress, isCourseCompleted, scopeCourses } from "@/lib/logic";
 import { DEFAULT_WATCH_THRESHOLD, LEVEL_LABELS, isAcademyAdmin } from "@/lib/types";
 import { parseVideoUrl } from "@/lib/video";
 import TrackedVideo from "@/components/TrackedVideo";
@@ -45,8 +45,9 @@ export default async function CoursePage({
    * anteprima. Senza questo, bastava cambiare l'indirizzo per entrare nei corsi
    * di un'altra insegna o di un altro punto vendita.
    */
-  const gestisceCorsi = isAcademyAdmin(user) && user.role !== "dept_head";
-  if (!coursesForUser(db, user).some((c) => c.id === course.id) && !gestisceCorsi) redirect("/studente");
+  const suo = coursesForUser(db, user).some((c) => c.id === course.id);
+  const inAnteprima = isAcademyAdmin(user) && scopeCourses(db, user).some((c) => c.id === course.id);
+  if (!suo && !inAnteprima) redirect("/studente");
 
   const prog = getProgress(db, user.id, course.id);
   const requestedIdx = Math.min(Math.max(Number(lezione ?? 0) || 0, 0), course.lessons.length - 1);
