@@ -28,8 +28,11 @@ async function requireZooUser() {
 }
 
 function backUrl(page: string, scopeParam: string, extra: Record<string, string> = {}) {
-  const qs = new URLSearchParams({ scope: scopeParam, ...extra });
-  return `${page}?${qs.toString()}`;
+  // `page` puo' gia' portarsi dietro dei parametri (es. "...?abbina=1"): si uniscono, non si sovrascrivono
+  const [percorso, suoi] = page.split("?");
+  const qs = new URLSearchParams(suoi ?? "");
+  for (const [k, v] of Object.entries({ scope: scopeParam, ...extra })) qs.set(k, v);
+  return `${percorso}?${qs.toString()}`;
 }
 
 type Righe = Record<string, unknown>[];
