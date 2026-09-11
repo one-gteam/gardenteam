@@ -3,6 +3,7 @@ import { getDb } from "@/lib/db";
 import { User, userSites, gestisce, ruoloEsteso } from "@/lib/types";
 import { logout } from "@/lib/actions";
 import { isConsortiumEditor, isZooEditor } from "@/lib/stampe";
+import HeaderMenu from "@/components/HeaderMenu";
 
 export default async function StampeHeader({
   user, active, area = "arredo", compatta = false,
@@ -10,7 +11,8 @@ export default async function StampeHeader({
   user: User;
   active: string;
   area?: "arredo" | "zoo";
-  /** Da cellulare (In reparto): il menu sta dietro ☰ e la testata occupa una riga sola. */
+  /** Testata compatta (In reparto): il ☰ anche da computer, e la riga utente ridotta.
+   *  Da cellulare il ☰ c'è comunque, in tutte le pagine: lo decide il CSS. */
   compatta?: boolean;
 }) {
   const db = await getDb();
@@ -55,16 +57,6 @@ export default async function StampeHeader({
   return (
     <header className={`site-header stampe-header${compatta ? " compatta" : ""}`} style={{ background: "linear-gradient(120deg, #1a2b45, #274b7a)" }}>
       <div className="site-header-inner">
-        {compatta && (
-          <details className="hamburger">
-            <summary>☰ Menu</summary>
-            <nav className="nav">
-              {links.map((l) => (
-                <Link key={l.key} href={l.href} className={active === l.key ? "active" : ""}>{l.label}</Link>
-              ))}
-            </nav>
-          </details>
-        )}
         <div className="header-top">
           <Link href="/stampe" className="brand">
             <span className="brand-logo">
@@ -100,17 +92,7 @@ export default async function StampeHeader({
             </form>
           </div>
         </div>
-        {!compatta && (
-        <div className="header-nav-row">
-          <nav className="nav">
-            {links.map((l) => (
-              <Link key={l.key} href={l.href} className={active === l.key ? "active" : ""}>
-                {l.label}
-              </Link>
-            ))}
-          </nav>
-        </div>
-        )}
+        <HeaderMenu voci={links} active={active} />
       </div>
     </header>
   );

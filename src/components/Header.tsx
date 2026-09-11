@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getDb } from "@/lib/db";
 import { User, userSites, isAcademyAdmin, ruoloEsteso } from "@/lib/types";
 import { logout } from "@/lib/actions";
+import HeaderMenu from "@/components/HeaderMenu";
 
 export default async function Header({ user, active }: { user: User; active: string }) {
   const db = await getDb();
@@ -70,15 +71,7 @@ export default async function Header({ user, active }: { user: User; active: str
             </form>
           </div>
         </div>
-        <div className="header-nav-row">
-          <nav className="nav">
-            {links.map((l) => (
-              <Link key={l.key} href={l.href} className={active === l.key ? "active" : ""}>
-                {l.label}
-              </Link>
-            ))}
-          </nav>
-        </div>
+        <HeaderMenu voci={links} active={active} />
       </div>
     </header>
   );

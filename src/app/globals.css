@@ -466,27 +466,68 @@ table.data td { overflow-wrap: anywhere; }
 .strumento[open] > .card { position: absolute; top: calc(100% + 4px); left: 0; z-index: 40; width: 640px; max-width: calc(100vw - 48px); box-shadow: 0 10px 30px rgba(0,0,0,.18); }
 @media (max-width: 720px) { .strumento[open] > .card { position: static; width: auto; } }
 
-/* testata compatta (In reparto): il menu a scomparsa, la riga utente sola */
-.stampe-header.compatta .header-top { flex-wrap: wrap; gap: 6px; padding-bottom: 4px; }
-.stampe-header.compatta .user-chip > div:nth-child(2) { display: none; }
-.hamburger { order: 99; width: 100%; }
+/* Menu della testata: da computer la riga di link, da cellulare (o con la
+   testata compatta di "In reparto") il ☰ a scomparsa. Le due vesti sono
+   sempre entrambe nel documento: qui si decide quale si vede. */
+.hamburger { display: none; order: 99; width: 100%; }
 .hamburger > summary { list-style: none; cursor: pointer; color: #fff; font-weight: 700; font-size: 14px; padding: 6px 0; }
 .hamburger > summary::-webkit-details-marker { display: none; }
 .hamburger .nav { display: flex; flex-direction: column; gap: 2px; padding-bottom: 6px; }
 .hamburger .nav a { display: block; padding: 8px 10px; }
 
+.stampe-header.compatta .header-top { flex-wrap: wrap; gap: 6px; padding-bottom: 4px; }
+.stampe-header.compatta .user-chip > div:nth-child(2) { display: none; }
+.stampe-header.compatta .hamburger { display: block; }
+.stampe-header.compatta .header-nav-row { display: none; }
+
+@media (max-width: 760px) {
+  .site-header { padding: 0 12px; }
+  .header-top { gap: 8px; }
+  .site-header .hamburger { display: block; }
+  .site-header .header-nav-row { display: none; }
+  /* nome e ruolo per esteso rubano la riga: restano l'iniziale e l'uscita */
+  .user-chip > div:nth-child(2) { display: none; }
+  .brand { font-size: 17px; }
+  .area-name { font-size: 13px; }
+}
+
+/* Filtri a scomparsa: chiusi dicono cosa è selezionato, aperti sono il modulo intero */
+.filtri-menu { margin-bottom: 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+.filtri-menu > summary {
+  list-style: none; cursor: pointer; padding: 9px 12px; font-size: 13px;
+  display: flex; align-items: center; gap: 8px;
+}
+.filtri-menu > summary::-webkit-details-marker { display: none; }
+.filtri-menu > summary::after { content: "▾"; margin-left: auto; opacity: .6; }
+.filtri-menu[open] > summary { border-bottom: 1px solid var(--line); font-weight: 700; }
+.filtri-menu[open] > summary::after { content: "▴"; }
+.filtri-menu .filtri-scelte { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.filtri-menu > form { padding: 10px 12px; }
+
 /* Controllo in reparto (cellulare): un cartello alla volta, pulsanti grandi in fondo */
-.reparto-filtri { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+.reparto-filtri { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 0; }
 .reparto-filtri select, .reparto-filtri input[type="search"] { margin-top: 0; font-size: 13px; }
 .reparto-filtri input[type="search"] { flex: 1; min-width: 140px; }
 .reparto-testa { display: flex; gap: 8px; align-items: center; margin-bottom: 2px; }
-.reparto-cartello { display: flex; justify-content: center; margin: 8px 0; overflow: hidden; }
+.reparto-cartello { display: flex; justify-content: center; align-items: flex-start; margin: 8px 0; overflow: hidden; }
+.reparto-cartello.attesa { opacity: .45; transition: opacity .15s; }
 .reparto-campi { padding: 10px; display: grid; gap: 8px; margin-bottom: 8px; }
 .reparto-campi label { font-size: 12px; font-weight: 700; display: grid; gap: 2px; }
 .reparto-riga { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.reparto-azioni { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 8px 0; }
-.reparto-azioni .btn { padding: 12px 8px; font-size: 14px; }
+/* le azioni: a destra il pulsante principale (grande, sotto il pollice), a
+   sinistra gli altri; il testo su due righe resta centrato dentro al pulsante */
+.reparto-azioni { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 8px 0; align-items: stretch; }
+.reparto-azioni .btn { padding: 12px 8px; font-size: 14px; text-align: center; }
 .reparto-azioni > label { grid-column: 1 / -1; }
+.reparto-azioni .azione-principale {
+  grid-column: 2; grid-row: 1 / -1;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 2px; line-height: 1.2;
+}
+.reparto-azioni .azione-secondaria { grid-column: 1; }
+.reparto-formato { display: flex; align-items: center; gap: 8px; margin: 2px 0 6px; }
+.reparto-formato select { margin-top: 0; font-size: 13px; max-width: 220px; }
+.reparto-formato .btn { margin-left: auto; }
 .reparto-nav { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
 .reparto-nav .btn { padding: 14px 8px; font-size: 15px; }
 .reparto { user-select: none; }

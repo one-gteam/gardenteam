@@ -3,6 +3,7 @@ import { ArrowLeft, Users } from "lucide-react";
 import { getDb } from "@/lib/db";
 import { ROLE_LABELS, User } from "@/lib/types";
 import { logout } from "@/lib/actions";
+import HeaderMenu from "@/components/HeaderMenu";
 
 /**
  * Barra dell'area "Utenti e ruoli": vale per la tabella dei ruoli e per
@@ -44,16 +45,7 @@ export default async function RuoliHeader({ user, active }: { user: User; active
             </form>
           </div>
         </div>
-        {/* stessa struttura della barra Academy: .header-nav-row > nav.nav, altrimenti i link restano senza stile */}
-        <div className="header-nav-row">
-          <nav className="nav">
-            {voci.map((v) => (
-              <Link key={v.key} href={v.href} className={active === v.key ? "active" : ""}>
-                {v.label}
-              </Link>
-            ))}
-          </nav>
-        </div>
+        <HeaderMenu voci={voci} active={active} />
       </div>
     </header>
   );

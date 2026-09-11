@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import type { CardLayout, PrintField, PrintFormat } from "@/lib/stampe";
 import Cartello from "./Cartello";
 import InlineEdit from "./InlineEdit";
@@ -57,25 +57,60 @@ export default function RepartoCheck({
   const [i, setI] = useState(0);
   const [stato, setStato] = useState<Record<string, VoceReparto>>(() => Object.fromEntries(voci.map((v) => [v.id, v])));
   const [dettagli, setDettagli] = useState<Dettagli | null>(null);
+  // l'ultimo cartello disegnato: resta al suo posto mentre arriva il prossimo, così la pagina non salta
+  const [ultimo, setUltimo] = useState<Dettagli["cartelli"][number] | null>(null);
   const [formato, setFormato] = useState(formati[0]?.id ?? "za4");
   const [esito, setEsito] = useState("");
   const [segnalazione, setSegnalazione] = useState("");
   const [pending, startTransition] = useTransition();
   const [touchX, setTouchX] = useState<number | null>(null);
-  // la parte bassa (prezzi, testi, formato, segnalazione) sta dietro l'ingranaggio: davanti allo scaffale servono soprattutto i tre pulsanti
+  // prezzi, testi e segnalazione stanno dietro l'ingranaggio: davanti allo scaffale servono soprattutto i pulsanti
   const [impostazioniAperte, setImpostazioniAperte] = useState(false);
+  /* I cartelli già scaricati restano qui: passare al successivo è immediato
+     perché mentre si guarda questo si scaricano in silenzio i prossimi. */
+  const memoria = useRef(new Map<string, Dettagli>());
 
   const voce = voci[i];
   const consorzio = scopeType === "system";
+  const chiave = (id: string) => `${id}|${formato}`;
 
-  const carica = async (id: string) => {
-    setDettagli(null);
+  const scarica = async (id: string): Promise<Dettagli | null> => {
+    const k = chiave(id);
+    const gia = memoria.current.get(k);
+    if (gia) return gia;
     try {
       const r = await fetch(`/stampe/zoo/stampa/dettagli?scope=${encodeURIComponent(scopeParam)}&sel=${encodeURIComponent(id)}&formato=${formato}`);
-      if (r.ok) setDettagli((await r.json()) as Dettagli);
-    } catch { /* si vede il messaggio di attesa */ }
+      if (!r.ok) return null;
+      const d = (await r.json()) as Dettagli;
+      if (memoria.current.size > 80) memoria.current.clear();
+      memoria.current.set(k, d);
+      return d;
+    } catch { return null; /* si vede il messaggio di attesa */ }
   };
-  useEffect(() => { if (voce) void carica(voce.id); setEsito(""); setSegnalazione(""); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [i, formato]);
+  /** Ricarica davvero dal server: dopo una correzione il cartello in memoria è vecchio. */
+  const carica = async (id: string) => {
+    memoria.current.delete(chiave(id));
+    const d = await scarica(id);
+    if (d) { setDettagli(d); setUltimo(d.cartelli[0] ?? null); }
+  };
+
+  useEffect(() => {
+    if (!voce) return;
+    setEsito(""); setSegnalazione("");
+    let vivo = true;
+    const pronto = memoria.current.get(chiave(voce.id));
+    if (pronto) { setDettagli(pronto); setUltimo(pronto.cartelli[0] ?? null); }
+    else {
+      setDettagli(null);
+      void scarica(voce.id).then((d) => { if (vivo && d) { setDettagli(d); setUltimo(d.cartelli[0] ?? null); } });
+    }
+    // i prossimi (e il precedente, per chi torna indietro) si preparano da soli
+    const avanti = setTimeout(() => {
+      for (const v of [voci[i + 1], voci[i + 2], voci[i + 3], voci[i - 1]]) if (v) void scarica(v.id);
+    }, pronto ? 0 : 400);
+    return () => { vivo = false; clearTimeout(avanti); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [i, formato]);
 
   const vai = (delta: number) => setI((x) => Math.max(0, Math.min(voci.length - 1, x + delta)));
   useEffect(() => {
@@ -92,7 +127,11 @@ export default function RepartoCheck({
   if (!voce) return <div className="card"><p className="empty">Nessun cartello da controllare con questi filtri.</p></div>;
   const s = stato[voce.id];
   const riga = dettagli?.righe[0];
-  const cartello = dettagli?.cartelli[0];
+  // mentre arriva il nuovo cartello resta in vista il precedente, sbiadito e nello stesso punto
+  const cartello = dettagli?.cartelli[0] ?? ultimo;
+  const attesa = !dettagli;
+  const scala = cartello ? Math.min(2, 330 / cartello.format.w) : 1;
+  const altezzaCartello = cartello ? Math.round(cartello.format.h * scala) : 320;
 
   const inCoda = (tipo: "dopo" | "arrivo") => startTransition(async () => {
     const r = await mettiInCoda(scopeParam, tipo, JSON.stringify([{ offerId: voce.id, impostazioni: { [`formato_${voce.id}`]: formato } }]));
@@ -132,15 +171,21 @@ export default function RepartoCheck({
         {voce.codiceGestionale && <> · cod. {voce.codiceGestionale}</>}
       </div>
 
-      <div className="reparto-cartello">
+      <div className={`reparto-cartello${attesa ? " attesa" : ""}`} style={{ minHeight: altezzaCartello }}>
         {cartello
-          ? <Cartello format={cartello.format} layout={cartello.layout} fields={fields} values={cartello.values} scale={Math.min(2, 330 / cartello.format.w)} />
+          ? <Cartello format={cartello.format} layout={cartello.layout} fields={fields} values={cartello.values} scale={scala} />
           : <div className="card" style={{ padding: 20, textAlign: "center", color: "var(--muted)" }}>Preparo il cartello…</div>}
       </div>
 
-      <div style={{ display: "flex", justifyContent: "flex-end", margin: "2px 0 6px" }}>
+      <div className="reparto-formato">
+        <label className="hint" style={{ display: "flex", gap: 6, alignItems: "center", margin: 0 }}>
+          Formato
+          <select value={formato} onChange={(e) => setFormato(e.target.value)}>
+            {formati.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+          </select>
+        </label>
         <button type="button" className={`btn btn-sm ${impostazioniAperte ? "" : "btn-outline"}`} onClick={() => setImpostazioniAperte((v) => !v)}
-          title="Prezzi, testi, formato e segnalazione al gestore">
+          title="Prezzi, testi e segnalazione al gestore">
           ⚙ {impostazioniAperte ? "Chiudi" : "Correggi"}
         </button>
       </div>
@@ -173,21 +218,16 @@ export default function RepartoCheck({
       )}
 
       <div className="reparto-azioni">
-        {impostazioniAperte && (
-          <label className="hint" style={{ display: "flex", gap: 6, alignItems: "center" }}>
-            Formato
-            <select value={formato} onChange={(e) => setFormato(e.target.value)} style={{ marginTop: 0 }}>
-              {formati.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
-            </select>
-          </label>
-        )}
-        <button type="button" className="btn" disabled={pending} onClick={() => inCoda("dopo")}>✓ Confermato, stampa dopo</button>
-        <button type="button" className="btn btn-outline" disabled={pending} onClick={() => inCoda("arrivo")}>Merce in arrivo</button>
+        <button type="button" className="btn btn-outline azione-secondaria" disabled={pending} onClick={() => inCoda("arrivo")}>Merce in arrivo</button>
         {!consorzio && (
-          <button type="button" className="btn btn-outline" disabled={pending} onClick={escludi}>
+          <button type="button" className="btn btn-outline azione-secondaria" disabled={pending} onClick={escludi}>
             {s.escluso ? "Rimetti in stampa" : "Non stampare"}
           </button>
         )}
+        <button type="button" className="btn azione-principale" disabled={pending} onClick={() => inCoda("dopo")}>
+          <span>✓ Confermato,</span>
+          <span>stampa dopo</span>
+        </button>
       </div>
       {esito && <div className="alert alert-green">{esito}</div>}
 

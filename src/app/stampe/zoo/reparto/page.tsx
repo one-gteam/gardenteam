@@ -70,6 +70,18 @@ export default async function ZooRepartoPage({
     .filter((v) => !sp.giacenza || (sp.giacenza === "si" ? Number(v.giacenza ?? 0) > 0 : sp.giacenza === "zero" ? v.giacenza !== undefined && Number(v.giacenza) <= 0 : v.giacenza === undefined))
     .map(({ testo: _t, ...v }) => v);
 
+  // chiuso, il menu dei filtri dice cosa si sta guardando
+  const etichetteGiacenza: Record<string, string> = {
+    si: "solo con giacenza", zero: "solo giacenza zero", no: "non nel gestionale",
+  };
+  const scelte = [
+    scope.label,
+    sp.q ? `«${sp.q}»` : "",
+    sp.animale ?? "",
+    sp.giacenza ? etichetteGiacenza[sp.giacenza] ?? "" : "",
+    sp.tutti === "1" ? "anche confermati e stampati" : "",
+  ].filter(Boolean);
+
   return (
     <div>
       <StampeHeader user={user} active="reparto" area="zoo" compatta />
@@ -82,6 +94,11 @@ export default async function ZooRepartoPage({
             </p>
           </div>
         </div>
+        <details className="filtri-menu">
+          <summary>
+            <strong>Filtri</strong>
+            <span className="filtri-scelte">{scelte.join(" · ")}</span>
+          </summary>
         <form method="get" className="reparto-filtri">
           <select name="scope" defaultValue={scopeParam} title="Insegna / PV">
             {scopes.map((s) => <option key={`${s.type}:${s.id}`} value={`${s.type}:${s.id}`}>{s.label}</option>)}
@@ -104,6 +121,7 @@ export default async function ZooRepartoPage({
           </label>
           <button className="btn btn-sm" type="submit">Vai</button>
         </form>
+        </details>
 
         <RepartoCheck
           voci={voci}
