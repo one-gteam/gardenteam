@@ -536,6 +536,15 @@ table.data td { overflow-wrap: anywhere; }
   position: sticky; bottom: 0; z-index: 20; margin-top: 8px;
   background: var(--bg); border-top: 1px solid var(--line); padding: 6px 0 8px;
 }
+/* da cellulare e' proprio inchiodata al fondo dello schermo, non al fondo del
+   contenuto: i pulsanti stanno sempre nello stesso punto sotto il pollice */
+@media screen and (max-width: 760px) {
+  .reparto-barra {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+    margin-top: 0; padding: 6px 12px calc(8px + env(safe-area-inset-bottom));
+    box-shadow: 0 -6px 16px rgba(20, 40, 25, 0.08);
+  }
+}
 .reparto-cartello { display: flex; justify-content: center; align-items: flex-start; margin: 8px 0; overflow: hidden; }
 .reparto-cartello.attesa { opacity: .45; transition: opacity .15s; }
 .reparto-campi { padding: 10px; display: grid; gap: 8px; margin-bottom: 8px; }

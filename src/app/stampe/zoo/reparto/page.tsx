@@ -128,7 +128,6 @@ export default async function ZooRepartoPage({
           voci={voci}
           scopeParam={scopeParam}
           scopeType={scope.type}
-          scopeLabel={scope.label}
           fields={ZOO_FIELDS}
           formati={ZOO_FORMATS.map((f) => ({ id: f.id, name: f.name }))}
         />

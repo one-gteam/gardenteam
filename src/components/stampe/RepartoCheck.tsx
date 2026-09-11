@@ -27,7 +27,6 @@ export interface VoceReparto {
 
 interface Dettagli {
   scopeType: string;
-  scopeLabel: string;
   cartelli: { id: string; format: PrintFormat; layout: CardLayout; values: Record<string, string> }[];
   righe: {
     id: string; ean: string; descrizione: string; parentId?: string;
@@ -46,12 +45,11 @@ interface Dettagli {
  * con le frecce della tastiera o scorrendo con il dito.
  */
 export default function RepartoCheck({
-  voci, scopeParam, scopeType, scopeLabel, fields, formati,
+  voci, scopeParam, scopeType, fields, formati,
 }: {
   voci: VoceReparto[];
   scopeParam: string;
   scopeType: string;
-  scopeLabel: string;
   fields: PrintField[];
   formati: { id: string; name: string }[];
 }) {
@@ -73,11 +71,13 @@ export default function RepartoCheck({
   /* Lo spazio libero fra la testata appesa in alto e la barra appesa in basso:
      il cartello si rimpicciolisce per starci dentro, così non si scorre nulla. */
   const [spazio, setSpazio] = useState(0);
+  const [altezzaBarra, setAltezzaBarra] = useState(0);
   useEffect(() => {
     const misura = () => {
       const alto = document.querySelector(".reparto-appeso")?.getBoundingClientRect().height ?? 60;
       const basso = document.querySelector(".reparto-barra")?.getBoundingClientRect().height ?? 160;
       setSpazio(Math.max(220, window.innerHeight - alto - basso - 28));
+      setAltezzaBarra(window.innerWidth <= 760 ? basso + 20 : 0);
     };
     misura();
     window.addEventListener("resize", misura);
@@ -86,6 +86,10 @@ export default function RepartoCheck({
 
   const voce = voci[i];
   const consorzio = scopeType === "system";
+  /* Appena il primo cartello e' pronto la pagina si porta da sola in posizione
+     di lavoro: testata in cima, cartello in mezzo, pulsanti in fondo. Da li' in
+     avanti non si muove piu' nulla. Si sale col dito per menu e filtri. */
+  const posizionato = useRef(false);
   const chiave = (id: string) => `${id}|${formato}`;
 
   const scarica = async (id: string): Promise<Dettagli | null> => {
@@ -126,6 +130,19 @@ export default function RepartoCheck({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [i, formato]);
 
+  useEffect(() => {
+    if (posizionato.current || !dettagli) return;
+    posizionato.current = true;
+    if (window.innerWidth > 760) return;
+    // il mezzo secondo serve al cartello per prendere la sua altezza vera:
+    // prima la pagina e' piu' corta e lo scorrimento si ferma a meta'
+    const t = setTimeout(() => {
+      const testa = document.querySelector(".reparto-appeso");
+      if (testa && window.scrollY < 60) window.scrollTo(0, window.scrollY + testa.getBoundingClientRect().top);
+    }, 500);
+    return () => clearTimeout(t);
+  }, [dettagli]);
+
   const vai = (delta: number) => setI((x) => Math.max(0, Math.min(voci.length - 1, x + delta)));
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -163,6 +180,7 @@ export default function RepartoCheck({
   return (
     <div
       className="reparto"
+      style={altezzaBarra ? { paddingBottom: altezzaBarra } : undefined}
       onTouchStart={(e) => setTouchX(e.touches[0].clientX)}
       onTouchEnd={(e) => {
         if (touchX === null) return;
@@ -278,7 +296,6 @@ export default function RepartoCheck({
         <button type="button" className="btn btn-outline" disabled={i >= voci.length - 1} onClick={() => vai(1)}>Successivo ▶</button>
       </div>
       </div>
-      <p className="hint" style={{ textAlign: "center" }}>Scorri con il dito o usa le frecce. Ambito: {scopeLabel}.</p>
     </div>
   );
 }
