@@ -8,11 +8,11 @@ import { canAccessArea, gestisceArea, isZooEditor, resolveScope, sanitizeMargins
 import { postLoginPath } from "./types";
 import { LAYOUT_FONTS } from "./layout-fonts";
 import {
-  getZooDb, saveZooDb, ZooDB, ZooParent, campagnaInLavorazione, campagnaInCorso, campaignStato, NO_VOLANTINO,
-  ZOO_FORMATS, PV_PROMO_CODES_DEFAULT, ownScopeVisible, apiKeyFor,
+  getZooDb, saveZooDb, ZooDB, ZooParent, ZooProduct, campagnaInLavorazione, campagnaInCorso, campaignStato, NO_VOLANTINO,
+  ZOO_FORMATS, PV_PROMO_CODES_DEFAULT, ownScopeVisible, apiKeyFor, contenutoDaTesto,
 } from "./zoo";
 import type { LayoutItem } from "./stampe";
-import { groupAndDescribe, groupAndDescribeBatched } from "./zoo-ai";
+import { groupAndDescribe, groupAndDescribeBatched, type AiGroup } from "./zoo-ai";
 import { uploadPublicFile, publicUrlFor, listStorageFiles } from "./supabase";
 import { sendMail } from "./mailer";
 
@@ -324,11 +324,15 @@ export async function confirmZooPhotoMatches(back: string, scopeParam: string, f
   redirect(backUrl(back, scopeParam, { abbinatenome: String(n) }));
 }
 
-function applyGroups(
-  db: ZooDB,
-  groups: { nome: string; descVolantino: string; descCartello: string; caratteristiche: string[]; eans: string[] }[],
-  usedAi: boolean
-): number {
+/** Il contenuto letto dall'AI va sugli articoli che non ne hanno ancora uno (quello scritto a mano non si tocca). */
+function applicaContenuti(children: ZooProduct[], contenuti?: { ean: string; quantita: number; unita: "kg" | "l" }[]) {
+  for (const c of contenuti ?? []) {
+    const p = children.find((x) => x.ean === c.ean);
+    if (p && !p.contenuto && c.quantita > 0 && (c.unita === "kg" || c.unita === "l")) p.contenuto = { quantita: c.quantita, unita: c.unita };
+  }
+}
+
+function applyGroups(db: ZooDB, groups: AiGroup[], usedAi: boolean): number {
   let created = 0;
   for (const g of groups) {
     const children = db.products.filter((p) => g.eans.includes(p.ean));
@@ -345,6 +349,7 @@ function applyGroups(
     };
     db.parents.push(parent);
     for (const c of children) c.parentId = id;
+    applicaContenuti(children, g.contenuti);
     created++;
   }
   return created;
@@ -416,6 +421,7 @@ export async function rigeneraTestiAI(back: string, parentId: string, scopeParam
       parent.caratteristiche = groups[0].caratteristiche.filter((c) => db.settings.caratteristiche.includes(c));
     }
     parent.aiGenerated = usedAi;
+    applicaContenuti(children, groups[0].contenuti);
   }
   await saveZooDb(db);
   redirect(backUrl(back, scopeParam, { padre: parentId, ai: usedAi ? "1" : "0", ...(error ? { aierr: error.slice(0, 120) } : {}) }));
@@ -513,7 +519,7 @@ export async function setParentTagInline(
 /** Modifica in linea di un campo dell'offerta (autosalvataggio, nessun redirect). */
 export async function updateOfferFieldInline(
   offerId: string,
-  field: "descrizione" | "prezzoPromo" | "prezzoListino" | "focus" | "label" | "paginaId" | "meccanica" | "condizioni",
+  field: "descrizione" | "prezzoPromo" | "prezzoListino" | "focus" | "label" | "paginaId" | "meccanica" | "condizioni" | "prezzoUnita",
   value: string
 ): Promise<{ ok: boolean }> {
   const user = await requireZooUser();
@@ -636,10 +642,22 @@ export async function resetZooPrinted(back: string, scopeParam: string, campaign
  * senso editare direttamente sulla riga).
  */
 export async function updateProductFieldInline(
-  productId: string, field: "descrizione", value: string
+  productId: string, field: "descrizione" | "contenuto", value: string
 ): Promise<{ ok: boolean }> {
   const user = await requireZooUser();
   if (!isZooEditor(user)) return { ok: false };
+  if (field === "contenuto") {
+    // "1,5 kg", "250 ml", vuoto = torna a quello letto dalla descrizione
+    const db2 = await getZooDb();
+    const p2 = db2.products.find((x) => x.id === productId);
+    if (!p2) return { ok: false };
+    const c = value.trim() ? contenutoDaTesto(value) : undefined;
+    if (value.trim() && !c) return { ok: false };
+    p2.contenuto = c;
+    await saveZooDb(db2);
+    rigeneraZoo();
+    return { ok: true };
+  }
   const db = await getZooDb();
   const p = db.products.find((x) => x.id === productId);
   if (!p) return { ok: false };
@@ -774,6 +792,43 @@ export async function toggleParentCaratteristica(back: string, parentId: string,
   redirect(backUrl(back, scopeParam, { padre: parentId }));
 }
 
+/** Come toggleParentCaratteristica, ma per il pannello dei dettagli che non ricarica la pagina. */
+export async function toggleParentCaratteristicaInline(parentId: string, caratteristica: string): Promise<{ ok: boolean; caratteristiche: string[] }> {
+  const user = await requireZooUser();
+  if (!isZooEditor(user)) return { ok: false, caratteristiche: [] };
+  const db = await getZooDb();
+  const parent = db.parents.find((p) => p.id === parentId);
+  if (!parent) return { ok: false, caratteristiche: [] };
+  parent.caratteristiche = parent.caratteristiche.includes(caratteristica)
+    ? parent.caratteristiche.filter((c) => c !== caratteristica)
+    : [...parent.caratteristiche, caratteristica];
+  await saveZooDb(db);
+  rigeneraZoo();
+  return { ok: true, caratteristiche: parent.caratteristiche };
+}
+
+/**
+ * Segnalazione al gestore da chi lavora in reparto: un errore su un prodotto
+ * (foto sbagliata, descrizione, prezzo…). Finisce fra i suggerimenti aperti,
+ * che il Consorzio vede in Scelta offerte Volantino.
+ */
+export async function segnalaProblemaInline(scopeParam: string, parentId: string | undefined, offerId: string | undefined, message: string): Promise<{ ok: boolean }> {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  const testo = message.trim();
+  if (!testo) return { ok: false };
+  db.suggestions.push({
+    id: `zs_${Date.now()}`, parentId: parentId || undefined, offerId: offerId || undefined, message: testo.slice(0, 400),
+    userId: user.id, userName: `${user.firstName} ${user.lastName}`,
+    scopeLabel: scope.label, date: new Date().toISOString(), status: "aperta",
+  });
+  await saveZooDb(db);
+  rigeneraZoo();
+  return { ok: true };
+}
+
 export async function scioglieParent(back: string, parentId: string, scopeParam: string) {
   const user = await requireZooUser();
   if (!isZooEditor(user)) redirect(backUrl(back, scopeParam));
@@ -810,7 +865,11 @@ export async function toggleZooHiddenBulk(back: string, scopeParam: string, form
   const scope = resolveScope(user, scopeParam, academyDb);
   if (scope.type === "system") redirect(backUrl(back, scopeParam));
   const ids = (formData.getAll("sel") as string[]).filter(Boolean);
-  const eans = new Set(db.products.filter((p) => ids.includes(p.id)).map((p) => p.ean));
+  // spuntando un prodotto padre si intendono tutti i suoi articoli
+  const padri = (formData.getAll("selpadre") as string[]).filter(Boolean);
+  const eans = new Set(
+    db.products.filter((p) => ids.includes(p.id) || (p.parentId && padri.includes(p.parentId))).map((p) => p.ean)
+  );
   for (const ean of eans) {
     const existing = db.hidden.find(
       (h) => h.scopeType === scope.type && h.scopeId === scope.id && h.kind === "articolo" && h.value === ean
@@ -1355,6 +1414,118 @@ export async function setPvPriceInline(ean: string, scopeParam: string, value: s
   return { ok: true };
 }
 
+/**
+ * Prezzo di partenza (barrato) dell'ambito per un articolo: vuoto = torna a
+ * quello del Consorzio. Vive nella stessa riga del prezzo proprio.
+ */
+export async function setPvListinoInline(ean: string, scopeParam: string, value: string): Promise<{ ok: boolean }> {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  if (scope.type === "system") return { ok: false };
+  const listino = priceStr(value);
+  const riga = db.pvPrices.find((p) => p.scopeType === scope.type && p.scopeId === scope.id && p.ean === ean);
+  if (riga) {
+    riga.listino = listino || undefined;
+    if (!riga.prezzo && !riga.listino) db.pvPrices = db.pvPrices.filter((p) => p !== riga);
+  } else if (listino) {
+    db.pvPrices.push({ scopeType: scope.type, scopeId: scope.id, ean, prezzo: "", listino });
+  }
+  await saveZooDb(db);
+  return { ok: true };
+}
+
+/* ================== Coda di stampa: "per dopo" e "merce in arrivo" ================== */
+
+/**
+ * Mette da parte i cartelli scelti con tutte le impostazioni fatte (formato,
+ * prezzi scritti a mano, cosa nascondere), per stamparli dopo in blocco o
+ * quando la merce arriva. Un cartello già in coda per lo stesso ambito viene
+ * aggiornato, non duplicato.
+ */
+export async function mettiInCoda(
+  scopeParam: string, stato: "dopo" | "arrivo", vociJson: string
+): Promise<{ ok: boolean; n: number }> {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  let voci: { offerId: string; impostazioni: Record<string, string> }[] = [];
+  try { voci = JSON.parse(vociJson); } catch { return { ok: false, n: 0 }; }
+  let n = 0;
+  for (const v of voci) {
+    if (!v.offerId) continue;
+    const esistente = db.coda.find((c) => c.scopeType === scope.type && c.scopeId === scope.id && c.offerId === v.offerId && !c.stampato);
+    if (esistente) {
+      esistente.stato = stato;
+      esistente.impostazioni = v.impostazioni ?? {};
+    } else {
+      db.coda.push({
+        id: `zq_${Date.now()}_${n}`, scopeType: scope.type, scopeId: scope.id, offerId: v.offerId, stato,
+        impostazioni: v.impostazioni ?? {}, userName: `${user.firstName} ${user.lastName}`, creato: new Date().toISOString(),
+      });
+    }
+    n++;
+  }
+  await saveZooDb(db);
+  rigeneraZoo();
+  return { ok: true, n };
+}
+
+export async function togliDallaCoda(id: string, scopeParam: string) {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  db.coda = db.coda.filter((c) => !(c.id === id && c.scopeType === scope.type && c.scopeId === scope.id));
+  await saveZooDb(db);
+  rigeneraZoo();
+  redirect(backUrl("/stampe/zoo/stampa", scopeParam));
+}
+
+/** La merce è arrivata: il cartello passa fra quelli da stampare. */
+export async function segnaArrivato(id: string, scopeParam: string) {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  const c = db.coda.find((x) => x.id === id && x.scopeType === scope.type && x.scopeId === scope.id);
+  if (c) c.stato = "dopo";
+  await saveZooDb(db);
+  rigeneraZoo();
+  redirect(backUrl("/stampe/zoo/stampa", scopeParam));
+}
+
+/**
+ * Manda in stampa tutta una coda: i cartelli vengono segnati come stampati
+ * (spariscono dalla coda) e si apre l'anteprima di stampa con le impostazioni
+ * salvate di ciascuno. Se qualcosa va storto si ritrovano in "già stampati".
+ */
+export async function stampaCoda(scopeParam: string, stato: "dopo" | "arrivo", formData: FormData) {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  const solo = (formData.getAll("coda") as string[]).filter(Boolean);
+  const voci = db.coda.filter((c) =>
+    c.scopeType === scope.type && c.scopeId === scope.id && c.stato === stato && !c.stampato && (solo.length === 0 || solo.includes(c.id))
+  );
+  if (voci.length === 0) redirect(backUrl("/stampe/zoo/stampa", scopeParam));
+  const params: Record<string, string> = { print: "1", sel: voci.map((v) => v.offerId).join(",") };
+  for (const v of voci) for (const [k, val] of Object.entries(v.impostazioni)) if (val) params[k] = val;
+  const adesso = new Date().toISOString();
+  for (const v of voci) v.stampato = adesso;
+  for (const v of voci) {
+    if (!db.printed.some((p) => p.scopeType === scope.type && p.scopeId === scope.id && p.offerId === v.offerId)) {
+      db.printed.push({ scopeType: scope.type, scopeId: scope.id, offerId: v.offerId, at: adesso });
+    }
+  }
+  await saveZooDb(db);
+  rigeneraZoo();
+  redirect(backUrl("/stampe/zoo/stampa", scopeParam, params));
+}
+
 /** Proposta di correzione al Consorzio (testi condivisi, dati offerta...). */
 export async function sendZooSuggestion(scopeParam: string, formData: FormData) {
   const user = await requireZooUser();
@@ -1629,6 +1800,23 @@ export async function toggleZooNoPrint(offerId: string, scopeParam: string, back
   await saveZooDb(db);
   rigeneraZoo();
   redirect(backUrl(back, scopeParam));
+}
+
+/** Come toggleZooNoPrint, ma per le pagine che non ricaricano (controllo in reparto). */
+export async function toggleZooNoPrintInline(offerId: string, scopeParam: string): Promise<{ ok: boolean; escluso: boolean }> {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  if (scope.type === "system") return { ok: false, escluso: false };
+  const ean = db.offers.find((o) => o.id === offerId)?.ean ?? "";
+  const miei = (n: (typeof db.noPrint)[number]) => n.scopeType === scope.type && n.scopeId === scope.id;
+  const gia = db.noPrint.some((n) => miei(n) && (n.offerId === offerId || (Boolean(ean) && n.ean === ean)));
+  if (gia) db.noPrint = db.noPrint.filter((n) => !(miei(n) && (n.offerId === offerId || (Boolean(ean) && n.ean === ean))));
+  else db.noPrint.push({ scopeType: scope.type, scopeId: scope.id, offerId });
+  await saveZooDb(db);
+  rigeneraZoo();
+  return { ok: true, escluso: !gia };
 }
 
 /** Stessa cosa in blocco, sulle offerte spuntate nell'elenco di Stampa cartelli. */

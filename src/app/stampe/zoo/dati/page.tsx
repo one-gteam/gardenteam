@@ -11,9 +11,10 @@ import InlineSelect from "@/components/stampe/InlineSelect";
 import ColumnTools from "@/components/stampe/ColumnTools";
 import ParentQuickEdit from "@/components/stampe/ParentQuickEdit";
 import PhotoMatcher from "@/components/stampe/PhotoMatcher";
+import { DettagliPadre, PannelloPadre } from "@/components/stampe/DettagliPadre";
 import {
   getZooDb, zooImageUrl, effectiveParentText, isZooHidden, hiddenEntriesFor, fornitoriList, marcheList, marcaEffettiva,
-  suggestPhotoMatch, buildAbbinamentoIndex, fotoDaControllare, animaliDi, caratteristicheProdottoDi, storicoOfferteByEan,
+  suggestPhotoMatch, buildAbbinamentoIndex, fotoDaControllare, contenutoDa, testoContenuto, animaliDi, caratteristicheProdottoDi, storicoOfferteByEan,
   periodoBreve, visibleProducts, type ZooProduct, type ZooParent, type ZooStoricoVoce,
 } from "@/lib/zoo";
 import {
@@ -98,8 +99,6 @@ export default async function ZooDatiPage({
   const showHidden = sp.nascosti === "1";
   if (scope.type !== "system" && !showHidden) products = products.filter((p) => !isZooHidden(db, scope, p, academyDb));
 
-  const activeParent = sp.padre ? parentById.get(sp.padre) : undefined;
-  const parentChildren = activeParent ? db.products.filter((p) => p.parentId === activeParent.id) : [];
 
   // foto disponibili non ancora abbinate (per l'associazione manuale)
   const usedPhotos = new Set(db.products.map((p) => (p.image ?? "").split("/").pop()));
@@ -200,111 +199,6 @@ export default async function ZooDatiPage({
       ]
     : [];
 
-  /**
-   * Dettaglio del padre aperto: non una scheda separata in cima alla pagina, ma
-   * una riga espansa in mezzo alla tabella, subito sotto la riga del prodotto.
-   */
-  const editorRow = activeParent && (
-    <tr key={`ed_${activeParent.id}`}>
-      <td colSpan={nCols} style={{ background: "#f5f8fc", borderTop: "2px solid #274b7a", borderBottom: "2px solid #274b7a" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-          <strong style={{ fontSize: 14 }}>
-            Prodotto padre: {effectiveParentText(db, scope, activeParent, "nome", academyDb).value}
-            {activeParent.aiGenerated && <span className="pill pill-blue" style={{ marginLeft: 8 }}>testi AI</span>}
-          </strong>
-          <a className="btn btn-outline btn-sm" href={`${BACK}?${pageQs(sp, { scope: scopeParam, padre: undefined })}`}>✕ Chiudi</a>
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: 16 }}>
-          <div>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={zooImageUrl(undefined, activeParent) === "/immagini/mancante.jpg" && parentChildren[0]
-                ? zooImageUrl(parentChildren[0])
-                : zooImageUrl(undefined, activeParent)}
-              alt=""
-              style={{ width: "100%", borderRadius: 8, background: "#fff", border: "1px solid #e4e4e4" }}
-            />
-            {consortium && (
-              <>
-                <form action={setParentImage.bind(null, BACK, activeParent.id, scopeParam)} style={{ marginTop: 8, display: "grid", gap: 6 }}>
-                  <select name="fromChild" style={{ fontSize: 12 }}>
-                    <option value="">Immagine di riferimento: scegli da un articolo…</option>
-                    {parentChildren.filter((c) => c.image).map((c) => (
-                      <option key={c.id} value={c.id}>{c.descrizione.slice(0, 45)}</option>
-                    ))}
-                  </select>
-                  <button className="btn btn-outline btn-sm" type="submit">Usa questa</button>
-                </form>
-                <form action={setParentImage.bind(null, BACK, activeParent.id, scopeParam)} style={{ marginTop: 6, display: "grid", gap: 6 }}>
-                  <input type="file" name="file" accept="image/*" style={{ fontSize: 12 }} />
-                  <button className="btn btn-outline btn-sm" type="submit">Carica nuova immagine</button>
-                </form>
-              </>
-            )}
-            <div style={{ marginTop: 10 }}>
-              <strong style={{ fontSize: 12.5 }}>Caratteristiche</strong>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 4 }}>
-                {db.settings.caratteristiche.map((c) => {
-                  const on = activeParent.caratteristiche.includes(c);
-                  return consortium ? (
-                    <form key={c} action={toggleParentCaratteristica.bind(null, BACK, activeParent.id, c, scopeParam)}>
-                      <button type="submit" className={`pill ${on ? "pill-green" : "pill-gray"}`} style={{ cursor: "pointer", border: "none" }}>
-                        {on ? "✓ " : ""}{c}
-                      </button>
-                    </form>
-                  ) : on ? <span key={c} className="pill pill-green">{c}</span> : null;
-                })}
-              </div>
-            </div>
-          </div>
-          <div>
-            <form action={saveParentTexts.bind(null, BACK, activeParent.id, scopeParam)} style={{ display: "grid", gap: 10 }}>
-              <label className="field" style={{ marginBottom: 0 }}>
-                Nome prodotto padre
-                <input type="text" name="nome" defaultValue={effectiveParentText(db, scope, activeParent, "nome", academyDb).value} />
-              </label>
-              <label className="field" style={{ marginBottom: 0 }}>
-                Descrizione per il VOLANTINO{" "}
-                {effectiveParentText(db, scope, activeParent, "descVolantino", academyDb).custom && <span className="pill pill-orange">personalizzata</span>}
-                <textarea name="descVolantino" rows={2} defaultValue={effectiveParentText(db, scope, activeParent, "descVolantino", academyDb).value} />
-              </label>
-              <label className="field" style={{ marginBottom: 0 }}>
-                Descrizione per il CARTELLO{" "}
-                {effectiveParentText(db, scope, activeParent, "descCartello", academyDb).custom && <span className="pill pill-orange">personalizzata</span>}
-                <textarea name="descCartello" rows={3} defaultValue={effectiveParentText(db, scope, activeParent, "descCartello", academyDb).value} />
-              </label>
-              <button className="btn btn-sm" type="submit">
-                Salva {scope.type === "system" ? "(versione Consorzio)" : `(personalizzazione ${scope.label})`}
-              </button>
-            </form>
-            {consortium && (
-              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                <form action={rigeneraTestiAI.bind(null, BACK, activeParent.id, scopeParam)}>
-                  <button className="btn btn-outline btn-sm" type="submit">Rigenera testi con AI</button>
-                </form>
-                <form action={scioglieParent.bind(null, BACK, activeParent.id, scopeParam)}>
-                  <button className="btn btn-outline btn-sm" type="submit">Sciogli raggruppamento</button>
-                </form>
-              </div>
-            )}
-            {consortium && (
-              <ParentQuickEdit
-                parentId={activeParent.id}
-                articoli={parentChildren.map((c) => ({ id: c.id, ean: c.ean, descrizione: c.descrizione }))}
-                padri={db.parents
-                  .map((p) => ({ id: p.id, nome: effectiveParentText(db, scope, p, "nome", academyDb).value }))
-                  .sort((a, b) => a.nome.localeCompare(b.nome, "it"))}
-                foto={availablePhotos}
-                fotoBaseUrl={publicUrlFor("zoo-foto/__ph__").slice(0, -6)}
-                onMove={moveProductToParent.bind(null, BACK, scopeParam)}
-                onSetImage={setParentImageFromFile.bind(null, activeParent.id)}
-              />
-            )}
-          </div>
-        </div>
-      </td>
-    </tr>
-  );
 
   return (
     <div>
@@ -317,6 +211,36 @@ export default async function ZooDatiPage({
               {db.products.length} articoli · {db.parents.length} prodotti padre · {senzaPadre} da raggruppare
             </p>
           </div>
+          {consortium && scope.type === "system" && (
+            <details className="strumento" open={sp.importati !== undefined}>
+              <summary className="btn btn-outline btn-sm">Import Excel prodotti</summary>
+              <div className="card" style={{ marginTop: 10, padding: 14 }}>
+                <strong>Import Excel prodotti</strong>
+                <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "4px 0 8px" }}>
+                  Colonne: EAN, CODICE FORNITORE, DESCRIZIONE, MARCA, FORNITORE, CATEGORIA, PREZZO.{" "}
+                  <a href={`/stampe/zoo/excel?template=1&scope=${scopeParam}`}>Scarica il modello</a>
+                </p>
+                <form action={importZooProducts.bind(null, scopeParam)} style={{ display: "flex", gap: 8 }}>
+                  <input type="file" name="file" accept=".xlsx,.xls,.csv" required />
+                  <button className="btn btn-sm" type="submit">Importa</button>
+                </form>
+              </div>
+            </details>
+          )}
+          {consortium && scope.type === "system" && (
+            <details className="strumento" open={sp.foto !== undefined}>
+              <summary className="btn btn-outline btn-sm">Caricamento foto</summary>
+              <div className="card" style={{ marginTop: 10, padding: 14 }}>
+                <strong>Caricamento foto</strong>
+                <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "4px 0 8px" }}>
+                  Puoi selezionare anche centinaia di foto insieme (caricate direttamente, niente limiti di
+                  dimensione): se il nome del file contiene l&apos;EAN o il codice fornitore, l&apos;abbinamento è
+                  automatico.
+                </p>
+                <PhotoUploader back={BACK} scopeParam={scopeParam} finalize={finalizeZooPhotoUpload} />
+              </div>
+            </details>
+          )}
           <form method="get" style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <label style={{ fontSize: 12.5, fontWeight: 700 }}>
               Insegna / PV{" "}
@@ -361,34 +285,6 @@ export default async function ZooDatiPage({
               <input type="file" name="file" accept=".xlsx,.xls,.csv" required />
               <button className="btn btn-sm" type="submit">Importa i miei articoli</button>
             </form>
-          </div>
-        )}
-
-        {/* strumenti del Consorzio: import Excel + caricamento foto */}
-        {consortium && scope.type === "system" && (
-          <div className="card" style={{ marginBottom: 14, padding: 14 }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-              <div>
-                <strong>Import Excel prodotti</strong>
-                <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "4px 0 8px" }}>
-                  Colonne: EAN, CODICE FORNITORE, DESCRIZIONE, MARCA, FORNITORE, CATEGORIA, PREZZO.{" "}
-                  <a href={`/stampe/zoo/excel?template=1&scope=${scopeParam}`}>Scarica il modello</a>
-                </p>
-                <form action={importZooProducts.bind(null, scopeParam)} style={{ display: "flex", gap: 8 }}>
-                  <input type="file" name="file" accept=".xlsx,.xls,.csv" required />
-                  <button className="btn btn-sm" type="submit">Importa</button>
-                </form>
-              </div>
-              <div>
-                <strong>Caricamento foto</strong>
-                <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "4px 0 8px" }}>
-                  Puoi selezionare anche centinaia di foto insieme (caricate direttamente, niente limiti di
-                  dimensione): se il nome del file contiene l&apos;EAN o il codice fornitore, l&apos;abbinamento è
-                  automatico.
-                </p>
-                <PhotoUploader back={BACK} scopeParam={scopeParam} finalize={finalizeZooPhotoUpload} />
-              </div>
-            </div>
           </div>
         )}
 
@@ -581,7 +477,6 @@ export default async function ZooDatiPage({
                   const animali = animaliDi(db, parent?.caratteristiche ?? []);
                   const prodottoCarat = caratteristicheProdottoDi(db, parent?.caratteristiche ?? []);
                   const key = parent?.id ?? `_o_${first.id}`;
-                  const aperto = !!parent && activeParent?.id === parent.id;
                   const nome = parent ? effectiveParentText(db, scope, parent, "nome", academyDb).value : first.descrizione;
                   const descr = parent ? effectiveParentText(db, scope, parent, "descVolantino", academyDb).value : "";
                   const hidden = scope.type !== "system" && prods.length === 1 && isZooHidden(db, scope, first, academyDb);
@@ -591,7 +486,8 @@ export default async function ZooDatiPage({
                       {(consortium || scope.type !== "system") && (
                         <td>
                           {parent
-                            ? consortium && <input type="checkbox" name="selpadre" value={parent.id} title="Spunta due o più padri e usa «Unisci i padri selezionati»: il primo dà i testi" />
+                            ? <input type="checkbox" name="selpadre" value={parent.id}
+                                title={consortium ? "Spunta due o più padri e usa «Unisci i padri selezionati»: il primo dà i testi" : "Spunta i padri e usa «Segna selezionati come non tenuti»"} />
                             : <input type="checkbox" name="sel" value={first.id} />}
                         </td>
                       )}
@@ -608,12 +504,7 @@ export default async function ZooDatiPage({
                           <strong style={{ fontSize: 13 }}>{nome}</strong>
                         )}
                         {!parent && <span className="pill pill-gray">senza padre</span>}
-                        {parent && (
-                          <a href={`${BACK}?${pageQs(sp, { scope: scopeParam, padre: aperto ? undefined : parent.id })}`}
-                            style={{ fontSize: 10.5, color: "#274b7a", textDecoration: "none" }}>
-                            {aperto ? "▾ dettagli" : "▸ dettagli"}
-                          </a>
-                        )}
+                        {parent && <DettagliPadre parentId={parent.id} />}
                       </td>
                       <td className="col-wide">
                         {consortium && parent ? (
@@ -671,7 +562,13 @@ export default async function ZooDatiPage({
                         </td>
                       )}
                     </tr>,
-                    aperto && editorRow,
+                    parent ? (
+                      <tr key={`pan_${parent.id}`} className="riga-pannello">
+                        <td colSpan={nCols} style={{ padding: 0 }}>
+                          <PannelloPadre parentId={parent.id} scopeParam={scopeParam} back={BACK} />
+                        </td>
+                      </tr>
+                    ) : null,
                   ];
                 })}
 
@@ -680,7 +577,6 @@ export default async function ZooDatiPage({
                   const parent = p.parentId ? parentById.get(p.parentId) : undefined;
                   const animali = animaliDi(db, parent?.caratteristiche ?? []);
                   const prodottoCarat = caratteristicheProdottoDi(db, parent?.caratteristiche ?? []);
-                  const aperto = !!parent && activeParent?.id === parent.id;
                   const parentDescr = parent ? effectiveParentText(db, scope, parent, "descVolantino", academyDb).value : "";
                   const hidden = scope.type !== "system" && isZooHidden(db, scope, p, academyDb);
                   return [
@@ -717,7 +613,16 @@ export default async function ZooDatiPage({
                             )}
                           </span>
                         )}
-                        {p.prezzo && <div style={{ fontSize: 11.5, color: "var(--muted)" }}>prezzo base € {p.prezzo}</div>}
+                        <div style={{ fontSize: 11.5, color: "var(--muted)", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                          {p.prezzo && <span>prezzo base € {p.prezzo}</span>}
+                          <span title="Contenuto della confezione, per il prezzo al chilo/litro">
+                            {consortium
+                              ? <InlineEdit value={testoContenuto(p.contenuto ?? contenutoDa(p.descrizione))} placeholder="contenuto (es. 1,5 kg)"
+                                  onSave={updateProductFieldInline.bind(null, p.id, "contenuto")} />
+                              : (testoContenuto(p.contenuto ?? contenutoDa(p.descrizione)) || "")}
+                          </span>
+                        </div>
+                        {parent && <DettagliPadre parentId={parent.id} />}
                       </td>
                       <td className="col-wide" style={{ fontSize: 11.5, color: "var(--muted)" }}>{parentDescr || "—"}</td>
                       <td>
@@ -742,9 +647,10 @@ export default async function ZooDatiPage({
                       <td>{cellaCampagne(storico.get(p.ean)?.promo ?? [], "promo")}</td>
                       <td>
                         {parent ? (
-                          <a className="pill pill-blue" href={`${BACK}?${pageQs(sp, { scope: scopeParam, padre: aperto ? undefined : parent.id })}`} style={{ textDecoration: "none" }}>
-                            {effectiveParentText(db, scope, parent, "nome", academyDb).value.slice(0, 24)}
-                          </a>
+                          <>
+                            <span className="pill pill-blue">{effectiveParentText(db, scope, parent, "nome", academyDb).value.slice(0, 24)}</span>
+                            {" "}<DettagliPadre parentId={parent.id} />
+                          </>
                         ) : (
                           <span className="pill pill-gray">senza padre</span>
                         )}
@@ -760,7 +666,13 @@ export default async function ZooDatiPage({
                         </td>
                       )}
                     </tr>,
-                    aperto && editorRow,
+                    parent && (
+                      <tr key={`pan_${parent.id}`} className="riga-pannello">
+                        <td colSpan={nCols} style={{ padding: 0 }}>
+                          <PannelloPadre parentId={parent.id} scopeParam={scopeParam} back={BACK} />
+                        </td>
+                      </tr>
+                    ),
                   ];
                 })}
               </tbody>

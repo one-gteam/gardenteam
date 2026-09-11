@@ -12,6 +12,8 @@ export interface AiGroup {
   descCartello: string;
   caratteristiche: string[];
   eans: string[];
+  /** Contenuto di ogni articolo (per il prezzo al chilo/litro): ean → quantità in kg o l. */
+  contenuti?: { ean: string; quantita: number; unita: "kg" | "l" }[];
 }
 
 const GROUPS_SCHEMA = {
@@ -27,8 +29,22 @@ const GROUPS_SCHEMA = {
           descCartello: { type: "string" },
           caratteristiche: { type: "array", items: { type: "string" } },
           eans: { type: "array", items: { type: "string" }, description: "EAN degli articoli che appartengono a questo padre" },
+          contenuti: {
+            type: "array",
+            description: "Per ogni articolo, quanto contiene la confezione, gia' convertito in chili o litri (multipack = totale). Solo gli articoli di cui si capisce il contenuto.",
+            items: {
+              type: "object",
+              properties: {
+                ean: { type: "string" },
+                quantita: { type: "number", description: "in kg oppure in litri, es. 0.07 per 70 g" },
+                unita: { type: "string", enum: ["kg", "l"] },
+              },
+              required: ["ean", "quantita", "unita"],
+              additionalProperties: false,
+            },
+          },
         },
-        required: ["nome", "descVolantino", "descCartello", "caratteristiche", "eans"],
+        required: ["nome", "descVolantino", "descCartello", "caratteristiche", "eans", "contenuti"],
         additionalProperties: false,
       },
     },
@@ -47,7 +63,7 @@ function buildPrompt(products: ZooProduct[], settings: ZooSettings, singleGroup:
       ? "Questi articoli sono varianti (gusto/formato) dello STESSO prodotto. Restituisci UN SOLO gruppo che li contiene tutti."
       : "Raggruppa questi articoli zoo/pet in prodotti \"padre\": stesse linee di prodotto che differiscono solo per gusto, formato o taglia vanno nello stesso gruppo. Non unire marche o linee diverse.",
     "",
-    "Per ogni gruppo genera QUATTRO campi. Anche con una descrizione di partenza povera (es. solo \"Tonnetto\"),",
+    "Per ogni gruppo genera CINQUE campi. Anche con una descrizione di partenza povera (es. solo \"Tonnetto\"),",
     "usa marca/fornitore/categoria dell'articolo per scrivere comunque un testo commerciale completo: non limitarti",
     "a ripetere la marca da sola.",
     "",
@@ -64,6 +80,10 @@ function buildPrompt(products: ZooProduct[], settings: ZooSettings, singleGroup:
     `   caratteristiche di prodotto → ${settings.caratteristicheProdotto.join(", ")}`,
     "   Includi ALMENO una categoria di animale E ALMENO una caratteristica di prodotto quando pertinenti all'articolo",
     "   (es. un croccantino per gatti è insieme \"Gatto\" e \"Secco\"; un accessorio generico può avere solo la caratteristica di prodotto).",
+    "",
+    "5) \"contenuti\": per ogni articolo di cui la descrizione dice quanto contiene la confezione (70 g, 1,5 kg, 250 ml, 4x85 g),",
+    "   la quantità già convertita in chili (kg) o litri (l): 70 g → 0.07 kg, 4x85 g → 0.34 kg, 250 ml → 0.25 l.",
+    "   Serve per il prezzo al chilo/litro sul cartello. Gli articoli senza contenuto leggibile (accessori, pezzi) non vanno elencati.",
     "",
     "Articoli:",
     ...products.map(productLine),

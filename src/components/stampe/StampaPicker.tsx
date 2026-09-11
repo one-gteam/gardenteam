@@ -36,6 +36,10 @@ export interface StampaPickerProps {
   initialListini?: Record<string, string>;
   /** Cartelli da stampare senza foto, anche se l'articolo ce l'ha. */
   initialNoPhoto?: Record<string, boolean>;
+  /** Cartelli senza il prezzo di partenza (resta il promo). */
+  initialNoListino?: Record<string, boolean>;
+  /** Mette i cartelli selezionati in coda ("dopo" o "arrivo") con le loro impostazioni. */
+  onQueue?: (stato: "dopo" | "arrivo", vociJson: string) => Promise<{ ok: boolean; n: number }>;
   /**
    * Chiamato a ogni cambio di selezione o di impostazioni con i parametri
    * dell'anteprima: chi lo riceve può ridisegnare i cartelli senza ricaricare.
@@ -65,6 +69,8 @@ export default function StampaPicker({
   onPrint,
   initialListini,
   initialNoPhoto,
+  initialNoListino,
+  onQueue,
   onChange,
   onPreview,
 }: StampaPickerProps) {
@@ -75,6 +81,8 @@ export default function StampaPicker({
   const [listini, setListini] = useState<Record<string, string>>(initialListini ?? {});
   const [noPrice, setNoPrice] = useState<Record<string, boolean>>(initialNoPrice);
   const [noPhoto, setNoPhoto] = useState<Record<string, boolean>>(initialNoPhoto ?? {});
+  const [noListino, setNoListino] = useState<Record<string, boolean>>(initialNoListino ?? {});
+  const [esitoCoda, setEsitoCoda] = useState("");
   const [hiddenFields, setHiddenFields] = useState<Record<string, string[]>>(initialHidden);
   const [applyAll, setApplyAll] = useState(globalFormat);
   const [doppio, setDoppio] = useState(false);
@@ -103,6 +111,7 @@ export default function StampaPicker({
       if (listini[id]) params.set(`listino_${id}`, listini[id]);
       if (noPrice[id]) params.set(`noprezzo_${id}`, "1");
       if (noPhoto[id]) params.set(`senzafoto_${id}`, "1");
+      if (noListino[id]) params.set(`nolistino_${id}`, "1");
       if (hiddenFields[id]?.length) params.set(`nascondi_${id}`, hiddenFields[id].join(","));
     }
     if (doppio) params.set("doppio", "1");
@@ -111,6 +120,33 @@ export default function StampaPicker({
   };
 
   const anyA5 = selected.some((id) => ["a5", "za5"].includes(rowFormat[id] ?? applyAll));
+
+  /** Le impostazioni di un cartello con gli stessi nomi dell'indirizzo di stampa: così la coda le rigioca tali e quali. */
+  const impostazioniDi = (id: string): Record<string, string> => {
+    const out: Record<string, string> = { [`formato_${id}`]: rowFormat[id] ?? applyAll };
+    if (prices[id]) out[`prezzo_${id}`] = prices[id];
+    if (listini[id]) out[`listino_${id}`] = listini[id];
+    if (noPrice[id]) out[`noprezzo_${id}`] = "1";
+    if (noListino[id]) out[`nolistino_${id}`] = "1";
+    if (noPhoto[id]) out[`senzafoto_${id}`] = "1";
+    if (hiddenFields[id]?.length) out[`nascondi_${id}`] = hiddenFields[id].join(",");
+    return out;
+  };
+  const inCoda = async (stato: "dopo" | "arrivo") => {
+    if (!onQueue || selected.length === 0) return;
+    const r = await onQueue(stato, JSON.stringify(selected.map((id) => ({ offerId: id, impostazioni: impostazioniDi(id) }))));
+    setEsitoCoda(r.ok
+      ? (stato === "dopo" ? `✓ ${r.n} cartelli messi da parte: li stampi quando vuoi da «Da stampare più tardi».` : `✓ ${r.n} cartelli segnati come merce in arrivo.`)
+      : "Non sono riuscito a metterli in coda.");
+    if (r.ok) setSelected([]);
+  };
+  /** Nasconde (o rimette) prezzo, prezzo di partenza o foto su tutti i cartelli selezionati insieme. */
+  const nascondiSuTutti = (cosa: "prezzo" | "listino" | "foto", valore: boolean) => {
+    const tutti = Object.fromEntries(selected.map((id) => [id, valore]));
+    if (cosa === "prezzo") setNoPrice((prev) => ({ ...prev, ...tutti }));
+    if (cosa === "listino") setNoListino((prev) => ({ ...prev, ...tutti }));
+    if (cosa === "foto") setNoPhoto((prev) => ({ ...prev, ...tutti }));
+  };
 
   // ogni cambiamento va all'anteprima dal vivo, se la pagina ne ha una
   const queryAnteprima = selected.length > 0 ? buildUrl(false).split("?")[1] : "";
@@ -256,6 +292,15 @@ export default function StampaPicker({
                           />{" "}
                           prezzo
                         </label>
+                        <label style={{ fontSize: 12, display: "flex", gap: 4, alignItems: "center" }}
+                          title="Stampa senza il prezzo di partenza barrato (resta il prezzo promo)">
+                          <input
+                            type="checkbox"
+                            checked={!!noListino[p.id]}
+                            onChange={(e) => setNoListino((prev) => ({ ...prev, [p.id]: e.target.checked }))}
+                          />{" "}
+                          partenza
+                        </label>
                         {/* senza foto si stampa il "foglio senza foto" del layout, con i campi ridisposti */}
                         <label style={{ fontSize: 12, display: "flex", gap: 4, alignItems: "center" }}
                           title="Stampa questo cartello senza foto, anche se l'articolo ne ha una">
@@ -299,7 +344,32 @@ export default function StampaPicker({
                 </tbody>
               </table>
             </div>
+            {/* stessa scelta su tutti i selezionati in un colpo: spunta = nascondi, togli la spunta = rimetti */}
+            <div style={{ display: "flex", gap: 12, marginTop: 10, flexWrap: "wrap", alignItems: "center", fontSize: 12.5 }}>
+              <strong>Su tutti i selezionati nascondi:</strong>
+              {([["prezzo", "prezzo"], ["listino", "prezzo di partenza"], ["foto", "foto"]] as const).map(([cosa, etichetta]) => {
+                const tutti = selected.length > 0 && selected.every((id) => (cosa === "prezzo" ? noPrice[id] : cosa === "listino" ? noListino[id] : noPhoto[id]));
+                return (
+                  <label key={cosa} style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
+                    <input type="checkbox" checked={tutti} onChange={(e) => nascondiSuTutti(cosa, e.target.checked)} /> {etichetta}
+                  </label>
+                );
+              })}
+            </div>
+            {esitoCoda && <div className="alert alert-green" style={{ marginTop: 8 }}>{esitoCoda}</div>}
             <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap", alignItems: "center" }}>
+              {onQueue && (
+                <>
+                  <button type="button" className="btn btn-outline" onClick={() => inCoda("dopo")}
+                    title="Mette da parte i cartelli selezionati con tutte le impostazioni: si stampano dopo, in blocco">
+                    Stampa per dopo
+                  </button>
+                  <button type="button" className="btn btn-outline" onClick={() => inCoda("arrivo")}
+                    title="Merce non ancora arrivata: le impostazioni restano salvate, si stampa quando entra">
+                    Merce in arrivo
+                  </button>
+                </>
+              )}
               {anyA5 && (
                 <label style={{ fontSize: 12.5, display: "flex", gap: 5, alignItems: "center" }}>
                   <input type="checkbox" checked={doppio} onChange={(e) => setDoppio(e.target.checked)} />

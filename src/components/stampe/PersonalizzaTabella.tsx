@@ -4,7 +4,7 @@ import { useTransition } from "react";
 import InlineEdit from "./InlineEdit";
 import InlineSelect from "./InlineSelect";
 import {
-  updateParentFieldInline, setParentTagScoped, setOfferTextScoped, setPvPriceInline, updateOfferFieldInline,
+  updateParentFieldInline, setParentTagScoped, setOfferTextScoped, setPvPriceInline, setPvListinoInline, updateOfferFieldInline,
   toggleZooNoPrint,
 } from "@/lib/zoo-actions";
 
@@ -26,6 +26,7 @@ export interface RigaPersonalizza {
   prezzoListino?: string;
   meccanica?: string;
   pv?: string;
+  pvListino?: string;
   escluso: boolean;
 }
 
@@ -56,7 +57,7 @@ export default function PersonalizzaTabella({
       <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 10px" }}>
         {consorzio
           ? "Stai modificando i testi comuni a tutte le insegne. Prezzo di partenza e prezzo promo sono dati dell'offerta, validi per tutti."
-          : `Le modifiche qui sotto valgono solo per i cartelli di ${scopeLabel}: la versione del Consorzio resta intatta. Il prezzo scritto qui è il vostro prezzo per quell'articolo; quello del solo cartello si cambia nella tabella "Selezionati".`}
+          : `Le modifiche qui sotto valgono solo per i cartelli di ${scopeLabel}: la versione del Consorzio resta intatta. Prezzo e prezzo di partenza scritti qui sono i vostri per quell'articolo, su tutti i cartelli; quelli del solo cartello si cambiano nella tabella "Selezionati".`}
       </p>
       <div className="table-wrap">
         <table className="data">
@@ -144,7 +145,13 @@ export default function PersonalizzaTabella({
                     <InlineEdit value={r.prezzoListino ?? ""} placeholder="es. 12,99" onSaved={onRefresh}
                       onSave={updateOfferFieldInline.bind(null, r.id, "prezzoListino")} />
                   ) : (
-                    <span style={{ fontSize: 12 }}>{r.prezzoListino ? `€ ${r.prezzoListino}` : "A SOLI"}</span>
+                    <>
+                      <InlineEdit value={r.pvListino ?? ""} placeholder={r.prezzoListino || "A SOLI"} onSaved={onRefresh}
+                        onSave={setPvListinoInline.bind(null, r.ean, scopeParam)} />
+                      {r.pvListino
+                        ? <span className="pill pill-orange">vostro</span>
+                        : <span className="hint">Consorzio: {r.prezzoListino ? `€ ${r.prezzoListino}` : "A SOLI"}</span>}
+                    </>
                   )}
                 </td>
                 <td>

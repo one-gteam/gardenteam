@@ -4,7 +4,7 @@ import { getDb } from "@/lib/db";
 import { canAccessArea, resolveScope } from "@/lib/stampe";
 import {
   getZooDb, campagnaPerStampa, offertePerStampa, tagsPerLayout, valoriPerStampa, effectiveZooLayout,
-  effectiveParentText, effectiveParentTag, effectiveOfferText, pvPriceFor, noPrintSets, ZOO_FORMATS,
+  effectiveParentText, effectiveParentTag, effectiveOfferText, pvPriceFor, pvListinoFor, noPrintSets, ZOO_FORMATS,
 } from "@/lib/zoo";
 
 /**
@@ -61,6 +61,7 @@ export async function GET(req: NextRequest) {
       prezzoListino: o.prezzoListino,
       meccanica: o.meccanica,
       pv: pvPriceFor(db, scope, o.ean, academyDb),
+      pvListino: pvListinoFor(db, scope, o.ean, academyDb),
       escluso: noPrint.offerIds.has(o.id) || noPrint.eans.has(o.ean),
     };
   });

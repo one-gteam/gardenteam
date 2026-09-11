@@ -458,10 +458,30 @@ table.data td { overflow-wrap: anywhere; }
   background: var(--green-600); border-radius: 3px 0 0 0; cursor: nwse-resize;
 }
 /* Stampa cartelli: strumenti di import come pulsanti nella riga del titolo; aperti, prendono tutta la riga */
+.strumento { position: relative; }
 .strumento > summary { list-style: none; cursor: pointer; display: inline-block; }
 .strumento > summary::-webkit-details-marker { display: none; }
-.strumento[open] { flex-basis: 100%; }
 .strumento[open] > summary { background: var(--green-700); color: #fff; }
+/* la scheda si apre come un pannello sotto il pulsante, senza spostare il resto della riga */
+.strumento[open] > .card { position: absolute; top: calc(100% + 4px); left: 0; z-index: 40; width: 640px; max-width: calc(100vw - 48px); box-shadow: 0 10px 30px rgba(0,0,0,.18); }
+@media (max-width: 720px) { .strumento[open] > .card { position: static; width: auto; } }
+
+/* Controllo in reparto (cellulare): un cartello alla volta, pulsanti grandi in fondo */
+.reparto-filtri { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+.reparto-filtri select, .reparto-filtri input[type="search"] { margin-top: 0; font-size: 13px; }
+.reparto-filtri input[type="search"] { flex: 1; min-width: 140px; }
+.reparto-testa { display: flex; gap: 8px; align-items: center; margin-bottom: 2px; }
+.reparto-cartello { display: flex; justify-content: center; margin: 8px 0; overflow: hidden; }
+.reparto-campi { padding: 10px; display: grid; gap: 8px; margin-bottom: 8px; }
+.reparto-campi label { font-size: 12px; font-weight: 700; display: grid; gap: 2px; }
+.reparto-riga { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.reparto-azioni { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 8px 0; }
+.reparto-azioni .btn { padding: 12px 8px; font-size: 14px; }
+.reparto-azioni > label { grid-column: 1 / -1; }
+.reparto-nav { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.reparto-nav .btn { padding: 14px 8px; font-size: 15px; }
+.reparto { user-select: none; }
+.reparto input, .reparto textarea { user-select: text; }
 
 /* Stampa cartelli: elenco, selezionati, anteprima. minmax(0) evita che la colonna centrale allarghi la pagina */
 .stampa-griglia { display: grid; grid-template-columns: 300px minmax(0, 1fr) 300px; gap: 16px; align-items: start; }

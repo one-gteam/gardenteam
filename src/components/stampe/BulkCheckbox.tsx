@@ -20,12 +20,12 @@ export default function BulkCheckbox({ name, also }: { name: string; also?: stri
     : `input[type="checkbox"][name="${name}"]`;
 
   useEffect(() => {
-    const boxes = () =>
-      Array.from(document.querySelectorAll<HTMLInputElement>(`input[type="checkbox"][name="${name}"]`));
+    // l'intervallo con Maiusc scorre l'elenco nell'ordine della tabella, padri e articoli insieme
+    const boxes = () => Array.from(document.querySelectorAll<HTMLInputElement>(selettore));
     let lastIndex: number | null = null;
     const onClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
-      if (!(target instanceof HTMLInputElement) || target.name !== name) return;
+      if (!(target instanceof HTMLInputElement) || (target.name !== name && target.name !== also)) return;
       const list = boxes();
       const idx = list.indexOf(target);
       if (e.shiftKey && lastIndex !== null && idx >= 0) {
@@ -36,7 +36,7 @@ export default function BulkCheckbox({ name, also }: { name: string; also?: stri
     };
     document.addEventListener("click", onClick);
     return () => document.removeEventListener("click", onClick);
-  }, [name]);
+  }, [name, also, selettore]);
 
   const toggleAll = () => {
     const next = allRef.current?.checked ?? false;

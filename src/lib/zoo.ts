@@ -22,6 +22,12 @@ export interface ZooProduct {
    */
   scopeType?: ScopeType;
   scopeId?: string;
+  /**
+   * Quanto contiene la confezione, per il prezzo al chilo o al litro sul
+   * cartello: ricavato dalla descrizione ("70 g", "1,5 kg", "250 ml", "4x85 g")
+   * o scritto a mano. Assente = non si sa, niente prezzo all'unità.
+   */
+  contenuto?: { quantita: number; unita: "kg" | "l" };
 }
 
 /** Prodotto padre: raggruppa articoli simili, con testi per volantino e cartello. */
@@ -121,6 +127,8 @@ export interface ZooOffer {
    * come è composto il layout del cartello.
    */
   meccanica?: string;
+  /** Prezzo al chilo/litro scritto a mano ("€ 12,90/kg"): vince su quello calcolato dal contenuto. */
+  prezzoUnita?: string;
   nuovo?: boolean; // prodotto creato da questo import (non era nel DB base)
   // scelte del Consorzio per il volantino:
   selezionata?: boolean;
@@ -226,6 +234,27 @@ export interface ZooPvPrice {
   scopeId: string;
   ean: string;
   prezzo: string;
+  /** Prezzo di partenza (barrato) dell'insegna/PV, se diverso da quello del Consorzio. */
+  listino?: string;
+}
+
+/**
+ * Cartello messo da parte per stamparlo dopo, con tutte le scelte già fatte
+ * (formato, prezzi scritti a mano, cosa nascondere). Due code: "dopo" per chi
+ * prepara i cartelli e li stampa in blocco, "arrivo" per la merce non ancora
+ * arrivata, da stampare quando entra in magazzino.
+ */
+export interface ZooCoda {
+  id: string;
+  scopeType: ScopeType;
+  scopeId: string;
+  offerId: string;
+  stato: "dopo" | "arrivo";
+  /** Parametri di stampa del cartello, con gli stessi nomi dell'indirizzo di stampa (formato_, prezzo_…). */
+  impostazioni: Record<string, string>;
+  userName: string;
+  creato: string; // ISO
+  stampato?: string; // ISO: già mandato in stampa
 }
 
 /** Proposta di correzione inviata al Consorzio (come le 🚩 dell'Arredo). */
@@ -423,6 +452,7 @@ export interface ZooDB {
   pvPromos: ZooPvPromo[];
   scopeApiKeys: ZooScopeApiKey[];
   noteBozza: ZooNotaBozza[];
+  coda: ZooCoda[];
 }
 
 /* ================== Persistenza ================== */
@@ -450,11 +480,11 @@ export async function getZooDb(): Promise<ZooDB> {
     products: [], parents: [], textOverrides: [], tagOverrides: [], offerOverrides: [], printed: [],
     campaigns: [], offers: [],
     votes: [], hidden: [], pvPrices: [], suggestions: [], volantinoLayouts: [], zooLayouts: [],
-    noPrint: [], layoutImages: [], pvPromoCodes: [], pvPromos: [], scopeApiKeys: [], noteBozza: [],
+    noPrint: [], layoutImages: [], pvPromoCodes: [], pvPromos: [], scopeApiKeys: [], noteBozza: [], coda: [],
   };
   const db = await readDomain<ZooDB>("zoo", empty);
   db.settings = { ...DEFAULT_SETTINGS, ...(db.settings ?? {}) };
-  for (const k of ["products", "parents", "textOverrides", "tagOverrides", "offerOverrides", "printed", "campaigns", "offers", "votes", "hidden", "pvPrices", "suggestions", "volantinoLayouts", "zooLayouts", "noPrint", "layoutImages", "pvPromoCodes", "pvPromos", "scopeApiKeys", "noteBozza"] as const) {
+  for (const k of ["products", "parents", "textOverrides", "tagOverrides", "offerOverrides", "printed", "campaigns", "offers", "votes", "hidden", "pvPrices", "suggestions", "volantinoLayouts", "zooLayouts", "noPrint", "layoutImages", "pvPromoCodes", "pvPromos", "scopeApiKeys", "noteBozza", "coda"] as const) {
     if (!db[k]) (db as unknown as Record<string, unknown>)[k] = [];
   }
   // i layout salvati prima delle tipologie non hanno il campo: senza questo la
@@ -561,7 +591,17 @@ export function pvPriceFor(db: ZooDB, scope: Scope, ean: string, academyDb: DB):
   for (const s of chainFor(scope, academyDb)) {
     if (s.type === "system") continue;
     const pp = db.pvPrices.find((p) => p.scopeType === s.type && p.scopeId === s.id && p.ean === ean);
-    if (pp) return pp.prezzo;
+    if (pp?.prezzo) return pp.prezzo;
+  }
+  return undefined;
+}
+
+/** Prezzo di partenza (barrato) dell'insegna/PV per un articolo, se ne hanno scritto uno. */
+export function pvListinoFor(db: ZooDB, scope: Scope, ean: string, academyDb: DB): string | undefined {
+  for (const s of chainFor(scope, academyDb)) {
+    if (s.type === "system") continue;
+    const pp = db.pvPrices.find((p) => p.scopeType === s.type && p.scopeId === s.id && p.ean === ean);
+    if (pp?.listino) return pp.listino;
   }
   return undefined;
 }
@@ -731,6 +771,13 @@ export function valoriPerStampa(
   const vals = zooCartelloValues(db, o, scope, academyDb);
   const pv = pvPriceFor(db, scope, o.ean, academyDb);
   if (pv) vals.prezzoPromo = `€ ${pv}`;
+  const prezzoManuale = sp[`prezzo_${o.id}`];
+  const prezzoEffettivo = prezzoManuale || pv || o.prezzoPromo;
+  if (prezzoEffettivo !== o.prezzoPromo) {
+    vals.prezzoUnita = prezzoUnitaDi(o, db.products.find((p) => p.id === o.productId), prezzoEffettivo);
+  }
+  const pvL = pvListinoFor(db, scope, o.ean, academyDb);
+  if (pvL) vals.prezzoListino = `€ ${pvL}`;
   const prezzo = sp[`prezzo_${o.id}`];
   if (prezzo !== undefined && prezzo !== "") vals.prezzoPromo = `€ ${prezzo}`;
   const listino = sp[`listino_${o.id}`];
@@ -739,6 +786,8 @@ export function valoriPerStampa(
     delete vals.prezzoPromo;
     delete vals.prezzoListino;
   }
+  // solo il prezzo di partenza nascosto: resta il promo, senza barrato né "A SOLI"
+  if (sp[`nolistino_${o.id}`] === "1") delete vals.prezzoListino;
   /*
    * Cartello senza foto anche se l'articolo ce l'ha: togliendo il valore entra
    * in gioco il "foglio senza foto" del layout, che dispone gli altri campi
@@ -918,6 +967,7 @@ export const ZOO_FIELDS: PrintField[] = [
   { id: "marca", label: "Marca", size: 14, bold: false },
   { id: "prezzoPromo", label: "Prezzo promo", size: 46, bold: true, font: "cn" },
   { id: "prezzoListino", label: "Prezzo listino (barrato) / «A SOLI»", size: 16, bold: false },
+  { id: "prezzoUnita", label: "Prezzo al kg / al litro", size: 11, bold: false },
   { id: "meccanica", label: "Meccanica promo (3x2, 1+1…)", size: 30, bold: true, font: "cn" },
   { id: "tipoPromo", label: "Tipo promo del punto vendita (10%, A SOLI…)", size: 20, bold: true, font: "cn" },
   { id: "label", label: "Etichetta (SOTTOCOSTO, NOVITÀ…)", size: 16, bold: true, font: "cn" },
@@ -1057,6 +1107,8 @@ export function zooCartelloValues(
       ? `€ ${offer.prezzoListino}`
       : offer.prezzoPromo ? "A SOLI" : "",
     meccanica: offer.meccanica ?? "",
+    // prezzo al chilo/litro: sul cartello è obbligatorio per legge sugli alimenti confezionati
+    prezzoUnita: prezzoUnitaDi(offer, product, offer.prezzoPromo),
     // promozione applicata dall'insegna/PV (dal loro file): vuota per il Consorzio
     tipoPromo: perScope ? (pvPromoFor(db, scope, offer.ean, academyDb)?.etichetta ?? "") : "",
     label: offer.label ?? "",
@@ -1075,6 +1127,60 @@ export function zooCartelloValues(
     // niente foto caricata: si lascia il campo vuoto invece del segnaposto "mancante"
     immagine: foto === "/immagini/mancante.jpg" ? "" : foto,
   };
+}
+
+/* ================== Contenuto e prezzo al chilo / al litro ================== */
+
+/**
+ * Legge dalla descrizione quanto contiene la confezione: "70 g", "1,5 kg",
+ * "1.250 g", "250 ml", "10 L", "4x85 g" (multipack = somma), "2KG". Torna in
+ * chili o litri, già pronti per il prezzo all'unità. Se non trova niente di
+ * riconoscibile non inventa: meglio nessun prezzo al chilo che uno sbagliato.
+ */
+export function contenutoDa(descrizione: string): { quantita: number; unita: "kg" | "l" } | undefined {
+  const t = descrizione.toLowerCase().replace(/\s+/g, " ");
+  // "4x85 g", "4 x 85g", "6x400ml"
+  const multi = t.match(/(\d+)\s*x\s*(\d+(?:[.,]\d+)?)\s*(kg|g|gr|grammi|ml|cl|l|lt|litri)\b/);
+  const singolo = t.match(/(\d+(?:[.,]\d+)?)\s*(kg|g|gr|grammi|ml|cl|l|lt|litri)\b/);
+  const m = multi ?? singolo;
+  if (!m) return undefined;
+  const pezzi = multi ? Number(multi[1]) : 1;
+  const grezzo = multi ? multi[2] : singolo![1];
+  const unitaTxt = multi ? multi[3] : singolo![2];
+  // "1.250" è milleduecentocinquanta, "1,5" è uno e mezzo
+  const n = Number(grezzo.includes(",") ? grezzo.replace(".", "").replace(",", ".") : (/^\d{1,3}\.\d{3}$/.test(grezzo) ? grezzo.replace(".", "") : grezzo));
+  if (!Number.isFinite(n) || n <= 0) return undefined;
+  const fattore: Record<string, [number, "kg" | "l"]> = {
+    kg: [1, "kg"], g: [0.001, "kg"], gr: [0.001, "kg"], grammi: [0.001, "kg"],
+    l: [1, "l"], lt: [1, "l"], litri: [1, "l"], ml: [0.001, "l"], cl: [0.01, "l"],
+  };
+  const [k, unita] = fattore[unitaTxt];
+  return { quantita: Math.round(n * k * pezzi * 1000) / 1000, unita };
+}
+
+/** "1,5 kg" → oggetto; vuoto o non riconoscibile → undefined (serve alla modifica a mano). */
+export function contenutoDaTesto(testo: string): { quantita: number; unita: "kg" | "l" } | undefined {
+  return contenutoDa(testo.trim());
+}
+
+/** "1,5 kg", "250 g" per mostrare il contenuto in tabella. */
+export function testoContenuto(c?: { quantita: number; unita: "kg" | "l" }): string {
+  if (!c) return "";
+  if (c.unita === "kg") return c.quantita < 1 ? `${Math.round(c.quantita * 1000)} g` : `${String(c.quantita).replace(".", ",")} kg`;
+  return c.quantita < 1 ? `${Math.round(c.quantita * 1000)} ml` : `${String(c.quantita).replace(".", ",")} l`;
+}
+
+/**
+ * Prezzo al chilo o al litro di un'offerta: quello scritto a mano se c'è,
+ * altrimenti calcolato dal prezzo (promo) e dal contenuto dell'articolo.
+ */
+export function prezzoUnitaDi(offer: ZooOffer, product: ZooProduct | undefined, prezzo: string): string {
+  if (offer.prezzoUnita) return offer.prezzoUnita;
+  const c = product?.contenuto ?? (product ? contenutoDa(product.descrizione) : undefined);
+  const n = Number((prezzo || "").replace(/[^\d,.-]/g, "").replace(/\.(?=\d{3})/g, "").replace(",", "."));
+  if (!c || !Number.isFinite(n) || n <= 0) return "";
+  const unitario = n / c.quantita;
+  return `€ ${unitario.toFixed(2).replace(".", ",")}/${c.unita}`;
 }
 
 /* ================== Prezzo di un'offerta fuori dal cartello ================== */
@@ -1111,7 +1217,8 @@ export function datiPrezzoOfferta(
 ): DatiPrezzoOfferta {
   const pv = scope && academyDb ? pvPriceFor(db, scope, offer.ean, academyDb) : undefined;
   const prezzo = (override || pv || offer.prezzoPromo || "").trim();
-  const listino = (offer.prezzoListino ?? "").trim();
+  const pvL = scope && academyDb ? pvListinoFor(db, scope, offer.ean, academyDb) : undefined;
+  const listino = (pvL || offer.prezzoListino || "").trim();
   const a = numeroPrezzo(listino);
   const b = numeroPrezzo(prezzo);
   const sconto = a > 0 && b > 0 && a > b ? `-${Math.round((1 - b / a) * 100)}%` : "";

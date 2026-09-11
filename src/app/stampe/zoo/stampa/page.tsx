@@ -9,12 +9,12 @@ import { canAccessArea, gestisceArea, scopesForUser, resolveScope } from "@/lib/
 import {
   getZooDb, effectiveZooLayout, pvPriceFor, isZooHidden,
   campagneStampabili, campagnaInCorso, campagnaInLavorazione, campaignStato,
-  effectiveParentText, printedAt, NO_VOLANTINO,
+  effectiveParentText, effectiveParentTag, printedAt, NO_VOLANTINO,
   ZOO_FIELDS, ZOO_FORMATS, marcaEffettiva, noPrintSets, offertePerStampa, tagsPerLayout, valoriPerStampa,
 } from "@/lib/zoo";
 import {
   importPvPricesRighe, markZooPrinted, resetZooPrinted, toggleZooHidden, importZooNoPrintRighe, svuotaZooNoPrint,
-  creaOffertaPropria, eliminaOffertaPropria,
+  creaOffertaPropria, eliminaOffertaPropria, stampaCoda, segnaArrivato, togliDallaCoda,
 } from "@/lib/zoo-actions";
 
 /** Stampa cartelli Offerte Zoo: stesso impianto dell'Arredo (selezione, formati per riga, stampa 1:1). */
@@ -91,17 +91,35 @@ export default async function ZooStampaPage({
     .map((h) => h.value);
 
   const q = (sp.q ?? "").toLowerCase();
-  const visible = allOffers.filter((o) => {
+  /*
+   * La ricerca guarda anche il nome del prodotto padre e la descrizione
+   * dell'articolo: la descrizione dell'offerta da sola ("NUTRIMI 70GR TONNO")
+   * non conteneva il nome con cui la gente lo cerca ("Life Pet Care").
+   */
+  const padreDi = (o: (typeof allOffers)[number]) => {
     const product = db.products.find((p) => p.id === o.productId);
+    const parent = product?.parentId ? db.parents.find((x) => x.id === product.parentId) : undefined;
+    return { product, parent };
+  };
+  const visible = allOffers.filter((o) => {
+    const { product, parent } = padreDi(o);
     if (product && isZooHidden(db, scope, product, academyDb)) return false;
-    if (sp.scheda && o.schedaId !== sp.scheda) return false;
+    if (sp.animale && !(parent ? effectiveParentTag(db, scope, parent, "animale", academyDb).value : "").includes(sp.animale)) return false;
+    if (sp.caratt && !(parent ? effectiveParentTag(db, scope, parent, "prodotto", academyDb).value : "").includes(sp.caratt)) return false;
     if (marcheScelte.length > 0 && !marcheScelte.includes(marcaEffettiva(product ?? { marca: "", fornitore: "" }))) return false;
-    if (sp.nonstampabili !== "si" && escluso(o)) return false;
+    if (sp.nonstampabili !== "si" && sp.nonstampabili !== "solo" && escluso(o)) return false;
+    if (sp.nonstampabili === "solo" && !escluso(o)) return false;
     if (sp.volantino === "si" && !inVolantino(o)) return false;
     if (sp.volantino === "no" && inVolantino(o)) return false;
     if (sp.stampati === "si" && !printedAt(db, scope, o.id)) return false;
     if (sp.stampati === "no" && printedAt(db, scope, o.id)) return false;
-    if (q && !`${o.descrizione} ${o.ean} ${marcaEffettiva(product ?? { marca: "", fornitore: "" })}`.toLowerCase().includes(q)) return false;
+    if (q) {
+      const testo = [
+        o.descrizione, o.ean, marcaEffettiva(product ?? { marca: "", fornitore: "" }), product?.descrizione ?? "", product?.codice ?? "",
+        parent ? effectiveParentText(db, scope, parent, "nome", academyDb).value : "",
+      ].join(" ").toLowerCase();
+      if (!testo.includes(q)) return false;
+    }
     return true;
   });
   const nStampati = allOffers.filter((o) => printedAt(db, scope, o.id)).length;
@@ -148,6 +166,19 @@ export default async function ZooStampaPage({
           };
         });
       })();
+
+  // cartelli in coda per questo ambito, con il nome che si legge in elenco
+  const nomeOfferta = (offerId: string) => {
+    const o = allOffers.find((x) => x.id === offerId);
+    if (!o) return offerId;
+    const { parent } = padreDi(o);
+    return parent ? effectiveParentText(db, scope, parent, "nome", academyDb).value || o.descrizione : o.descrizione;
+  };
+  const codaMia = db.coda
+    .filter((c) => c.scopeType === scope.type && c.scopeId === scope.id && !c.stampato)
+    .map((c) => ({ ...c, nome: nomeOfferta(c.offerId) }));
+  const codaDopo = codaMia.filter((c) => c.stato === "dopo");
+  const codaArrivo = codaMia.filter((c) => c.stato === "arrivo");
 
   const selectedIds = (sp.sel ?? "").split(",").filter(Boolean);
   const selected = selectedIds.map((id) => allOffers.find((o) => o.id === id)).filter(Boolean) as typeof allOffers;
@@ -330,17 +361,69 @@ export default async function ZooStampaPage({
           <div className="alert alert-green">✓ Azzerato il &quot;già stampato&quot; su {sp.azzerati} cartelli.</div>
         )}
 
+        {/* cartelli messi da parte: si stampano in blocco con le impostazioni già decise */}
+        {(codaDopo.length > 0 || codaArrivo.length > 0) && (
+          <div className="card" style={{ marginBottom: 16, padding: 14 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 16 }}>
+              {([["dopo", "Da stampare più tardi", codaDopo], ["arrivo", "Merce in arrivo", codaArrivo]] as const).map(([stato, titolo, voci]) => (
+                voci.length > 0 && (
+                  <form key={stato} action={stampaCoda.bind(null, scopeParam, stato)}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
+                      <strong>{titolo}</strong>
+                      <span className="pill pill-orange">{voci.length}</span>
+                      {stato === "dopo" && (
+                        <button className="btn btn-sm" type="submit" style={{ marginLeft: "auto" }}
+                          title="Apre l'anteprima di stampa di tutti (o dei soli spuntati) con le impostazioni salvate, e li toglie dalla coda">
+                          Stampa {voci.length > 1 ? "tutti" : ""} →
+                        </button>
+                      )}
+                    </div>
+                    <ul style={{ margin: 0, paddingLeft: 0, listStyle: "none", fontSize: 12.5 }}>
+                      {voci.map((c) => (
+                        <li key={c.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "3px 0", borderBottom: "1px dashed var(--line)" }}>
+                          {stato === "dopo" && <input type="checkbox" name="coda" value={c.id} title="Spunta per stampare solo alcuni" />}
+                          <span style={{ flex: 1, minWidth: 0 }}>
+                            {c.nome}
+                            <span className="hint" style={{ marginLeft: 6 }}>
+                              {ZOO_FORMATS.find((f) => f.id === c.impostazioni[`formato_${c.offerId}`])?.name ?? "A4"}
+                              {" · "}{new Date(c.creato).toLocaleDateString("it-IT")}{" · "}{c.userName}
+                            </span>
+                          </span>
+                          {stato === "arrivo" && (
+                            <button className="btn btn-outline btn-sm" type="submit" formAction={segnaArrivato.bind(null, c.id, scopeParam)}
+                              title="La merce è arrivata: passa fra quelli da stampare">
+                              Arrivata
+                            </button>
+                          )}
+                          <button className="btn btn-outline btn-sm" type="submit" formAction={togliDallaCoda.bind(null, c.id, scopeParam)} title="Togli dalla coda">✕</button>
+                        </li>
+                      ))}
+                    </ul>
+                  </form>
+                )
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="card" style={{ marginBottom: 16, padding: 14 }}>
-          <form method="get" style={{ display: "grid", gridTemplateColumns: "repeat(6, minmax(0, 1fr)) auto", gap: 10, alignItems: "end" }}>
+          <form method="get" style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr)) auto", gap: 10, alignItems: "end" }}>
             <input type="hidden" name="scope" value={scopeParam} />
             <input type="hidden" name="sel" value={sp.sel ?? ""} />
             {campaign && <input type="hidden" name="campagna" value={campaign.id} />}
-            <label className="field" style={{ marginBottom: 0 }}>Cerca<input type="text" name="q" defaultValue={sp.q ?? ""} placeholder="descrizione, EAN, marca" /></label>
+            <label className="field" style={{ marginBottom: 0 }}>Cerca<input type="text" name="q" defaultValue={sp.q ?? ""} placeholder="prodotto, articolo, EAN, marca" /></label>
             <label className="field" style={{ marginBottom: 0 }}>
-              Scheda volantino
-              <select name="scheda" defaultValue={sp.scheda ?? ""}>
-                <option value="">Tutte le offerte</option>
-                {(campaign?.schede ?? []).map((s) => <option key={s.id} value={s.id}>{s.nome}</option>)}
+              Tipologia animale
+              <select name="animale" defaultValue={sp.animale ?? ""}>
+                <option value="">Tutte</option>
+                {db.settings.categorieAnimali.map((a) => <option key={a} value={a}>{a}</option>)}
+              </select>
+            </label>
+            <label className="field" style={{ marginBottom: 0 }}>
+              Caratteristica
+              <select name="caratt" defaultValue={sp.caratt ?? ""}>
+                <option value="">Tutte</option>
+                {db.settings.caratteristicheProdotto.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </label>
             <label className="field" style={{ marginBottom: 0 }}>
@@ -367,10 +450,11 @@ export default async function ZooStampaPage({
               </select>
             </label>
             <label className="field" style={{ marginBottom: 0 }}>
-              Non stampabili
-              <select name="nonstampabili" defaultValue={sp.nonstampabili ?? ""}>
-                <option value="">Nascondi quelli esclusi</option>
+              Cartelli esclusi
+              <select name="nonstampabili" defaultValue={sp.nonstampabili ?? ""} title="Gli esclusi sono i cartelli che avete segnato «Non stampare» o caricato nell'elenco dei codici da non stampare">
+                <option value="">Nascondi gli esclusi</option>
                 <option value="si">Mostra anche gli esclusi</option>
+                <option value="solo">Solo gli esclusi</option>
               </select>
             </label>
             <button className="btn btn-sm" type="submit">Filtra</button>
@@ -496,7 +580,7 @@ export default async function ZooStampaPage({
             formats: ZOO_FORMATS.map((f) => ({ id: f.id, name: f.name })),
             scopeParam,
             filters: {
-              q: sp.q ?? "", scheda: sp.scheda ?? "", marca: marcheScelte.join(","), vista: sp.vista ?? "",
+              q: sp.q ?? "", animale: sp.animale ?? "", caratt: sp.caratt ?? "", marca: marcheScelte.join(","), vista: sp.vista ?? "",
               volantino: sp.volantino ?? "", stampati: sp.stampati ?? "", campagna: campaign?.id ?? "",
             },
             printed: Object.fromEntries(
@@ -511,6 +595,7 @@ export default async function ZooStampaPage({
             initialListini: Object.fromEntries(selectedIds.map((id) => [id, sp[`listino_${id}`] ?? ""]).filter(([, v]) => v)),
             initialNoPrice: Object.fromEntries(selectedIds.map((id) => [id, sp[`noprezzo_${id}`] === "1"])),
             initialNoPhoto: Object.fromEntries(selectedIds.map((id) => [id, sp[`senzafoto_${id}`] === "1"])),
+            initialNoListino: Object.fromEntries(selectedIds.map((id) => [id, sp[`nolistino_${id}`] === "1"])),
             initialHidden: Object.fromEntries(
               selectedIds.map((id) => [id, (sp[`nascondi_${id}`] ?? "").split(",").filter(Boolean)])
             ),

@@ -5,6 +5,7 @@ import type { CardLayout, PrintField, PrintFormat } from "@/lib/stampe";
 import Cartello from "./Cartello";
 import StampaPicker, { type StampaPickerProps } from "./StampaPicker";
 import PersonalizzaTabella, { type RigaPersonalizza } from "./PersonalizzaTabella";
+import { mettiInCoda } from "@/lib/zoo-actions";
 
 interface Dettagli {
   scopeType: string;
@@ -26,7 +27,7 @@ interface Dettagli {
 export default function StampaWorkspace({
   picker, dettagliUrl, fields, scopeParam,
 }: {
-  picker: Omit<StampaPickerProps, "onChange">;
+  picker: Omit<StampaPickerProps, "onChange" | "onQueue">;
   /** Indirizzo dell'anteprima dal vivo (senza parametri). */
   dettagliUrl: string;
   fields: PrintField[];
@@ -64,7 +65,8 @@ export default function StampaWorkspace({
   return (
     <>
       <div className="stampa-griglia">
-        <StampaPicker {...picker} onChange={(q) => setQuery(q)} onPreview={() => carica(query)} />
+        <StampaPicker {...picker} onChange={(q) => setQuery(q)} onPreview={() => carica(query)}
+          onQueue={(stato, voci) => mettiInCoda(scopeParam, stato, voci)} />
         <div>
           {anteprima.map((c) => (
             <div key={c.id} style={{ marginBottom: 12, overflow: "hidden" }}>
