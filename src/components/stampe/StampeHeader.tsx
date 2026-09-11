@@ -4,7 +4,15 @@ import { User, userSites, gestisce, ruoloEsteso } from "@/lib/types";
 import { logout } from "@/lib/actions";
 import { isConsortiumEditor, isZooEditor } from "@/lib/stampe";
 
-export default async function StampeHeader({ user, active, area = "arredo" }: { user: User; active: string; area?: "arredo" | "zoo" }) {
+export default async function StampeHeader({
+  user, active, area = "arredo", compatta = false,
+}: {
+  user: User;
+  active: string;
+  area?: "arredo" | "zoo";
+  /** Da cellulare (In reparto): il menu sta dietro ☰ e la testata occupa una riga sola. */
+  compatta?: boolean;
+}) {
   const db = await getDb();
   const settings = db.settings;
   const tenant = db.tenants.find((t) => t.id === user.tenantId);
@@ -29,7 +37,7 @@ export default async function StampeHeader({ user, active, area = "arredo" }: { 
         { href: "/stampe/zoo/stampa", label: "Stampa cartelli", key: "stampa" },
         { href: "/stampe/zoo/reparto", label: "📱 In reparto", key: "reparto" },
         ...(isZooEditor(user) ? [{ href: "/stampe/zoo/archivio", label: "Archivio volantini", key: "archivio" }] : []),
-        { href: "/stampe/zoo/focus", label: "Storico focus", key: "focus" },
+        ...(gestZoo ? [{ href: "/stampe/zoo/focus", label: "Storico focus", key: "focus" }] : []),
         ...(gestZoo ? [{ href: "/stampe/zoo/impostazioni", label: "Impostazioni", key: "impostazioni" }] : []),
         ...(sites.includes("arredo") ? [{ href: "/stampe/arredo/dati", label: "⇄ Cartelli Arredo", key: "arredo" }] : []),
         ...(sites.length > 1 ? [{ href: "/scegli", label: "⇄ Cambia area", key: "academy" }] : []),
@@ -45,8 +53,18 @@ export default async function StampeHeader({ user, active, area = "arredo" }: { 
       ];
 
   return (
-    <header className="site-header stampe-header" style={{ background: "linear-gradient(120deg, #1a2b45, #274b7a)" }}>
+    <header className={`site-header stampe-header${compatta ? " compatta" : ""}`} style={{ background: "linear-gradient(120deg, #1a2b45, #274b7a)" }}>
       <div className="site-header-inner">
+        {compatta && (
+          <details className="hamburger">
+            <summary>☰ Menu</summary>
+            <nav className="nav">
+              {links.map((l) => (
+                <Link key={l.key} href={l.href} className={active === l.key ? "active" : ""}>{l.label}</Link>
+              ))}
+            </nav>
+          </details>
+        )}
         <div className="header-top">
           <Link href="/stampe" className="brand">
             <span className="brand-logo">
@@ -82,6 +100,7 @@ export default async function StampeHeader({ user, active, area = "arredo" }: { 
             </form>
           </div>
         </div>
+        {!compatta && (
         <div className="header-nav-row">
           <nav className="nav">
             {links.map((l) => (
@@ -91,6 +110,7 @@ export default async function StampeHeader({ user, active, area = "arredo" }: { 
             ))}
           </nav>
         </div>
+        )}
       </div>
     </header>
   );

@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import StampeHeader from "@/components/stampe/StampeHeader";
 import { canAccessArea, resolveScope } from "@/lib/stampe";
+import { gestisce } from "@/lib/types";
 import { getZooDb, effectiveParentText, animaliDi, campaignStato } from "@/lib/zoo";
 
 interface GruppoFocus {
@@ -25,6 +26,8 @@ export default async function ZooFocusPage({
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (!canAccessArea(user, "zoo")) redirect("/studente");
+  // lo storico dei focus serve a chi costruisce i volantini: il capo reparto non lo vede
+  if (!gestisce(user, "zoo")) redirect("/stampe/zoo/stampa");
   const sp = await searchParams;
   const db = await getZooDb();
   const academyDb = await getDb();

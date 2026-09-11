@@ -4,7 +4,7 @@ import { getDb } from "@/lib/db";
 import { canAccessArea, resolveScope } from "@/lib/stampe";
 import {
   getZooDb, campagnaPerStampa, offertePerStampa, tagsPerLayout, valoriPerStampa, effectiveZooLayout,
-  effectiveParentText, effectiveParentTag, effectiveOfferText, pvPriceFor, pvListinoFor, noPrintSets, ZOO_FORMATS,
+  effectiveParentText, effectiveParentTag, effectiveOfferText, pvPriceFor, pvListinoFor, noPrintSets, ZOO_FORMATS, giacenzePer, prezzoDaNumero,
 } from "@/lib/zoo";
 
 /**
@@ -32,6 +32,8 @@ export async function GET(req: NextRequest) {
   const globalFormatId = sp.formato ?? ZOO_FORMATS[0].id;
   const formatFor = (oid: string) => ZOO_FORMATS.find((f) => f.id === (sp[`formato_${oid}`] ?? globalFormatId)) ?? ZOO_FORMATS[0];
   const noPrint = noPrintSets(db, scope);
+  // giacenze e prezzi di vendita del gestionale collegato, per i soli cartelli scelti
+  const gestionale = await giacenzePer(db, scope, academyDb, selected.map((o) => o.ean));
 
   const cartelli = selected.map((o) => {
     const format = formatFor(o.id);
@@ -39,7 +41,7 @@ export async function GET(req: NextRequest) {
       id: o.id,
       format,
       layout: effectiveZooLayout(db, scope, format.id, academyDb, tagsPerLayout(db, scope, academyDb, o)),
-      values: valoriPerStampa(db, scope, academyDb, o, sp),
+      values: valoriPerStampa(db, scope, academyDb, o, sp, gestionale),
     };
   });
 
@@ -62,6 +64,9 @@ export async function GET(req: NextRequest) {
       meccanica: o.meccanica,
       pv: pvPriceFor(db, scope, o.ean, academyDb),
       pvListino: pvListinoFor(db, scope, o.ean, academyDb),
+      listinoGestionale: prezzoDaNumero(gestionale[o.ean]?.prezzo),
+      giacenza: gestionale[o.ean]?.giacenza,
+      codiceGestionale: gestionale[o.ean]?.codice,
       escluso: noPrint.offerIds.has(o.id) || noPrint.eans.has(o.ean),
     };
   });

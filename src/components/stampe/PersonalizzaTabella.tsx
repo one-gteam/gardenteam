@@ -27,6 +27,9 @@ export interface RigaPersonalizza {
   meccanica?: string;
   pv?: string;
   pvListino?: string;
+  listinoGestionale?: string;
+  giacenza?: number;
+  codiceGestionale?: string;
   escluso: boolean;
 }
 
@@ -87,6 +90,9 @@ export default function PersonalizzaTabella({
                     </>
                   ) : (
                     <span style={{ fontSize: 11.5, color: "var(--muted)" }}>{r.descrizione} (senza padre)</span>
+                  )}
+                  {r.giacenza !== undefined && (
+                    <div className="hint">giacenza {r.giacenza}{r.codiceGestionale ? ` · cod. ${r.codiceGestionale}` : ""}</div>
                   )}
                 </td>
                 <td className="col-wide">
@@ -150,7 +156,9 @@ export default function PersonalizzaTabella({
                         onSave={setPvListinoInline.bind(null, r.ean, scopeParam)} />
                       {r.pvListino
                         ? <span className="pill pill-orange">vostro</span>
-                        : <span className="hint">Consorzio: {r.prezzoListino ? `€ ${r.prezzoListino}` : "A SOLI"}</span>}
+                        : r.listinoGestionale
+                          ? <span className="hint" title="Prezzo di vendita del vostro gestionale: è quello che si stampa come prezzo di partenza">dal gestionale: € {r.listinoGestionale}</span>
+                          : <span className="hint">Consorzio: {r.prezzoListino ? `€ ${r.prezzoListino}` : "A SOLI"}</span>}
                     </>
                   )}
                 </td>

@@ -779,7 +779,8 @@ export function tagsPerLayout(db: ZooDB, scope: Scope, academyDb: DB, o: ZooOffe
  * nascondi_<id>) sia dall'anteprima di stampa sia dall'anteprima dal vivo.
  */
 export function valoriPerStampa(
-  db: ZooDB, scope: Scope, academyDb: DB, o: ZooOffer, sp: Record<string, string | undefined>
+  db: ZooDB, scope: Scope, academyDb: DB, o: ZooOffer, sp: Record<string, string | undefined>,
+  gestionale?: Record<string, Giacenza>
 ): Record<string, string> {
   const vals = zooCartelloValues(db, o, scope, academyDb);
   const pv = pvPriceFor(db, scope, o.ean, academyDb);
@@ -789,7 +790,12 @@ export function valoriPerStampa(
   if (prezzoEffettivo !== o.prezzoPromo) {
     vals.prezzoUnita = prezzoUnitaDi(o, db.products.find((p) => p.id === o.productId), prezzoEffettivo);
   }
-  const pvL = pvListinoFor(db, scope, o.ean, academyDb);
+  /*
+   * Prezzo di partenza: quello scritto dall'insegna/PV, altrimenti quello di
+   * vendita del loro gestionale (se collegato), altrimenti quello del Consorzio.
+   * Così il punto vendita non deve caricare i suoi listini a mano.
+   */
+  const pvL = pvListinoFor(db, scope, o.ean, academyDb) || prezzoDaNumero(gestionale?.[o.ean]?.prezzo);
   if (pvL) vals.prezzoListino = `€ ${pvL}`;
   const prezzo = sp[`prezzo_${o.id}`];
   if (prezzo !== undefined && prezzo !== "") vals.prezzoPromo = `€ ${prezzo}`;
@@ -943,7 +949,19 @@ export function giacenzeUrlFor(db: ZooDB, scope: Scope, academyDb: DB): string |
   return undefined;
 }
 
-export interface Giacenza { giacenza: number; al: string }
+export interface Giacenza {
+  giacenza: number;
+  al: string;
+  /** Prezzo di vendita del gestionale: per il punto vendita è il prezzo di partenza del cartello. */
+  prezzo?: number;
+  /** Codice articolo nel gestionale. */
+  codice?: string;
+}
+
+/** "12.9" → "12,90": il prezzo del gestionale scritto come gli altri prezzi del cartello. */
+export function prezzoDaNumero(n: number | undefined): string {
+  return n && n > 0 ? n.toFixed(2).replace(".", ",") : "";
+}
 
 /**
  * Giacenze per codice a barre dal gestionale collegato. A lotti da 200, con
@@ -965,8 +983,10 @@ export async function giacenzePer(db: ZooDB, scope: Scope, academyDb: DB, eans: 
       });
       clearTimeout(timer);
       if (!r.ok) break;
-      const j = (await r.json()) as { giacenze?: Record<string, { giacenza: number; al?: string }> };
-      for (const [ean, g] of Object.entries(j.giacenze ?? {})) out[ean] = { giacenza: g.giacenza, al: g.al ?? "" };
+      const j = (await r.json()) as { giacenze?: Record<string, { giacenza: number; al?: string; prezzo?: number; codice?: string }> };
+      for (const [ean, g] of Object.entries(j.giacenze ?? {})) {
+        out[ean] = { giacenza: g.giacenza, al: g.al ?? "", prezzo: g.prezzo, codice: g.codice };
+      }
     } catch {
       break; // gestionale spento o irraggiungibile: niente giacenze, niente errore in pagina
     }

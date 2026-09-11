@@ -91,6 +91,12 @@ export default async function ZooStampaPage({
     .map((h) => h.value);
 
   const q = (sp.q ?? "").toLowerCase();
+  // giacenze e prezzi del gestionale collegato (se c'è), su tutte le offerte: servono anche al filtro
+  const giacenze = await giacenzePer(db, scope, academyDb, allOffers.map((o) => o.ean));
+  const giacenzaDi = (eans: string[]) => {
+    const trovate = eans.map((e) => giacenze[e]).filter(Boolean);
+    return trovate.length > 0 ? String(trovate.reduce((t, g) => t + g.giacenza, 0)) : undefined;
+  };
   /*
    * La ricerca guarda anche il nome del prodotto padre e la descrizione
    * dell'articolo: la descrizione dell'offerta da sola ("NUTRIMI 70GR TONNO")
@@ -107,6 +113,12 @@ export default async function ZooStampaPage({
     if (sp.animale && !(parent ? effectiveParentTag(db, scope, parent, "animale", academyDb).value : "").includes(sp.animale)) return false;
     if (sp.caratt && !(parent ? effectiveParentTag(db, scope, parent, "prodotto", academyDb).value : "").includes(sp.caratt)) return false;
     if (marcheScelte.length > 0 && !marcheScelte.includes(marcaEffettiva(product ?? { marca: "", fornitore: "" }))) return false;
+    if (sp.giacenza) {
+      const g = giacenze[o.ean];
+      if (sp.giacenza === "si" && !(g && g.giacenza > 0)) return false;
+      if (sp.giacenza === "zero" && !(g && g.giacenza <= 0)) return false;
+      if (sp.giacenza === "no" && g) return false;
+    }
     if (sp.nonstampabili !== "si" && sp.nonstampabili !== "solo" && escluso(o)) return false;
     if (sp.nonstampabili === "solo" && !escluso(o)) return false;
     if (sp.volantino === "si" && !inVolantino(o)) return false;
@@ -142,13 +154,8 @@ export default async function ZooStampaPage({
     listino: o.prezzoListino,
     tipologia: marcaDi(o),
     giacenza: giacenzaDi([o.ean]),
+    codiceGestionale: giacenze[o.ean]?.codice,
   });
-  // giacenze dal gestionale collegato (se c'è): una chiamata per tutti i codici in elenco
-  const giacenze = await giacenzePer(db, scope, academyDb, visible.map((o) => o.ean));
-  const giacenzaDi = (eans: string[]) => {
-    const trovate = eans.map((e) => giacenze[e]).filter(Boolean);
-    return trovate.length > 0 ? String(trovate.reduce((t, g) => t + g.giacenza, 0)) : undefined;
-  };
   const voci = vistaSingole
     ? visible.map(voceSingola)
     : (() => {
@@ -171,6 +178,7 @@ export default async function ZooStampaPage({
             listino: primo.prezzoListino,
             tipologia: marcaDi(primo),
             giacenza: giacenzaDi(gruppo.map((g) => g.ean)),
+            codiceGestionale: gruppo.length === 1 ? giacenze[primo.ean]?.codice : undefined,
           };
         });
       })();
@@ -193,7 +201,7 @@ export default async function ZooStampaPage({
   const globalFormatId = sp.formato ?? ZOO_FORMATS[0].id;
   const formatFor = (oid: string) => ZOO_FORMATS.find((f) => f.id === (sp[`formato_${oid}`] ?? globalFormatId)) ?? ZOO_FORMATS[0];
 
-  const valuesFor = (o: (typeof allOffers)[number]) => valoriPerStampa(db, scope, academyDb, o, sp);
+  const valuesFor = (o: (typeof allOffers)[number]) => valoriPerStampa(db, scope, academyDb, o, sp, giacenze);
 
   const qsBack = () => {
     const params = new URLSearchParams();
@@ -415,7 +423,7 @@ export default async function ZooStampaPage({
         )}
 
         <div className="card" style={{ marginBottom: 16, padding: 14 }}>
-          <form method="get" style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr)) auto", gap: 10, alignItems: "end" }}>
+          <form method="get" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10, alignItems: "end" }}>
             <input type="hidden" name="scope" value={scopeParam} />
             <input type="hidden" name="sel" value={sp.sel ?? ""} />
             {campaign && <input type="hidden" name="campagna" value={campaign.id} />}
@@ -457,6 +465,17 @@ export default async function ZooStampaPage({
                 <option value="singole">Offerte singole</option>
               </select>
             </label>
+            {Object.keys(giacenze).length > 0 && (
+              <label className="field" style={{ marginBottom: 0 }}>
+                Giacenza
+                <select name="giacenza" defaultValue={sp.giacenza ?? ""}>
+                  <option value="">Qualsiasi</option>
+                  <option value="si">Solo con giacenza (&gt; 0)</option>
+                  <option value="zero">Solo giacenza zero</option>
+                  <option value="no">Non nel gestionale</option>
+                </select>
+              </label>
+            )}
             <label className="field" style={{ marginBottom: 0 }}>
               Cartelli esclusi
               <select name="nonstampabili" defaultValue={sp.nonstampabili ?? ""} title="Gli esclusi sono i cartelli che avete segnato «Non stampare» o caricato nell'elenco dei codici da non stampare">
@@ -588,7 +607,7 @@ export default async function ZooStampaPage({
             formats: ZOO_FORMATS.map((f) => ({ id: f.id, name: f.name })),
             scopeParam,
             filters: {
-              q: sp.q ?? "", animale: sp.animale ?? "", caratt: sp.caratt ?? "", marca: marcheScelte.join(","), vista: sp.vista ?? "",
+              q: sp.q ?? "", animale: sp.animale ?? "", caratt: sp.caratt ?? "", marca: marcheScelte.join(","), vista: sp.vista ?? "", giacenza: sp.giacenza ?? "",
               volantino: sp.volantino ?? "", stampati: sp.stampati ?? "", campagna: campaign?.id ?? "",
             },
             printed: Object.fromEntries(

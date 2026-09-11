@@ -21,6 +21,7 @@ export interface VoceReparto {
   stampato: boolean;
   escluso: boolean;
   giacenza?: string; // dal gestionale del punto vendita, quando collegato
+  codiceGestionale?: string;
 }
 
 interface Dettagli {
@@ -61,6 +62,8 @@ export default function RepartoCheck({
   const [segnalazione, setSegnalazione] = useState("");
   const [pending, startTransition] = useTransition();
   const [touchX, setTouchX] = useState<number | null>(null);
+  // la parte bassa (prezzi, testi, formato, segnalazione) sta dietro l'ingranaggio: davanti allo scaffale servono soprattutto i tre pulsanti
+  const [impostazioniAperte, setImpostazioniAperte] = useState(false);
 
   const voce = voci[i];
   const consorzio = scopeType === "system";
@@ -126,6 +129,7 @@ export default function RepartoCheck({
       <div className="hint" style={{ marginBottom: 6 }}>
         {voce.marca}{voce.animale ? ` · ${voce.animale}` : ""} · {voce.nCodici > 1 ? `${voce.nCodici} codici` : voce.ean}
         {voce.giacenza !== undefined && <> · <strong>giacenza {voce.giacenza}</strong></>}
+        {voce.codiceGestionale && <> · cod. {voce.codiceGestionale}</>}
       </div>
 
       <div className="reparto-cartello">
@@ -134,7 +138,14 @@ export default function RepartoCheck({
           : <div className="card" style={{ padding: 20, textAlign: "center", color: "var(--muted)" }}>Preparo il cartello…</div>}
       </div>
 
-      {riga && (
+      <div style={{ display: "flex", justifyContent: "flex-end", margin: "2px 0 6px" }}>
+        <button type="button" className={`btn btn-sm ${impostazioniAperte ? "" : "btn-outline"}`} onClick={() => setImpostazioniAperte((v) => !v)}
+          title="Prezzi, testi, formato e segnalazione al gestore">
+          ⚙ {impostazioniAperte ? "Chiudi" : "Correggi"}
+        </button>
+      </div>
+
+      {impostazioniAperte && riga && (
         <div className="card reparto-campi">
           <div className="reparto-riga">
             <label>Prezzo promo
@@ -162,12 +173,14 @@ export default function RepartoCheck({
       )}
 
       <div className="reparto-azioni">
-        <label className="hint" style={{ display: "flex", gap: 6, alignItems: "center" }}>
-          Formato
-          <select value={formato} onChange={(e) => setFormato(e.target.value)} style={{ marginTop: 0 }}>
-            {formati.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
-          </select>
-        </label>
+        {impostazioniAperte && (
+          <label className="hint" style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            Formato
+            <select value={formato} onChange={(e) => setFormato(e.target.value)} style={{ marginTop: 0 }}>
+              {formati.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+            </select>
+          </label>
+        )}
         <button type="button" className="btn" disabled={pending} onClick={() => inCoda("dopo")}>✓ Confermato, stampa dopo</button>
         <button type="button" className="btn btn-outline" disabled={pending} onClick={() => inCoda("arrivo")}>Merce in arrivo</button>
         {!consorzio && (
@@ -178,7 +191,7 @@ export default function RepartoCheck({
       </div>
       {esito && <div className="alert alert-green">{esito}</div>}
 
-      {!consorzio && (
+      {!consorzio && impostazioniAperte && (
         <div className="card" style={{ padding: 10, marginTop: 8 }}>
           <div style={{ display: "flex", gap: 6 }}>
             <input type="text" value={segnalazione} onChange={(e) => setSegnalazione(e.target.value)} placeholder="Segnala un errore al gestore…"

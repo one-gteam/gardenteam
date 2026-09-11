@@ -13,6 +13,8 @@ interface ProdLite {
   listino?: string;
   /** Quantità a magazzino dal gestionale collegato (somma dei codici del padre). */
   giacenza?: string;
+  /** Codice dell'articolo nel gestionale collegato. */
+  codiceGestionale?: string;
 }
 
 export interface StampaPickerProps {
@@ -227,6 +229,7 @@ export default function StampaPicker({
                     giac. {p.giacenza}
                   </span>
                 )}
+                {p.codiceGestionale && <span className="hint" style={{ marginLeft: 6 }} title="Codice nel gestionale">cod. {p.codiceGestionale}</span>}
               </div>
             </button>
           );

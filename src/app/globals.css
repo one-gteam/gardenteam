@@ -466,6 +466,15 @@ table.data td { overflow-wrap: anywhere; }
 .strumento[open] > .card { position: absolute; top: calc(100% + 4px); left: 0; z-index: 40; width: 640px; max-width: calc(100vw - 48px); box-shadow: 0 10px 30px rgba(0,0,0,.18); }
 @media (max-width: 720px) { .strumento[open] > .card { position: static; width: auto; } }
 
+/* testata compatta (In reparto): il menu a scomparsa, la riga utente sola */
+.stampe-header.compatta .header-top { flex-wrap: wrap; gap: 6px; padding-bottom: 4px; }
+.stampe-header.compatta .user-chip > div:nth-child(2) { display: none; }
+.hamburger { order: 99; width: 100%; }
+.hamburger > summary { list-style: none; cursor: pointer; color: #fff; font-weight: 700; font-size: 14px; padding: 6px 0; }
+.hamburger > summary::-webkit-details-marker { display: none; }
+.hamburger .nav { display: flex; flex-direction: column; gap: 2px; padding-bottom: 6px; }
+.hamburger .nav a { display: block; padding: 8px 10px; }
+
 /* Controllo in reparto (cellulare): un cartello alla volta, pulsanti grandi in fondo */
 .reparto-filtri { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
 .reparto-filtri select, .reparto-filtri input[type="search"] { margin-top: 0; font-size: 13px; }

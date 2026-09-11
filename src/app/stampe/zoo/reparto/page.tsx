@@ -60,17 +60,19 @@ export default async function ZooRepartoPage({
         const trovate = gruppo.map((g) => giacenze[g.ean]).filter(Boolean);
         return trovate.length > 0 ? String(trovate.reduce((t, g) => t + g.giacenza, 0)) : undefined;
       })(),
+      codiceGestionale: gruppo.length === 1 ? giacenze[o.ean]?.codice : undefined,
       testo: `${nome} ${o.descrizione} ${o.ean} ${product?.descrizione ?? ""}`.toLowerCase(),
     };
   })
     .filter((v) => !q || v.testo.includes(q))
     .filter((v) => !sp.animale || v.animale.includes(sp.animale))
     .filter((v) => sp.tutti === "1" || (!v.inCoda && !v.stampato && !v.escluso))
+    .filter((v) => !sp.giacenza || (sp.giacenza === "si" ? Number(v.giacenza ?? 0) > 0 : sp.giacenza === "zero" ? v.giacenza !== undefined && Number(v.giacenza) <= 0 : v.giacenza === undefined))
     .map(({ testo: _t, ...v }) => v);
 
   return (
     <div>
-      <StampeHeader user={user} active="reparto" area="zoo" />
+      <StampeHeader user={user} active="reparto" area="zoo" compatta />
       <div className="container" style={{ maxWidth: 640 }}>
         <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 10 }}>
           <div style={{ flex: 1 }}>
@@ -89,6 +91,14 @@ export default async function ZooRepartoPage({
             <option value="">Tutti gli animali</option>
             {db.settings.categorieAnimali.map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
+          {Object.keys(giacenze).length > 0 && (
+            <select name="giacenza" defaultValue={sp.giacenza ?? ""}>
+              <option value="">Qualsiasi giacenza</option>
+              <option value="si">Solo con giacenza</option>
+              <option value="zero">Solo giacenza zero</option>
+              <option value="no">Non nel gestionale</option>
+            </select>
+          )}
           <label className="hint" style={{ display: "flex", gap: 4, alignItems: "center", whiteSpace: "nowrap" }}>
             <input type="checkbox" name="tutti" value="1" defaultChecked={sp.tutti === "1"} /> anche confermati e stampati
           </label>
