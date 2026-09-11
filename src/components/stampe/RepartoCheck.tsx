@@ -68,6 +68,9 @@ export default function RepartoCheck({
   /* I cartelli già scaricati restano qui: passare al successivo è immediato
      perché mentre si guarda questo si scaricano in silenzio i prossimi. */
   const memoria = useRef(new Map<string, Dettagli>());
+  /* Foto sbagliata: si stampa il cartello senza. Vale per questo cartello e
+     viaggia con lui nella coda di stampa, come il formato. */
+  const [senzaFoto, setSenzaFoto] = useState<Record<string, boolean>>({});
   /* Lo spazio libero fra la testata appesa in alto e la barra appesa in basso:
      il cartello si rimpicciolisce per starci dentro, così non si scorre nulla. */
   const [spazio, setSpazio] = useState(0);
@@ -90,14 +93,16 @@ export default function RepartoCheck({
      di lavoro: testata in cima, cartello in mezzo, pulsanti in fondo. Da li' in
      avanti non si muove piu' nulla. Si sale col dito per menu e filtri. */
   const posizionato = useRef(false);
-  const chiave = (id: string) => `${id}|${formato}`;
+  const noFoto = (id: string) => !!senzaFoto[id];
+  const chiave = (id: string) => `${id}|${formato}|${noFoto(id) ? "nf" : ""}`;
 
   const scarica = async (id: string): Promise<Dettagli | null> => {
     const k = chiave(id);
     const gia = memoria.current.get(k);
     if (gia) return gia;
     try {
-      const r = await fetch(`/stampe/zoo/stampa/dettagli?scope=${encodeURIComponent(scopeParam)}&sel=${encodeURIComponent(id)}&formato=${formato}`);
+      const r = await fetch(`/stampe/zoo/stampa/dettagli?scope=${encodeURIComponent(scopeParam)}&sel=${encodeURIComponent(id)}&formato=${formato}`
+        + (noFoto(id) ? `&senzafoto_${encodeURIComponent(id)}=1` : ""));
       if (!r.ok) return null;
       const d = (await r.json()) as Dettagli;
       if (memoria.current.size > 80) memoria.current.clear();
@@ -128,7 +133,7 @@ export default function RepartoCheck({
     }, pronto ? 0 : 400);
     return () => { vivo = false; clearTimeout(avanti); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [i, formato]);
+  }, [i, formato, voce && senzaFoto[voce.id]]);
 
   useEffect(() => {
     if (posizionato.current || !dettagli) return;
@@ -165,11 +170,12 @@ export default function RepartoCheck({
   const altezzaCartello = cartello ? Math.round(cartello.format.h * scala) : 320;
 
   const inCoda = (tipo: "dopo" | "arrivo") => startTransition(async () => {
-    const r = await mettiInCoda(scopeParam, tipo, JSON.stringify([{ offerId: voce.id, impostazioni: { [`formato_${voce.id}`]: formato } }]));
+    const impostazioni: Record<string, string> = { [`formato_${voce.id}`]: formato };
+    if (noFoto(voce.id)) impostazioni[`senzafoto_${voce.id}`] = "1";
+    const r = await mettiInCoda(scopeParam, tipo, JSON.stringify([{ offerId: voce.id, impostazioni }]));
     if (r.ok) {
       setStato((p) => ({ ...p, [voce.id]: { ...p[voce.id], inCoda: tipo } }));
       setEsito(tipo === "dopo" ? "✓ Confermato: lo stampi dopo, in blocco, da Stampa cartelli." : "✓ Segnato come merce in arrivo.");
-      setTimeout(() => vai(1), 900);
     } else setEsito("Non sono riuscito a salvarlo.");
   });
   const escludi = () => startTransition(async () => {
@@ -250,8 +256,13 @@ export default function RepartoCheck({
           <label>Condizioni
             <InlineEdit value={riga.cond.value} placeholder="es. fino a esaurimento" onSaved={() => carica(voce.id)} onSave={setOfferTextScoped.bind(null, riga.id, "condizioni", scopeParam)} />
           </label>
+          <label className="reparto-spunta">
+            <input type="checkbox" checked={noFoto(voce.id)}
+              onChange={(e) => setSenzaFoto((p) => ({ ...p, [voce.id]: e.target.checked }))} />
+            Stampa senza foto (se la foto è sbagliata)
+          </label>
           {riga.meccanica && <div className="hint">Meccanica: {riga.meccanica}</div>}
-          <span className="hint">I campi si salvano da soli uscendo dal campo e il cartello si aggiorna.</span>
+          <span className="hint hint-mini">I campi si salvano da soli uscendo dal campo e il cartello si aggiorna.</span>
         </div>
       )}
 
