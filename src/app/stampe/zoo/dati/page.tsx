@@ -13,14 +13,14 @@ import ParentQuickEdit from "@/components/stampe/ParentQuickEdit";
 import PhotoMatcher from "@/components/stampe/PhotoMatcher";
 import {
   getZooDb, zooImageUrl, effectiveParentText, isZooHidden, hiddenEntriesFor, fornitoriList, marcheList, marcaEffettiva,
-  suggestPhotoMatch, buildAbbinamentoIndex, animaliDi, caratteristicheProdottoDi, storicoOfferteByEan,
+  suggestPhotoMatch, buildAbbinamentoIndex, fotoDaControllare, animaliDi, caratteristicheProdottoDi, storicoOfferteByEan,
   periodoBreve, visibleProducts, type ZooProduct, type ZooParent, type ZooStoricoVoce,
 } from "@/lib/zoo";
 import {
   importZooProducts, finalizeZooPhotoUpload, confirmZooPhotoTargets, createZooParent, associaConAI,
   rigeneraTestiAI, saveParentTexts, setParentImage, toggleParentCaratteristica, scioglieParent, toggleZooHidden,
   toggleZooHiddenBulk, updateParentFieldInline, updateProductFieldInline, setParentTagInline, moveProductToParent,
-  setParentImageFromFile, mergeParentsForm, promuoviProdottoAConsorzio, adottaProdotto,
+  setParentImageFromFile, mergeParentsForm, promuoviProdottoAConsorzio, adottaProdotto, staccaZooFoto,
 } from "@/lib/zoo-actions";
 
 // "Associa con AI" può richiedere più dei 10s di default per un lotto di articoli.
@@ -114,6 +114,7 @@ export default async function ZooDatiPage({
    */
   const abbinaAperto = sp.abbina === "1";
   const senzaFotoCatalogo = db.products.filter((p) => !p.image);
+  const daControllare = abbinaAperto ? fotoDaControllare(visibleProducts(db, scope, academyDb)) : [];
   const senzaFotoById = new Map(senzaFotoCatalogo.map((p) => [p.id, p]));
   const photoSuggestions = abbinaAperto
     ? (() => {
@@ -404,6 +405,32 @@ export default async function ZooDatiPage({
             </div>
             {abbinaAperto && (
             <>
+            {/* abbinamenti che non tornano: nel nome del file non c'è nessuna parola dell'articolo */}
+            {daControllare.length > 0 && (
+              <div className="card" style={{ padding: 12, marginTop: 8, borderColor: "#f0c000" }}>
+                <strong>Foto da controllare ({daControllare.length})</strong>
+                <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "4px 0 8px" }}>
+                  Il nome del file non ha nessuna parola in comune con l&apos;articolo: quasi sempre è un
+                  abbinamento sbagliato, fatto quando bastava un numero uguale. Togliendo la foto, il file
+                  torna qui sotto fra quelli da abbinare.
+                </p>
+                <div style={{ display: "grid", gap: 8 }}>
+                  {daControllare.map(({ product, file }) => (
+                    <div key={product.id} style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={product.image} alt="" style={{ width: 46, height: 46, objectFit: "contain", background: "#fff", border: "1px solid #eee", borderRadius: 6 }} />
+                      <div style={{ flex: 1, minWidth: 220, fontSize: 12.5 }}>
+                        <strong>{product.descrizione}</strong>
+                        <div style={{ color: "var(--muted)", fontSize: 11.5 }}>{product.ean} · foto: {file}</div>
+                      </div>
+                      <form action={staccaZooFoto.bind(null, product.id, scopeParam, `${BACK}?abbina=1`)}>
+                        <button className="btn btn-outline btn-sm" type="submit">Togli la foto</button>
+                      </form>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "8px 0" }}>
               Le foto senza EAN/codice nel nome non si abbinano da sole: qui sotto trovi un&apos;ipotesi per ciascuna,
               basata sul confronto tra il nome del file e la descrizione. Se la proposta non va bene — o se non ce

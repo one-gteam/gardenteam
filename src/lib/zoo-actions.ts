@@ -248,6 +248,29 @@ export async function associateZooPhoto(back: string, scopeParam: string, produc
 }
 
 /**
+ * Toglie la foto da un articolo (o da un prodotto padre, con "p:<id>"): il file
+ * resta nella raccolta e torna fra quelli da abbinare, l'articolo torna senza
+ * foto. Serve per disfare un abbinamento sbagliato.
+ */
+export async function staccaZooFoto(target: string, scopeParam: string, back: string) {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  if (!gestisceArea(user, "zoo", scope, academyDb)) redirect(backUrl(back, scopeParam, { permessi: "no" }));
+  if (target.startsWith("p:")) {
+    const parent = db.parents.find((p) => p.id === target.slice(2));
+    if (parent) parent.image = undefined;
+  } else {
+    const p = db.products.find((x) => x.id === target);
+    if (p) p.image = undefined;
+  }
+  await saveZooDb(db);
+  rigeneraZoo();
+  redirect(backUrl(back, scopeParam, { staccata: "1" }));
+}
+
+/**
  * Conferma in blocco gli abbinamenti foto→articolo/padre scelti nella tabella di
  * abbinamento. Il bersaglio è l'id di un articolo, oppure "p:<id>" per un
  * prodotto padre: la ricerca permette di scegliere l'uno o l'altro.

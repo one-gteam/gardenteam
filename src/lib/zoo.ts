@@ -626,14 +626,42 @@ export function suggestPhotoMatch(
   const fileNums = new Set([...fileTokens].filter((t) => /^\d+$/.test(t)));
   const scored = index.map(({ productId, tokens, nums }) => {
     if (tokens.size === 0) return { productId, score: 0 };
-    let common = 0;
-    for (const t of fileTokens) if (tokens.has(t)) common++;
+    /*
+     * Ci vuole almeno una PAROLA in comune. I numeri (grammature, misure) da soli
+     * non bastano: si ripetono su mezzo catalogo, e bastava un "250" per mettere
+     * la foto di un cibo per cani da 1.250 g sul condizionatore d'acqua da 250 ml.
+     * Restano come premio, per scegliere fra articoli che gia' condividono il nome.
+     */
+    let parole = 0;
+    for (const t of fileTokens) if (tokens.has(t) && !/^\d+$/.test(t)) parole++;
+    if (parole === 0) return { productId, score: 0 };
     let numBonus = 0;
     for (const n of fileNums) if (nums.has(n)) numBonus += 0.5;
     const union = new Set([...fileTokens, ...tokens]).size;
-    return { productId, score: union > 0 ? (common + numBonus) / union : 0 };
+    return { productId, score: union > 0 ? (parole + numBonus) / union : 0 };
   });
   return scored.filter((s) => s.score > 0).sort((a, b) => b.score - a.score).slice(0, limit);
+}
+
+/**
+ * Articoli la cui foto non c'entra con la descrizione: nel nome del file non
+ * compare nessuna delle loro parole. Sono quelli abbinati quando bastava un
+ * numero in comune; qui si elencano per poterli staccare e rifare.
+ */
+export function fotoDaControllare(products: ZooProduct[]): { product: ZooProduct; file: string }[] {
+  const fuori: { product: ZooProduct; file: string }[] = [];
+  for (const p of products) {
+    if (!p.image) continue;
+    const file = decodeURIComponent(p.image.split("/").pop() ?? "").replace(/\.[a-z0-9]+$/i, "");
+    // il nome che contiene EAN o codice fornitore e' un abbinamento certo, non si discute
+    if (p.ean && file.includes(p.ean)) continue;
+    if (p.codice && p.codice.length > 3 && file.toLowerCase().includes(p.codice.toLowerCase())) continue;
+    const fileTokens = new Set(tokenizzaPerAbbinamento(file.replace(/[_-]/g, " ")));
+    const suoi = new Set(tokenizzaPerAbbinamento(`${p.marca} ${p.fornitore} ${p.descrizione}`));
+    const parole = [...fileTokens].filter((t) => suoi.has(t) && !/^\d+$/.test(t));
+    if (parole.length === 0) fuori.push({ product: p, file });
+  }
+  return fuori;
 }
 
 /**
@@ -711,6 +739,12 @@ export function valoriPerStampa(
     delete vals.prezzoPromo;
     delete vals.prezzoListino;
   }
+  /*
+   * Cartello senza foto anche se l'articolo ce l'ha: togliendo il valore entra
+   * in gioco il "foglio senza foto" del layout, che dispone gli altri campi
+   * nello spazio rimasto libero.
+   */
+  if (sp[`senzafoto_${o.id}`] === "1") delete vals.immagine;
   for (const fid of (sp[`nascondi_${o.id}`] ?? "").split(",").filter(Boolean)) delete vals[fid];
   return vals;
 }

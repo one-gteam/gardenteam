@@ -510,6 +510,7 @@ export default async function ZooStampaPage({
             initialPrices: Object.fromEntries(selectedIds.map((id) => [id, sp[`prezzo_${id}`] ?? ""]).filter(([, v]) => v)),
             initialListini: Object.fromEntries(selectedIds.map((id) => [id, sp[`listino_${id}`] ?? ""]).filter(([, v]) => v)),
             initialNoPrice: Object.fromEntries(selectedIds.map((id) => [id, sp[`noprezzo_${id}`] === "1"])),
+            initialNoPhoto: Object.fromEntries(selectedIds.map((id) => [id, sp[`senzafoto_${id}`] === "1"])),
             initialHidden: Object.fromEntries(
               selectedIds.map((id) => [id, (sp[`nascondi_${id}`] ?? "").split(",").filter(Boolean)])
             ),

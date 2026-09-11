@@ -34,6 +34,8 @@ export interface StampaPickerProps {
   onPrint?: (ids: string[]) => Promise<{ ok: boolean }>; // segna come stampati al momento della stampa
   /** Prezzi di partenza (barrati) scritti a mano per il singolo cartello. */
   initialListini?: Record<string, string>;
+  /** Cartelli da stampare senza foto, anche se l'articolo ce l'ha. */
+  initialNoPhoto?: Record<string, boolean>;
   /**
    * Chiamato a ogni cambio di selezione o di impostazioni con i parametri
    * dell'anteprima: chi lo riceve può ridisegnare i cartelli senza ricaricare.
@@ -62,6 +64,7 @@ export default function StampaPicker({
   printed,
   onPrint,
   initialListini,
+  initialNoPhoto,
   onChange,
   onPreview,
 }: StampaPickerProps) {
@@ -71,6 +74,7 @@ export default function StampaPicker({
   const [prices, setPrices] = useState<Record<string, string>>(initialPrices);
   const [listini, setListini] = useState<Record<string, string>>(initialListini ?? {});
   const [noPrice, setNoPrice] = useState<Record<string, boolean>>(initialNoPrice);
+  const [noPhoto, setNoPhoto] = useState<Record<string, boolean>>(initialNoPhoto ?? {});
   const [hiddenFields, setHiddenFields] = useState<Record<string, string[]>>(initialHidden);
   const [applyAll, setApplyAll] = useState(globalFormat);
   const [doppio, setDoppio] = useState(false);
@@ -98,6 +102,7 @@ export default function StampaPicker({
       if (prices[id]) params.set(`prezzo_${id}`, prices[id]);
       if (listini[id]) params.set(`listino_${id}`, listini[id]);
       if (noPrice[id]) params.set(`noprezzo_${id}`, "1");
+      if (noPhoto[id]) params.set(`senzafoto_${id}`, "1");
       if (hiddenFields[id]?.length) params.set(`nascondi_${id}`, hiddenFields[id].join(","));
     }
     if (doppio) params.set("doppio", "1");
@@ -207,7 +212,7 @@ export default function StampaPicker({
           <>
             <div className="table-wrap">
               <table className="data">
-                <thead><tr><th>Prodotto</th><th>Formato</th><th>Prezzo cartello</th><th>Prezzo di partenza</th><th>Prezzo</th><th>Campi</th><th></th></tr></thead>
+                <thead><tr><th>Prodotto</th><th>Formato</th><th>Prezzo cartello</th><th>Prezzo di partenza</th><th>Nascondi</th><th>Campi</th><th></th></tr></thead>
                 <tbody>
                   {selectedProds.map((p) => (
                     <tr key={p.id}>
@@ -242,14 +247,24 @@ export default function StampaPicker({
                           style={{ width: 85, marginTop: 0 }}
                         />
                       </td>
-                      <td>
+                      <td style={{ whiteSpace: "nowrap" }}>
                         <label style={{ fontSize: 12, display: "flex", gap: 4, alignItems: "center" }}>
                           <input
                             type="checkbox"
                             checked={!!noPrice[p.id]}
                             onChange={(e) => setNoPrice((prev) => ({ ...prev, [p.id]: e.target.checked }))}
                           />{" "}
-                          nascondi
+                          prezzo
+                        </label>
+                        {/* senza foto si stampa il "foglio senza foto" del layout, con i campi ridisposti */}
+                        <label style={{ fontSize: 12, display: "flex", gap: 4, alignItems: "center" }}
+                          title="Stampa questo cartello senza foto, anche se l'articolo ne ha una">
+                          <input
+                            type="checkbox"
+                            checked={!!noPhoto[p.id]}
+                            onChange={(e) => setNoPhoto((prev) => ({ ...prev, [p.id]: e.target.checked }))}
+                          />{" "}
+                          foto
                         </label>
                       </td>
                       <td>
