@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
+import FiltriMobile from "@/components/FiltriMobile";
 import StampeHeader from "@/components/stampe/StampeHeader";
 import Cartello from "@/components/stampe/Cartello";
 import StampaWorkspace from "@/components/stampe/StampaWorkspace";
@@ -423,6 +424,15 @@ export default async function ZooStampaPage({
         )}
 
         <div className="card" style={{ marginBottom: 16, padding: 14 }}>
+          <FiltriMobile id="filtri-stampa" scelte={[
+            sp.q && `«${sp.q}»`, sp.animale, sp.caratt,
+            sp.volantino === "si" && "in volantino", sp.volantino === "no" && "non in volantino",
+            sp.stampati === "no" && "da stampare", sp.stampati === "si" && "già stampati",
+            sp.vista === "singole" ? "offerte singole" : "per prodotto padre",
+            sp.giacenza === "si" && "con giacenza", sp.giacenza === "zero" && "giacenza zero",
+            sp.giacenza === "no" && "non nel gestionale",
+            sp.nonstampabili === "1" && "solo non stampabili",
+          ]}>
           <form method="get" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10, alignItems: "end" }}>
             <input type="hidden" name="scope" value={scopeParam} />
             <input type="hidden" name="sel" value={sp.sel ?? ""} />
@@ -503,6 +513,7 @@ export default async function ZooStampaPage({
               </div>
             </details>
           </form>
+          </FiltriMobile>
           {scope.type !== "system" && gestione && (
             <details style={{ marginTop: 12, borderTop: "1px dashed var(--line)", paddingTop: 10 }} open={sp.offerta === "ok" || offerteProprie.length > 0}>
               <summary style={{ cursor: "pointer", fontWeight: 700, fontSize: 12.5 }}>

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
+import FiltriMobile from "@/components/FiltriMobile";
 import StampeHeader from "@/components/stampe/StampeHeader";
 import { canAccessArea, isZooEditor, scopesForUser, resolveScope } from "@/lib/stampe";
 import { getDb } from "@/lib/db";
@@ -506,6 +507,11 @@ export default async function ZooOffertePage({
                   Vista articoli singoli ({visibili.length})
                 </a>
               </div>
+              <FiltriMobile id="filtri-offerte" scelte={[
+                vistaArticoli ? "articoli singoli" : "raggruppata",
+                sp.q && `«${sp.q}»`, sp.animale, sp.caratt, sp.marca, sp.fornitore, sp.tipopromo,
+                sp.senzapadre === "1" && "solo senza padre",
+              ]}>
               <form method="get" style={{ display: "grid", gridTemplateColumns: "repeat(6, minmax(0, 1fr)) auto", gap: 10, alignItems: "end" }}>
                 <input type="hidden" name="scope" value={scopeParam} />
                 <input type="hidden" name="vista" value={vistaArticoli ? "articoli" : "raggruppata"} />
@@ -561,6 +567,7 @@ export default async function ZooOffertePage({
                   )}
                 </label>
               </form>
+              </FiltriMobile>
             </div>
 
             {/* ---------- tabella offerte del volantino ---------- */}

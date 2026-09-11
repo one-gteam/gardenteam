@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
+import FiltriMobile from "@/components/FiltriMobile";
 import StampeHeader from "@/components/stampe/StampeHeader";
 import { canAccessArea, gestisceArea, isZooEditor, scopesForUser, resolveScope } from "@/lib/stampe";
 import { getDb } from "@/lib/db";
@@ -361,6 +362,11 @@ export default async function ZooDatiPage({
               Vista articoli singoli ({products.length})
             </a>
           </div>
+          <FiltriMobile id="filtri-dati" scelte={[
+            vistaArticoli ? "articoli singoli" : "raggruppata",
+            sp.q && `«${sp.q}»`, sp.animale, sp.caratt, sp.fornitore, sp.marca,
+            soloSenzaPadre && "solo senza padre", showHidden && "anche i nascosti",
+          ]}>
           <form method="get" style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr)) auto", gap: 10, alignItems: "end" }}>
             <input type="hidden" name="scope" value={scopeParam} />
             <input type="hidden" name="vista" value={vistaArticoli ? "articoli" : "raggruppata"} />
@@ -413,6 +419,7 @@ export default async function ZooDatiPage({
               )}
             </label>
           </form>
+          </FiltriMobile>
         </div>
 
         {/* tabella prodotti con selezione multipla → crea padre / associa con AI / unisci / non tenuti */}

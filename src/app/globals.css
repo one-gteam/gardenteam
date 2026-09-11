@@ -480,7 +480,7 @@ table.data td { overflow-wrap: anywhere; }
 .stampe-header.compatta .hamburger { display: block; }
 .stampe-header.compatta .header-nav-row { display: none; }
 
-@media (max-width: 760px) {
+@media screen and (max-width: 760px) {
   .site-header { padding: 0 12px; }
   .header-top { gap: 8px; }
   .site-header .hamburger { display: block; }
@@ -489,6 +489,20 @@ table.data td { overflow-wrap: anywhere; }
   .user-chip > div:nth-child(2) { display: none; }
   .brand { font-size: 17px; }
   .area-name { font-size: 13px; }
+}
+
+/* Filtri di una pagina elenco: la riga che li apre esiste solo da cellulare
+   (vedi FiltriMobile.tsx); da computer il modulo resta sempre in vista */
+.filtri-etichetta { display: none; }
+@media screen and (max-width: 760px) {
+  .filtri-etichetta {
+    display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px;
+    border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; background: #fff;
+  }
+  .filtri-etichetta::after { content: "\25be"; margin-left: auto; opacity: .6; }
+  .filtri-interruttore:checked ~ .filtri-etichetta { font-weight: 700; margin-bottom: 8px; }
+  .filtri-interruttore:checked ~ .filtri-etichetta::after { content: "\25b4"; }
+  .filtri-interruttore:not(:checked) ~ .filtri-corpo { display: none; }
 }
 
 /* Filtri a scomparsa: chiusi dicono cosa è selezionato, aperti sono il modulo intero */
@@ -508,7 +522,14 @@ table.data td { overflow-wrap: anywhere; }
 .reparto-filtri { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 0; }
 .reparto-filtri select, .reparto-filtri input[type="search"] { margin-top: 0; font-size: 13px; }
 .reparto-filtri input[type="search"] { flex: 1; min-width: 140px; }
-.reparto-testa { display: flex; gap: 8px; align-items: center; margin-bottom: 2px; }
+/* il nome del cartello resta appeso in cima allo schermo mentre si scorre:
+   davanti allo scaffale serve sapere sempre di che prodotto si sta parlando */
+.reparto-testa {
+  display: flex; gap: 8px; align-items: center; margin-bottom: 2px;
+  position: sticky; top: 0; z-index: 20;
+  background: var(--bg); padding: 8px 0 6px; border-bottom: 1px solid var(--line);
+}
+.reparto-testa .vol-numero { flex: none; }
 .reparto-cartello { display: flex; justify-content: center; align-items: flex-start; margin: 8px 0; overflow: hidden; }
 .reparto-cartello.attesa { opacity: .45; transition: opacity .15s; }
 .reparto-campi { padding: 10px; display: grid; gap: 8px; margin-bottom: 8px; }
@@ -526,7 +547,9 @@ table.data td { overflow-wrap: anywhere; }
 }
 .reparto-azioni .azione-secondaria { grid-column: 1; }
 .reparto-formato { display: flex; align-items: center; gap: 8px; margin: 2px 0 6px; }
-.reparto-formato select { margin-top: 0; font-size: 13px; max-width: 220px; }
+/* "Formato" e la tendina restano sulla stessa riga anche da cellulare */
+.reparto-formato > label { flex-wrap: nowrap !important; }
+.reparto-formato select { margin-top: 0; font-size: 13px; width: auto; max-width: 220px; }
 .reparto-formato .btn { margin-left: auto; }
 .reparto-nav { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
 .reparto-nav .btn { padding: 14px 8px; font-size: 15px; }
@@ -730,6 +753,34 @@ table.data td { overflow-wrap: anywhere; }
 .vol-sezione-testo {
   position: absolute; top: 4px; left: 6px; right: 6px; font-size: 9.5px; line-height: 1.25;
   color: var(--green-900); white-space: pre-wrap;
+}
+
+/* ---------- Cellulare: una colonna, niente scorrimento laterale ----------
+   Le pagine sono nate per lo schermo largo del computer. Invece di rifarle una
+   per una, qui i moduli a colonne fisse (i filtri soprattutto, che si
+   sovrapponevano) diventano una colonna sola. Restano a griglia le cose che
+   sono carta e non pagina web: la bozza del volantino e i cartelli, escluse
+   qui sotto, e qualunque blocco marcato .griglia-fissa. */
+@media screen and (max-width: 760px) {
+  .container { padding: 16px 12px 48px; }
+  h1 { font-size: 22px; }
+  h2 { font-size: 17px; }
+  h3 { font-size: 15px; }
+  .subtitle { font-size: 14px; margin-bottom: 16px; }
+  .card { padding: 14px; }
+  .section { margin-top: 24px; }
+  .section-head { flex-wrap: wrap; }
+
+  .container [style*="grid-template-columns"]:not(.griglia-fissa):not(.vol-page):not(.vol-page *):not(.cartello *) { grid-template-columns: 1fr !important; }
+  /* le righe di pulsanti e di campi vanno a capo invece di uscire dallo schermo */
+  .container [style*="display:flex"]:not(.cartello *), .container [style*="display: flex"]:not(.cartello *) { flex-wrap: wrap; }
+  .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+
+  table.data { font-size: 12.5px; }
+  table.data th { padding: 7px 6px; font-size: 11px; }
+  table.data td { padding: 7px 6px; }
+  .stat .num { font-size: 24px; }
+  .strumento[open] > .card { max-width: calc(100vw - 24px); }
 }
 
 @media print {
