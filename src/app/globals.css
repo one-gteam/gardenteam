@@ -522,37 +522,44 @@ table.data td { overflow-wrap: anywhere; }
 .reparto-filtri { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 0; }
 .reparto-filtri select, .reparto-filtri input[type="search"] { margin-top: 0; font-size: 13px; }
 .reparto-filtri input[type="search"] { flex: 1; min-width: 140px; }
-/* il nome del cartello resta appeso in cima allo schermo mentre si scorre:
-   davanti allo scaffale serve sapere sempre di che prodotto si sta parlando */
-.reparto-testa {
-  display: flex; gap: 8px; align-items: center; margin-bottom: 2px;
+/* Il nome del cartello (con marca, animale, caratteristica e giacenza) resta
+   appeso in cima allo schermo e i pulsanti in fondo: in mezzo scorre solo il
+   cartello, così davanti allo scaffale niente si muove sotto il dito. */
+.reparto-appeso {
   position: sticky; top: 0; z-index: 20;
   background: var(--bg); padding: 8px 0 6px; border-bottom: 1px solid var(--line);
 }
+.reparto-testa { display: flex; gap: 8px; align-items: center; }
 .reparto-testa .vol-numero { flex: none; }
+.reparto-info { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+.reparto-barra {
+  position: sticky; bottom: 0; z-index: 20; margin-top: 8px;
+  background: var(--bg); border-top: 1px solid var(--line); padding: 6px 0 8px;
+}
 .reparto-cartello { display: flex; justify-content: center; align-items: flex-start; margin: 8px 0; overflow: hidden; }
 .reparto-cartello.attesa { opacity: .45; transition: opacity .15s; }
 .reparto-campi { padding: 10px; display: grid; gap: 8px; margin-bottom: 8px; }
 .reparto-campi label { font-size: 12px; font-weight: 700; display: grid; gap: 2px; }
 .reparto-riga { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-/* le azioni: a destra il pulsante principale (grande, sotto il pollice), a
-   sinistra gli altri; il testo su due righe resta centrato dentro al pulsante */
-.reparto-azioni { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 8px 0; align-items: stretch; }
-.reparto-azioni .btn { padding: 12px 8px; font-size: 14px; text-align: center; }
-.reparto-azioni > label { grid-column: 1 / -1; }
-.reparto-azioni .azione-principale {
-  grid-column: 2; grid-row: 1 / -1;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 2px; line-height: 1.2;
+/* le azioni: tutte su una riga, la stampa larga il doppio delle altre; il
+   testo va su due righe centrate invece di lasciare buchi bianchi */
+.reparto-azioni { display: flex; gap: 6px; margin: 6px 0; align-items: stretch; }
+.reparto-azioni .btn {
+  flex: 1; padding: 10px 4px; font-size: 13px; text-align: center; line-height: 1.15;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
 }
-.reparto-azioni .azione-secondaria { grid-column: 1; }
+.reparto-azioni .azione-principale { flex: 1.9; font-size: 13.5px; }
+/* la scelta fatta resta colorata: verde in coda, ambra in arrivo, rosso esclusa */
+.reparto-azioni .btn.scelto-verde { background: var(--green-900); box-shadow: inset 0 0 0 2px var(--green-500); }
+.reparto-azioni .btn.scelto-ambra { background: var(--amber); border-color: var(--amber); color: #fff; }
+.reparto-azioni .btn.scelto-rosso { background: var(--red); border-color: var(--red); color: #fff; }
 .reparto-formato { display: flex; align-items: center; gap: 8px; margin: 2px 0 6px; }
 /* "Formato" e la tendina restano sulla stessa riga anche da cellulare */
 .reparto-formato > label { flex-wrap: nowrap !important; }
 .reparto-formato select { margin-top: 0; font-size: 13px; width: auto; max-width: 220px; }
 .reparto-formato .btn { margin-left: auto; }
-.reparto-nav { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
-.reparto-nav .btn { padding: 14px 8px; font-size: 15px; }
+.reparto-nav { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.reparto-nav .btn { padding: 11px 8px; font-size: 14.5px; }
 .reparto { user-select: none; }
 .reparto input, .reparto textarea { user-select: text; }
 
@@ -772,6 +779,10 @@ table.data td { overflow-wrap: anywhere; }
   .section-head { flex-wrap: wrap; }
 
   .container [style*="grid-template-columns"]:not(.griglia-fissa):not(.vol-page):not(.vol-page *):not(.cartello *) { grid-template-columns: 1fr !important; }
+  /* il titolo della pagina prende tutta la riga: se resta in una colonna
+     stretta accanto agli strumenti si spezza in cinque righe */
+  .container [style*="display:flex"] > [style*="flex:1"],
+  .container [style*="display: flex"] > [style*="flex: 1"] { flex: 1 0 100% !important; }
   /* le righe di pulsanti e di campi vanno a capo invece di uscire dallo schermo */
   .container [style*="display:flex"]:not(.cartello *), .container [style*="display: flex"]:not(.cartello *) { flex-wrap: wrap; }
   .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }

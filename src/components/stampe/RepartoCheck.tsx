@@ -17,6 +17,7 @@ export interface VoceReparto {
   nCodici: number;
   marca: string;
   animale: string;
+  caratteristica: string;
   inCoda?: "dopo" | "arrivo";
   stampato: boolean;
   escluso: boolean;
@@ -69,6 +70,19 @@ export default function RepartoCheck({
   /* I cartelli già scaricati restano qui: passare al successivo è immediato
      perché mentre si guarda questo si scaricano in silenzio i prossimi. */
   const memoria = useRef(new Map<string, Dettagli>());
+  /* Lo spazio libero fra la testata appesa in alto e la barra appesa in basso:
+     il cartello si rimpicciolisce per starci dentro, così non si scorre nulla. */
+  const [spazio, setSpazio] = useState(0);
+  useEffect(() => {
+    const misura = () => {
+      const alto = document.querySelector(".reparto-appeso")?.getBoundingClientRect().height ?? 60;
+      const basso = document.querySelector(".reparto-barra")?.getBoundingClientRect().height ?? 160;
+      setSpazio(Math.max(220, window.innerHeight - alto - basso - 28));
+    };
+    misura();
+    window.addEventListener("resize", misura);
+    return () => window.removeEventListener("resize", misura);
+  }, []);
 
   const voce = voci[i];
   const consorzio = scopeType === "system";
@@ -130,7 +144,7 @@ export default function RepartoCheck({
   // mentre arriva il nuovo cartello resta in vista il precedente, sbiadito e nello stesso punto
   const cartello = dettagli?.cartelli[0] ?? ultimo;
   const attesa = !dettagli;
-  const scala = cartello ? Math.min(2, 330 / cartello.format.w) : 1;
+  const scala = cartello ? Math.min(2, 330 / cartello.format.w, spazio > 0 ? spazio / cartello.format.h : 99) : 1;
   const altezzaCartello = cartello ? Math.round(cartello.format.h * scala) : 320;
 
   const inCoda = (tipo: "dopo" | "arrivo") => startTransition(async () => {
@@ -138,7 +152,7 @@ export default function RepartoCheck({
     if (r.ok) {
       setStato((p) => ({ ...p, [voce.id]: { ...p[voce.id], inCoda: tipo } }));
       setEsito(tipo === "dopo" ? "✓ Confermato: lo stampi dopo, in blocco, da Stampa cartelli." : "✓ Segnato come merce in arrivo.");
-      setTimeout(() => vai(1), 600);
+      setTimeout(() => vai(1), 900);
     } else setEsito("Non sono riuscito a salvarlo.");
   });
   const escludi = () => startTransition(async () => {
@@ -157,18 +171,23 @@ export default function RepartoCheck({
         setTouchX(null);
       }}
     >
-      <div className="reparto-testa">
-        <span className="vol-numero">{i + 1} / {voci.length}</span>
-        <strong style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{voce.nome}</strong>
-        {s.inCoda === "dopo" && <span className="pill pill-green">in coda</span>}
-        {s.inCoda === "arrivo" && <span className="pill pill-amber">in arrivo</span>}
-        {s.stampato && <span className="pill pill-gray">stampato</span>}
-        {s.escluso && <span className="pill pill-red">escluso</span>}
-      </div>
-      <div className="hint" style={{ marginBottom: 6 }}>
-        {voce.marca}{voce.animale ? ` · ${voce.animale}` : ""} · {voce.nCodici > 1 ? `${voce.nCodici} codici` : voce.ean}
-        {voce.giacenza !== undefined && <> · <strong>giacenza {voce.giacenza}</strong></>}
-        {voce.codiceGestionale && <> · cod. {voce.codiceGestionale}</>}
+      {/* resta appesa in cima allo schermo: davanti allo scaffale si deve sempre
+          sapere di che prodotto si sta parlando, e con che giacenza */}
+      <div className="reparto-appeso">
+        <div className="reparto-testa">
+          <span className="vol-numero">{i + 1} / {voci.length}</span>
+          <strong style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{voce.nome}</strong>
+          {s.inCoda === "dopo" && <span className="pill pill-green">in coda</span>}
+          {s.inCoda === "arrivo" && <span className="pill pill-amber">in arrivo</span>}
+          {s.stampato && <span className="pill pill-gray">stampato</span>}
+          {s.escluso && <span className="pill pill-red">escluso</span>}
+        </div>
+        <div className="reparto-info">
+          {voce.marca}{voce.animale ? ` · ${voce.animale}` : ""}{voce.caratteristica ? ` · ${voce.caratteristica}` : ""}
+          {" · "}{voce.nCodici > 1 ? `${voce.nCodici} codici` : voce.ean}
+          {voce.giacenza !== undefined && <> · <strong>giacenza {voce.giacenza}</strong></>}
+          {voce.codiceGestionale && <> · cod. {voce.codiceGestionale}</>}
+        </div>
       </div>
 
       <div className={`reparto-cartello${attesa ? " attesa" : ""}`} style={{ minHeight: altezzaCartello }}>
@@ -177,6 +196,7 @@ export default function RepartoCheck({
           : <div className="card" style={{ padding: 20, textAlign: "center", color: "var(--muted)" }}>Preparo il cartello…</div>}
       </div>
 
+      <div className="reparto-barra">
       <div className="reparto-formato">
         <label className="hint" style={{ display: "flex", gap: 6, alignItems: "center", margin: 0 }}>
           Formato
@@ -217,19 +237,27 @@ export default function RepartoCheck({
         </div>
       )}
 
+      {/* tutte e tre sulla stessa riga, con la stampa larga il doppio; quella
+          scelta resta colorata, così tornando indietro si vede cosa si è deciso */}
       <div className="reparto-azioni">
-        <button type="button" className="btn btn-outline azione-secondaria" disabled={pending} onClick={() => inCoda("arrivo")}>Merce in arrivo</button>
+        <button type="button" className={`btn btn-outline azione-secondaria${s.inCoda === "arrivo" ? " scelto-ambra" : ""}`}
+          disabled={pending} onClick={() => inCoda("arrivo")}>
+          <span>Merce</span><span>in arrivo</span>
+        </button>
         {!consorzio && (
-          <button type="button" className="btn btn-outline azione-secondaria" disabled={pending} onClick={escludi}>
-            {s.escluso ? "Rimetti in stampa" : "Non stampare"}
+          <button type="button" className={`btn btn-outline azione-secondaria${s.escluso ? " scelto-rosso" : ""}`}
+            disabled={pending} onClick={escludi}>
+            {s.escluso ? <><span>Escluso</span><span>rimetti</span></> : <><span>Non</span><span>stampare</span></>}
           </button>
         )}
-        <button type="button" className="btn azione-principale" disabled={pending} onClick={() => inCoda("dopo")}>
-          <span>✓ Confermato,</span>
-          <span>stampa dopo</span>
+        <button type="button" className={`btn azione-principale${s.inCoda === "dopo" ? " scelto-verde" : ""}`}
+          disabled={pending} onClick={() => inCoda("dopo")}>
+          {s.inCoda === "dopo"
+            ? <><span>✓ In coda</span><span>di stampa</span></>
+            : <><span>✓ Confermato,</span><span>stampa dopo</span></>}
         </button>
       </div>
-      {esito && <div className="alert alert-green">{esito}</div>}
+      {esito && <div className="alert alert-green" style={{ margin: "6px 0" }}>{esito}</div>}
 
       {!consorzio && impostazioniAperte && (
         <div className="card" style={{ padding: 10, marginTop: 8 }}>
@@ -248,6 +276,7 @@ export default function RepartoCheck({
       <div className="reparto-nav">
         <button type="button" className="btn btn-outline" disabled={i === 0} onClick={() => vai(-1)}>◀ Precedente</button>
         <button type="button" className="btn btn-outline" disabled={i >= voci.length - 1} onClick={() => vai(1)}>Successivo ▶</button>
+      </div>
       </div>
       <p className="hint" style={{ textAlign: "center" }}>Scorri con il dito o usa le frecce. Ambito: {scopeLabel}.</p>
     </div>

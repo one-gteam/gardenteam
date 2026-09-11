@@ -50,10 +50,11 @@ export default async function ZooRepartoPage({
     const parent = key.startsWith("p:") ? db.parents.find((x) => x.id === key.slice(2)) : undefined;
     const nome = parent ? effectiveParentText(db, scope, parent, "nome", academyDb).value || o.descrizione : o.descrizione;
     const animale = parent ? effectiveParentTag(db, scope, parent, "animale", academyDb).value : "";
+    const caratteristica = parent ? effectiveParentTag(db, scope, parent, "prodotto", academyDb).value : "";
     const inCoda = coda.find((c) => gruppo.some((g) => g.id === c.offerId))?.stato;
     return {
       id: o.id, nome, ean: o.ean, nCodici: gruppo.length,
-      marca: marcaEffettiva(product ?? { marca: "", fornitore: "" }), animale,
+      marca: marcaEffettiva(product ?? { marca: "", fornitore: "" }), animale, caratteristica,
       inCoda, stampato: !!printedAt(db, scope, o.id),
       escluso: noPrint.offerIds.has(o.id) || noPrint.eans.has(o.ean),
       giacenza: (() => {
