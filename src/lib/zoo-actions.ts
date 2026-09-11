@@ -1606,6 +1606,21 @@ export async function saveZooApiKey(scopeParam: string, formData: FormData) {
   redirect(backUrl("/stampe/zoo/impostazioni", scopeParam, { chiave: key ? "1" : "0" }));
 }
 
+/** Indirizzo (con chiave) del servizio giacenze del gestionale dell'insegna/PV: vuoto = scollega. */
+export async function saveZooGiacenze(scopeParam: string, formData: FormData) {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  if (scope.type === "system" || !gestisceArea(user, "zoo", scope, academyDb)) redirect(backUrl("/stampe/zoo/impostazioni", scopeParam));
+  const url = String(formData.get("url") ?? "").trim();
+  db.giacenze = db.giacenze.filter((g) => !(g.scopeType === scope.type && g.scopeId === scope.id));
+  if (/^https:\/\/\S+$/.test(url)) db.giacenze.push({ scopeType: scope.type, scopeId: scope.id, url });
+  await saveZooDb(db);
+  rigeneraZoo();
+  redirect(backUrl("/stampe/zoo/impostazioni", scopeParam, { giacenze: url ? "1" : "0" }));
+}
+
 export async function saveFormatoRegola(scopeParam: string, formData: FormData) {
   const user = await requireZooUser();
   if (!isZooEditor(user)) redirect(backUrl("/stampe/zoo/impostazioni", scopeParam));

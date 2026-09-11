@@ -10,7 +10,7 @@ import {
   getZooDb, effectiveZooLayout, pvPriceFor, isZooHidden,
   campagneStampabili, campagnaInCorso, campagnaInLavorazione, campaignStato,
   effectiveParentText, effectiveParentTag, printedAt, NO_VOLANTINO,
-  ZOO_FIELDS, ZOO_FORMATS, marcaEffettiva, noPrintSets, offertePerStampa, tagsPerLayout, valoriPerStampa,
+  ZOO_FIELDS, ZOO_FORMATS, marcaEffettiva, noPrintSets, offertePerStampa, tagsPerLayout, valoriPerStampa, giacenzePer,
 } from "@/lib/zoo";
 import {
   importPvPricesRighe, markZooPrinted, resetZooPrinted, toggleZooHidden, importZooNoPrintRighe, svuotaZooNoPrint,
@@ -141,7 +141,14 @@ export default async function ZooStampaPage({
     prezzo: pvPriceFor(db, scope, o.ean, academyDb) ?? o.prezzoPromo,
     listino: o.prezzoListino,
     tipologia: marcaDi(o),
+    giacenza: giacenzaDi([o.ean]),
   });
+  // giacenze dal gestionale collegato (se c'è): una chiamata per tutti i codici in elenco
+  const giacenze = await giacenzePer(db, scope, academyDb, visible.map((o) => o.ean));
+  const giacenzaDi = (eans: string[]) => {
+    const trovate = eans.map((e) => giacenze[e]).filter(Boolean);
+    return trovate.length > 0 ? String(trovate.reduce((t, g) => t + g.giacenza, 0)) : undefined;
+  };
   const voci = vistaSingole
     ? visible.map(voceSingola)
     : (() => {
@@ -163,6 +170,7 @@ export default async function ZooStampaPage({
             prezzo: prezzi.length > 1 ? `da ${[...prezzi].sort()[0]}` : (prezzi[0] ?? ""),
             listino: primo.prezzoListino,
             tipologia: marcaDi(primo),
+            giacenza: giacenzaDi(gruppo.map((g) => g.ean)),
           };
         });
       })();

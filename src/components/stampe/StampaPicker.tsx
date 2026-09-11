@@ -11,6 +11,8 @@ interface ProdLite {
   tipologia: string;
   /** Prezzo di partenza dell'offerta (senza €), se c'è. */
   listino?: string;
+  /** Quantità a magazzino dal gestionale collegato (somma dei codici del padre). */
+  giacenza?: string;
 }
 
 export interface StampaPickerProps {
@@ -219,6 +221,12 @@ export default function StampaPicker({
               )}
               <div style={{ fontSize: 11, color: "var(--muted)" }}>
                 {p.codice} · {p.prezzo ? `€ ${p.prezzo}` : <span style={{ color: "#b45309" }}>prezzo da definire</span>} · {p.tipologia}
+                {p.giacenza !== undefined && (
+                  <span className={`pill ${Number(p.giacenza) > 0 ? "pill-green" : "pill-red"}`} style={{ marginLeft: 6, fontSize: 9.5 }}
+                    title="Giacenza dal gestionale">
+                    giac. {p.giacenza}
+                  </span>
+                )}
               </div>
             </button>
           );

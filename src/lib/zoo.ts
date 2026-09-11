@@ -405,6 +405,18 @@ export interface ZooScopeApiKey {
 }
 
 /**
+ * Collegamento alle giacenze del gestionale di un'insegna/PV (per Rosàflor:
+ * Linfa, /api/pub/giacenze). Dati i codici a barre risponde con le quantità a
+ * magazzino: così in Stampa cartelli e in reparto si vede se un cartello va
+ * stampato davvero. L'indirizzo contiene già la chiave.
+ */
+export interface ZooScopeGiacenze {
+  scopeType: ScopeType;
+  scopeId: string;
+  url: string;
+}
+
+/**
  * Nota lasciata sulla bozza del volantino da chi la rivede. Sta a parte dal
  * builder: chi commenta non deve poter spostare le offerte, e chi impagina deve
  * vedere tutte le note in un posto solo, comprese quelle degli altri.
@@ -451,6 +463,7 @@ export interface ZooDB {
   pvPromoCodes: ZooPvPromoCode[];
   pvPromos: ZooPvPromo[];
   scopeApiKeys: ZooScopeApiKey[];
+  giacenze: ZooScopeGiacenze[];
   noteBozza: ZooNotaBozza[];
   coda: ZooCoda[];
 }
@@ -480,11 +493,11 @@ export async function getZooDb(): Promise<ZooDB> {
     products: [], parents: [], textOverrides: [], tagOverrides: [], offerOverrides: [], printed: [],
     campaigns: [], offers: [],
     votes: [], hidden: [], pvPrices: [], suggestions: [], volantinoLayouts: [], zooLayouts: [],
-    noPrint: [], layoutImages: [], pvPromoCodes: [], pvPromos: [], scopeApiKeys: [], noteBozza: [], coda: [],
+    noPrint: [], layoutImages: [], pvPromoCodes: [], pvPromos: [], scopeApiKeys: [], noteBozza: [], coda: [], giacenze: [],
   };
   const db = await readDomain<ZooDB>("zoo", empty);
   db.settings = { ...DEFAULT_SETTINGS, ...(db.settings ?? {}) };
-  for (const k of ["products", "parents", "textOverrides", "tagOverrides", "offerOverrides", "printed", "campaigns", "offers", "votes", "hidden", "pvPrices", "suggestions", "volantinoLayouts", "zooLayouts", "noPrint", "layoutImages", "pvPromoCodes", "pvPromos", "scopeApiKeys", "noteBozza", "coda"] as const) {
+  for (const k of ["products", "parents", "textOverrides", "tagOverrides", "offerOverrides", "printed", "campaigns", "offers", "votes", "hidden", "pvPrices", "suggestions", "volantinoLayouts", "zooLayouts", "noPrint", "layoutImages", "pvPromoCodes", "pvPromos", "scopeApiKeys", "noteBozza", "coda", "giacenze"] as const) {
     if (!db[k]) (db as unknown as Record<string, unknown>)[k] = [];
   }
   // i layout salvati prima delle tipologie non hanno il campo: senza questo la
@@ -918,6 +931,47 @@ export function visibleProducts(db: ZooDB, scope: Scope, academyDb: DB): ZooProd
 export function apiKeyFor(db: ZooDB, scope: Scope): string | undefined {
   const propria = db.scopeApiKeys.find((k) => k.scopeType === scope.type && k.scopeId === scope.id);
   return propria?.key || db.settings.apiKey;
+}
+
+/** Il collegamento alle giacenze più vicino: il PV, altrimenti la sua insegna. */
+export function giacenzeUrlFor(db: ZooDB, scope: Scope, academyDb: DB): string | undefined {
+  for (const s of chainFor(scope, academyDb)) {
+    if (s.type === "system") continue;
+    const g = db.giacenze.find((x) => x.scopeType === s.type && x.scopeId === s.id);
+    if (g?.url) return g.url;
+  }
+  return undefined;
+}
+
+export interface Giacenza { giacenza: number; al: string }
+
+/**
+ * Giacenze per codice a barre dal gestionale collegato. A lotti da 200, con
+ * pochi secondi di attesa: se il gestionale non risponde la pagina esce lo
+ * stesso, semplicemente senza giacenze. Torna una mappa ean → giacenza.
+ */
+export async function giacenzePer(db: ZooDB, scope: Scope, academyDb: DB, eans: string[]): Promise<Record<string, Giacenza>> {
+  const url = giacenzeUrlFor(db, scope, academyDb);
+  const out: Record<string, Giacenza> = {};
+  const unici = [...new Set(eans.filter(Boolean))];
+  if (!url || unici.length === 0) return out;
+  for (let i = 0; i < unici.length; i += 200) {
+    const lotto = unici.slice(i, i + 200);
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 6000);
+      const r = await fetch(`${url}${url.includes("?") ? "&" : "?"}ean=${encodeURIComponent(lotto.join(","))}`, {
+        signal: ctrl.signal, cache: "no-store", headers: { accept: "application/json" },
+      });
+      clearTimeout(timer);
+      if (!r.ok) break;
+      const j = (await r.json()) as { giacenze?: Record<string, { giacenza: number; al?: string }> };
+      for (const [ean, g] of Object.entries(j.giacenze ?? {})) out[ean] = { giacenza: g.giacenza, al: g.al ?? "" };
+    } catch {
+      break; // gestionale spento o irraggiungibile: niente giacenze, niente errore in pagina
+    }
+  }
+  return out;
 }
 
 /** Codici promozione dell'ambito (se non ne ha ancora, valgono quelli proposti). */

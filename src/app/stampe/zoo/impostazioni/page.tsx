@@ -4,11 +4,11 @@ import { getCurrentUser } from "@/lib/auth";
 import StampeHeader from "@/components/stampe/StampeHeader";
 import { canAccessArea, isZooEditor, scopesForUser, resolveScope } from "@/lib/stampe";
 import { getDb } from "@/lib/db";
-import { getZooDb, hiddenEntriesFor, pvPromoCodesFor } from "@/lib/zoo";
+import { getZooDb, hiddenEntriesFor, pvPromoCodesFor, giacenzeUrlFor } from "@/lib/zoo";
 import InlineEdit from "@/components/stampe/InlineEdit";
 import ImportExcel from "@/components/stampe/ImportExcel";
 import {
-  saveZooSettings, saveZooApiKey, saveFormatoRegola, toggleZooHidden, importPvPromoRighe, rinominaPvPromoCode,
+  saveZooSettings, saveZooApiKey, saveZooGiacenze, saveFormatoRegola, toggleZooHidden, importPvPromoRighe, rinominaPvPromoCode,
 } from "@/lib/zoo-actions";
 
 export default async function ZooImpostazioniPage({
@@ -28,6 +28,7 @@ export default async function ZooImpostazioniPage({
   const scopes = scopesForUser(user, academyDb);
   const scope = resolveScope(user, sp.scope, academyDb);
   const scopeParam = `${scope.type}:${scope.id}`;
+  const giacenzeUrl = db.giacenze.find((g) => g.scopeType === scope.type && g.scopeId === scope.id)?.url;
   const consortium = isZooEditor(user);
   const hiddenHere = hiddenEntriesFor(db, scope);
   // codici promozione dell'ambito e quanti articoli ne hanno uno
@@ -166,6 +167,27 @@ export default async function ZooImpostazioniPage({
             <form action={saveZooApiKey.bind(null, scopeParam)} style={{ display: "flex", gap: 8 }}>
               <input type="password" name="apiKey" placeholder="sk-ant-…  (vuoto per rimuovere)" style={{ flex: 1, maxWidth: 420 }} />
               <button className="btn btn-sm" type="submit">Salva chiave</button>
+            </form>
+          </div>
+        )}
+
+        {/* giacenze dal gestionale dell'insegna/PV */}
+        {scope.type !== "system" && (
+          <div className="card" style={{ padding: 14, marginBottom: 14 }}>
+            <h2 style={{ marginTop: 0 }}>Giacenze dal gestionale di {scope.label}</h2>
+            <p style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 0 }}>
+              Collegando il servizio giacenze del vostro gestionale (per Rosàflor: Linfa, indirizzo e chiave da
+              <strong> Linfa → /api/giacenze-token</strong>), in Stampa cartelli e in reparto compare la quantità a
+              magazzino accanto a ogni prodotto: si capisce subito se il cartello va stampato. Stato:{" "}
+              {giacenzeUrl
+                ? <span className="pill pill-green">collegato</span>
+                : <span className="pill pill-gray">non collegato</span>}
+              {sp.giacenze === "1" && <span className="pill pill-green" style={{ marginLeft: 6 }}>salvato</span>}
+            </p>
+            <form action={saveZooGiacenze.bind(null, scopeParam)} style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <input type="url" name="url" defaultValue={giacenzeUrl ?? ""} placeholder="https://consegne.rosaflorgarden.it/api/pub/giacenze/CHIAVE   (vuoto per scollegare)"
+                style={{ flex: 1, minWidth: 320 }} />
+              <button className="btn btn-sm" type="submit">Salva collegamento</button>
             </form>
           </div>
         )}

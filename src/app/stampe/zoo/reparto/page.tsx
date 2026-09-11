@@ -6,7 +6,7 @@ import RepartoCheck, { type VoceReparto } from "@/components/stampe/RepartoCheck
 import { canAccessArea, resolveScope, scopesForUser } from "@/lib/stampe";
 import {
   getZooDb, campagnaPerStampa, offertePerStampa, effectiveParentText, effectiveParentTag, isZooHidden, marcaEffettiva,
-  noPrintSets, printedAt, ZOO_FIELDS, ZOO_FORMATS,
+  noPrintSets, printedAt, ZOO_FIELDS, ZOO_FORMATS, giacenzePer,
 } from "@/lib/zoo";
 
 /**
@@ -43,6 +43,7 @@ export default async function ZooRepartoPage({
     const key = product?.parentId ? `p:${product.parentId}` : `o:${o.id}`;
     gruppi.set(key, [...(gruppi.get(key) ?? []), o]);
   }
+  const giacenze = await giacenzePer(db, scope, academyDb, allOffers.map((o) => o.ean));
   const voci: VoceReparto[] = [...gruppi.entries()].map(([key, gruppo]) => {
     const o = gruppo[0];
     const product = db.products.find((p) => p.id === o.productId);
@@ -55,6 +56,10 @@ export default async function ZooRepartoPage({
       marca: marcaEffettiva(product ?? { marca: "", fornitore: "" }), animale,
       inCoda, stampato: !!printedAt(db, scope, o.id),
       escluso: noPrint.offerIds.has(o.id) || noPrint.eans.has(o.ean),
+      giacenza: (() => {
+        const trovate = gruppo.map((g) => giacenze[g.ean]).filter(Boolean);
+        return trovate.length > 0 ? String(trovate.reduce((t, g) => t + g.giacenza, 0)) : undefined;
+      })(),
       testo: `${nome} ${o.descrizione} ${o.ean} ${product?.descrizione ?? ""}`.toLowerCase(),
     };
   })
