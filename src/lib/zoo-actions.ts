@@ -829,6 +829,46 @@ export async function segnalaProblemaInline(scopeParam: string, parentId: string
   return { ok: true };
 }
 
+/**
+ * Segna (o toglie) il "non conforme" sul cartello che si ha davanti. Lo può
+ * fare chi lavora nell'ambito, capo reparto compreso: è chi sta allo scaffale
+ * a vedere che il cartello non torna. Se c'è un motivo scritto, viaggia anche
+ * come segnalazione al gestore, dove le segnalazioni si leggono già.
+ */
+export async function toggleNonConformeInline(
+  offerId: string, scopeParam: string, motivo: string
+): Promise<{ ok: boolean; nonConforme: boolean }> {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  const gia = db.nonConformi.find((n) => n.scopeType === scope.type && n.scopeId === scope.id && n.offerId === offerId);
+  if (gia) {
+    db.nonConformi = db.nonConformi.filter((n) => n !== gia);
+    await saveZooDb(db);
+    rigeneraZoo();
+    return { ok: true, nonConforme: false };
+  }
+  const testo = motivo.trim().slice(0, 400);
+  db.nonConformi.push({
+    id: `znc_${Date.now()}`, scopeType: scope.type, scopeId: scope.id, offerId,
+    motivo: testo || undefined, userName: `${user.firstName} ${user.lastName}`, at: new Date().toISOString(),
+  });
+  if (testo) {
+    const offer = db.offers.find((o) => o.id === offerId);
+    const product = offer ? db.products.find((x) => x.id === offer.productId) : undefined;
+    db.suggestions.push({
+      id: `zs_${Date.now()}`, parentId: product?.parentId, offerId,
+      message: `Cartello non conforme: ${testo}`,
+      userId: user.id, userName: `${user.firstName} ${user.lastName}`,
+      scopeLabel: scope.label, date: new Date().toISOString(), status: "aperta",
+    });
+  }
+  await saveZooDb(db);
+  rigeneraZoo();
+  return { ok: true, nonConforme: true };
+}
+
 export async function scioglieParent(back: string, parentId: string, scopeParam: string) {
   const user = await requireZooUser();
   if (!isZooEditor(user)) redirect(backUrl(back, scopeParam));

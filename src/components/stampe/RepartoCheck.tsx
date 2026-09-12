@@ -6,7 +6,7 @@ import Cartello from "./Cartello";
 import InlineEdit from "./InlineEdit";
 import {
   mettiInCoda, toggleZooNoPrintInline, setPvPriceInline, setPvListinoInline, updateOfferFieldInline, setOfferTextScoped,
-  segnalaProblemaInline,
+  segnalaProblemaInline, toggleNonConformeInline,
 } from "@/lib/zoo-actions";
 
 /** Una voce dell'elenco da controllare: un cartello (prodotto padre o offerta singola). */
@@ -21,6 +21,8 @@ export interface VoceReparto {
   inCoda?: "dopo" | "arrivo";
   stampato: boolean;
   escluso: boolean;
+  /** Segnato non conforme: il cartello non corrisponde a quello che c'è a scaffale. */
+  nonConforme?: boolean;
   giacenza?: string; // dal gestionale del punto vendita, quando collegato
   codiceGestionale?: string;
 }
@@ -178,6 +180,18 @@ export default function RepartoCheck({
       setEsito(tipo === "dopo" ? "✓ Confermato: lo stampi dopo, in blocco, da Stampa cartelli." : "✓ Segnato come merce in arrivo.");
     } else setEsito("Non sono riuscito a salvarlo.");
   });
+  /* Non conforme: quello che c'è sul cartello non torna con lo scaffale. Se nel
+     campo segnalazione c'è scritto il motivo, parte anche al gestore. */
+  const nonConforme = () => startTransition(async () => {
+    const r = await toggleNonConformeInline(voce.id, scopeParam, segnalazione);
+    if (r.ok) {
+      setStato((p) => ({ ...p, [voce.id]: { ...p[voce.id], nonConforme: r.nonConforme } }));
+      setEsito(r.nonConforme
+        ? (segnalazione.trim() ? "⚠ Segnato non conforme e segnalato al gestore." : "⚠ Segnato non conforme.")
+        : "Non conformità annullata.");
+      if (r.nonConforme) setSegnalazione("");
+    } else setEsito("Non sono riuscito a salvarlo.");
+  });
   const escludi = () => startTransition(async () => {
     const r = await toggleZooNoPrintInline(voce.id, scopeParam);
     if (r.ok) { setStato((p) => ({ ...p, [voce.id]: { ...p[voce.id], escluso: r.escluso } })); setEsito(r.escluso ? "Cartello escluso dalla stampa." : "Cartello rimesso fra quelli da stampare."); }
@@ -205,6 +219,7 @@ export default function RepartoCheck({
           {s.inCoda === "arrivo" && <span className="pill pill-amber">in arrivo</span>}
           {s.stampato && <span className="pill pill-gray">stampato</span>}
           {s.escluso && <span className="pill pill-red">escluso</span>}
+          {s.nonConforme && <span className="pill pill-orange">non conforme</span>}
         </div>
         <div className="reparto-info">
           {voce.marca}{voce.animale ? ` · ${voce.animale}` : ""}{voce.caratteristica ? ` · ${voce.caratteristica}` : ""}
@@ -262,7 +277,13 @@ export default function RepartoCheck({
             Stampa senza foto (se la foto è sbagliata)
           </label>
           {riga.meccanica && <div className="hint">Meccanica: {riga.meccanica}</div>}
-          <span className="hint hint-mini">I campi si salvano da soli uscendo dal campo e il cartello si aggiorna.</span>
+          <button type="button" className={`btn btn-sm ${s.nonConforme ? "scelto-ambra" : "btn-outline"}`}
+            disabled={pending} onClick={nonConforme}
+            title="Il cartello non corrisponde a quello che c'è sullo scaffale: prezzo, descrizione o foto">
+            {s.nonConforme ? "⚠ Non conforme — annulla" : "⚠ Segna non conforme"}
+          </button>
+          <span className="hint hint-mini">I campi si salvano da soli uscendo dal campo e il cartello si aggiorna.{" "}
+            Scrivi il motivo qui sotto prima di segnare il cartello non conforme: arriva al gestore.</span>
         </div>
       )}
 

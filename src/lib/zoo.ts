@@ -384,6 +384,33 @@ export interface ZooNoPrint {
   ean?: string;
 }
 
+/**
+ * Cartello segnato "non conforme" da chi è in reparto: il prezzo esposto, la
+ * descrizione o la foto non corrispondono a quello che c'è sullo scaffale.
+ * Resta dell'ambito che l'ha segnato (il PV segna per sé) e si vede come
+ * pastiglia in Controllo in reparto e in Stampa cartelli, così chi stampa sa
+ * che quel cartello va sistemato prima.
+ */
+export interface ZooNonConforme {
+  id: string;
+  scopeType: ScopeType;
+  scopeId: string;
+  offerId: string;
+  /** Cosa non torna, se chi segnala l'ha scritto. */
+  motivo?: string;
+  userName: string;
+  at: string; // ISO
+}
+
+/** I cartelli segnati non conformi in questo ambito, per id offerta. */
+export function nonConformiDi(db: ZooDB, scope: Scope): Map<string, ZooNonConforme> {
+  const m = new Map<string, ZooNonConforme>();
+  for (const n of db.nonConformi) {
+    if (n.scopeType === scope.type && n.scopeId === scope.id) m.set(n.offerId, n);
+  }
+  return m;
+}
+
 /** Le due liste di esclusione di un ambito: per offerta e per codice a barre. */
 export function noPrintSets(db: ZooDB, scope: Scope) {
   const miei = db.noPrint.filter((n) => n.scopeType === scope.type && n.scopeId === scope.id);
@@ -466,6 +493,7 @@ export interface ZooDB {
   giacenze: ZooScopeGiacenze[];
   noteBozza: ZooNotaBozza[];
   coda: ZooCoda[];
+  nonConformi: ZooNonConforme[];
 }
 
 /* ================== Persistenza ================== */
@@ -493,11 +521,11 @@ export async function getZooDb(): Promise<ZooDB> {
     products: [], parents: [], textOverrides: [], tagOverrides: [], offerOverrides: [], printed: [],
     campaigns: [], offers: [],
     votes: [], hidden: [], pvPrices: [], suggestions: [], volantinoLayouts: [], zooLayouts: [],
-    noPrint: [], layoutImages: [], pvPromoCodes: [], pvPromos: [], scopeApiKeys: [], noteBozza: [], coda: [], giacenze: [],
+    noPrint: [], layoutImages: [], pvPromoCodes: [], pvPromos: [], scopeApiKeys: [], noteBozza: [], coda: [], giacenze: [], nonConformi: [],
   };
   const db = await readDomain<ZooDB>("zoo", empty);
   db.settings = { ...DEFAULT_SETTINGS, ...(db.settings ?? {}) };
-  for (const k of ["products", "parents", "textOverrides", "tagOverrides", "offerOverrides", "printed", "campaigns", "offers", "votes", "hidden", "pvPrices", "suggestions", "volantinoLayouts", "zooLayouts", "noPrint", "layoutImages", "pvPromoCodes", "pvPromos", "scopeApiKeys", "noteBozza", "coda", "giacenze"] as const) {
+  for (const k of ["products", "parents", "textOverrides", "tagOverrides", "offerOverrides", "printed", "campaigns", "offers", "votes", "hidden", "pvPrices", "suggestions", "volantinoLayouts", "zooLayouts", "noPrint", "layoutImages", "pvPromoCodes", "pvPromos", "scopeApiKeys", "noteBozza", "coda", "giacenze", "nonConformi"] as const) {
     if (!db[k]) (db as unknown as Record<string, unknown>)[k] = [];
   }
   // i layout salvati prima delle tipologie non hanno il campo: senza questo la

@@ -8,7 +8,7 @@ import StampaWorkspace from "@/components/stampe/StampaWorkspace";
 import ImportExcel from "@/components/stampe/ImportExcel";
 import { canAccessArea, gestisceArea, scopesForUser, resolveScope } from "@/lib/stampe";
 import {
-  getZooDb, effectiveZooLayout, pvPriceFor, isZooHidden,
+  getZooDb, nonConformiDi, effectiveZooLayout, pvPriceFor, isZooHidden,
   campagneStampabili, campagnaInCorso, campagnaInLavorazione, campaignStato,
   effectiveParentText, effectiveParentTag, printedAt, NO_VOLANTINO,
   ZOO_FIELDS, ZOO_FORMATS, marcaEffettiva, noPrintSets, offertePerStampa, tagsPerLayout, valoriPerStampa, giacenzePer,
@@ -147,6 +147,12 @@ export default async function ZooStampaPage({
     const product = db.products.find((p) => p.id === o.productId);
     return product ? marcaEffettiva(product) : "";
   };
+  const nonConformi = nonConformiDi(db, scope);
+  /** undefined = conforme; stringa (anche vuota) = segnato non conforme, col motivo. */
+  const ncDi = (ids: string[]) => {
+    const trovato = ids.map((id) => nonConformi.get(id)).find(Boolean);
+    return trovato ? (trovato.motivo ?? "") : undefined;
+  };
   const voceSingola = (o: (typeof allOffers)[number]) => ({
     id: o.id,
     titolo: o.descrizione,
@@ -155,6 +161,7 @@ export default async function ZooStampaPage({
     listino: o.prezzoListino,
     tipologia: marcaDi(o),
     giacenza: giacenzaDi([o.ean]),
+    nonConforme: ncDi([o.id]),
     codiceGestionale: giacenze[o.ean]?.codice,
   });
   const voci = vistaSingole
@@ -179,6 +186,7 @@ export default async function ZooStampaPage({
             listino: primo.prezzoListino,
             tipologia: marcaDi(primo),
             giacenza: giacenzaDi(gruppo.map((g) => g.ean)),
+            nonConforme: ncDi(gruppo.map((g) => g.id)),
             codiceGestionale: gruppo.length === 1 ? giacenze[primo.ean]?.codice : undefined,
           };
         });

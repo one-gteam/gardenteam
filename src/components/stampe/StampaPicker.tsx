@@ -15,6 +15,8 @@ interface ProdLite {
   giacenza?: string;
   /** Codice dell'articolo nel gestionale collegato. */
   codiceGestionale?: string;
+  /** Segnato non conforme da chi è in reparto: il motivo, se l'ha scritto. */
+  nonConforme?: string;
 }
 
 export interface StampaPickerProps {
@@ -216,6 +218,12 @@ export default function StampaPicker({
               onClick={(e) => toggle(i, e.shiftKey)}
             >
               {isSel ? "☑" : "☐"} {p.titolo}
+              {p.nonConforme !== undefined && (
+                <span className="pill pill-orange" style={{ marginLeft: 6, fontSize: 9.5 }}
+                  title={p.nonConforme || "Segnato non conforme dal reparto: da sistemare prima di stampare"}>
+                  ⚠ non conforme
+                </span>
+              )}
               {dataStampa(p.id) && (
                 <span className="pill pill-gray" style={{ marginLeft: 6, fontSize: 9.5 }} title={`Già stampato il ${dataStampa(p.id)}`}>
                   ✓ stampato

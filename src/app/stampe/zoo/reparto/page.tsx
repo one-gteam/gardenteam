@@ -6,7 +6,7 @@ import RepartoCheck, { type VoceReparto } from "@/components/stampe/RepartoCheck
 import { canAccessArea, resolveScope, scopesForUser } from "@/lib/stampe";
 import {
   getZooDb, campagnaPerStampa, offertePerStampa, effectiveParentText, effectiveParentTag, isZooHidden, marcaEffettiva,
-  noPrintSets, printedAt, ZOO_FIELDS, ZOO_FORMATS, giacenzePer,
+  noPrintSets, printedAt, ZOO_FIELDS, ZOO_FORMATS, giacenzePer, nonConformiDi,
 } from "@/lib/zoo";
 
 /**
@@ -32,6 +32,7 @@ export default async function ZooRepartoPage({
   const campaign = campagnaPerStampa(db, sp.campagna);
   const allOffers = offertePerStampa(db, scope, academyDb, campaign);
   const noPrint = noPrintSets(db, scope);
+  const nonConformi = nonConformiDi(db, scope);
   const coda = db.coda.filter((c) => c.scopeType === scope.type && c.scopeId === scope.id && !c.stampato);
   const q = (sp.q ?? "").toLowerCase();
 
@@ -44,6 +45,11 @@ export default async function ZooRepartoPage({
     gruppi.set(key, [...(gruppi.get(key) ?? []), o]);
   }
   const giacenze = await giacenzePer(db, scope, academyDb, allOffers.map((o) => o.ean));
+  // le marche (o i fornitori, quando la marca manca) presenti in questo volantino
+  const marche = [...new Set(allOffers.map((o) => {
+    const pr = db.products.find((x) => x.id === o.productId);
+    return marcaEffettiva(pr ?? { marca: "", fornitore: "" });
+  }).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   const voci: VoceReparto[] = [...gruppi.entries()].map(([key, gruppo]) => {
     const o = gruppo[0];
     const product = db.products.find((p) => p.id === o.productId);
@@ -57,6 +63,7 @@ export default async function ZooRepartoPage({
       marca: marcaEffettiva(product ?? { marca: "", fornitore: "" }), animale, caratteristica,
       inCoda, stampato: !!printedAt(db, scope, o.id),
       escluso: noPrint.offerIds.has(o.id) || noPrint.eans.has(o.ean),
+      nonConforme: gruppo.some((g) => nonConformi.has(g.id)),
       giacenza: (() => {
         const trovate = gruppo.map((g) => giacenze[g.ean]).filter(Boolean);
         return trovate.length > 0 ? String(trovate.reduce((t, g) => t + g.giacenza, 0)) : undefined;
@@ -67,6 +74,8 @@ export default async function ZooRepartoPage({
   })
     .filter((v) => !q || v.testo.includes(q))
     .filter((v) => !sp.animale || v.animale.includes(sp.animale))
+    .filter((v) => !sp.marca || v.marca === sp.marca)
+    .filter((v) => sp.nonconformi !== "1" || v.nonConforme)
     .filter((v) => sp.tutti === "1" || (!v.inCoda && !v.stampato && !v.escluso))
     .filter((v) => !sp.giacenza || (sp.giacenza === "si" ? Number(v.giacenza ?? 0) > 0 : sp.giacenza === "zero" ? v.giacenza !== undefined && Number(v.giacenza) <= 0 : v.giacenza === undefined))
     .map(({ testo: _t, ...v }) => v);
@@ -80,6 +89,8 @@ export default async function ZooRepartoPage({
     sp.q ? `«${sp.q}»` : "",
     sp.animale ?? "",
     sp.giacenza ? etichetteGiacenza[sp.giacenza] ?? "" : "",
+    sp.marca ?? "",
+    sp.nonconformi === "1" ? "solo non conformi" : "",
     sp.tutti === "1" ? "anche confermati e stampati" : "",
   ].filter(Boolean);
 
@@ -109,6 +120,10 @@ export default async function ZooRepartoPage({
             <option value="">Tutti gli animali</option>
             {db.settings.categorieAnimali.map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
+          <select name="marca" defaultValue={sp.marca ?? ""} title="Marca o fornitore">
+            <option value="">Tutte le marche</option>
+            {marche.map((m) => <option key={m} value={m}>{m}</option>)}
+          </select>
           {Object.keys(giacenze).length > 0 && (
             <select name="giacenza" defaultValue={sp.giacenza ?? ""}>
               <option value="">Qualsiasi giacenza</option>
@@ -119,6 +134,9 @@ export default async function ZooRepartoPage({
           )}
           <label className="hint" style={{ display: "flex", gap: 4, alignItems: "center", whiteSpace: "nowrap" }}>
             <input type="checkbox" name="tutti" value="1" defaultChecked={sp.tutti === "1"} /> anche confermati e stampati
+          </label>
+          <label className="hint" style={{ display: "flex", gap: 4, alignItems: "center", whiteSpace: "nowrap" }}>
+            <input type="checkbox" name="nonconformi" value="1" defaultChecked={sp.nonconformi === "1"} /> solo non conformi
           </label>
           <button className="btn btn-sm" type="submit">Vai</button>
         </form>
