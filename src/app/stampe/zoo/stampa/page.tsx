@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
+import BulkCheckbox from "@/components/stampe/BulkCheckbox";
 import FiltriMobile from "@/components/FiltriMobile";
 import StampeHeader from "@/components/stampe/StampeHeader";
 import Cartello from "@/components/stampe/Cartello";
@@ -15,6 +16,7 @@ import {
 } from "@/lib/zoo";
 import {
   importPvPricesRighe, markZooPrinted, resetZooPrinted, toggleZooHidden, importZooNoPrintRighe, svuotaZooNoPrint,
+  togliNonConforme, toggleZooNoPrint,
   creaOffertaPropria, eliminaOffertaPropria, stampaCoda, segnaArrivato, togliDallaCoda,
 } from "@/lib/zoo-actions";
 
@@ -204,6 +206,13 @@ export default async function ZooStampaPage({
     .map((c) => ({ ...c, nome: nomeOfferta(c.offerId) }));
   const codaDopo = codaMia.filter((c) => c.stato === "dopo");
   const codaArrivo = codaMia.filter((c) => c.stato === "arrivo");
+  /* Segnalati dal reparto: non conformi (il cartello non torna con lo scaffale)
+     ed esclusi (segnati "Non stampare"). Stanno nelle stesse sezioni della coda
+     perché sono tutte cose da guardare prima di mandare in stampa. */
+  const nonConformiVoci = [...nonConformi.values()]
+    .map((n) => ({ ...n, nome: nomeOfferta(n.offerId) }))
+    .sort((a, b) => b.at.localeCompare(a.at));
+  const esclusiVoci = allOffers.filter(escluso).map((o) => ({ id: o.id, ean: o.ean, nome: nomeOfferta(o.id) }));
 
   const selectedIds = (sp.sel ?? "").split(",").filter(Boolean);
   const selected = selectedIds.map((id) => allOffers.find((o) => o.id === id)).filter(Boolean) as typeof allOffers;
@@ -386,48 +395,123 @@ export default async function ZooStampaPage({
           <div className="alert alert-green">✓ Azzerato il &quot;già stampato&quot; su {sp.azzerati} cartelli.</div>
         )}
 
-        {/* cartelli messi da parte: si stampano in blocco con le impostazioni già decise */}
-        {(codaDopo.length > 0 || codaArrivo.length > 0) && (
-          <div className="card" style={{ marginBottom: 16, padding: 14 }}>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 16 }}>
-              {([["dopo", "Da stampare più tardi", codaDopo], ["arrivo", "Merce in arrivo", codaArrivo]] as const).map(([stato, titolo, voci]) => (
-                voci.length > 0 && (
-                  <form key={stato} action={stampaCoda.bind(null, scopeParam, stato)}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
-                      <strong>{titolo}</strong>
-                      <span className="pill pill-orange">{voci.length}</span>
-                      {stato === "dopo" && (
-                        <button className="btn btn-sm" type="submit" style={{ marginLeft: "auto" }}
-                          title="Apre l'anteprima di stampa di tutti (o dei soli spuntati) con le impostazioni salvate, e li toglie dalla coda">
-                          Stampa {voci.length > 1 ? "tutti" : ""} →
-                        </button>
-                      )}
-                    </div>
-                    <ul style={{ margin: 0, paddingLeft: 0, listStyle: "none", fontSize: 12.5 }}>
-                      {voci.map((c) => (
-                        <li key={c.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "3px 0", borderBottom: "1px dashed var(--line)" }}>
-                          {stato === "dopo" && <input type="checkbox" name="coda" value={c.id} title="Spunta per stampare solo alcuni" />}
-                          <span style={{ flex: 1, minWidth: 0 }}>
-                            {c.nome}
-                            <span className="hint" style={{ marginLeft: 6 }}>
-                              {ZOO_FORMATS.find((f) => f.id === c.impostazioni[`formato_${c.offerId}`])?.name ?? "A4"}
-                              {" · "}{new Date(c.creato).toLocaleDateString("it-IT")}{" · "}{c.userName}
-                            </span>
+        {/*
+          * Cosa c'è da guardare prima di stampare, in sezioni che si aprono e si
+          * chiudono: la coda di stampa, la merce in arrivo, i cartelli segnati
+          * non conformi in reparto e quelli esclusi dalla stampa.
+          */}
+        {(codaDopo.length > 0 || codaArrivo.length > 0 || nonConformiVoci.length > 0 || esclusiVoci.length > 0) && (
+          <div className="card sezioni" style={{ marginBottom: 16, padding: 14 }}>
+            {codaDopo.length > 0 && (
+              <details className="sezione" open>
+                <summary><strong>Da stampare più tardi</strong> <span className="pill pill-orange">{codaDopo.length}</span></summary>
+                <form action={stampaCoda.bind(null, scopeParam, "dopo")}>
+                  <div className="sezione-azioni">
+                    <label className="hint" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                      <BulkCheckbox name="coda" /> tutti
+                    </label>
+                    <span className="hint">Clic per spuntare, Maiusc+clic per un intervallo.</span>
+                    <button className="btn btn-sm" type="submit" style={{ marginLeft: "auto" }}
+                      title="Apre l'anteprima di stampa di tutti (o dei soli spuntati) con le impostazioni salvate, e li toglie dalla coda">
+                      Stampa {codaDopo.length > 1 ? "tutti o i selezionati" : ""} →
+                    </button>
+                  </div>
+                  <ul className="sezione-elenco">
+                    {codaDopo.map((c) => (
+                      <li key={c.id}>
+                        <input type="checkbox" name="coda" value={c.id} title="Spunta per stampare solo alcuni" />
+                        <span style={{ flex: 1, minWidth: 0 }}>
+                          {c.nome}
+                          <span className="hint" style={{ marginLeft: 6 }}>
+                            {ZOO_FORMATS.find((f) => f.id === c.impostazioni[`formato_${c.offerId}`])?.name ?? "A4"}
+                            {c.impostazioni[`senzafoto_${c.offerId}`] === "1" ? " · senza foto" : ""}
+                            {" · "}{new Date(c.creato).toLocaleDateString("it-IT")}{" · "}{c.userName}
                           </span>
-                          {stato === "arrivo" && (
-                            <button className="btn btn-outline btn-sm" type="submit" formAction={segnaArrivato.bind(null, c.id, scopeParam)}
-                              title="La merce è arrivata: passa fra quelli da stampare">
-                              Arrivata
-                            </button>
-                          )}
-                          <button className="btn btn-outline btn-sm" type="submit" formAction={togliDallaCoda.bind(null, c.id, scopeParam)} title="Togli dalla coda">✕</button>
-                        </li>
-                      ))}
-                    </ul>
-                  </form>
-                )
-              ))}
-            </div>
+                        </span>
+                        <button className="btn btn-outline btn-sm" type="submit" formAction={togliDallaCoda.bind(null, c.id, scopeParam)} title="Togli dalla coda">✕</button>
+                      </li>
+                    ))}
+                  </ul>
+                </form>
+              </details>
+            )}
+
+            {codaArrivo.length > 0 && (
+              <details className="sezione">
+                <summary><strong>Merce in arrivo</strong> <span className="pill pill-amber">{codaArrivo.length}</span></summary>
+                <form>
+                  <ul className="sezione-elenco">
+                    {codaArrivo.map((c) => (
+                      <li key={c.id}>
+                        <span style={{ flex: 1, minWidth: 0 }}>
+                          {c.nome}
+                          <span className="hint" style={{ marginLeft: 6 }}>
+                            {ZOO_FORMATS.find((f) => f.id === c.impostazioni[`formato_${c.offerId}`])?.name ?? "A4"}
+                            {" · "}{new Date(c.creato).toLocaleDateString("it-IT")}{" · "}{c.userName}
+                          </span>
+                        </span>
+                        <button className="btn btn-outline btn-sm" type="submit" formAction={segnaArrivato.bind(null, c.id, scopeParam)}
+                          title="La merce è arrivata: passa fra quelli da stampare">
+                          Arrivata
+                        </button>
+                        <button className="btn btn-outline btn-sm" type="submit" formAction={togliDallaCoda.bind(null, c.id, scopeParam)} title="Togli dalla coda">✕</button>
+                      </li>
+                    ))}
+                  </ul>
+                </form>
+              </details>
+            )}
+
+            {nonConformiVoci.length > 0 && (
+              <details className="sezione">
+                <summary><strong>Segnati non conformi</strong> <span className="pill pill-orange">{nonConformiVoci.length}</span></summary>
+                <form>
+                  <ul className="sezione-elenco">
+                    {nonConformiVoci.map((n) => (
+                      <li key={n.id}>
+                        <span style={{ flex: 1, minWidth: 0 }}>
+                          {n.nome}
+                          {n.motivo && <em style={{ marginLeft: 6 }}>«{n.motivo}»</em>}
+                          <span className="hint" style={{ marginLeft: 6 }}>
+                            {new Date(n.at).toLocaleDateString("it-IT")}{" · "}{n.userName}
+                          </span>
+                        </span>
+                        <button className="btn btn-outline btn-sm" type="submit"
+                          formAction={togliNonConforme.bind(null, n.offerId, scopeParam, "/stampe/zoo/stampa")}
+                          title="Il cartello è stato sistemato: togli la segnalazione">
+                          Sistemato
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </form>
+              </details>
+            )}
+
+            {esclusiVoci.length > 0 && (
+              <details className="sezione">
+                <summary><strong>Da non stampare</strong> <span className="pill pill-red">{esclusiVoci.length}</span></summary>
+                <form>
+                  <ul className="sezione-elenco">
+                    {esclusiVoci.slice(0, 100).map((o) => (
+                      <li key={o.id}>
+                        <span style={{ flex: 1, minWidth: 0 }}>
+                          {o.nome}<span className="hint" style={{ marginLeft: 6 }}>{o.ean}</span>
+                        </span>
+                        <button className="btn btn-outline btn-sm" type="submit"
+                          formAction={toggleZooNoPrint.bind(null, o.id, scopeParam, "/stampe/zoo/stampa")}
+                          title="Rimetti questo cartello fra quelli da stampare">
+                          Rimetti in stampa
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                  {esclusiVoci.length > 100 && (
+                    <p className="hint">Mostrati i primi 100 di {esclusiVoci.length}: gli altri si vedono con il filtro «Mostra anche gli esclusi».</p>
+                  )}
+                </form>
+              </details>
+            )}
           </div>
         )}
 

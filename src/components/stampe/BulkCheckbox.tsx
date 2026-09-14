@@ -20,12 +20,19 @@ export default function BulkCheckbox({ name, also }: { name: string; also?: stri
     : `input[type="checkbox"][name="${name}"]`;
 
   useEffect(() => {
+    /*
+     * Se la spunta sta dentro a un modulo, comanda solo le caselle di quel
+     * modulo: nella pagina Stampa cartelli ci sono piu' elenchi spuntabili
+     * (coda di stampa, merce in arrivo) e "tutte" non deve rastrellarli tutti.
+     */
+    const dentro = (): ParentNode => allRef.current?.form ?? document;
     // l'intervallo con Maiusc scorre l'elenco nell'ordine della tabella, padri e articoli insieme
-    const boxes = () => Array.from(document.querySelectorAll<HTMLInputElement>(selettore));
+    const boxes = () => Array.from(dentro().querySelectorAll<HTMLInputElement>(selettore));
     let lastIndex: number | null = null;
     const onClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
       if (!(target instanceof HTMLInputElement) || (target.name !== name && target.name !== also)) return;
+      if (allRef.current?.form && target.form !== allRef.current.form) return;
       const list = boxes();
       const idx = list.indexOf(target);
       if (e.shiftKey && lastIndex !== null && idx >= 0) {
@@ -40,7 +47,8 @@ export default function BulkCheckbox({ name, also }: { name: string; also?: stri
 
   const toggleAll = () => {
     const next = allRef.current?.checked ?? false;
-    for (const b of document.querySelectorAll<HTMLInputElement>(selettore)) {
+    const dentro: ParentNode = allRef.current?.form ?? document;
+    for (const b of dentro.querySelectorAll<HTMLInputElement>(selettore)) {
       if (!b.disabled) b.checked = next;
     }
   };

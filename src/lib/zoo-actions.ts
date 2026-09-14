@@ -869,6 +869,20 @@ export async function toggleNonConformeInline(
   return { ok: true, nonConforme: true };
 }
 
+/** Toglie il contrassegno "non conforme" (il cartello è stato sistemato). */
+export async function togliNonConforme(offerId: string, scopeParam: string, back: string) {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  db.nonConformi = db.nonConformi.filter(
+    (n) => !(n.scopeType === scope.type && n.scopeId === scope.id && n.offerId === offerId)
+  );
+  await saveZooDb(db);
+  rigeneraZoo();
+  redirect(backUrl(back, scopeParam));
+}
+
 export async function scioglieParent(back: string, parentId: string, scopeParam: string) {
   const user = await requireZooUser();
   if (!isZooEditor(user)) redirect(backUrl(back, scopeParam));

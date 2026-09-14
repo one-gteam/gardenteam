@@ -518,6 +518,18 @@ table.data td { overflow-wrap: anywhere; }
 .filtri-menu .filtri-scelte { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .filtri-menu > form { padding: 10px 12px; }
 
+/* Sezioni comprimibili di Stampa cartelli: coda, merce in arrivo, non conformi, esclusi */
+.sezioni .sezione + .sezione { border-top: 1px solid var(--line); margin-top: 8px; padding-top: 8px; }
+.sezione > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px; padding: 2px 0; }
+.sezione > summary::-webkit-details-marker { display: none; }
+.sezione > summary::before { content: "\25b8"; opacity: .6; }
+.sezione[open] > summary::before { content: "\25be"; }
+.sezione-azioni { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 8px 0 4px; }
+.sezione-elenco { margin: 0; padding-left: 0; list-style: none; font-size: 12.5px; }
+.sezione-elenco > li { display: flex; gap: 8px; align-items: center; padding: 3px 0; border-bottom: 1px dashed var(--line); }
+.sezione-elenco > li:last-child { border-bottom: none; }
+.sezione-elenco input[type="checkbox"] { flex: none; }
+
 /* Controllo in reparto (cellulare): un cartello alla volta, pulsanti grandi in fondo */
 .reparto-filtri { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 0; }
 .reparto-filtri select, .reparto-filtri input[type="search"] { margin-top: 0; font-size: 13px; }
