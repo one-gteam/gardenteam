@@ -23,6 +23,11 @@ export interface VoceReparto {
   escluso: boolean;
   /** Segnato non conforme: il cartello non corrisponde a quello che c'è a scaffale. */
   nonConforme?: boolean;
+  /** Gli articoli raggruppati sotto questo cartello (il "codice padre"). */
+  articoli: {
+    id: string; ean: string; descrizione: string; prezzo?: string;
+    giacenza?: number; codice?: string; nonConforme?: boolean;
+  }[];
   giacenza?: string; // dal gestionale del punto vendita, quando collegato
   codiceGestionale?: string;
 }
@@ -73,6 +78,22 @@ export default function RepartoCheck({
   /* Foto sbagliata: si stampa il cartello senza. Vale per questo cartello e
      viaggia con lui nella coda di stampa, come il formato. */
   const [senzaFoto, setSenzaFoto] = useState<Record<string, boolean>>({});
+  /* Articoli segnati errati (uno o più dei codici sotto al prodotto padre):
+     restano segnati e si riprendono dal computer, in Stampa cartelli. */
+  const [articoliErrati, setArticoliErrati] = useState<Record<string, boolean>>(
+    () => Object.fromEntries(voci.flatMap((v) => v.articoli.map((a) => [a.id, !!a.nonConforme])))
+  );
+  const segnaArticolo = (articoloId: string) => startTransition(async () => {
+    const r = await toggleNonConformeInline(articoloId, scopeParam, segnalazione);
+    if (r.ok) {
+      const aggiornati = { ...articoliErrati, [articoloId]: r.nonConforme };
+      setArticoliErrati(aggiornati);
+      // la pastiglia del cartello si accende se almeno un articolo è segnato
+      setStato((p) => ({ ...p, [voce.id]: { ...p[voce.id], nonConforme: voce.articoli.some((a) => aggiornati[a.id]) } }));
+      setEsito(r.nonConforme ? "⚠ Articolo segnato errato: lo riprendi dal computer." : "Segnalazione dell'articolo tolta.");
+      if (r.nonConforme && segnalazione.trim()) setSegnalazione("");
+    } else setEsito("Non sono riuscito a salvarlo.");
+  });
   /* Lo spazio libero fra la testata appesa in alto e la barra appesa in basso:
      il cartello si rimpicciolisce per starci dentro, così non si scorre nulla. */
   const [spazio, setSpazio] = useState(0);
@@ -186,6 +207,7 @@ export default function RepartoCheck({
     const r = await toggleNonConformeInline(voce.id, scopeParam, segnalazione);
     if (r.ok) {
       setStato((p) => ({ ...p, [voce.id]: { ...p[voce.id], nonConforme: r.nonConforme } }));
+      setArticoliErrati((p) => ({ ...p, [voce.id]: r.nonConforme }));
       setEsito(r.nonConforme
         ? (segnalazione.trim() ? "⚠ Segnato non conforme e segnalato al gestore." : "⚠ Segnato non conforme.")
         : "Non conformità annullata.");
@@ -251,18 +273,19 @@ export default function RepartoCheck({
 
       {impostazioniAperte && riga && (
         <div className="card reparto-campi">
+          {/* come sul cartello: a sinistra il prezzo di partenza (barrato), a destra il promo */}
           <div className="reparto-riga">
-            <label>Prezzo promo
-              {consorzio
-                ? <InlineEdit value={riga.prezzoPromo} placeholder="es. 9,99" onSaved={() => carica(voce.id)} onSave={updateOfferFieldInline.bind(null, riga.id, "prezzoPromo")} />
-                : <InlineEdit value={riga.pv ?? ""} placeholder={riga.prezzoPromo || "—"} onSaved={() => carica(voce.id)} onSave={setPvPriceInline.bind(null, riga.ean, scopeParam)} />}
-              {!consorzio && <span className="hint">Consorzio: € {riga.prezzoPromo || "—"}</span>}
-            </label>
             <label>Prezzo di partenza
               {consorzio
                 ? <InlineEdit value={riga.prezzoListino ?? ""} placeholder="es. 12,99" onSaved={() => carica(voce.id)} onSave={updateOfferFieldInline.bind(null, riga.id, "prezzoListino")} />
                 : <InlineEdit value={riga.pvListino ?? ""} placeholder={riga.prezzoListino || "A SOLI"} onSaved={() => carica(voce.id)} onSave={setPvListinoInline.bind(null, riga.ean, scopeParam)} />}
               {!consorzio && <span className="hint">Consorzio: {riga.prezzoListino ? `€ ${riga.prezzoListino}` : "A SOLI"}</span>}
+            </label>
+            <label>Prezzo promo
+              {consorzio
+                ? <InlineEdit value={riga.prezzoPromo} placeholder="es. 9,99" onSaved={() => carica(voce.id)} onSave={updateOfferFieldInline.bind(null, riga.id, "prezzoPromo")} />
+                : <InlineEdit value={riga.pv ?? ""} placeholder={riga.prezzoPromo || "—"} onSaved={() => carica(voce.id)} onSave={setPvPriceInline.bind(null, riga.ean, scopeParam)} />}
+              {!consorzio && <span className="hint">Consorzio: € {riga.prezzoPromo || "—"}</span>}
             </label>
           </div>
           <label>Descrizione offerta
@@ -271,6 +294,33 @@ export default function RepartoCheck({
           <label>Condizioni
             <InlineEdit value={riga.cond.value} placeholder="es. fino a esaurimento" onSaved={() => carica(voce.id)} onSave={setOfferTextScoped.bind(null, riga.id, "condizioni", scopeParam)} />
           </label>
+          <details className="sezione">
+            <summary>
+              <strong>Articoli del prodotto</strong> <span className="pill pill-gray">{voce.articoli.length}</span>
+            </summary>
+            <ul className="sezione-elenco">
+              {voce.articoli.map((a) => (
+                <li key={a.id}>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    {a.descrizione}
+                    <span className="hint" style={{ marginLeft: 6 }}>
+                      {a.ean}{a.prezzo ? ` · € ${a.prezzo}` : ""}
+                      {a.giacenza !== undefined ? ` · giac. ${a.giacenza}` : ""}
+                      {a.codice ? ` · cod. ${a.codice}` : ""}
+                    </span>
+                  </span>
+                  <button type="button" disabled={pending} onClick={() => segnaArticolo(a.id)}
+                    className={`btn btn-sm ${articoliErrati[a.id] ? "scelto-ambra" : "btn-outline"}`}
+                    title="Segna questo articolo come errato: resta in elenco e si sistema dal computer">
+                    {articoliErrati[a.id] ? "⚠ errato" : "Segna errato"}
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <span className="hint hint-mini">
+              Gli articoli segnati errati finiscono in «Segnati non conformi» di Stampa cartelli, da riprendere dal computer.
+            </span>
+          </details>
           <label className="reparto-spunta">
             <input type="checkbox" checked={noFoto(voce.id)}
               onChange={(e) => setSenzaFoto((p) => ({ ...p, [voce.id]: e.target.checked }))} />

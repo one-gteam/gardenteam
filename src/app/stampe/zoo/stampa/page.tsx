@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import BulkCheckbox from "@/components/stampe/BulkCheckbox";
+import RigaCoda from "@/components/stampe/RigaCoda";
 import FiltriMobile from "@/components/FiltriMobile";
 import StampeHeader from "@/components/stampe/StampeHeader";
 import Cartello from "@/components/stampe/Cartello";
@@ -17,7 +18,7 @@ import {
 import {
   importPvPricesRighe, markZooPrinted, resetZooPrinted, toggleZooHidden, importZooNoPrintRighe, svuotaZooNoPrint,
   togliNonConforme, toggleZooNoPrint,
-  creaOffertaPropria, eliminaOffertaPropria, stampaCoda, segnaArrivato, togliDallaCoda,
+  creaOffertaPropria, eliminaOffertaPropria, stampaCoda, segnaArrivato,
 } from "@/lib/zoo-actions";
 
 /** Stampa cartelli Offerte Zoo: stesso impianto dell'Arredo (selezione, formati per riga, stampa 1:1). */
@@ -210,7 +211,10 @@ export default async function ZooStampaPage({
      ed esclusi (segnati "Non stampare"). Stanno nelle stesse sezioni della coda
      perché sono tutte cose da guardare prima di mandare in stampa. */
   const nonConformiVoci = [...nonConformi.values()]
-    .map((n) => ({ ...n, nome: nomeOfferta(n.offerId) }))
+    .map((n) => {
+      const o = db.offers.find((x) => x.id === n.offerId);
+      return { ...n, nome: nomeOfferta(n.offerId), articolo: o?.descrizione, ean: o?.ean };
+    })
     .sort((a, b) => b.at.localeCompare(a.at));
   const esclusiVoci = allOffers.filter(escluso).map((o) => ({ id: o.id, ean: o.ean, nome: nomeOfferta(o.id) }));
 
@@ -404,7 +408,7 @@ export default async function ZooStampaPage({
           <div className="card sezioni" style={{ marginBottom: 16, padding: 14 }}>
             {codaDopo.length > 0 && (
               <details className="sezione" open>
-                <summary><strong>Da stampare più tardi</strong> <span className="pill pill-orange">{codaDopo.length}</span></summary>
+                <summary><strong>Da stampare più tardi</strong> <span className="pill pill-orange" id="conta-dopo">{codaDopo.length}</span></summary>
                 <form action={stampaCoda.bind(null, scopeParam, "dopo")}>
                   <div className="sezione-azioni">
                     <label className="hint" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
@@ -418,7 +422,7 @@ export default async function ZooStampaPage({
                   </div>
                   <ul className="sezione-elenco">
                     {codaDopo.map((c) => (
-                      <li key={c.id}>
+                      <RigaCoda key={c.id} id={c.id} scopeParam={scopeParam} contatoreId="conta-dopo">
                         <input type="checkbox" name="coda" value={c.id} title="Spunta per stampare solo alcuni" />
                         <span style={{ flex: 1, minWidth: 0 }}>
                           {c.nome}
@@ -428,8 +432,7 @@ export default async function ZooStampaPage({
                             {" · "}{new Date(c.creato).toLocaleDateString("it-IT")}{" · "}{c.userName}
                           </span>
                         </span>
-                        <button className="btn btn-outline btn-sm" type="submit" formAction={togliDallaCoda.bind(null, c.id, scopeParam)} title="Togli dalla coda">✕</button>
-                      </li>
+                      </RigaCoda>
                     ))}
                   </ul>
                 </form>
@@ -438,11 +441,11 @@ export default async function ZooStampaPage({
 
             {codaArrivo.length > 0 && (
               <details className="sezione">
-                <summary><strong>Merce in arrivo</strong> <span className="pill pill-amber">{codaArrivo.length}</span></summary>
+                <summary><strong>Merce in arrivo</strong> <span className="pill pill-amber" id="conta-arrivo">{codaArrivo.length}</span></summary>
                 <form>
                   <ul className="sezione-elenco">
                     {codaArrivo.map((c) => (
-                      <li key={c.id}>
+                      <RigaCoda key={c.id} id={c.id} scopeParam={scopeParam} contatoreId="conta-arrivo">
                         <span style={{ flex: 1, minWidth: 0 }}>
                           {c.nome}
                           <span className="hint" style={{ marginLeft: 6 }}>
@@ -454,8 +457,7 @@ export default async function ZooStampaPage({
                           title="La merce è arrivata: passa fra quelli da stampare">
                           Arrivata
                         </button>
-                        <button className="btn btn-outline btn-sm" type="submit" formAction={togliDallaCoda.bind(null, c.id, scopeParam)} title="Togli dalla coda">✕</button>
-                      </li>
+                      </RigaCoda>
                     ))}
                   </ul>
                 </form>
@@ -471,6 +473,9 @@ export default async function ZooStampaPage({
                       <li key={n.id}>
                         <span style={{ flex: 1, minWidth: 0 }}>
                           {n.nome}
+                          {n.articolo && n.articolo !== n.nome && (
+                            <span className="hint" style={{ marginLeft: 6 }}>{n.articolo}{n.ean ? ` · ${n.ean}` : ""}</span>
+                          )}
                           {n.motivo && <em style={{ marginLeft: 6 }}>«{n.motivo}»</em>}
                           <span className="hint" style={{ marginLeft: 6 }}>
                             {new Date(n.at).toLocaleDateString("it-IT")}{" · "}{n.userName}

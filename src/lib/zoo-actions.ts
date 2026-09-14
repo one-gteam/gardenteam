@@ -1538,6 +1538,23 @@ export async function togliDallaCoda(id: string, scopeParam: string) {
   redirect(backUrl("/stampe/zoo/stampa", scopeParam));
 }
 
+/**
+ * Come togliDallaCoda, ma senza ricaricare la pagina: la riga sparisce e basta
+ * (Stampa cartelli ha elenchi lunghi e ricaricare faceva perdere il punto).
+ */
+export async function togliDallaCodaInline(id: string, scopeParam: string): Promise<{ ok: boolean }> {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  const prima = db.coda.length;
+  db.coda = db.coda.filter((c) => !(c.id === id && c.scopeType === scope.type && c.scopeId === scope.id));
+  if (db.coda.length === prima) return { ok: false };
+  await saveZooDb(db);
+  rigeneraZoo();
+  return { ok: true };
+}
+
 /** La merce è arrivata: il cartello passa fra quelli da stampare. */
 export async function segnaArrivato(id: string, scopeParam: string) {
   const user = await requireZooUser();

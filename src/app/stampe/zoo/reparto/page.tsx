@@ -6,7 +6,7 @@ import RepartoCheck, { type VoceReparto } from "@/components/stampe/RepartoCheck
 import { canAccessArea, resolveScope, scopesForUser } from "@/lib/stampe";
 import {
   getZooDb, campagnaPerStampa, offertePerStampa, effectiveParentText, effectiveParentTag, isZooHidden, marcaEffettiva,
-  noPrintSets, printedAt, ZOO_FIELDS, ZOO_FORMATS, giacenzePer, nonConformiDi,
+  noPrintSets, printedAt, ZOO_FIELDS, ZOO_FORMATS, giacenzePer, nonConformiDi, pvPriceFor,
 } from "@/lib/zoo";
 
 /**
@@ -69,6 +69,17 @@ export default async function ZooRepartoPage({
         return trovate.length > 0 ? String(trovate.reduce((t, g) => t + g.giacenza, 0)) : undefined;
       })(),
       codiceGestionale: gruppo.length === 1 ? giacenze[o.ean]?.codice : undefined,
+      // i singoli articoli sotto al prodotto padre: si guardano allo scaffale e
+      // si segnano quelli sbagliati, da riprendere dal computer
+      articoli: gruppo.map((g) => ({
+        id: g.id,
+        ean: g.ean,
+        descrizione: g.descrizione,
+        prezzo: pvPriceFor(db, scope, g.ean, academyDb) ?? g.prezzoPromo,
+        giacenza: giacenze[g.ean]?.giacenza,
+        codice: giacenze[g.ean]?.codice,
+        nonConforme: nonConformi.has(g.id),
+      })),
       testo: `${nome} ${o.descrizione} ${o.ean} ${product?.descrizione ?? ""}`.toLowerCase(),
     };
   })
