@@ -92,6 +92,9 @@ export default function StampaPicker({
   const [hiddenFields, setHiddenFields] = useState<Record<string, string[]>>(initialHidden);
   const [applyAll, setApplyAll] = useState(globalFormat);
   const [doppio, setDoppio] = useState(false);
+  /* righe spuntate nella tabella dei selezionati: si tolgono in blocco, senza
+     cliccare la ✕ una per una quando la lista è lunga */
+  const [daTogliere, setDaTogliere] = useState<string[]>([]);
   const lastIndex = useRef<number | null>(null);
 
   const toggle = (index: number, shift: boolean) => {
@@ -261,16 +264,40 @@ export default function StampaPicker({
           >
             Applica a tutti
           </button>
+          {selectedProds.length > 0 && (
+            <>
+              <button type="button" className="btn btn-outline btn-sm" disabled={daTogliere.length === 0}
+                onClick={() => { setSelected((prev) => prev.filter((x) => !daTogliere.includes(x))); setDaTogliere([]); }}
+                title="Toglie dalla selezione le righe spuntate">
+                Togli gli spuntati{daTogliere.length > 0 ? ` (${daTogliere.length})` : ""}
+              </button>
+              <button type="button" className="btn btn-outline btn-sm"
+                onClick={() => { setSelected([]); setDaTogliere([]); }}
+                title="Svuota tutta la selezione">
+                Svuota
+              </button>
+            </>
+          )}
         </div>
         {selectedProds.length === 0 && <p className="empty">Seleziona i prodotti dall&apos;elenco a sinistra (Shift+clic per più righe).</p>}
         {selectedProds.length > 0 && (
           <>
             <div className="table-wrap">
               <table className="data">
-                <thead><tr><th>Prodotto</th><th>Formato</th><th>Prezzo cartello</th><th>Prezzo di partenza</th><th>Nascondi</th><th>Campi</th><th></th></tr></thead>
+                <thead><tr>
+                  <th style={{ width: 28 }}>
+                    <input type="checkbox" title="Spunta tutte" checked={daTogliere.length === selectedProds.length && selectedProds.length > 0}
+                      onChange={(e) => setDaTogliere(e.target.checked ? selectedProds.map((p) => p.id) : [])} />
+                  </th>
+                  <th>Prodotto</th><th>Formato</th><th>Prezzo cartello</th><th>Prezzo di partenza</th><th>Nascondi</th><th>Campi</th><th></th>
+                </tr></thead>
                 <tbody>
                   {selectedProds.map((p) => (
                     <tr key={p.id}>
+                      <td>
+                        <input type="checkbox" checked={daTogliere.includes(p.id)} title="Spunta per toglierlo dalla selezione"
+                          onChange={(e) => setDaTogliere((prev) => (e.target.checked ? [...prev, p.id] : prev.filter((x) => x !== p.id)))} />
+                      </td>
                       <td>
                         <strong>{p.titolo}</strong>
                         <div style={{ fontSize: 11.5, color: "var(--muted)" }}>{p.codice} · {p.tipologia}</div>

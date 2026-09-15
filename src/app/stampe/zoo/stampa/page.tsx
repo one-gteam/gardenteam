@@ -283,9 +283,14 @@ export default async function ZooStampaPage({
 
   const valuesFor = (o: (typeof allOffers)[number]) => valoriPerStampa(db, scope, academyDb, o, sp, giacenze);
 
+  /*
+   * Si torna all'elenco con la selezione svuotata: i cartelli mandati in stampa
+   * hanno finito il loro giro e restare selezionati confondeva (si finiva per
+   * ristamparli). Per rivederli c'è il tasto Indietro del browser.
+   */
   const qsBack = () => {
     const params = new URLSearchParams();
-    for (const [k, v] of Object.entries(sp)) if (v && k !== "print") params.set(k, v);
+    for (const [k, v] of Object.entries(sp)) if (v && k !== "print" && k !== "sel") params.set(k, v);
     return params.toString();
   };
 
@@ -306,7 +311,7 @@ export default async function ZooStampaPage({
         {doppio && <style>{`@page { size: 297mm 210mm; margin: 0; }`}</style>}
         <div className="no-print" style={{ padding: 14, display: "flex", gap: 10, alignItems: "center", background: "var(--green-50)", flexWrap: "wrap" }}>
           <strong>Anteprima di stampa — {toPrint.length} cartelli</strong>
-          <a className="btn btn-outline btn-sm" href={`/stampe/zoo/stampa?${qsBack()}`}>← Torna alla selezione</a>
+          <a className="btn btn-outline btn-sm" href={`/stampe/zoo/stampa?${qsBack()}`}>← Torna all&apos;elenco</a>
           <span style={{ fontSize: 12.5, color: "var(--muted)" }}>
             Usa il pulsante Stampa del browser (Ctrl+P) e scegli &quot;Salva come PDF&quot;.
             {doppio && " Il foglio esce orizzontale: due A5 affiancati per pagina."}

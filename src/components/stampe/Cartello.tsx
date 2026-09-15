@@ -36,6 +36,20 @@ export default function Cartello({
   const activeItems = (mancaLaFoto && layout?.itemsNoPhoto && layout.itemsNoPhoto.length > 0)
     ? layout.itemsNoPhoto
     : layout?.items;
+
+  /*
+   * "SCONTO 20%" prende il posto del prezzo sui cartelli a solo sconto. Se il
+   * foglio in uso non ha il campo del prezzo — capita sul foglio senza foto,
+   * disegnato quando quei cartelli restavano senza niente — lo si stampa nel
+   * riquadro del tipo di promozione, così la scritta non sparisce.
+   */
+  const valori = (() => {
+    const prezzo = (values.prezzoPromo ?? "").trim();
+    if (!prezzo || prezzo.startsWith("€") || values.tipoPromo) return values;
+    const haPrezzo = (activeItems ?? []).some((it) => it.fieldId === "prezzoPromo");
+    const haTipo = (activeItems ?? []).some((it) => it.fieldId === "tipoPromo");
+    return !haPrezzo && haTipo ? { ...values, tipoPromo: prezzo } : values;
+  })();
   return (
     <div
       className="cartello"
@@ -71,7 +85,7 @@ export default function Cartello({
           );
         }
         const meta = fields.find((f) => f.id === item.fieldId);
-        const value = values[item.fieldId];
+        const value = valori[item.fieldId];
         if (!meta || !value) return null;
         // sticker/bollino associato a un campo
         if (item.sticker) {

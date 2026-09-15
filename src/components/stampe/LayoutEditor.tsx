@@ -404,6 +404,13 @@ export default function LayoutEditor({
   const bordoAlto = pctFromMmY(margins.top);
   const bordoBasso = 100 - pctFromMmY(margins.bottom);
 
+  /** Campi presenti sul foglio normale e non su quello senza foto (con i nomi leggibili). */
+  const mancantiSenzaFoto = [...new Set(items.map((i) => i.fieldId))]
+    .filter((fid) => fid !== "__img" && !itemsNoPhoto.some((i) => i.fieldId === fid))
+    .filter((fid) => !(fields.find((f) => f.id === fid)?.label ?? "").toLowerCase().includes("foto"))
+    .map((fid) => fields.find((f) => f.id === fid)?.label ?? fid)
+    .filter((etichetta) => !/immagine|foto/i.test(etichetta));
+
   const usedFields = new Set(activeItems.map((i) => i.fieldId));
 
   return (
@@ -476,6 +483,14 @@ export default function LayoutEditor({
               Questo foglio si stampa al posto di quello normale solo quando il prodotto non ha una foto caricata:
               di solito conviene allargare gli altri campi per riempire lo spazio che lascerebbe libero la foto.
             </p>
+            {/* i campi che stanno sul foglio normale ma qui no: senza questo avviso
+                ci si accorge del buco solo davanti al cartello stampato */}
+            {mancantiSenzaFoto.length > 0 && (
+              <div className="alert alert-amber" style={{ fontSize: 12.5, padding: "8px 10px" }}>
+                Qui mancano rispetto al foglio normale: <strong>{mancantiSenzaFoto.join(", ")}</strong>.
+                Se servono, aggiungili dall&apos;elenco dei campi.
+              </div>
+            )}
             {canEdit && (
               <button
                 type="button" className="btn btn-outline btn-sm" style={{ marginBottom: 8 }}

@@ -64,7 +64,7 @@ export default async function StampaPage({
 
   const qsBack = () => {
     const params = new URLSearchParams();
-    for (const [k, v] of Object.entries(sp)) if (v && k !== "print") params.set(k, v);
+    for (const [k, v] of Object.entries(sp)) if (v && k !== "print" && k !== "sel") params.set(k, v);
     return params.toString();
   };
 
