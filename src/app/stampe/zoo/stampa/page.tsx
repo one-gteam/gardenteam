@@ -17,7 +17,7 @@ import {
 } from "@/lib/zoo";
 import {
   importPvPricesRighe, markZooPrinted, resetZooPrinted, toggleZooHidden, importZooNoPrintRighe, svuotaZooNoPrint,
-  togliNonConforme, toggleZooNoPrint, rimettiInCoda, svuotaStampatiCoda,
+  togliNonConforme, toggleZooNoPrint, rimettiInCoda, rimettiInCodaMulti, svuotaStampatiCoda,
   creaOffertaPropria, eliminaOffertaPropria, stampaCoda, segnaArrivato,
 } from "@/lib/zoo-actions";
 
@@ -462,8 +462,16 @@ export default async function ZooStampaPage({
                     </summary>
                     <form>
                       <div className="sezione-azioni">
-                        <span className="hint">Restano qui per sapere cosa è stato fatto. «Rimetti» li riporta fra quelli da stampare.</span>
-                        <button className="btn btn-outline btn-sm" type="submit" style={{ marginLeft: "auto" }}
+                        <label className="hint" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                          <BulkCheckbox name="coda" /> tutti
+                        </label>
+                        <span className="hint">Spunta quelli da rifare (Maiusc+clic per un intervallo): senza spunte li rimette in coda tutti.</span>
+                        <button className="btn btn-sm" type="submit" style={{ marginLeft: "auto" }}
+                          formAction={rimettiInCodaMulti.bind(null, scopeParam)}
+                          title="Riporta fra quelli da stampare i cartelli spuntati, o tutti se non ne spunti nessuno">
+                          Rimetti in coda
+                        </button>
+                        <button className="btn btn-outline btn-sm" type="submit"
                           formAction={svuotaStampatiCoda.bind(null, scopeParam)}
                           title="Svuota l'elenco degli stampati (i cartelli restano, sparisce solo questo elenco)">
                           Svuota elenco
@@ -472,6 +480,7 @@ export default async function ZooStampaPage({
                       <ul className="sezione-elenco">
                         {codaStampati.map((c) => (
                           <li key={c.id}>
+                            <input type="checkbox" name="coda" value={c.id} title="Spunta per rimetterlo in coda" />
                             <span style={{ flex: 1, minWidth: 0, opacity: 0.75 }}>
                               {c.nome}
                               <span className="hint" style={{ marginLeft: 6 }}>

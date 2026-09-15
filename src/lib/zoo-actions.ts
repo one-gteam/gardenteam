@@ -1538,6 +1538,27 @@ export async function rimettiInCoda(id: string, scopeParam: string) {
   redirect(backUrl("/stampe/zoo/stampa", scopeParam));
 }
 
+/**
+ * Rimette fra quelli da stampare i cartelli già stampati: quelli spuntati
+ * oppure, se non ne è spuntato nessuno, tutti. Serve quando la stampa è andata
+ * male o quando si ristampa lo stesso giro.
+ */
+export async function rimettiInCodaMulti(scopeParam: string, formData: FormData) {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  const solo = (formData.getAll("coda") as string[]).filter(Boolean);
+  for (const c of db.coda) {
+    if (c.scopeType !== scope.type || c.scopeId !== scope.id || !c.stampato) continue;
+    if (solo.length > 0 && !solo.includes(c.id)) continue;
+    delete c.stampato;
+  }
+  await saveZooDb(db);
+  rigeneraZoo();
+  redirect(backUrl("/stampe/zoo/stampa", scopeParam));
+}
+
 /** Pulisce l'elenco dei cartelli già stampati (restano i cartelli, sparisce lo storico). */
 export async function svuotaStampatiCoda(scopeParam: string) {
   const user = await requireZooUser();
