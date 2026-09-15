@@ -1187,9 +1187,24 @@ export function effectiveZooLayout(
    * layout "prezzo barrato" del Consorzio, e i cartelli uscivano con
    * l'impaginazione sbagliata.
    */
+  /*
+   * Fra i layout che combaciano vince il più specifico, non il primo salvato:
+   * un cartello 3x2 con anche il prezzo barrato corrisponde sia al layout "3x2"
+   * sia a quello "prezzo barrato", e deve uscire col 3x2. L'ordine di
+   * specificità delle promozioni è sconto, meccanica, barrato, "a soli"; a pari
+   * merito vale il layout che combacia con più tipologie (es. Gatto + 3x2).
+   */
+  const specificita = (t: string) =>
+    t === TIPO_SCONTO ? 4 : t === TIPO_MECCANICA ? 3 : t === TIPO_BARRATO ? 2 : t === TIPO_A_SOLI ? 1 : 0;
+  const punteggio = (l: ZooLayout) => {
+    const comuni = tip(l).filter((t) => tags.includes(t));
+    return comuni.length * 10 + comuni.reduce((max, t) => Math.max(max, specificita(t)), 0);
+  };
   for (const s of chain) {
-    const specific = candidates.find((l) => di(l, s) && tip(l).length > 0 && tip(l).some((t) => tags.includes(t)));
-    if (specific) return specific;
+    const adatti = candidates.filter((l) => di(l, s) && tip(l).length > 0 && tip(l).some((t) => tags.includes(t)));
+    if (adatti.length > 0) {
+      return adatti.reduce((migliore, l) => (punteggio(l) > punteggio(migliore) ? l : migliore), adatti[0]);
+    }
   }
   for (const s of chain) {
     const generic = candidates.find((l) => di(l, s) && tip(l).length === 0);

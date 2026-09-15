@@ -94,7 +94,7 @@ export function testoStampato(value: string): string {
  * campi restano neri, compreso il prezzo dell'Arredo, che segue altre regole.
  */
 export function coloreCampo(item: LayoutItem): string {
-  const rossoDiDefault = item.fieldId === "prezzoPromo" || item.fieldId === "meccanica";
+  const rossoDiDefault = item.fieldId === "prezzoPromo" || item.fieldId === "meccanica" || item.fieldId === "tipoPromo";
   return item.color ?? (rossoDiDefault ? "#c8161d" : "#111");
 }
 
