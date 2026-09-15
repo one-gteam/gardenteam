@@ -8,21 +8,22 @@ import { togliDallaCodaInline } from "@/lib/zoo-actions";
  * ricaricare la pagina: la riga sparisce e il resto dell'elenco resta dov'è.
  */
 export default function RigaCoda({
-  id, scopeParam, contatoreId, children,
+  id, scopeParam, contatoreId, tabella = false, children,
 }: {
   id: string;
   scopeParam: string;
   /** id (anche più d'uno, separati da virgola) delle pastiglie col numero, da tenere allineate senza ricaricare */
   contatoreId?: string;
+  /** true = riga di tabella (i figli sono già celle), false = riga di elenco */
+  tabella?: boolean;
   children: ReactNode;
 }) {
   const [via, setVia] = useState(false);
   const [errore, setErrore] = useState(false);
   const [pending, startTransition] = useTransition();
   if (via) return null;
-  return (
-    <li>
-      {children}
+  const bottone = (
+    <>
       {errore && <span className="hint" style={{ color: "var(--red)" }}>non tolto</span>}
       <button type="button" className="btn btn-outline btn-sm" disabled={pending} title="Togli dalla coda"
         onClick={() => startTransition(async () => {
@@ -38,6 +39,20 @@ export default function RigaCoda({
         })}>
         ✕
       </button>
+    </>
+  );
+  if (tabella) {
+    return (
+      <tr>
+        {children}
+        <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>{bottone}</td>
+      </tr>
+    );
+  }
+  return (
+    <li>
+      {children}
+      {bottone}
     </li>
   );
 }
