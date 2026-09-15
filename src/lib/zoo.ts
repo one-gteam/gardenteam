@@ -443,6 +443,29 @@ export function condizioniPer(
   return base;
 }
 
+/**
+ * Testata propria di un'insegna o punto vendita: l'immagine in cima al cartello
+ * (la fascia "OFFERTA" col logo). Prende il posto di quella del Consorzio senza
+ * creare una copia del layout, così tutto il resto del cartello resta comune e
+ * continua a seguire le modifiche del Consorzio.
+ */
+export interface ZooTestataScopo {
+  scopeType: ScopeType;
+  scopeId: string;
+  url: string;
+}
+
+/** La testata da usare in questo ambito: la propria, o quella dell'insegna sopra. */
+export function testataPer(db: ZooDB, scope?: Scope, academyDb?: DB): string {
+  if (!scope || !academyDb) return "";
+  for (const s of chainFor(scope, academyDb)) {
+    if (s.type === "system") break;
+    const mia = db.testate.find((t) => t.scopeType === s.type && t.scopeId === s.id);
+    if (mia?.url) return mia.url;
+  }
+  return "";
+}
+
 /** Cartello che un'insegna/PV ha deciso di non stampare (l'offerta resta per gli altri). */
 export interface ZooNoPrint {
   scopeType: ScopeType;
@@ -569,6 +592,7 @@ export interface ZooDB {
   coda: ZooCoda[];
   nonConformi: ZooNonConforme[];
   condizioniScopo: ZooCondizioniScopo[];
+  testate: ZooTestataScopo[];
 }
 
 /* ================== Persistenza ================== */
@@ -596,11 +620,11 @@ export async function getZooDb(): Promise<ZooDB> {
     products: [], parents: [], textOverrides: [], tagOverrides: [], offerOverrides: [], printed: [],
     campaigns: [], offers: [],
     votes: [], hidden: [], pvPrices: [], suggestions: [], volantinoLayouts: [], zooLayouts: [],
-    noPrint: [], layoutImages: [], pvPromoCodes: [], pvPromos: [], scopeApiKeys: [], noteBozza: [], coda: [], giacenze: [], nonConformi: [], condizioniScopo: [],
+    noPrint: [], layoutImages: [], pvPromoCodes: [], pvPromos: [], scopeApiKeys: [], noteBozza: [], coda: [], giacenze: [], nonConformi: [], condizioniScopo: [], testate: [],
   };
   const db = await readDomain<ZooDB>("zoo", empty);
   db.settings = { ...DEFAULT_SETTINGS, ...(db.settings ?? {}) };
-  for (const k of ["products", "parents", "textOverrides", "tagOverrides", "offerOverrides", "printed", "campaigns", "offers", "votes", "hidden", "pvPrices", "suggestions", "volantinoLayouts", "zooLayouts", "noPrint", "layoutImages", "pvPromoCodes", "pvPromos", "scopeApiKeys", "noteBozza", "coda", "giacenze", "nonConformi", "condizioniScopo"] as const) {
+  for (const k of ["products", "parents", "textOverrides", "tagOverrides", "offerOverrides", "printed", "campaigns", "offers", "votes", "hidden", "pvPrices", "suggestions", "volantinoLayouts", "zooLayouts", "noPrint", "layoutImages", "pvPromoCodes", "pvPromos", "scopeApiKeys", "noteBozza", "coda", "giacenze", "nonConformi", "condizioniScopo", "testate"] as const) {
     if (!db[k]) (db as unknown as Record<string, unknown>)[k] = [];
   }
   // i layout salvati prima delle tipologie non hanno il campo: senza questo la
@@ -1248,6 +1272,12 @@ export function effectiveZooLayout(
   const candidates = db.zooLayouts.filter((l) => l.formatId === formatId);
   // i layout salvati prima delle tipologie non hanno il campo: valgono per tutti
   const tip = (l: ZooLayout) => l.tipologie ?? [];
+  /*
+   * La testata dell'insegna/PV, se ce l'hanno: entra nel layout scelto al volo,
+   * senza che il layout salvato cambi. È il modo per personalizzare la fascia
+   * in cima restando su quello comune del Consorzio.
+   */
+  const conTestata = (l: ZooLayout) => conTestataDiScopo(l, testataPer(db, scope, academyDb));
   const chain = chainFor(scope, academyDb);
   const di = (l: ZooLayout, s: { type: ScopeType; id: string }) => l.scopeType === s.type && l.scopeId === s.id;
   /*
@@ -1274,16 +1304,35 @@ export function effectiveZooLayout(
   for (const s of chain) {
     const adatti = candidates.filter((l) => di(l, s) && tip(l).length > 0 && tip(l).some((t) => tags.includes(t)));
     if (adatti.length > 0) {
-      return adatti.reduce((migliore, l) => (punteggio(l) > punteggio(migliore) ? l : migliore), adatti[0]);
+      return conTestata(adatti.reduce((migliore, l) => (punteggio(l) > punteggio(migliore) ? l : migliore), adatti[0]));
     }
   }
   for (const s of chain) {
     const generic = candidates.find((l) => di(l, s) && tip(l).length === 0);
-    if (generic) return generic;
+    if (generic) return conTestata(generic);
   }
-  return candidates.find((l) => l.scopeType === "system") ?? {
+  const comune = candidates.find((l) => l.scopeType === "system");
+  return conTestata(comune ?? {
     id: "default", formatId, scopeType: "system", scopeId: "", tipologie: [], items: DEFAULT_ZOO_ITEMS,
+  });
+}
+
+/**
+ * La prima immagine libera in cima al foglio è la testata: se l'ambito ne ha una
+ * sua, si sostituisce solo quella e il resto del layout resta come l'ha fatto il
+ * Consorzio. Così un'insegna cambia la fascia col proprio logo senza doversi
+ * tenere una copia di tutto il cartello.
+ */
+export function conTestataDiScopo(layout: ZooLayout, testata: string): ZooLayout {
+  if (!testata) return layout;
+  const sostituisci = (items: LayoutItem[] | undefined) => {
+    if (!items || items.length === 0) return items;
+    const liberi = items.map((it, i) => ({ it, i })).filter(({ it }) => it.fieldId === "__img" && it.imageUrl);
+    if (liberi.length === 0) return items;
+    const piuInAlto = liberi.reduce((a, b) => (b.it.y < a.it.y ? b : a), liberi[0]);
+    return items.map((it, i) => (i === piuInAlto.i ? { ...it, imageUrl: testata } : it));
   };
+  return { ...layout, items: sostituisci(layout.items) ?? layout.items, itemsNoPhoto: sostituisci(layout.itemsNoPhoto) };
 }
 
 /**

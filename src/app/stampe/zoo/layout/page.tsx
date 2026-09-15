@@ -8,10 +8,10 @@ import { canAccessArea, gestisceArea, scopesForUser, resolveScope, layoutMargins
 import { gestisce } from "@/lib/types";
 import {
   getZooDb, activeCampaign, zooCartelloValues, ZOO_FIELDS, ZOO_FORMATS, ZOO_TIPI_OFFERTA, pvPromoCodesFor,
-  pvPromoFor, tagsOfferta,
+  pvPromoFor, tagsOfferta, testataPer,
 } from "@/lib/zoo";
 import {
-  deleteZooLayout, uploadZooLayoutImage, deleteZooLayoutImage, copiaZooLayoutSuFormato,
+  deleteZooLayout, uploadZooLayoutImage, deleteZooLayoutImage, copiaZooLayoutSuFormato, saveZooTestata,
 } from "@/lib/zoo-actions";
 
 /** Layout dei cartelli Offerte Zoo: stessa meccanica dell'Arredo, campi delle offerte. */
@@ -33,6 +33,7 @@ export default async function ZooLayoutPage({
   // il layout è di chi gestisce l'area: il capo reparto non entra proprio (il menu non glielo mostra)
   if (!gestisce(user, "zoo")) redirect("/stampe/zoo/stampa");
   const canEdit = gestisceArea(user, "zoo", scope, academyDb);
+  const testataMia = testataPer(db, scope, academyDb);
 
   const format = ZOO_FORMATS.find((f) => f.id === sp.formato) ?? ZOO_FORMATS[0];
   /*
@@ -168,6 +169,54 @@ export default async function ZooLayoutPage({
             .filter((li) => li.scopeType === scope.type && li.scopeId === scope.id)
             .map((li) => ({ name: li.name, url: li.url }))}
         />
+
+        {/* la testata propria: si cambia la fascia in cima senza copiare tutto il layout */}
+        {canEdit && scope.type !== "system" && (
+          <div className="card" style={{ marginTop: 14, padding: 14 }}>
+            <h3 style={{ marginTop: 0 }}>Testata di {scope.label}</h3>
+            <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 10px" }}>
+              È l&apos;immagine in cima al cartello (la fascia «OFFERTA» col logo). Caricando la vostra,
+              prende il posto di quella del Consorzio <strong>su tutti i formati</strong>, e il resto del cartello
+              resta quello comune: se il Consorzio lo cambia, il cambiamento arriva anche a voi. Non serve creare
+              una versione vostra del layout.
+            </p>
+            <div style={{ display: "flex", gap: 14, alignItems: "flex-start", flexWrap: "wrap" }}>
+              {testataMia
+                ? (
+                  <div style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 6, background: "#fff" }}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={testataMia} alt="" style={{ height: 54, maxWidth: 240, objectFit: "contain", display: "block" }} />
+                    <div className="hint" style={{ textAlign: "center" }}>testata in uso</div>
+                  </div>
+                )
+                : <span className="hint">Nessuna testata vostra: si stampa quella del Consorzio.</span>}
+              <form action={saveZooTestata.bind(null, scopeParam)} style={{ display: "grid", gap: 8 }}>
+                <input type="hidden" name="formato" value={format.id} />
+                <input type="file" name="image" accept="image/*" />
+                {db.layoutImages.filter((li) => li.scopeType === scope.type && li.scopeId === scope.id).length > 0 && (
+                  <label className="field" style={{ marginBottom: 0, fontSize: 12.5 }}>
+                    …oppure scegli una delle vostre immagini già caricate
+                    <select name="url" defaultValue="">
+                      <option value="">— nessuna —</option>
+                      {db.layoutImages
+                        .filter((li) => li.scopeType === scope.type && li.scopeId === scope.id)
+                        .map((li) => <option key={li.id} value={li.url}>{li.name}</option>)}
+                    </select>
+                  </label>
+                )}
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button className="btn btn-sm" type="submit">Salva testata</button>
+                  {testataMia && (
+                    <button className="btn btn-outline btn-sm" type="submit" name="togli" value="1"
+                      title="Torna alla testata del Consorzio">
+                      Togli la nostra
+                    </button>
+                  )}
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
 
         {canEdit && (
           <div className="card" style={{ marginTop: 14, padding: 14 }}>

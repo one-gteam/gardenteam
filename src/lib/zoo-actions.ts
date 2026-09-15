@@ -2208,6 +2208,38 @@ export async function uploadZooLayoutImage(scopeParam: string, formData: FormDat
   redirect(backUrl("/stampe/zoo/layout", scopeParam, { formato }));
 }
 
+/**
+ * Testata propria dell'insegna/PV: l'immagine in cima al cartello. Non crea una
+ * copia del layout — sostituisce solo quella fascia, il resto resta del
+ * Consorzio e continua a seguirne le modifiche.
+ */
+export async function saveZooTestata(scopeParam: string, formData: FormData) {
+  const { db, scope } = await requireZooGestione(scopeParam, "/stampe/zoo/layout");
+  if (scope.type === "system") redirect(backUrl("/stampe/zoo/layout", scopeParam));
+  const formato = String(formData.get("formato") ?? "");
+  const togli = String(formData.get("togli") ?? "") === "1";
+  /*
+   * L'indirizzo scelto vale solo se è una delle immagini che questo ambito ha
+   * già caricato: così nessuno può far puntare la testata a un'immagine altrui
+   * o a un sito qualunque passando un indirizzo a mano.
+   */
+  const richiesta = togli ? "" : String(formData.get("url") ?? "").trim();
+  const mie = db.layoutImages.filter((i) => i.scopeType === scope.type && i.scopeId === scope.id).map((i) => i.url);
+  const scelta = mie.includes(richiesta) ? richiesta : "";
+  const file = togli ? null : (formData.get("image") as File | null);
+  let url = scelta;
+  if (file && file.size > 0 && file.type.startsWith("image/")) {
+    const ext = (file.name.split(".").pop() || "png").toLowerCase().replace(/[^a-z0-9]/g, "");
+    const nomeFile = `zootestata_${scope.type}_${scope.id || "sys"}_${Date.now()}.${ext}`;
+    url = (await uploadPublicFile(`uploads/zoo-layout/${nomeFile}`, Buffer.from(await file.arrayBuffer()), file.type)) ?? "";
+  }
+  db.testate = db.testate.filter((t) => !(t.scopeType === scope.type && t.scopeId === scope.id));
+  if (url) db.testate.push({ scopeType: scope.type, scopeId: scope.id, url });
+  await saveZooDb(db);
+  rigeneraZoo();
+  redirect(backUrl("/stampe/zoo/layout", scopeParam, { formato, testata: url ? "1" : "0" }));
+}
+
 export async function deleteZooLayoutImage(imageId: string, scopeParam: string, formato: string) {
   const { db, scope } = await requireZooGestione(scopeParam, "/stampe/zoo/layout");
   db.layoutImages = db.layoutImages.filter(
