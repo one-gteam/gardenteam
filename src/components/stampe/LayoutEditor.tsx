@@ -6,7 +6,7 @@ import { LAYOUT_FONTS, layoutFontCss } from "@/lib/layout-fonts";
 import { saveLayout } from "@/lib/stampe-actions";
 import { saveZooLayout } from "@/lib/zoo-actions";
 import {
-  Prezzo, coloreCampo, isPrezzoField, justifyPrezzo, stileStickerCartello, stileTestoCartello, testoStampato,
+  Prezzo, alignPrezzo, coloreCampo, isPrezzoField, justifyPrezzo, stileStickerCartello, stileTestoCartello, testoStampato,
 } from "./cartelloStyle";
 
 /** Riquadro del pannello di destra richiudibile, per non dover scorrere fra tante sezioni aperte. */
@@ -26,6 +26,18 @@ function Sezione({
     </details>
   );
 }
+
+/** Colori pronti per i testi del cartello: quelli di casa Garden Team più i neutri. */
+const COLORI_TESTO = [
+  { nome: "Rosso offerta", valore: "#c8161d" },
+  { nome: "Nero", valore: "#111111" },
+  { nome: "Bianco", valore: "#ffffff" },
+  { nome: "Verde Garden Team", valore: "#00652e" },
+  { nome: "Verde chiaro", valore: "#8dc63f" },
+  { nome: "Arancio", valore: "#d97706" },
+  { nome: "Blu", valore: "#1d4ed8" },
+  { nome: "Grigio", valore: "#6b7280" },
+];
 
 /** Editor drag & drop del layout cartello: trascina i campi, ridimensionali dall'angolo, si salva da solo. */
 export default function LayoutEditor({
@@ -609,7 +621,7 @@ export default function LayoutEditor({
                     borderRadius: item.radius ? item.radius * scale : undefined,
                     // il prezzo esce dal riquadro invece di essere tagliato, come in stampa
                     overflow: "visible",
-                    display: "flex", justifyContent: justifyPrezzo(item), alignItems: "flex-start",
+                    display: "flex", justifyContent: justifyPrezzo(item), alignItems: alignPrezzo(item),
                     color: coloreCampo(item),
                   }}
                   onMouseDown={(e) => onMouseDown(e, i, "move")}
@@ -805,6 +817,51 @@ export default function LayoutEditor({
                     {a === "left" ? "⇤" : a === "center" ? "↔" : "⇥"}
                   </button>
                 ))}
+              </div>
+            </label>
+            {/* dove sta il testo dentro al suo riquadro: il prezzo centrato in
+                verticale è la richiesta più frequente sui riquadri alti */}
+            <label className="field" style={{ marginBottom: 10 }}>
+              Testo nel riquadro
+              <div style={{ display: "flex", gap: 4, marginTop: 4 }}>
+                {([["top", "⇡", "In alto"], ["middle", "↕", "Centrato"], ["bottom", "⇣", "In basso"]] as const).map(([v, icona, titolo]) => (
+                  <button
+                    key={v}
+                    type="button"
+                    className={`btn btn-sm ${(selItem.valign ?? "top") === v ? "" : "btn-outline"}`}
+                    style={{ flex: 1 }}
+                    onClick={() => updateSelected({ valign: v })}
+                    title={titolo}
+                  >
+                    {icona}
+                  </button>
+                ))}
+              </div>
+            </label>
+            {/* colore del testo: i colori di casa a portata di clic, più la ruota per gli altri */}
+            <label className="field" style={{ marginBottom: 10 }}>
+              Colore del testo
+              <div style={{ display: "flex", gap: 4, marginTop: 4, flexWrap: "wrap", alignItems: "center" }}>
+                {COLORI_TESTO.map((c) => (
+                  <button
+                    key={c.valore}
+                    type="button"
+                    onClick={() => updateSelected({ color: c.valore })}
+                    title={c.nome}
+                    style={{
+                      width: 24, height: 24, borderRadius: 6, cursor: "pointer",
+                      background: c.valore, border: (selItem.color ?? "") === c.valore ? "3px solid var(--green-600)" : "1px solid var(--line)",
+                    }}
+                  />
+                ))}
+                <input type="color" value={selItem.color ?? coloreCampo(selItem)}
+                  onChange={(e) => updateSelected({ color: e.target.value })}
+                  title="Scegli un colore qualsiasi" style={{ width: 34, height: 26, padding: 2, marginTop: 0 }} />
+                <button type="button" className="btn btn-outline btn-sm" style={{ padding: "0 8px" }}
+                  onClick={() => updateSelected({ color: undefined })}
+                  title="Torna al colore predefinito del campo (rosso sul prezzo, nero sugli altri)">
+                  predefinito
+                </button>
               </div>
             </label>
             <div style={{ fontSize: 11.5, color: "var(--muted)", marginBottom: 4 }}>

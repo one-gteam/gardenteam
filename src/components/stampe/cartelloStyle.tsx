@@ -97,7 +97,19 @@ export function stileTestoCartello(
     textAlign: item.align ?? "left",
     whiteSpace: "pre-line",
     textDecoration: barrato ? "line-through" : undefined,
+    /*
+     * Testo centrato (o in basso) dentro al suo riquadro: colonna flessibile,
+     * così l'allineamento orizzontale del paragrafo resta quello di textAlign.
+     */
+    ...(item.valign && item.valign !== "top"
+      ? { display: "flex", flexDirection: "column" as const, justifyContent: item.valign === "middle" ? "center" : "flex-end" }
+      : {}),
   };
+}
+
+/** Dove sta il prezzo dentro al suo riquadro (il prezzo vive in un flex). */
+export function alignPrezzo(item: LayoutItem): "flex-start" | "center" | "flex-end" {
+  return item.valign === "middle" ? "center" : item.valign === "bottom" ? "flex-end" : "flex-start";
 }
 
 /** Come si legge il testo dentro uno sticker/bollino stampato. */

@@ -1828,6 +1828,7 @@ function sanitizeZooLayoutItems(raw: unknown, isKnownField: (fieldId: string) =>
       ...(typeof i.bold === "boolean" ? { bold: i.bold as boolean } : {}),
       ...(typeof i.italic === "boolean" ? { italic: i.italic as boolean } : {}),
       ...(["left", "center", "right"].includes(i.align as string) ? { align: i.align as "left" | "center" | "right" } : {}),
+      ...(["top", "middle", "bottom"].includes(i.valign as string) ? { valign: i.valign as "top" | "middle" | "bottom" } : {}),
       ...(typeof i.font === "string" && LAYOUT_FONTS.some((f) => f.id === i.font) ? { font: i.font as string } : {}),
       ...(typeof i.bg === "string" && /^#[0-9a-fA-F]{3,8}$/.test(i.bg) ? { bg: i.bg as string } : {}),
       ...(Number.isFinite(Number(i.radius)) ? { radius: Math.max(0, Math.min(40, Number(i.radius))) } : {}),

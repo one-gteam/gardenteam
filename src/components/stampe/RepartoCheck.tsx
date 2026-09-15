@@ -6,7 +6,7 @@ import Cartello from "./Cartello";
 import InlineEdit from "./InlineEdit";
 import {
   mettiInCoda, toggleZooNoPrintInline, setPvPriceInline, setPvListinoInline, updateOfferFieldInline, setOfferTextScoped,
-  segnalaProblemaInline, toggleNonConformeInline,
+  segnalaProblemaInline, toggleNonConformeInline, updateParentFieldInline,
 } from "@/lib/zoo-actions";
 
 /** Una voce dell'elenco da controllare: un cartello (prodotto padre o offerta singola). */
@@ -38,6 +38,7 @@ interface Dettagli {
   righe: {
     id: string; ean: string; descrizione: string; parentId?: string;
     nome?: { value: string; custom: boolean };
+    desc?: { value: string; custom: boolean };
     descOfferta: { value: string; custom: boolean };
     cond: { value: string; custom: boolean };
     prezzoPromo: string; prezzoListino?: string; meccanica?: string; pv?: string; pvListino?: string; escluso: boolean;
@@ -288,7 +289,21 @@ export default function RepartoCheck({
               {!consorzio && <span className="hint">Consorzio: € {riga.prezzoPromo || "—"}</span>}
             </label>
           </div>
-          <label>Descrizione offerta
+          {/* i testi come si leggono sul cartello: titolo e descrizione vengono dal
+              prodotto padre, non dall'offerta, ed è quello che si stampa */}
+          {riga.parentId && riga.nome && (
+            <label>Titolo del cartello
+              <InlineEdit value={riga.nome.value} onSaved={() => carica(voce.id)}
+                onSave={updateParentFieldInline.bind(null, riga.parentId, "nome", scopeParam)} />
+            </label>
+          )}
+          {riga.parentId && riga.desc && (
+            <label>Descrizione sul cartello
+              <InlineEdit value={riga.desc.value} multiline onSaved={() => carica(voce.id)}
+                onSave={updateParentFieldInline.bind(null, riga.parentId, "descCartello", scopeParam)} />
+            </label>
+          )}
+          <label>Descrizione dell&apos;offerta{riga.parentId ? " (volantino)" : ""}
             <InlineEdit value={riga.descOfferta.value} multiline onSaved={() => carica(voce.id)} onSave={setOfferTextScoped.bind(null, riga.id, "descrizione", scopeParam)} />
           </label>
           <label>Condizioni

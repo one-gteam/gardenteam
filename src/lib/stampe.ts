@@ -82,6 +82,7 @@ export interface LayoutItem {
   bold?: boolean; // grassetto: sovrascrive il default del campo per questo elemento
   italic?: boolean; // corsivo (nessun default: solo per elemento)
   align?: "left" | "center" | "right"; // allineamento del testo nel paragrafo
+  valign?: "top" | "middle" | "bottom"; // dove sta il testo dentro al riquadro (default: in alto)
   font?: string; // chiave di LAYOUT_FONTS (vedi lib/layout-fonts): sovrascrive il carattere del campo
   bg?: string; // colore di sfondo del riquadro (assente = trasparente)
   radius?: number; // raggio degli angoli arrotondati, in mm (0/assente = angoli vivi)

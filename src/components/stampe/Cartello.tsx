@@ -3,7 +3,7 @@ import { isImageField } from "@/lib/cartello-campi";
 import FitText from "./FitText";
 import { layoutFontCss } from "@/lib/layout-fonts";
 import {
-  Prezzo, coloreCampo, isPrezzoField, justifyPrezzo, stileStickerCartello, stileTestoCartello, testoStampato,
+  Prezzo, alignPrezzo, coloreCampo, isPrezzoField, justifyPrezzo, stileStickerCartello, stileTestoCartello, testoStampato,
 } from "./cartelloStyle";
 
 /** Anteprima di un cartello: campi posizionati in % sul formato scelto. */
@@ -117,7 +117,7 @@ export default function Cartello({
            * mangerebbe la parte bassa delle cifre invece di lasciarle uscire.
            */
           return (
-            <div key={i} style={{ ...box, overflow: "visible", display: "flex", justifyContent: justifyPrezzo(item), alignItems: "flex-start", color }}>
+            <div key={i} style={{ ...box, overflow: "visible", display: "flex", justifyContent: justifyPrezzo(item), alignItems: alignPrezzo(item), color }}>
               <Prezzo value={value} size={item.size ?? meta.size} scale={scale}
                 font={item.font !== undefined ? layoutFontCss(item.font) : undefined} />
             </div>

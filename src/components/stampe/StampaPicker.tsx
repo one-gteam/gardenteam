@@ -95,6 +95,20 @@ export default function StampaPicker({
   /* righe spuntate nella tabella dei selezionati: si tolgono in blocco, senza
      cliccare la ✕ una per una quando la lista è lunga */
   const [daTogliere, setDaTogliere] = useState<string[]>([]);
+  /*
+   * L'indirizzo della pagina segue la selezione: "Svuota" o "Togli gli spuntati"
+   * cambiavano solo lo schermo, e al primo aggiornamento di pagina i prodotti
+   * tornavano su, perché l'elenco dei selezionati veniva riletto dall'indirizzo.
+   */
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    const attuale = url.searchParams.get("sel") ?? "";
+    const nuovo = selected.join(",");
+    if (attuale === nuovo) return;
+    if (nuovo) url.searchParams.set("sel", nuovo); else url.searchParams.delete("sel");
+    window.history.replaceState(null, "", url.toString());
+  }, [selected]);
   const lastIndex = useRef<number | null>(null);
 
   const toggle = (index: number, shift: boolean) => {
