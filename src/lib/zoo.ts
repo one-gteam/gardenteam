@@ -404,6 +404,45 @@ export interface ZooSettings {
   condizioniConValidita?: boolean;
 }
 
+/**
+ * Le condizioni pronte di un'insegna o di un punto vendita: le stesse del
+ * Consorzio, con i loro testi al posto dei suoi. Non c'è un campo nuovo sul
+ * cartello — è sempre "Condizioni pronte", cambia solo il contenuto.
+ */
+export interface ZooCondizioniScopo {
+  scopeType: ScopeType;
+  scopeId: string;
+  /** Vuoto = valgono quelle del Consorzio. */
+  condizioniStandard: string[];
+  /** Aggiungere la validità del volantino in coda alle condizioni: se assente vale la scelta del Consorzio. */
+  condizioniConValidita?: boolean;
+}
+
+/**
+ * Condizioni pronte e regola della validità come le vede questo ambito: le
+ * proprie se le ha scritte, altrimenti quelle dell'insegna, altrimenti quelle
+ * del Consorzio.
+ */
+export function condizioniPer(
+  db: ZooDB, scope?: Scope, academyDb?: DB
+): { condizioniStandard: string[]; conValidita: boolean } {
+  const base = {
+    condizioniStandard: db.settings.condizioniStandard,
+    conValidita: db.settings.condizioniConValidita ?? true,
+  };
+  if (!scope || !academyDb) return base;
+  for (const s of chainFor(scope, academyDb)) {
+    if (s.type === "system") break;
+    const mie = db.condizioniScopo.find((c) => c.scopeType === s.type && c.scopeId === s.id);
+    if (!mie) continue;
+    return {
+      condizioniStandard: mie.condizioniStandard.length > 0 ? mie.condizioniStandard : base.condizioniStandard,
+      conValidita: mie.condizioniConValidita ?? base.conValidita,
+    };
+  }
+  return base;
+}
+
 /** Cartello che un'insegna/PV ha deciso di non stampare (l'offerta resta per gli altri). */
 export interface ZooNoPrint {
   scopeType: ScopeType;
@@ -529,6 +568,7 @@ export interface ZooDB {
   noteBozza: ZooNotaBozza[];
   coda: ZooCoda[];
   nonConformi: ZooNonConforme[];
+  condizioniScopo: ZooCondizioniScopo[];
 }
 
 /* ================== Persistenza ================== */
@@ -556,11 +596,11 @@ export async function getZooDb(): Promise<ZooDB> {
     products: [], parents: [], textOverrides: [], tagOverrides: [], offerOverrides: [], printed: [],
     campaigns: [], offers: [],
     votes: [], hidden: [], pvPrices: [], suggestions: [], volantinoLayouts: [], zooLayouts: [],
-    noPrint: [], layoutImages: [], pvPromoCodes: [], pvPromos: [], scopeApiKeys: [], noteBozza: [], coda: [], giacenze: [], nonConformi: [],
+    noPrint: [], layoutImages: [], pvPromoCodes: [], pvPromos: [], scopeApiKeys: [], noteBozza: [], coda: [], giacenze: [], nonConformi: [], condizioniScopo: [],
   };
   const db = await readDomain<ZooDB>("zoo", empty);
   db.settings = { ...DEFAULT_SETTINGS, ...(db.settings ?? {}) };
-  for (const k of ["products", "parents", "textOverrides", "tagOverrides", "offerOverrides", "printed", "campaigns", "offers", "votes", "hidden", "pvPrices", "suggestions", "volantinoLayouts", "zooLayouts", "noPrint", "layoutImages", "pvPromoCodes", "pvPromos", "scopeApiKeys", "noteBozza", "coda", "giacenze", "nonConformi"] as const) {
+  for (const k of ["products", "parents", "textOverrides", "tagOverrides", "offerOverrides", "printed", "campaigns", "offers", "votes", "hidden", "pvPrices", "suggestions", "volantinoLayouts", "zooLayouts", "noPrint", "layoutImages", "pvPromoCodes", "pvPromos", "scopeApiKeys", "noteBozza", "coda", "giacenze", "nonConformi", "condizioniScopo"] as const) {
     if (!db[k]) (db as unknown as Record<string, unknown>)[k] = [];
   }
   // i layout salvati prima delle tipologie non hanno il campo: senza questo la
@@ -1325,7 +1365,8 @@ export function zooCartelloValues(
     };
     return testo.split("·").map((t) => t.trim()).filter((t) => t && !soloLoSconto(t)).join(" · ");
   })();
-  const condizioni = (db.settings.condizioniConValidita ?? true) && validita
+  const regoleCondizioni = condizioniPer(db, scope, academyDb);
+  const condizioni = regoleCondizioni.conValidita && validita
     ? [condizioniSalvate, validita].filter(Boolean).join(" · ")
     : condizioniSalvate;
   return {
@@ -1379,7 +1420,7 @@ export function zooCartelloValues(
      * Sono un campo a sé perché di solito vanno in un rigo fisso in fondo, accanto
      * o al posto delle condizioni della promozione.
      */
-    condizioniStandard: db.settings.condizioniStandard.join(" · "),
+    condizioniStandard: regoleCondizioni.condizioniStandard.join(" · "),
     validita,
     eanLista: fratelli.map((p) => p.ean).join(" · "),
     animale: tagPadre("animale"),

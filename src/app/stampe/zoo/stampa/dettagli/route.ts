@@ -3,7 +3,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { canAccessArea, resolveScope } from "@/lib/stampe";
 import {
-  getZooDb, campagnaPerStampa, offertePerStampa, tagsPerStampa, valoriPerStampa, effectiveZooLayout,
+  getZooDb, campagnaPerStampa, offertePerStampa, tagsPerStampa, valoriPerStampa, effectiveZooLayout, condizioniPer,
   effectiveParentText, effectiveParentTag, effectiveOfferText, pvPriceFor, pvListinoFor, noPrintSets, ZOO_FORMATS, giacenzePer, prezzoDaNumero,
 } from "@/lib/zoo";
 
@@ -78,6 +78,6 @@ export async function GET(req: NextRequest) {
     righe,
     categorieAnimali: db.settings.categorieAnimali,
     caratteristicheProdotto: db.settings.caratteristicheProdotto,
-    condizioniStandard: db.settings.condizioniStandard,
+    condizioniStandard: condizioniPer(db, scope, academyDb).condizioniStandard,
   });
 }

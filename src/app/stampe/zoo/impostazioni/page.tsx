@@ -4,11 +4,13 @@ import { getCurrentUser } from "@/lib/auth";
 import StampeHeader from "@/components/stampe/StampeHeader";
 import { canAccessArea, isZooEditor, scopesForUser, resolveScope } from "@/lib/stampe";
 import { getDb } from "@/lib/db";
-import { getZooDb, hiddenEntriesFor, pvPromoCodesFor, giacenzeUrlFor } from "@/lib/zoo";
+import {
+  condizioniPer, getZooDb, hiddenEntriesFor, pvPromoCodesFor, giacenzeUrlFor } from "@/lib/zoo";
 import InlineEdit from "@/components/stampe/InlineEdit";
 import ImportExcel from "@/components/stampe/ImportExcel";
 import {
   saveZooSettings, saveZooApiKey, saveZooGiacenze, saveFormatoRegola, toggleZooHidden, importPvPromoRighe, rinominaPvPromoCode,
+  saveZooCondizioniScope,
 } from "@/lib/zoo-actions";
 
 export default async function ZooImpostazioniPage({
@@ -34,6 +36,10 @@ export default async function ZooImpostazioniPage({
   // codici promozione dell'ambito e quanti articoli ne hanno uno
   const codiciPromo = scope.type === "system" ? [] : pvPromoCodesFor(db, scope);
   const chiavePropria = db.scopeApiKeys.find((k) => k.scopeType === scope.type && k.scopeId === scope.id)?.key;
+  // condizioni pronte: quelle scritte da questo ambito e quelle che valgono davvero (con la catena)
+  const condizioniMie = db.condizioniScopo
+    .find((c) => c.scopeType === scope.type && c.scopeId === scope.id)?.condizioniStandard ?? [];
+  const condizioniRegole = condizioniPer(db, scope, academyDb);
   const promoPerCodice = new Map<string, number>();
   for (const p of db.pvPromos) {
     if (p.scopeType !== scope.type || p.scopeId !== scope.id) continue;
@@ -148,6 +154,36 @@ export default async function ZooImpostazioniPage({
               </div>
             </div>
           </>
+        )}
+
+        {/* condizioni pronte dell'insegna/PV: stesso campo del cartello, testi loro */}
+        {scope.type !== "system" && (
+          <div className="card" style={{ padding: 14, marginBottom: 14 }}>
+            <h2 style={{ marginTop: 0 }}>Condizioni dei cartelli di {scope.label}</h2>
+            <p style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 0 }}>
+              Sono le stesse condizioni pronte che si vedono in Stampa cartelli: qui ci scrivete le vostre e sui
+              vostri cartelli prendono il posto di quelle del Consorzio. Sul cartello non cambia niente — è sempre il
+              riquadro &quot;Condizioni pronte&quot;, cambia solo il testo. Lasciate vuoto per tornare a quelle del Consorzio.
+            </p>
+            <form action={saveZooCondizioniScope.bind(null, scopeParam)} style={{ display: "grid", gap: 10, maxWidth: 620 }}>
+              <label className="field" style={{ marginBottom: 0 }}>
+                Condizioni pronte (una per riga)
+                <textarea name="condizioniStandard" rows={4} defaultValue={condizioniMie.join("\n")}
+                  placeholder={db.settings.condizioniStandard.join("\n") || "Offerta valida fino a esaurimento scorte"} />
+                <span className="hint">
+                  In grigio, come suggerimento, quelle del Consorzio: {db.settings.condizioniStandard.join(" · ") || "nessuna"}
+                </span>
+              </label>
+              <label className="field" style={{ marginBottom: 0 }}>
+                Validità sui cartelli
+                <span style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
+                  <input type="checkbox" name="condizioniConValidita" value="1" defaultChecked={condizioniRegole.conValidita} />
+                  <span style={{ fontSize: 13 }}>Aggiungi alle condizioni la validità del volantino</span>
+                </span>
+              </label>
+              <div><button className="btn btn-sm" type="submit">Salva condizioni</button></div>
+            </form>
+          </div>
         )}
 
         {/* chiave API propria dell'insegna/PV: per raggruppare i propri articoli con l'AI */}

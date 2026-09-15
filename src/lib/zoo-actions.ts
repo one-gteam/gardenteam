@@ -1774,6 +1774,31 @@ export async function saveZooSettings(scopeParam: string, formData: FormData) {
   redirect(backUrl("/stampe/zoo/impostazioni", scopeParam, { salvate: "1" }));
 }
 
+/**
+ * Condizioni pronte di un'insegna o punto vendita: sostituiscono quelle del
+ * Consorzio sui loro cartelli, senza aggiungere campi nuovi. Testo vuoto =
+ * tornano a valere quelle del Consorzio.
+ */
+export async function saveZooCondizioniScope(scopeParam: string, formData: FormData) {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  if (scope.type === "system" || !gestisceArea(user, "zoo", scope, academyDb)) {
+    redirect(backUrl("/stampe/zoo/impostazioni", scopeParam, { permessi: "no" }));
+  }
+  const righe = String(formData.get("condizioniStandard") ?? "")
+    .split(/\r?\n/).map((r) => r.trim()).filter(Boolean);
+  const conValidita = String(formData.get("condizioniConValidita") ?? "") === "1";
+  db.condizioniScopo = db.condizioniScopo.filter((c) => !(c.scopeType === scope.type && c.scopeId === scope.id));
+  db.condizioniScopo.push({
+    scopeType: scope.type, scopeId: scope.id, condizioniStandard: righe, condizioniConValidita: conValidita,
+  });
+  await saveZooDb(db);
+  rigeneraZoo();
+  redirect(backUrl("/stampe/zoo/impostazioni", scopeParam, { salvate: "1" }));
+}
+
 /** La chiave API Claude può essere impostata SOLO dall'amministratore di sistema. */
 /**
  * Salva la chiave API Claude. Sul Consorzio è quella comune (solo amministratore
