@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
+import { Fragment } from "react";
 import BulkCheckbox from "@/components/stampe/BulkCheckbox";
+import { DettagliPadre, PannelloPadre } from "@/components/stampe/DettagliPadre";
 import RigaCoda from "@/components/stampe/RigaCoda";
 import FiltriMobile from "@/components/FiltriMobile";
 import StampeHeader from "@/components/stampe/StampeHeader";
@@ -17,7 +19,7 @@ import {
 } from "@/lib/zoo";
 import {
   importPvPricesRighe, markZooPrinted, resetZooPrinted, toggleZooHidden, importZooNoPrintRighe, svuotaZooNoPrint,
-  togliNonConforme, toggleZooNoPrint, rimettiInCoda, rimettiInCodaMulti, svuotaStampatiCoda,
+  togliNonConforme, toggleZooNoPrint, rimettiInCoda, rimettiInCodaMulti, svuotaStampatiCoda, rimettiInStampaMulti,
   creaOffertaPropria, eliminaOffertaPropria, stampaCoda, segnaArrivato,
 } from "@/lib/zoo-actions";
 
@@ -228,10 +230,15 @@ export default async function ZooStampaPage({
   const nonConformiVoci = [...nonConformi.values()]
     .map((n) => {
       const o = db.offers.find((x) => x.id === n.offerId);
-      return { ...n, nome: nomeOfferta(n.offerId), articolo: o?.descrizione, ean: o?.ean };
+      return {
+        ...n, nome: nomeOfferta(n.offerId), articolo: o?.descrizione, ean: o?.ean,
+        parentId: o ? padreDi(o).parent?.id : undefined,
+      };
     })
     .sort((a, b) => b.at.localeCompare(a.at));
-  const esclusiVoci = allOffers.filter(escluso).map((o) => ({ id: o.id, ean: o.ean, nome: nomeOfferta(o.id) }));
+  const esclusiVoci = allOffers.filter(escluso).map((o) => ({
+    id: o.id, ean: o.ean, nome: nomeOfferta(o.id), parentId: padreDi(o).parent?.id,
+  }));
 
   const selectedIds = (sp.sel ?? "").split(",").filter(Boolean);
   const selected = selectedIds.map((id) => allOffers.find((o) => o.id === id)).filter(Boolean) as typeof allOffers;
@@ -410,6 +417,10 @@ export default async function ZooStampaPage({
           </div>
         )}
 
+        {sp.rimessi !== undefined && (
+          <div className="alert alert-green">✓ {sp.rimessi} cartelli rimessi fra quelli da stampare.</div>
+        )}
+
         {sp.azzerati !== undefined && (
           <div className="alert alert-green">✓ Azzerato il &quot;già stampato&quot; su {sp.azzerati} cartelli.</div>
         )}
@@ -554,13 +565,15 @@ export default async function ZooStampaPage({
                 <form>
                   <ul className="sezione-elenco">
                     {nonConformiVoci.map((n) => (
-                      <li key={n.id}>
+                      <Fragment key={n.id}>
+                      <li>
                         <span style={{ flex: 1, minWidth: 0 }}>
                           {n.nome}
                           {n.articolo && n.articolo !== n.nome && (
                             <span className="hint" style={{ marginLeft: 6 }}>{n.articolo}{n.ean ? ` · ${n.ean}` : ""}</span>
                           )}
                           {n.motivo && <em style={{ marginLeft: 6 }}>«{n.motivo}»</em>}
+                          {n.parentId && <> · <DettagliPadre parentId={n.parentId} /></>}
                           <span className="hint" style={{ marginLeft: 6 }}>
                             {new Date(n.at).toLocaleDateString("it-IT")}{" · "}{n.userName}
                           </span>
@@ -571,6 +584,12 @@ export default async function ZooStampaPage({
                           Sistemato
                         </button>
                       </li>
+                      {n.parentId && (
+                        <li className="riga-pannello">
+                          <PannelloPadre parentId={n.parentId} scopeParam={scopeParam} back="/stampe/zoo/stampa" />
+                        </li>
+                      )}
+                      </Fragment>
                     ))}
                   </ul>
                 </form>
@@ -581,11 +600,25 @@ export default async function ZooStampaPage({
               <details className="sezione">
                 <summary><strong>Da non stampare</strong> <span className="pill pill-red">{esclusiVoci.length}</span></summary>
                 <form>
+                  <div className="sezione-azioni">
+                    <label className="hint" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                      <BulkCheckbox name="escluso" /> tutti
+                    </label>
+                    <span className="hint">Spunta quelli da rimettere in stampa (Maiusc+clic per un intervallo).</span>
+                    <button className="btn btn-sm" type="submit" style={{ marginLeft: "auto" }}
+                      formAction={rimettiInStampaMulti.bind(null, scopeParam)}
+                      title="Rimette fra quelli da stampare tutti i cartelli spuntati">
+                      Rimetti in stampa i selezionati
+                    </button>
+                  </div>
                   <ul className="sezione-elenco">
                     {esclusiVoci.slice(0, 100).map((o) => (
-                      <li key={o.id}>
+                      <Fragment key={o.id}>
+                      <li>
+                        <input type="checkbox" name="escluso" value={o.id} title="Spunta per rimetterlo in stampa" />
                         <span style={{ flex: 1, minWidth: 0 }}>
                           {o.nome}<span className="hint" style={{ marginLeft: 6 }}>{o.ean}</span>
+                          {o.parentId && <> · <DettagliPadre parentId={o.parentId} /></>}
                         </span>
                         <button className="btn btn-outline btn-sm" type="submit"
                           formAction={toggleZooNoPrint.bind(null, o.id, scopeParam, "/stampe/zoo/stampa")}
@@ -593,6 +626,12 @@ export default async function ZooStampaPage({
                           Rimetti in stampa
                         </button>
                       </li>
+                      {o.parentId && (
+                        <li className="riga-pannello">
+                          <PannelloPadre parentId={o.parentId} scopeParam={scopeParam} back="/stampe/zoo/stampa" />
+                        </li>
+                      )}
+                      </Fragment>
                     ))}
                   </ul>
                   {esclusiVoci.length > 100 && (

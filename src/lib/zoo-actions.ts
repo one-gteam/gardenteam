@@ -1921,6 +1921,33 @@ export async function uploadVolantinoImage(formData: FormData) {
  * l'offerta resta valida per tutti gli altri, semplicemente questo punto vendita
  * non la espone. Diverso dal "non tenuto", che vale per l'articolo in ogni volantino.
  */
+/**
+ * Rimette fra quelli da stampare i cartelli esclusi che sono stati spuntati.
+ * Toglie sia l'esclusione della singola offerta sia quella del codice a barre
+ * (caricata da Excel), altrimenti il cartello sembra tornare e invece resta
+ * fuori al volantino dopo.
+ */
+export async function rimettiInStampaMulti(scopeParam: string, formData: FormData) {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  if (scope.type === "system") redirect(backUrl("/stampe/zoo/stampa", scopeParam));
+  const ids = (formData.getAll("escluso") as string[]).filter(Boolean);
+  if (ids.length === 0) redirect(backUrl("/stampe/zoo/stampa", scopeParam));
+  const eans = new Set(ids.map((id) => db.offers.find((o) => o.id === id)?.ean).filter(Boolean) as string[]);
+  db.noPrint = db.noPrint.filter((n) => {
+    const mio = n.scopeType === scope.type && n.scopeId === scope.id;
+    if (!mio) return true;
+    if (n.offerId && ids.includes(n.offerId)) return false;
+    if (n.ean && eans.has(n.ean)) return false;
+    return true;
+  });
+  await saveZooDb(db);
+  rigeneraZoo();
+  redirect(backUrl("/stampe/zoo/stampa", scopeParam, { rimessi: String(ids.length) }));
+}
+
 export async function toggleZooNoPrint(offerId: string, scopeParam: string, back: string) {
   const user = await requireZooUser();
   const db = await getZooDb();

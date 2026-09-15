@@ -893,6 +893,9 @@ export function valoriPerStampa(
    */
   const promoEPrezzo = (vals.prezzoPromo ?? "").trim().startsWith("€");
   if (promoEPrezzo && !vals.prezzoListino && sp[`nolistino_${o.id}`] !== "1") vals.prezzoListino = "A SOLI";
+  // lo sconto si rifà sui prezzi veri del cartello (quelli del PV o scritti a mano)
+  const perc = scontoFraPrezzi(vals.prezzoListino ?? "", vals.prezzoPromo ?? "");
+  vals.sconto = perc ? `Sconto ${perc}` : "";
   if (sp[`senzafoto_${o.id}`] === "1") delete vals.immagine;
   for (const fid of (sp[`nascondi_${o.id}`] ?? "").split(",").filter(Boolean)) delete vals[fid];
   return vals;
@@ -1125,6 +1128,7 @@ export const ZOO_FIELDS: PrintField[] = [
   { id: "prezzoUnita", label: "Prezzo al kg / al litro", size: 11, bold: false },
   { id: "meccanica", label: "Meccanica promo (3x2, 1+1…)", size: 30, bold: true, font: "cn" },
   { id: "tipoPromo", label: "Tipo di promozione (3x2, 20%, A SOLI…)", size: 20, bold: true, font: "cn" },
+  { id: "sconto", label: "Sconto in percentuale (Sconto 10%)", size: 18, bold: true, font: "cn" },
   { id: "label", label: "Etichetta (SOTTOCOSTO, NOVITÀ…)", size: 16, bold: true, font: "cn" },
   { id: "condizioni", label: "Condizioni", size: 11, bold: false },
   { id: "condizioniStandard", label: "Condizioni pronte (da Impostazioni)", size: 11, bold: false },
@@ -1284,6 +1288,11 @@ export function zooCartelloValues(
       ? `€ ${offer.prezzoListino}`
       : offer.prezzoPromo ? "A SOLI" : "",
     meccanica: scontoSecco ? "" : (offer.meccanica ?? ""),
+    // sconto in percentuale fra i due prezzi: si posa sul layout come gli altri campi
+    sconto: (() => {
+      const p = scontoFraPrezzi(offer.prezzoListino ?? "", offer.prezzoPromo ?? "");
+      return p ? `Sconto ${p}` : "";
+    })(),
     // prezzo al chilo/litro: sul cartello è obbligatorio per legge sugli alimenti confezionati
     prezzoUnita: prezzoUnitaDi(offer, product, offer.prezzoPromo),
     /*
@@ -1378,6 +1387,17 @@ export interface DatiPrezzoOfferta {
   sconto: string;
   /** Tipologia dell'offerta: "3x2", "sconto", "A SOLI", o la promo dell'insegna/PV. */
   tipi: string[];
+}
+
+/**
+ * Quanto si risparmia fra prezzo di partenza e prezzo promo, in percentuale
+ * tonda: da 10,00 a 9,00 esce "10%". Vuota se uno dei due non è un prezzo.
+ */
+export function scontoFraPrezzi(listino: string, promo: string): string {
+  const a = numeroPrezzo(listino ?? "");
+  const b = numeroPrezzo(promo ?? "");
+  if (!(a > 0 && b > 0 && a > b)) return "";
+  return `${Math.round((1 - b / a) * 100)}%`;
 }
 
 /** Numero da un prezzo scritto all'italiana: "1.299,50" → 1299.5. */

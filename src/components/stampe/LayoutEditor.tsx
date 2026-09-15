@@ -394,6 +394,16 @@ export default function LayoutEditor({
     });
   };
 
+  /*
+   * I bordi buoni per l'allineamento sono i margini, non il taglio della carta:
+   * allineare "a sinistra" deve portare il campo sul margine sinistro, che è la
+   * riga tratteggiata che si vede sul foglio.
+   */
+  const bordoSx = pctFromMmX(margins.left);
+  const bordoDx = 100 - pctFromMmX(margins.right);
+  const bordoAlto = pctFromMmY(margins.top);
+  const bordoBasso = 100 - pctFromMmY(margins.bottom);
+
   const usedFields = new Set(activeItems.map((i) => i.fieldId));
 
   return (
@@ -814,13 +824,14 @@ export default function LayoutEditor({
             <label className="field" style={{ marginBottom: 0 }}>
               Allinea sul foglio
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 4, marginTop: 4 }}>
-                <button type="button" className="btn btn-outline btn-sm" title="Sinistra" onClick={() => updateSelected({ x: 0 })}>⇤ Sx</button>
-                <button type="button" className="btn btn-outline btn-sm" title="Centro orizzontale" onClick={() => updateSelected({ x: (100 - selItem.w) / 2 })}>↔ Centro</button>
-                <button type="button" className="btn btn-outline btn-sm" title="Destra" onClick={() => updateSelected({ x: 100 - selItem.w })}>⇥ Dx</button>
-                <button type="button" className="btn btn-outline btn-sm" title="Alto" onClick={() => updateSelected({ y: 0 })}>⇡ Alto</button>
-                <button type="button" className="btn btn-outline btn-sm" title="Centro verticale" onClick={() => updateSelected({ y: (100 - selItem.h) / 2 })}>↕ Centro</button>
-                <button type="button" className="btn btn-outline btn-sm" title="Basso" onClick={() => updateSelected({ y: 100 - selItem.h })}>⇣ Basso</button>
+                <button type="button" className="btn btn-outline btn-sm" title="Sinistra (al margine)" onClick={() => updateSelected({ x: bordoSx })}>⇤ Sx</button>
+                <button type="button" className="btn btn-outline btn-sm" title="Centro orizzontale (fra i margini)" onClick={() => updateSelected({ x: bordoSx + (bordoDx - bordoSx - selItem.w) / 2 })}>↔ Centro</button>
+                <button type="button" className="btn btn-outline btn-sm" title="Destra (al margine)" onClick={() => updateSelected({ x: bordoDx - selItem.w })}>⇥ Dx</button>
+                <button type="button" className="btn btn-outline btn-sm" title="Alto (al margine)" onClick={() => updateSelected({ y: bordoAlto })}>⇡ Alto</button>
+                <button type="button" className="btn btn-outline btn-sm" title="Centro verticale (fra i margini)" onClick={() => updateSelected({ y: bordoAlto + (bordoBasso - bordoAlto - selItem.h) / 2 })}>↕ Centro</button>
+                <button type="button" className="btn btn-outline btn-sm" title="Basso (al margine)" onClick={() => updateSelected({ y: bordoBasso - selItem.h })}>⇣ Basso</button>
               </div>
+              <span className="hint" style={{ fontSize: 11 }}>Si allinea ai margini del foglio, non al bordo della carta.</span>
             </label>
           </Sezione>
           </div>

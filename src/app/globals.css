@@ -528,6 +528,8 @@ table.data td { overflow-wrap: anywhere; }
 .sezione-elenco { margin: 0; padding-left: 0; list-style: none; font-size: 12.5px; }
 .sezione-elenco > li { display: flex; gap: 8px; align-items: center; padding: 3px 0; border-bottom: 1px dashed var(--line); }
 .sezione-elenco > li:last-child { border-bottom: none; }
+/* la riga che ospita il pannello del prodotto padre: sta sotto, a tutta larghezza */
+.sezione-elenco > li.riga-pannello { display: block; padding: 0; border-bottom: none; }
 .sezione-elenco input[type="checkbox"] { flex: none; }
 
 /* Controllo in reparto (cellulare): un cartello alla volta, pulsanti grandi in fondo */
