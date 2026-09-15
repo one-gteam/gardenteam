@@ -17,7 +17,7 @@ import {
 } from "@/lib/zoo";
 import {
   importPvPricesRighe, markZooPrinted, resetZooPrinted, toggleZooHidden, importZooNoPrintRighe, svuotaZooNoPrint,
-  togliNonConforme, toggleZooNoPrint,
+  togliNonConforme, toggleZooNoPrint, rimettiInCoda, svuotaStampatiCoda,
   creaOffertaPropria, eliminaOffertaPropria, stampaCoda, segnaArrivato,
 } from "@/lib/zoo-actions";
 
@@ -203,10 +203,21 @@ export default async function ZooStampaPage({
     return parent ? effectiveParentText(db, scope, parent, "nome", academyDb).value || o.descrizione : o.descrizione;
   };
   const codaMia = db.coda
-    .filter((c) => c.scopeType === scope.type && c.scopeId === scope.id && !c.stampato)
+    .filter((c) => c.scopeType === scope.type && c.scopeId === scope.id)
     .map((c) => ({ ...c, nome: nomeOfferta(c.offerId) }));
-  const codaDopo = codaMia.filter((c) => c.stato === "dopo");
-  const codaArrivo = codaMia.filter((c) => c.stato === "arrivo");
+  const codaDopo = codaMia.filter((c) => c.stato === "dopo" && !c.stampato);
+  const codaArrivo = codaMia.filter((c) => c.stato === "arrivo" && !c.stampato);
+  /* I cartelli gia' mandati in stampa restano in elenco, segnati: serve a
+     sapere cosa e' stato fatto e a ristampare se la stampa e' andata male. */
+  const codaStampati = codaMia.filter((c) => c.stampato)
+    .sort((a, b) => (b.stampato ?? "").localeCompare(a.stampato ?? ""));
+  /* L'elenco da stampare e' diviso per formato: A4 e A5 vanno in stampante in
+     due giri diversi, quindi ognuno ha il suo gruppo e il suo pulsante. */
+  const formatoDiCoda = (c: (typeof codaMia)[number]) =>
+    ZOO_FORMATS.find((f) => f.id === (c.impostazioni[`formato_${c.offerId}`] || ZOO_FORMATS[0].id)) ?? ZOO_FORMATS[0];
+  const gruppiFormato = ZOO_FORMATS
+    .map((f) => ({ formato: f, voci: codaDopo.filter((c) => formatoDiCoda(c).id === f.id) }))
+    .filter((g) => g.voci.length > 0);
   /* Segnalati dal reparto: non conformi (il cartello non torna con lo scaffale)
      ed esclusi (segnati "Non stampare"). Stanno nelle stesse sezioni della coda
      perché sono tutte cose da guardare prima di mandare in stampa. */
@@ -404,38 +415,84 @@ export default async function ZooStampaPage({
           * chiudono: la coda di stampa, la merce in arrivo, i cartelli segnati
           * non conformi in reparto e quelli esclusi dalla stampa.
           */}
-        {(codaDopo.length > 0 || codaArrivo.length > 0 || nonConformiVoci.length > 0 || esclusiVoci.length > 0) && (
+        {(codaDopo.length > 0 || codaArrivo.length > 0 || codaStampati.length > 0 || nonConformiVoci.length > 0 || esclusiVoci.length > 0) && (
           <div className="card sezioni" style={{ marginBottom: 16, padding: 14 }}>
-            {codaDopo.length > 0 && (
+            {(codaDopo.length > 0 || codaStampati.length > 0) && (
               <details className="sezione" open>
-                <summary><strong>Da stampare più tardi</strong> <span className="pill pill-orange" id="conta-dopo">{codaDopo.length}</span></summary>
-                <form action={stampaCoda.bind(null, scopeParam, "dopo")}>
-                  <div className="sezione-azioni">
-                    <label className="hint" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-                      <BulkCheckbox name="coda" /> tutti
-                    </label>
-                    <span className="hint">Clic per spuntare, Maiusc+clic per un intervallo.</span>
-                    <button className="btn btn-sm" type="submit" style={{ marginLeft: "auto" }}
-                      title="Apre l'anteprima di stampa di tutti (o dei soli spuntati) con le impostazioni salvate, e li toglie dalla coda">
-                      Stampa {codaDopo.length > 1 ? "tutti o i selezionati" : ""} →
-                    </button>
-                  </div>
-                  <ul className="sezione-elenco">
-                    {codaDopo.map((c) => (
-                      <RigaCoda key={c.id} id={c.id} scopeParam={scopeParam} contatoreId="conta-dopo">
-                        <input type="checkbox" name="coda" value={c.id} title="Spunta per stampare solo alcuni" />
-                        <span style={{ flex: 1, minWidth: 0 }}>
-                          {c.nome}
-                          <span className="hint" style={{ marginLeft: 6 }}>
-                            {ZOO_FORMATS.find((f) => f.id === c.impostazioni[`formato_${c.offerId}`])?.name ?? "A4"}
-                            {c.impostazioni[`senzafoto_${c.offerId}`] === "1" ? " · senza foto" : ""}
-                            {" · "}{new Date(c.creato).toLocaleDateString("it-IT")}{" · "}{c.userName}
+                <summary>
+                  <strong>Da stampare più tardi</strong> <span className="pill pill-orange" id="conta-dopo">{codaDopo.length}</span>
+                  {codaStampati.length > 0 && <span className="pill pill-gray">{codaStampati.length} stampati</span>}
+                </summary>
+
+                {gruppiFormato.map((g) => (
+                  <form key={g.formato.id} action={stampaCoda.bind(null, scopeParam, "dopo", g.formato.id)}>
+                    <div className="sezione-azioni">
+                      <strong style={{ fontSize: 13 }}>{g.formato.name}</strong>
+                      <span className="pill pill-orange" id={`conta-${g.formato.id}`}>{g.voci.length}</span>
+                      <label className="hint" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                        <BulkCheckbox name="coda" /> tutti
+                      </label>
+                      <span className="hint">Clic per spuntare, Maiusc+clic per un intervallo.</span>
+                      <button className="btn btn-sm" type="submit" style={{ marginLeft: "auto" }}
+                        title={`Apre l'anteprima di stampa dei cartelli ${g.formato.name} (o dei soli spuntati) con le impostazioni salvate`}>
+                        Stampa {g.formato.name} →
+                      </button>
+                    </div>
+                    <ul className="sezione-elenco">
+                      {g.voci.map((c) => (
+                        <RigaCoda key={c.id} id={c.id} scopeParam={scopeParam} contatoreId={`conta-dopo,conta-${g.formato.id}`}>
+                          <input type="checkbox" name="coda" value={c.id} title="Spunta per stampare solo alcuni" />
+                          <span style={{ flex: 1, minWidth: 0 }}>
+                            {c.nome}
+                            <span className="hint" style={{ marginLeft: 6 }}>
+                              {c.impostazioni[`senzafoto_${c.offerId}`] === "1" ? "senza foto · " : ""}
+                              {new Date(c.creato).toLocaleDateString("it-IT")}{" · "}{c.userName}
+                            </span>
                           </span>
-                        </span>
-                      </RigaCoda>
-                    ))}
-                  </ul>
-                </form>
+                        </RigaCoda>
+                      ))}
+                    </ul>
+                  </form>
+                ))}
+
+                {codaStampati.length > 0 && (
+                  <details className="sezione">
+                    <summary>
+                      <strong>Già stampati</strong> <span className="pill pill-gray">{codaStampati.length}</span>
+                    </summary>
+                    <form>
+                      <div className="sezione-azioni">
+                        <span className="hint">Restano qui per sapere cosa è stato fatto. «Rimetti» li riporta fra quelli da stampare.</span>
+                        <button className="btn btn-outline btn-sm" type="submit" style={{ marginLeft: "auto" }}
+                          formAction={svuotaStampatiCoda.bind(null, scopeParam)}
+                          title="Svuota l'elenco degli stampati (i cartelli restano, sparisce solo questo elenco)">
+                          Svuota elenco
+                        </button>
+                      </div>
+                      <ul className="sezione-elenco">
+                        {codaStampati.map((c) => (
+                          <li key={c.id}>
+                            <span style={{ flex: 1, minWidth: 0, opacity: 0.75 }}>
+                              {c.nome}
+                              <span className="hint" style={{ marginLeft: 6 }}>
+                                {formatoDiCoda(c).name}
+                                {c.stato === "arrivo" ? " · era in arrivo" : ""}
+                                {" · stampato il "}{new Date(c.stampato ?? c.creato).toLocaleDateString("it-IT")}
+                                {" · "}{c.userName}
+                              </span>
+                            </span>
+                            <span className="pill pill-gray">stampato</span>
+                            <button className="btn btn-outline btn-sm" type="submit"
+                              formAction={rimettiInCoda.bind(null, c.id, scopeParam)}
+                              title="La stampa è andata male: rimettilo fra quelli da stampare">
+                              Rimetti
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </form>
+                  </details>
+                )}
               </details>
             )}
 

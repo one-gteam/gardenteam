@@ -1527,6 +1527,29 @@ export async function mettiInCoda(
   return { ok: true, n };
 }
 
+/** Rimette fra quelli da stampare un cartello già stampato (la stampa è andata male). */
+export async function rimettiInCoda(id: string, scopeParam: string) {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  const riga = db.coda.find((c) => c.id === id && c.scopeType === scope.type && c.scopeId === scope.id);
+  if (riga) { delete riga.stampato; await saveZooDb(db); rigeneraZoo(); }
+  redirect(backUrl("/stampe/zoo/stampa", scopeParam));
+}
+
+/** Pulisce l'elenco dei cartelli già stampati (restano i cartelli, sparisce lo storico). */
+export async function svuotaStampatiCoda(scopeParam: string) {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  db.coda = db.coda.filter((c) => !(c.scopeType === scope.type && c.scopeId === scope.id && c.stampato));
+  await saveZooDb(db);
+  rigeneraZoo();
+  redirect(backUrl("/stampe/zoo/stampa", scopeParam));
+}
+
 export async function togliDallaCoda(id: string, scopeParam: string) {
   const user = await requireZooUser();
   const db = await getZooDb();
@@ -1573,14 +1596,22 @@ export async function segnaArrivato(id: string, scopeParam: string) {
  * (spariscono dalla coda) e si apre l'anteprima di stampa con le impostazioni
  * salvate di ciascuno. Se qualcosa va storto si ritrovano in "già stampati".
  */
-export async function stampaCoda(scopeParam: string, stato: "dopo" | "arrivo", formData: FormData) {
+/**
+ * Manda in stampa i cartelli messi da parte. `formatoId` restringe a un solo
+ * formato (l'elenco è diviso in A4, A5, A6…, e ogni gruppo ha il suo pulsante);
+ * stringa vuota = tutti. Se qualche riga è spuntata stampa solo quelle.
+ * I cartelli stampati restano nell'elenco, segnati, invece di sparire.
+ */
+export async function stampaCoda(scopeParam: string, stato: "dopo" | "arrivo", formatoId: string, formData: FormData) {
   const user = await requireZooUser();
   const db = await getZooDb();
   const academyDb = await getDb();
   const scope = resolveScope(user, scopeParam, academyDb);
   const solo = (formData.getAll("coda") as string[]).filter(Boolean);
   const voci = db.coda.filter((c) =>
-    c.scopeType === scope.type && c.scopeId === scope.id && c.stato === stato && !c.stampato && (solo.length === 0 || solo.includes(c.id))
+    c.scopeType === scope.type && c.scopeId === scope.id && c.stato === stato && !c.stampato
+    && (solo.length === 0 || solo.includes(c.id))
+    && (!formatoId || (c.impostazioni[`formato_${c.offerId}`] || "za4") === formatoId)
   );
   if (voci.length === 0) redirect(backUrl("/stampe/zoo/stampa", scopeParam));
   const params: Record<string, string> = { print: "1", sel: voci.map((v) => v.offerId).join(",") };

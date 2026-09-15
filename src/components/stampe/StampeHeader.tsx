@@ -41,7 +41,7 @@ export default async function StampeHeader({
         ...(isZooEditor(user) ? [{ href: "/stampe/zoo/archivio", label: "Archivio volantini", key: "archivio" }] : []),
         ...(gestZoo ? [{ href: "/stampe/zoo/focus", label: "Storico focus", key: "focus" }] : []),
         ...(gestZoo ? [{ href: "/stampe/zoo/impostazioni", label: "Impostazioni", key: "impostazioni" }] : []),
-        ...(sites.includes("arredo") ? [{ href: "/stampe/arredo/dati", label: "⇄ Cartelli Arredo", key: "arredo" }] : []),
+        // una voce sola per uscire: la scelta dell'area si fa in /scegli, non dal menu
         ...(sites.length > 1 ? [{ href: "/scegli", label: "⇄ Cambia area", key: "academy" }] : []),
       ]
     : [
@@ -50,7 +50,6 @@ export default async function StampeHeader({
         { href: "/stampe/arredo/stampa", label: "Stampa cartelli", key: "stampa" },
         { href: "/stampe/arredo/linee-guida", label: "Linee guida", key: "linee-guida" },
         ...(gestArredo ? [{ href: "/stampe/impostazioni", label: "Impostazioni", key: "impostazioni" }] : []),
-        ...(sites.includes("zoo") ? [{ href: "/stampe/zoo/dati", label: "⇄ Offerte Zoo", key: "zoo" }] : []),
         ...(sites.length > 1 ? [{ href: "/scegli", label: "⇄ Cambia area", key: "academy" }] : []),
       ];
 

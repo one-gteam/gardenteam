@@ -12,7 +12,7 @@ export default function RigaCoda({
 }: {
   id: string;
   scopeParam: string;
-  /** id della pastiglia col numero, da tenere allineata senza ricaricare */
+  /** id (anche più d'uno, separati da virgola) delle pastiglie col numero, da tenere allineate senza ricaricare */
   contatoreId?: string;
   children: ReactNode;
 }) {
@@ -31,8 +31,10 @@ export default function RigaCoda({
           setVia(true);
           /* il numero nel titolo della sezione lo disegna il server: senza
              ricaricare la pagina lo aggiorniamo qui, altrimenti resta indietro */
-          const conta = contatoreId ? document.getElementById(contatoreId) : null;
-          if (conta) conta.textContent = String(Math.max(0, Number(conta.textContent) - 1));
+          for (const cid of (contatoreId ?? "").split(",").filter(Boolean)) {
+            const conta = document.getElementById(cid);
+            if (conta) conta.textContent = String(Math.max(0, Number(conta.textContent) - 1));
+          }
         })}>
         ✕
       </button>
