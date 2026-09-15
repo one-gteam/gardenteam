@@ -166,11 +166,46 @@ export const NO_VOLANTINO = "__no__";
 export const TIPO_BARRATO = "Promo con prezzo barrato";
 export const TIPO_A_SOLI = "Promo senza prezzo barrato";
 export const TIPO_MECCANICA = "Promo a meccanica (3x2)";
-export const ZOO_TIPI_OFFERTA = [TIPO_BARRATO, TIPO_A_SOLI, TIPO_MECCANICA];
+export const TIPO_SCONTO = "Promo a sconto (20%)";
+export const ZOO_TIPI_OFFERTA = [TIPO_BARRATO, TIPO_A_SOLI, TIPO_MECCANICA, TIPO_SCONTO];
+
+/**
+ * La percentuale scritta in un tipo di promozione: "-20%", "sconto 20%", "20 %"
+ * e "20%" diventano tutte "20%". Vuota se non è una percentuale.
+ */
+export function scontoDaTesto(testo: string): string {
+  const m = /(\d{1,2}(?:[.,]\d+)?)\s*%/.exec(testo ?? "");
+  return m ? `${m[1].replace(".", ",")}%` : "";
+}
+
+/**
+ * Lo sconto che va stampato al posto del prezzo, se è quello il caso.
+ *
+ * Succede quando la promozione è una percentuale e non porta un prezzo con sé:
+ * il caso tipico è il file delle promozioni di un punto vendita, dove il codice
+ * "0003" vale "20%" e la colonna del prezzo è vuota — lì il cartello non ha un
+ * prezzo da scrivere, ha uno sconto. Vale anche per il Consorzio, quando la
+ * meccanica dell'offerta è una percentuale e i prezzi non ci sono.
+ */
+export function scontoDiCartello(db: ZooDB, offer: ZooOffer, scope?: Scope, academyDb?: DB): string {
+  const perScope = scope && academyDb && scope.type !== "system";
+  const promoPv = perScope ? pvPromoFor(db, scope, offer.ean, academyDb) : undefined;
+  const tipo = promoPv?.etichetta || offer.meccanica || "";
+  const sconto = scontoDaTesto(tipo);
+  if (!sconto) return "";
+  // se la promozione porta anche un prezzo (il loro, o quello del Consorzio quando
+  // la percentuale è solo del Consorzio), il cartello resta un cartello a prezzo
+  const prezzoPv = perScope ? pvPriceFor(db, scope, offer.ean, academyDb) : undefined;
+  if (prezzoPv || promoPv?.prezzo) return "";
+  if (!promoPv && offer.prezzoPromo) return "";
+  return sconto;
+}
 
 /** Tipologie che descrivono questa offerta: guidano la scelta del layout in stampa. */
 export function tagsOfferta(offer: ZooOffer): string[] {
   const tags: string[] = [];
+  // lo sconto secco del Consorzio è una tipologia sua: vuole un layout senza prezzi
+  if (!offer.prezzoPromo && !offer.prezzoListino && scontoDaTesto(offer.meccanica ?? "")) return [TIPO_SCONTO];
   if (offer.meccanica) tags.push(TIPO_MECCANICA);
   if (offer.prezzoListino) tags.push(TIPO_BARRATO);
   else if (offer.prezzoPromo) tags.push(TIPO_A_SOLI);
@@ -797,7 +832,17 @@ export function tagsPerLayout(db: ZooDB, scope: Scope, academyDb: DB, o: ZooOffe
   const product = db.products.find((p) => p.id === o.productId);
   const parent = product?.parentId ? db.parents.find((x) => x.id === product.parentId) : undefined;
   const promoPv = pvPromoFor(db, scope, o.ean, academyDb);
-  return [...(parent?.caratteristiche ?? []), ...tagsOfferta(o), ...(promoPv ? [promoPv.etichetta] : [])];
+  /*
+   * Il cartello a solo sconto ha una sua tipologia anche quando lo sconto arriva
+   * dal file del punto vendita: così gli si può disegnare un layout apposta,
+   * senza prezzo e col "SCONTO 20%" grande.
+   */
+  const sconto = scontoDiCartello(db, o, scope, academyDb);
+  return [
+    ...(parent?.caratteristiche ?? []),
+    ...(sconto ? [TIPO_SCONTO] : tagsOfferta(o)),
+    ...(promoPv ? [promoPv.etichetta] : []),
+  ];
 }
 
 /**
@@ -840,6 +885,14 @@ export function valoriPerStampa(
    * in gioco il "foglio senza foto" del layout, che dispone gli altri campi
    * nello spazio rimasto libero.
    */
+  /*
+   * Le tre forme del cartello, decise qui una volta sola:
+   * prezzo di partenza + promo → barrato, senza "A SOLI";
+   * solo promo (anche quello del punto vendita) → "A SOLI" sopra al prezzo;
+   * niente prezzi ma uno sconto → "SCONTO 20%" al posto del prezzo.
+   */
+  const promoEPrezzo = (vals.prezzoPromo ?? "").trim().startsWith("€");
+  if (promoEPrezzo && !vals.prezzoListino && sp[`nolistino_${o.id}`] !== "1") vals.prezzoListino = "A SOLI";
   if (sp[`senzafoto_${o.id}`] === "1") delete vals.immagine;
   for (const fid of (sp[`nascondi_${o.id}`] ?? "").split(",").filter(Boolean)) delete vals[fid];
   return vals;
@@ -1071,7 +1124,7 @@ export const ZOO_FIELDS: PrintField[] = [
   { id: "prezzoListino", label: "Prezzo listino (barrato) / «A SOLI»", size: 16, bold: false },
   { id: "prezzoUnita", label: "Prezzo al kg / al litro", size: 11, bold: false },
   { id: "meccanica", label: "Meccanica promo (3x2, 1+1…)", size: 30, bold: true, font: "cn" },
-  { id: "tipoPromo", label: "Tipo promo del punto vendita (10%, A SOLI…)", size: 20, bold: true, font: "cn" },
+  { id: "tipoPromo", label: "Tipo di promozione (3x2, 20%, A SOLI…)", size: 20, bold: true, font: "cn" },
   { id: "label", label: "Etichetta (SOTTOCOSTO, NOVITÀ…)", size: 16, bold: true, font: "cn" },
   { id: "condizioni", label: "Condizioni", size: 11, bold: false },
   { id: "condizioniStandard", label: "Condizioni pronte (da Impostazioni)", size: 11, bold: false },
@@ -1183,6 +1236,22 @@ export function zooCartelloValues(
    * cartelli già impaginati la mostrano senza rifare il layout. Chi preferisce
    * tenerla in un riquadro suo usa il campo "validita", che resta separato.
    */
+  /*
+   * La promozione del punto vendita (dal loro file) vale se il Consorzio non ha
+   * una meccanica per quell'articolo, oppure se il punto vendita ha caricato
+   * anche il proprio prezzo: in quel caso l'offerta è la loro.
+   */
+  const promoPvDato = perScope ? pvPromoFor(db, scope, offer.ean, academyDb) : undefined;
+  const promoPvEtichetta = promoPvDato?.etichetta ?? "";
+  const scontoSecco = scontoDiCartello(db, offer, scope, academyDb);
+  /*
+   * "A SOLI" non è un tipo di promozione da scrivere a parte: è la dicitura che
+   * prende il posto del prezzo barrato quando il prezzo di partenza non c'è, e
+   * la mette già il campo del prezzo di partenza. Se il cartello ha tutti e due
+   * i prezzi non va scritta da nessuna parte.
+   */
+  const tipoTesto = promoPvEtichetta || offer.meccanica || "";
+  const tipoPromoStampato = scontoSecco || /^a\s*soli$/i.test(tipoTesto.trim()) ? "" : tipoTesto;
   const condizioniSalvate = testoOfferta("condizioni");
   const condizioni = (db.settings.condizioniConValidita ?? true) && validita
     ? [condizioniSalvate, validita].filter(Boolean).join(" · ")
@@ -1199,20 +1268,32 @@ export function zooCartelloValues(
     descrizioneArticolo: product?.descrizione ?? "",
     // i listini dei fornitori spesso non hanno la marca: meglio il fornitore che un campo vuoto
     marca: product?.marca || product?.fornitore || "",
-    prezzoPromo: offer.prezzoPromo ? `€ ${offer.prezzoPromo}` : "",
+    /*
+     * Quando l'offerta è il solo sconto — niente prezzo promo, niente prezzo di
+     * partenza — al posto del prezzo si scrive "SCONTO 20%": è quello il numero
+     * che deve saltare all'occhio a scaffale.
+     */
+    prezzoPromo: offer.prezzoPromo ? `€ ${offer.prezzoPromo}` : (scontoSecco ? `SCONTO ${scontoSecco}` : ""),
     /*
      * Senza prezzo di partenza non c'è niente da barrare: al suo posto va la
      * dicitura "A SOLI", che introduce il prezzo promo (Cartello.tsx barra solo
-     * i valori che sono davvero un prezzo).
+     * i valori che sono davvero un prezzo). Sui cartelli a solo sconto non va:
+     * lì il prezzo non c'è proprio.
      */
     prezzoListino: offer.prezzoListino
       ? `€ ${offer.prezzoListino}`
       : offer.prezzoPromo ? "A SOLI" : "",
-    meccanica: offer.meccanica ?? "",
+    meccanica: scontoSecco ? "" : (offer.meccanica ?? ""),
     // prezzo al chilo/litro: sul cartello è obbligatorio per legge sugli alimenti confezionati
     prezzoUnita: prezzoUnitaDi(offer, product, offer.prezzoPromo),
-    // promozione applicata dall'insegna/PV (dal loro file): vuota per il Consorzio
-    tipoPromo: perScope ? (pvPromoFor(db, scope, offer.ean, academyDb)?.etichetta ?? "") : "",
+    /*
+     * Tipo di promozione, uno solo. Vale quella del punto vendita quando c'è (è il
+     * loro file, sono le loro offerte), altrimenti la meccanica del Consorzio.
+     * Non è più un campo a parte "promo del PV": sul cartello ce n'è uno e dice
+     * la promozione buona. Sui cartelli a solo sconto resta vuoto, perché lo
+     * sconto è già scritto al posto del prezzo.
+     */
+    tipoPromo: tipoPromoStampato,
     label: offer.label ?? "",
     condizioni,
     /*

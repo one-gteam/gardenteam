@@ -26,6 +26,18 @@ export function Prezzo({ value, size, scale, font }: { value: string; size: numb
    * i prezzi dell'Arredo arrivano senza simbolo e restano come prima.
    */
   const testo = value.trim();
+  /*
+   * Al posto del prezzo può esserci una scritta — "SCONTO 20%" sui cartelli a
+   * solo sconto: si stampa grande come il prezzo, ma va a capo invece di uscire
+   * dal riquadro, perché non ha centesimi da mettere in apice.
+   */
+  if (testo && !/^[€$£]?\s*\d/.test(testo)) {
+    return (
+      <span style={{ fontFamily: font ?? FONT_CN, fontWeight: 800, lineHeight: 0.95, fontSize: (size * scale) / 2.4, whiteSpace: "pre-line" }}>
+        {testoStampato(testo)}
+      </span>
+    );
+  }
   const valuta = /^[€$£]/.test(testo) ? testo[0] : "";
   const [int, cent] = (valuta ? testo.slice(1).trim() : testo).split(",");
   const fs = (size * scale) / 2.4;

@@ -1540,10 +1540,11 @@ export async function rimettiInCoda(id: string, scopeParam: string) {
 
 /**
  * Rimette fra quelli da stampare i cartelli già stampati: quelli spuntati
- * oppure, se non ne è spuntato nessuno, tutti. Serve quando la stampa è andata
- * male o quando si ristampa lo stesso giro.
+ * oppure, se non ne è spuntato nessuno, tutti quelli di quel formato
+ * (`formatoId` vuoto = tutti). Serve quando la stampa è andata male o quando si
+ * rifà lo stesso giro.
  */
-export async function rimettiInCodaMulti(scopeParam: string, formData: FormData) {
+export async function rimettiInCodaMulti(scopeParam: string, formatoId: string, formData: FormData) {
   const user = await requireZooUser();
   const db = await getZooDb();
   const academyDb = await getDb();
@@ -1552,6 +1553,8 @@ export async function rimettiInCodaMulti(scopeParam: string, formData: FormData)
   for (const c of db.coda) {
     if (c.scopeType !== scope.type || c.scopeId !== scope.id || !c.stampato) continue;
     if (solo.length > 0 && !solo.includes(c.id)) continue;
+    // il pulsante è per formato: senza spunte rimette in coda solo quel giro
+    if (formatoId && (c.impostazioni[`formato_${c.offerId}`] || "za4") !== formatoId) continue;
     delete c.stampato;
   }
   await saveZooDb(db);

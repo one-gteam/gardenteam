@@ -163,6 +163,7 @@ export default async function ZooLayoutPage({
           sampleValues={sampleValues}
           canEdit={canEdit}
           area="zoo"
+          ambiti={scopes.map((sc) => ({ value: `${sc.type}:${sc.id}`, label: sc.label }))}
           images={db.layoutImages
             .filter((li) => li.scopeType === scope.type && li.scopeId === scope.id)
             .map((li) => ({ name: li.name, url: li.url }))}

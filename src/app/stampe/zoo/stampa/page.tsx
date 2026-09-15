@@ -218,6 +218,10 @@ export default async function ZooStampaPage({
   const gruppiFormato = ZOO_FORMATS
     .map((f) => ({ formato: f, voci: codaDopo.filter((c) => formatoDiCoda(c).id === f.id) }))
     .filter((g) => g.voci.length > 0);
+  // anche gli stampati stanno per formato: si rimettono in coda un giro alla volta
+  const gruppiStampati = ZOO_FORMATS
+    .map((f) => ({ formato: f, voci: codaStampati.filter((c) => formatoDiCoda(c).id === f.id) }))
+    .filter((g) => g.voci.length > 0);
   /* Segnalati dal reparto: non conformi (il cartello non torna con lo scaffale)
      ed esclusi (segnati "Non stampare"). Stanno nelle stesse sezioni della coda
      perché sono tutte cose da guardare prima di mandare in stampa. */
@@ -467,23 +471,31 @@ export default async function ZooStampaPage({
                     </summary>
                     <form>
                       <div className="sezione-azioni">
-                        <label className="hint" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-                          <BulkCheckbox name="coda" /> tutti
-                        </label>
-                        <span className="hint">Spunta quelli da rifare (Maiusc+clic per un intervallo): senza spunte li rimette in coda tutti.</span>
-                        <button className="btn btn-sm" type="submit" style={{ marginLeft: "auto" }}
-                          formAction={rimettiInCodaMulti.bind(null, scopeParam)}
-                          title="Riporta fra quelli da stampare i cartelli spuntati, o tutti se non ne spunti nessuno">
-                          Rimetti in coda
-                        </button>
-                        <button className="btn btn-outline btn-sm" type="submit"
+                        <span className="hint">Restano qui per sapere cosa è stato fatto: si rimettono in coda per formato, tutti o solo gli spuntati.</span>
+                        <button className="btn btn-outline btn-sm" type="submit" style={{ marginLeft: "auto" }}
                           formAction={svuotaStampatiCoda.bind(null, scopeParam)}
                           title="Svuota l'elenco degli stampati (i cartelli restano, sparisce solo questo elenco)">
                           Svuota elenco
                         </button>
                       </div>
+                    </form>
+                    {gruppiStampati.map((g) => (
+                    <form key={g.formato.id}>
+                      <div className="sezione-azioni">
+                        <strong style={{ fontSize: 13 }}>{g.formato.name}</strong>
+                        <span className="pill pill-gray">{g.voci.length}</span>
+                        <label className="hint" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                          <BulkCheckbox name="coda" /> tutti
+                        </label>
+                        <span className="hint">Maiusc+clic per un intervallo; senza spunte li rimette in coda tutti.</span>
+                        <button className="btn btn-sm" type="submit" style={{ marginLeft: "auto" }}
+                          formAction={rimettiInCodaMulti.bind(null, scopeParam, g.formato.id)}
+                          title={`Riporta fra quelli da stampare i cartelli ${g.formato.name} spuntati, o tutti quelli di questo formato`}>
+                          Rimetti in coda {g.formato.name}
+                        </button>
+                      </div>
                       <ul className="sezione-elenco">
-                        {codaStampati.map((c) => (
+                        {g.voci.map((c) => (
                           <li key={c.id}>
                             <input type="checkbox" name="coda" value={c.id} title="Spunta per rimetterlo in coda" />
                             <span style={{ flex: 1, minWidth: 0, opacity: 0.75 }}>
@@ -505,6 +517,7 @@ export default async function ZooStampaPage({
                         ))}
                       </ul>
                     </form>
+                    ))}
                   </details>
                 )}
               </details>

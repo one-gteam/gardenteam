@@ -44,6 +44,7 @@ export default function LayoutEditor({
   canEdit,
   images = [],
   area = "arredo",
+  ambiti = [],
 }: {
   format: PrintFormat;
   fields: PrintField[];
@@ -64,6 +65,8 @@ export default function LayoutEditor({
   canEdit: boolean;
   images?: { name: string; url: string }[];
   area?: "arredo" | "zoo"; // dove salvare il layout (default: arredo)
+  /** Insegne/PV a cui chi gestisce può assegnare una copia di questo layout. */
+  ambiti?: { value: string; label: string }[];
 }) {
   const [layoutId, setLayoutId] = useState(initialLayoutId ?? "");
   const [nome, setNome] = useState(initialNome ?? "");
@@ -73,7 +76,15 @@ export default function LayoutEditor({
   // due fogli, due modalità: quello che si vede/trascina è sempre quello attivo
   const [mode, setMode] = useState<"normal" | "noPhoto">("normal");
   const activeItems = mode === "normal" ? items : itemsNoPhoto;
-  const setActiveItems = mode === "normal" ? setItems : setItemsNoPhoto;
+  /*
+   * Si salva da solo, ma solo dopo che qualcuno ha toccato qualcosa. Senza
+   * questa guardia bastava aprire un layout del Consorzio da un'insegna — o
+   * eliminarne uno e ritrovarsi sulla pagina — perché l'autosalvataggio ne
+   * creasse una copia che nessuno aveva chiesto.
+   */
+  const [tocco, setTocco] = useState(false);
+  const setItemsAttivi = mode === "normal" ? setItems : setItemsNoPhoto;
+  const setActiveItems: typeof setItems = (v) => { setTocco(true); setItemsAttivi(v); };
   const [margins, setMargins] = useState<LayoutMargins>(initialMargins ?? { top: 0, right: 0, bottom: 0, left: 0 });
   const [tipologie, setTipologie] = useState<string[]>(initialTipologie);
   const [selected, setSelected] = useState<number | null>(null);
@@ -345,7 +356,7 @@ export default function LayoutEditor({
       skipFirstSave.current = false;
       return;
     }
-    if (!canEdit) return;
+    if (!canEdit || !tocco) return;
     const t = setTimeout(() => doSaveRef.current(), 900);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -361,6 +372,25 @@ export default function LayoutEditor({
         "", format.id, scopeParam, finalName, tipologie.join(","), JSON.stringify(items), JSON.stringify(margins), JSON.stringify(itemsNoPhoto)
       );
       if (res.ok && res.id) window.location.href = `${layoutUrlBase}&layout=${res.id}`;
+    });
+  };
+
+  /*
+   * Assegna il layout a un'insegna o a un punto vendita: ne salva una copia
+   * nell'ambito scelto, che da quel momento vince sul layout del Consorzio per
+   * quei cartelli. L'originale resta dov'è.
+   */
+  const [assegnaA, setAssegnaA] = useState(scopeParam);
+  const doAssegna = () => {
+    if (!canEdit || assegnaA === scopeParam) return;
+    startTransition(async () => {
+      const save = area === "zoo" ? saveZooLayout : saveLayout;
+      const etichetta = ambiti.find((a) => a.value === assegnaA)?.label ?? "";
+      const res = await save(
+        "", format.id, assegnaA, (nome || format.name) + (etichetta ? ` — ${etichetta}` : ""),
+        tipologie.join(","), JSON.stringify(items), JSON.stringify(margins), JSON.stringify(itemsNoPhoto)
+      );
+      if (res.ok && res.id) window.location.href = `/stampe/${area}/layout?formato=${format.id}&scope=${assegnaA}&layout=${res.id}`;
     });
   };
 
@@ -443,6 +473,7 @@ export default function LayoutEditor({
                 onClick={() => {
                   // la foto in stampa qui non c'è comunque: portarsela dietro confonderebbe soltanto
                   const copia = items.filter((it) => !isImageField(it.fieldId));
+                  setTocco(true);
                   setItemsNoPhoto(copia);
                   pushHistory(copia);
                   setSelected(null);
@@ -803,7 +834,7 @@ export default function LayoutEditor({
           <Sezione titolo="Layout">
             <label className="field" style={{ marginBottom: 8 }}>
               Nome
-              <input type="text" value={nome} onChange={(e) => setNome(e.target.value)} placeholder="es. Cartello Gatto" />
+              <input type="text" value={nome} onChange={(e) => { setTocco(true); setNome(e.target.value); }} placeholder="es. Cartello Gatto" />
             </label>
             <label className="field" style={{ marginBottom: 4 }}>
               Duplica come nuovo layout
@@ -828,7 +859,7 @@ export default function LayoutEditor({
                     <input
                       type="number" step={passo} min={0} value={inUnita(margins[lato])}
                       onChange={(e) =>
-                        setMargins((m) => ({ ...m, [lato]: Math.max(0, Math.min(100, daUnita(e.target.value))) }))
+                        { setTocco(true); setMargins((m) => ({ ...m, [lato]: Math.max(0, Math.min(100, daUnita(e.target.value))) })); }
                       }
                     />
                   </label>
@@ -860,7 +891,7 @@ export default function LayoutEditor({
                       checked={tipologie.includes(t)}
                       disabled={!canEdit}
                       onChange={(e) =>
-                        setTipologie((prev) => (e.target.checked ? [...prev, t] : prev.filter((x) => x !== t)))
+                        { setTocco(true); setTipologie((prev) => (e.target.checked ? [...prev, t] : prev.filter((x) => x !== t))); }
                       }
                     />
                     {t}
@@ -878,7 +909,7 @@ export default function LayoutEditor({
                   checked={tipologie.includes(t)}
                   disabled={!canEdit}
                   onChange={(e) =>
-                    setTipologie((prev) => (e.target.checked ? [...prev, t] : prev.filter((x) => x !== t)))
+                    { setTocco(true); setTipologie((prev) => (e.target.checked ? [...prev, t] : prev.filter((x) => x !== t))); }
                   }
                 />
                 {t}
@@ -887,6 +918,23 @@ export default function LayoutEditor({
           </div>
         </Sezione>
           </div>
+        {canEdit && ambiti.length > 1 && (
+          <div className="panel-layout">
+            <Sezione titolo="Assegna a un'insegna / punto vendita">
+              <p style={{ fontSize: 12, color: "var(--muted)", margin: "0 0 8px" }}>
+                Ne salva una copia per l&apos;ambito scelto: da lì in poi quei cartelli usano questo layout
+                invece di quello del Consorzio. L&apos;originale resta dov&apos;è.
+              </p>
+              <select value={assegnaA} onChange={(e) => setAssegnaA(e.target.value)} style={{ marginTop: 0 }}>
+                {ambiti.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
+              </select>
+              <button type="button" className="btn btn-sm" style={{ width: "100%", marginTop: 8 }}
+                disabled={pending || assegnaA === scopeParam} onClick={doAssegna}>
+                Assegna una copia
+              </button>
+            </Sezione>
+          </div>
+        )}
         {canEdit ? (
           <div className="panel-layout">
             <p style={{ fontSize: 11.5, color: "var(--muted)", margin: "14px 0 6px", textAlign: "center" }}>
