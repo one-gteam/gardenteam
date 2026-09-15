@@ -7,7 +7,8 @@ import { randomBytes, scryptSync, timingSafeEqual } from "crypto";
 import { getDb, saveDb } from "./db";
 import { uploadPublicFile } from "./supabase";
 import { mailerConfig, sendMail } from "./mailer";
-import { AUTH_COOKIE, requireUser } from "./auth";
+import { verifySsoToken } from "./sso";
+import { AUTH_COOKIE, OPZIONI_SESSIONE, requireUser, valoreSessione } from "./auth";
 import { assignableRolesFor, canManageUsers, coursesForUser, courseVisibleTo, dueDate, getProgress, hasStartedCourse, isCourseCompleted, pathsForUser } from "./logic";
 import {
   Course, CourseLevel, CourseSession, DB, DEFAULT_HOME_BLOCKS, DEFAULT_REMINDER_RULES, DEFAULT_WATCH_THRESHOLD,
@@ -147,56 +148,6 @@ function canSendStage(db: DB, user: User, type: EmailType, rule: ReminderRule, s
   return daysSince(previous[previous.length - 1].date) >= rule.intervalDays;
 }
 
-/**
- * Login/iscrizione via SSO da My Rosaflor: se l'email non esiste ancora la
- * crea (reparto abbinato per nome, insegna/PV di default configurati in
- * Organizzazione → Consorzio), altrimenti fa accedere l'account esistente.
- * La verifica del token (firma/scadenza) avviene nella route /sso, PRIMA di
- * chiamare questa funzione: qui i dati sono già considerati fidati.
- */
-export async function provisionSsoUser(payload: {
-  email: string;
-  nome: string;
-  cognome: string;
-  reparto?: string;
-  assunzione?: string;
-}): Promise<{ ok: true; userId: string } | { ok: false; reason: "disattivato" }> {
-  const db = await getDb();
-  const email = payload.email.toLowerCase().trim();
-  let user = db.users.find((u) => u.email.toLowerCase() === email);
-
-  if (!user) {
-    const dept = payload.reparto
-      ? db.departments.find((d) => d.name.toLowerCase() === payload.reparto!.toLowerCase())
-      : undefined;
-    // senza data di assunzione nota, un anno fa: non deve risultare "neoassunto" per errore
-    const unAnnoFa = new Date(Date.now() - 366 * 86400000).toISOString().slice(0, 10);
-    user = {
-      id: `u_sso_${Date.now()}`,
-      firstName: payload.nome || "Collaboratore",
-      lastName: payload.cognome || "",
-      email,
-      role: "student",
-      sites: ["academy"], // arriva da My Rosaflor per la formazione: quella area, non altre
-      tenantId: db.settings.ssoDefaultTenantId,
-      storeId: db.settings.ssoDefaultStoreId,
-      departmentId: dept?.id,
-      jobTitle: payload.reparto,
-      hireDate: /^\d{4}-\d{2}-\d{2}$/.test(payload.assunzione ?? "") ? payload.assunzione! : unAnnoFa,
-      points: 0,
-      badges: [],
-      active: true,
-    };
-    db.users.push(user);
-    await queueEmail(db, user, "benvenuto");
-    await notifyNewAssignments(db, user);
-    await saveDb(db);
-  }
-
-  if (!user.active) return { ok: false, reason: "disattivato" };
-  return { ok: true, userId: user.id };
-}
-
 export async function saveSsoDefaults(formData: FormData) {
   const admin = await requireUser();
   if (admin.role !== "system_admin") redirect("/admin");
@@ -247,6 +198,59 @@ async function requireEditableCourse(courseId: string) {
   const course = db.courses.find((c) => c.id === courseId);
   if (!course || !canEditCourse(admin, course)) redirect("/admin/corsi");
   return { admin, db, course: course! };
+}
+
+/**
+ * Login/iscrizione via SSO da My Rosaflor: se l'email non esiste ancora la
+ * crea (reparto abbinato per nome, insegna/PV di default configurati in
+ * Organizzazione → Consorzio), altrimenti fa accedere l'account esistente.
+ * La verifica del token (firma/scadenza) avviene nella route /sso, PRIMA di
+ * chiamare questa funzione: qui i dati sono già considerati fidati.
+ */
+export async function provisionSsoUser(
+  token: string
+): Promise<{ ok: true; userId: string } | { ok: false; reason: "disattivato" | "token" }> {
+  /*
+   * Il token si verifica QUI, non solo nella route: essendo un'azione server è
+   * richiamabile dal browser come tutte le altre, e senza questo controllo
+   * bastava conoscere un'email per farsi creare (o restituire) un account.
+   */
+  const payload = verifySsoToken(token);
+  if (!payload) return { ok: false, reason: "token" };
+  const db = await getDb();
+  const email = payload.email.toLowerCase().trim();
+  let user = db.users.find((u) => u.email.toLowerCase() === email);
+
+  if (!user) {
+    const dept = payload.reparto
+      ? db.departments.find((d) => d.name.toLowerCase() === payload.reparto!.toLowerCase())
+      : undefined;
+    // senza data di assunzione nota, un anno fa: non deve risultare "neoassunto" per errore
+    const unAnnoFa = new Date(Date.now() - 366 * 86400000).toISOString().slice(0, 10);
+    user = {
+      id: `u_sso_${Date.now()}`,
+      firstName: payload.nome || "Collaboratore",
+      lastName: payload.cognome || "",
+      email,
+      role: "student",
+      sites: ["academy"], // arriva da My Rosaflor per la formazione: quella area, non altre
+      tenantId: db.settings.ssoDefaultTenantId,
+      storeId: db.settings.ssoDefaultStoreId,
+      departmentId: dept?.id,
+      jobTitle: payload.reparto,
+      hireDate: /^\d{4}-\d{2}-\d{2}$/.test(payload.assunzione ?? "") ? payload.assunzione! : unAnnoFa,
+      points: 0,
+      badges: [],
+      active: true,
+    };
+    db.users.push(user);
+    await queueEmail(db, user, "benvenuto");
+    await notifyNewAssignments(db, user);
+    await saveDb(db);
+  }
+
+  if (!user.active) return { ok: false, reason: "disattivato" };
+  return { ok: true, userId: user.id };
 }
 
 export async function logout() {
@@ -1809,7 +1813,7 @@ export async function loginWithPassword(formData: FormData) {
   }
   if (user!.active === false) redirect("/login?disattivato=1");
   const store = await cookies();
-  store.set(AUTH_COOKIE, user!.id, { httpOnly: true, sameSite: "lax", path: "/" });
+  store.set(AUTH_COOKIE, valoreSessione(user!.id), OPZIONI_SESSIONE);
   redirect(postLoginPath(user!));
 }
 

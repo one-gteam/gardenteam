@@ -1,13 +1,55 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { createHmac, timingSafeEqual } from "crypto";
 import { getDb } from "./db";
 import { postLoginPath, SiteId, User, userSites } from "./types";
 
 const COOKIE = "agt_user";
 
+/*
+ * Il biscotto di sessione porta l'id dell'utente FIRMATO con un segreto del
+ * server. Prima portava l'id nudo: e gli id degli utenti si leggono in giro per
+ * l'applicazione (elenchi, moduli), quindi bastava copiarne uno nel proprio
+ * biscotto per diventare quella persona. Con la firma un id da solo non apre
+ * più niente.
+ */
+function segretoSessione(): string {
+  return process.env.AUTH_COOKIE_SECRET || process.env.SSO_SHARED_SECRET || "";
+}
+
+/** Il valore da scrivere nel biscotto: id più firma. */
+export function valoreSessione(userId: string): string {
+  const segreto = segretoSessione();
+  if (!segreto) return userId; // ambiente senza segreto configurato: come prima
+  return `${userId}.${createHmac("sha256", segreto).update(userId).digest("base64url")}`;
+}
+
+/** L'id dentro al biscotto, solo se la firma torna. */
+function idDaBiscotto(valore: string): string | null {
+  const segreto = segretoSessione();
+  if (!segreto) return valore;
+  const punto = valore.lastIndexOf(".");
+  if (punto <= 0) return null; // biscotto senza firma: non vale più
+  const id = valore.slice(0, punto);
+  const firma = Buffer.from(valore.slice(punto + 1));
+  const attesa = Buffer.from(createHmac("sha256", segreto).update(id).digest("base64url"));
+  if (firma.length !== attesa.length || !timingSafeEqual(firma, attesa)) return null;
+  return id;
+}
+
+/** Come si scrive il biscotto: solo server, solo https in produzione, un mese. */
+export const OPZIONI_SESSIONE = {
+  httpOnly: true as const,
+  sameSite: "lax" as const,
+  path: "/",
+  secure: process.env.NODE_ENV === "production",
+  maxAge: 60 * 60 * 24 * 30,
+};
+
 export async function getCurrentUser(): Promise<User | null> {
   const store = await cookies();
-  const id = store.get(COOKIE)?.value;
+  const valore = store.get(COOKIE)?.value;
+  const id = valore ? idDaBiscotto(valore) : null;
   if (!id) return null;
   const db = await getDb();
   const user = db.users.find((u) => u.id === id) ?? null;

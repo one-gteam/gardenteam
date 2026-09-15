@@ -52,15 +52,24 @@ export const dynamic = "force-dynamic";
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const { settings } = await getDb();
+  /*
+   * I due colori finiscono dentro a un <style>: si accettano solo colori
+   * esadecimali, altrimenti un testo qualunque salvato in Impostazioni
+   * uscirebbe dal foglio di stile e potrebbe iniettare codice nella pagina.
+   */
+  const colore = (v: string | undefined, difetto: string) =>
+    /^#[0-9a-fA-F]{3,8}$/.test((v ?? "").trim()) ? (v as string).trim() : difetto;
+  const colorPrimary = colore(settings.colorPrimary, "#00652e");
+  const colorAccent = colore(settings.colorAccent, "#8dc63f");
   // Palette derivata dai due colori del consorzio, applicata a tutto il portale
   const themeVars = `
     :root {
-      --green-700: ${settings.colorPrimary};
-      --green-600: color-mix(in srgb, ${settings.colorPrimary} 82%, #2fae5e);
-      --green-900: color-mix(in srgb, ${settings.colorPrimary} 55%, black);
-      --green-500: ${settings.colorAccent};
-      --green-100: color-mix(in srgb, ${settings.colorAccent} 24%, white);
-      --green-50: color-mix(in srgb, ${settings.colorAccent} 11%, white);
+      --green-700: ${colorPrimary};
+      --green-600: color-mix(in srgb, ${colorPrimary} 82%, #2fae5e);
+      --green-900: color-mix(in srgb, ${colorPrimary} 55%, black);
+      --green-500: ${colorAccent};
+      --green-100: color-mix(in srgb, ${colorAccent} 24%, white);
+      --green-50: color-mix(in srgb, ${colorAccent} 11%, white);
     }
   `;
   // Il font scelto in Impostazioni sostituisce Inter solo per il testo: i titoli

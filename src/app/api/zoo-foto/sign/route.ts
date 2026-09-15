@@ -20,10 +20,27 @@ export async function POST(req: NextRequest) {
     : [];
   if (fileNames.length === 0) return NextResponse.json({ urls: [] });
 
+  /*
+   * Il nome del file finisce in un percorso dello storage e l'URL firmato
+   * permette di sovrascrivere: senza ripulirlo, un nome come
+   * "../scorm/pacchetto/index.html" avrebbe dato il permesso di scrivere fuori
+   * dalle foto. Si tiene solo il nome, con caratteri sicuri e un'estensione
+   * d'immagine.
+   */
+  const ESTENSIONI = ["jpg", "jpeg", "png", "webp", "gif", "avif"];
+  const nomeSicuro = (nome: string): string | null => {
+    const solo = nome.split(/[\\/]/).pop() ?? "";
+    const pulito = solo.replace(/[^A-Za-z0-9._-]/g, "_").replace(/^\.+/, "").slice(0, 120);
+    const ext = pulito.split(".").pop()?.toLowerCase() ?? "";
+    return pulito.includes(".") && ESTENSIONI.includes(ext) ? pulito : null;
+  };
+
   const urls = await Promise.all(
     fileNames.map(async (fileName) => {
+      const sicuro = nomeSicuro(fileName);
+      if (!sicuro) return { fileName, signedUrl: null };
       try {
-        const signedUrl = await createSignedUploadUrl(`zoo-foto/${fileName}`);
+        const signedUrl = await createSignedUploadUrl(`zoo-foto/${sicuro}`);
         return { fileName, signedUrl };
       } catch {
         return { fileName, signedUrl: null };

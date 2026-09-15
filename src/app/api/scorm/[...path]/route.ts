@@ -32,11 +32,17 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ path: strin
   if (!user || !userSites(user).includes("academy")) return new NextResponse("Non autorizzato", { status: 403 });
 
   const { path } = await ctx.params;
-  // deve iniziare con "scorm/…": non si serve altro dal bucket
-  if (path[0] !== "scorm" || path.some((p) => p === "..")) {
-    return new NextResponse("Percorso non valido", { status: 400 });
-  }
-  const storagePath = path.map((p) => decodeURIComponent(p)).join("/");
+  /*
+   * Prima si decodifica e poi si controlla: controllando i pezzi ancora
+   * codificati, un "%2e%2e" passava il filtro e diventava ".." nel percorso,
+   * uscendo dalla cartella dei pacchetti.
+   */
+  const pezzi = path.map((p) => { try { return decodeURIComponent(p); } catch { return p; } });
+  const valido = pezzi.length > 0
+    && pezzi[0] === "scorm"
+    && pezzi.every((p) => p.length > 0 && p !== "." && p !== ".." && !p.includes("/") && !p.includes("\\"));
+  if (!valido) return new NextResponse("Percorso non valido", { status: 400 });
+  const storagePath = pezzi.join("/");
 
   const upstream = await fetch(publicUrlFor(storagePath));
   if (!upstream.ok || !upstream.body) return new NextResponse("File non trovato", { status: 404 });

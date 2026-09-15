@@ -29,7 +29,13 @@ async function requireZooUser() {
 
 function backUrl(page: string, scopeParam: string, extra: Record<string, string> = {}) {
   // `page` puo' gia' portarsi dietro dei parametri (es. "...?abbina=1"): si uniscono, non si sovrascrivono
-  const [percorso, suoi] = page.split("?");
+  const [grezzo, suoi] = page.split("?");
+  /*
+   * Il "torna a" arriva dai parametri dell'azione, quindi dal browser: se non
+   * si controlla, qualcuno può farsi rimandare fuori dal sito. Vale solo un
+   * percorso interno.
+   */
+  const percorso = grezzo.startsWith("/") && !grezzo.startsWith("//") ? grezzo : "/stampe/zoo/stampa";
   const qs = new URLSearchParams(suoi ?? "");
   for (const [k, v] of Object.entries({ scope: scopeParam, ...extra })) qs.set(k, v);
   return `${percorso}?${qs.toString()}`;

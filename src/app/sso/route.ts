@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { AUTH_COOKIE } from "@/lib/auth";
+import { AUTH_COOKIE, OPZIONI_SESSIONE, valoreSessione } from "@/lib/auth";
 import { verifySsoToken } from "@/lib/sso";
 import { provisionSsoUser } from "@/lib/actions";
 import { getDb } from "@/lib/db";
@@ -17,13 +17,13 @@ export async function GET(req: NextRequest) {
   const payload = verifySsoToken(token);
   if (!payload) return NextResponse.redirect(new URL("/login?errore=sso", req.url));
 
-  const result = await provisionSsoUser(payload);
+  const result = await provisionSsoUser(token);
   if (!result.ok) return NextResponse.redirect(new URL("/login?errore=disattivato", req.url));
 
   const db = await getDb();
   const user = db.users.find((u) => u.id === result.userId)!;
 
   const store = await cookies();
-  store.set(AUTH_COOKIE, user.id, { httpOnly: true, sameSite: "lax", path: "/" });
+  store.set(AUTH_COOKIE, valoreSessione(user.id), OPZIONI_SESSIONE);
   return NextResponse.redirect(new URL(postLoginPath(user), req.url));
 }
