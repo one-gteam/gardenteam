@@ -5,6 +5,8 @@ import { Fragment } from "react";
 import BulkCheckbox from "@/components/stampe/BulkCheckbox";
 import { DettagliPadre, PannelloPadre } from "@/components/stampe/DettagliPadre";
 import RigaCoda from "@/components/stampe/RigaCoda";
+import RigaAzione from "@/components/stampe/RigaAzione";
+import ColonnaOrdinabile from "@/components/stampe/ColonnaOrdinabile";
 import FiltriMobile from "@/components/FiltriMobile";
 import StampeHeader from "@/components/stampe/StampeHeader";
 import Cartello from "@/components/stampe/Cartello";
@@ -19,8 +21,9 @@ import {
 } from "@/lib/zoo";
 import {
   importPvPricesRighe, markZooPrinted, resetZooPrinted, toggleZooHidden, importZooNoPrintRighe, svuotaZooNoPrint,
-  togliNonConforme, toggleZooNoPrint, rimettiInCoda, rimettiInCodaMulti, svuotaStampatiCoda, rimettiInStampaMulti,
-  creaOffertaPropria, eliminaOffertaPropria, stampaCoda, segnaArrivato,
+  toggleZooNoPrint, rimettiInCodaMulti, svuotaStampatiCoda, rimettiInStampaMulti,
+  rimettiInCodaInline, segnaArrivatoInline, togliNonConformeInline, rimettiInStampaInline,
+  creaOffertaPropria, eliminaOffertaPropria, stampaCoda,
 } from "@/lib/zoo-actions";
 
 /** Stampa cartelli Offerte Zoo: stesso impianto dell'Arredo (selezione, formati per riga, stampa 1:1). */
@@ -235,15 +238,6 @@ export default async function ZooStampaPage({
         : r.nome;
     return [...righe].sort((a, b) => chiave(a).localeCompare(chiave(b)) || a.nome.localeCompare(b.nome));
   };
-  /** Intestazione di colonna che ordina l'elenco (riclicca per tornare all'ordine naturale). */
-  const ordHref = (campo: string) => {
-    const params = new URLSearchParams(Object.entries(sp).filter(([, v]) => v) as [string, string][]);
-    if (ordCoda === campo) params.delete("ordcoda"); else params.set("ordcoda", campo);
-    return `/stampe/zoo/stampa?${params.toString()}`;
-  };
-  const Col = ({ campo, children }: { campo: string; children: React.ReactNode }) => (
-    <th><a href={ordHref(campo)} title="Ordina per questa colonna" style={{ color: "inherit" }}>{children}{ordCoda === campo ? " ▾" : ""}</a></th>
-  );
   const codaMia = db.coda
     .filter((c) => c.scopeType === scope.type && c.scopeId === scope.id)
     .map((c) => ({ ...c, ...datiCartello(c.offerId) }));
@@ -260,10 +254,24 @@ export default async function ZooStampaPage({
   const gruppiFormato = ZOO_FORMATS
     .map((f) => ({ formato: f, voci: ordinaCoda(codaDopo.filter((c) => formatoDiCoda(c).id === f.id)) }))
     .filter((g) => g.voci.length > 0);
-  // anche gli stampati stanno per formato: si rimettono in coda un giro alla volta
-  const gruppiStampati = ZOO_FORMATS
-    .map((f) => ({ formato: f, voci: ordinaCoda(codaStampati.filter((c) => formatoDiCoda(c).id === f.id)) }))
-    .filter((g) => g.voci.length > 0);
+  /*
+   * Gli stampati stanno per lotto di stampa: un lotto è un giro in stampante,
+   * cioè tutti i cartelli mandati insieme in quell'ora precisa. Dentro al lotto
+   * il formato resta una colonna, ordinabile come le altre.
+   */
+  const lottiStampati = [...new Set(codaStampati.map((c) => c.stampato ?? ""))]
+    .sort((a, b) => b.localeCompare(a))
+    .map((iso) => {
+      const voci = ordinaCoda(codaStampati.filter((c) => (c.stampato ?? "") === iso));
+      const formati = [...new Set(voci.map((c) => formatoDiCoda(c).name))];
+      return { iso, voci, formati };
+    });
+  const quando = (iso: string) => {
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime())
+      ? "data sconosciuta"
+      : `${d.toLocaleDateString("it-IT")} alle ${d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}`;
+  };
   /* Segnalati dal reparto: non conformi (il cartello non torna con lo scaffale)
      ed esclusi (segnati "Non stampare"). Stanno nelle stesse sezioni della coda
      perché sono tutte cose da guardare prima di mandare in stampa. */
@@ -479,7 +487,7 @@ export default async function ZooStampaPage({
               <details className="sezione" open>
                 <summary>
                   <strong>Da stampare più tardi</strong> <span className="pill pill-orange" id="conta-dopo">{codaDopo.length}</span>
-                  {codaStampati.length > 0 && <span className="pill pill-gray">{codaStampati.length} stampati</span>}
+                  {codaStampati.length > 0 && <span className="pill pill-gray"><span id="conta-stampati">{codaStampati.length}</span> stampati</span>}
                 </summary>
 
                 {gruppiFormato.map((g) => (
@@ -503,11 +511,11 @@ export default async function ZooStampaPage({
                         <thead>
                           <tr>
                             <th style={{ width: 28 }}><BulkCheckbox name="coda" /></th>
-                            <Col campo="nome">Prodotto</Col>
-                            <Col campo="marca">Marca</Col>
-                            <Col campo="fornitore">Fornitore</Col>
-                            <Col campo="animale">Animale</Col>
-                            <Col campo="promo">Promo</Col>
+                            <ColonnaOrdinabile campo="nome">Prodotto</ColonnaOrdinabile>
+                            <ColonnaOrdinabile campo="marca">Marca</ColonnaOrdinabile>
+                            <ColonnaOrdinabile campo="fornitore">Fornitore</ColonnaOrdinabile>
+                            <ColonnaOrdinabile campo="animale">Animale</ColonnaOrdinabile>
+                            <ColonnaOrdinabile campo="promo">Promo</ColonnaOrdinabile>
                             <th>Messo da</th>
                             <th></th>
                           </tr>
@@ -515,7 +523,8 @@ export default async function ZooStampaPage({
                         <tbody>
                           {g.voci.map((c) => (
                             <Fragment key={c.id}>
-                              <RigaCoda id={c.id} scopeParam={scopeParam} contatoreId={`conta-dopo,conta-${g.formato.id}`} tabella>
+                              <RigaCoda id={c.id} scopeParam={scopeParam} contatoreId={`conta-dopo,conta-${g.formato.id}`} tabella
+                                dati={{ nome: c.nome, marca: c.marca, fornitore: c.fornitore, animale: c.animale, promo: c.promo }}>
                                 <td><input type="checkbox" name="coda" value={c.id} title="Spunta per stampare solo alcuni" /></td>
                                 <td>
                                   {c.nome}
@@ -548,7 +557,7 @@ export default async function ZooStampaPage({
                     </summary>
                     <form>
                       <div className="sezione-azioni">
-                        <span className="hint">Restano qui per sapere cosa è stato fatto: si rimettono in coda per formato, tutti o solo gli spuntati.</span>
+                        <span className="hint">Restano qui divisi per lotto di stampa, cioè per giro mandato in stampante: si rimettono in coda tutti, per lotto o solo gli spuntati.</span>
                         <button className="btn btn-outline btn-sm" type="submit" style={{ marginLeft: "auto" }}
                           formAction={svuotaStampatiCoda.bind(null, scopeParam)}
                           title="Svuota l'elenco degli stampati (i cartelli restano, sparisce solo questo elenco)">
@@ -556,58 +565,67 @@ export default async function ZooStampaPage({
                         </button>
                       </div>
                     </form>
-                    {gruppiStampati.map((g) => (
-                      <form key={g.formato.id}>
-                        <div className="sezione-azioni">
-                          <strong style={{ fontSize: 13 }}>{g.formato.name}</strong>
-                          <span className="pill pill-gray">{g.voci.length}</span>
-                          <span className="hint">Maiusc+clic per un intervallo; senza spunte li rimette in coda tutti.</span>
-                          <button className="btn btn-sm" type="submit" style={{ marginLeft: "auto" }}
-                            formAction={rimettiInCodaMulti.bind(null, scopeParam, g.formato.id)}
-                            title={`Riporta fra quelli da stampare i cartelli ${g.formato.name} spuntati, o tutti quelli di questo formato`}>
-                            Rimetti in coda {g.formato.name}
-                          </button>
-                        </div>
-                        <div className="table-wrap">
-                          <table className="data">
-                            <thead>
-                              <tr>
-                                <th style={{ width: 28 }}><BulkCheckbox name="coda" /></th>
-                                <Col campo="nome">Prodotto</Col>
-                                <Col campo="marca">Marca</Col>
-                                <Col campo="fornitore">Fornitore</Col>
-                                <Col campo="animale">Animale</Col>
-                                <Col campo="promo">Promo</Col>
-                                <th>Stampato</th>
-                                <th></th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {g.voci.map((c) => (
-                                <tr key={c.id}>
-                                  <td><input type="checkbox" name="coda" value={c.id} title="Spunta per rimetterlo in coda" /></td>
-                                  <td style={{ opacity: 0.8 }}>{c.nome}</td>
-                                  <td>{c.marca}</td>
-                                  <td>{c.fornitore}</td>
-                                  <td>{c.animale}</td>
-                                  <td>{c.promo}</td>
-                                  <td className="hint">
-                                    {new Date(c.stampato ?? c.creato).toLocaleDateString("it-IT")} · {c.userName}
-                                    {c.stato === "arrivo" ? " · era in arrivo" : ""}
-                                  </td>
-                                  <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                                    <button className="btn btn-outline btn-sm" type="submit"
-                                      formAction={rimettiInCoda.bind(null, c.id, scopeParam)}
-                                      title="La stampa è andata male: rimettilo fra quelli da stampare">
-                                      Rimetti
-                                    </button>
-                                  </td>
+                    {lottiStampati.map((l, idx) => (
+                      <details key={l.iso || idx} className="sezione" open={idx === 0}>
+                        <summary>
+                          <strong>Stampati il {quando(l.iso)}</strong>
+                          <span className="pill pill-gray">{l.voci.length}</span>
+                          <span className="hint">{l.formati.join(" · ")}</span>
+                        </summary>
+                        <form>
+                          <div className="sezione-azioni">
+                            <label className="hint" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                              <BulkCheckbox name="coda" /> tutti
+                            </label>
+                            <span className="hint">Maiusc+clic per un intervallo; senza spunte rimette in coda tutto il lotto.</span>
+                            <button className="btn btn-sm" type="submit" style={{ marginLeft: "auto" }}
+                              formAction={rimettiInCodaMulti.bind(null, scopeParam, "", l.iso)}
+                              title="Riporta fra quelli da stampare i cartelli spuntati, o tutto questo lotto">
+                              Rimetti in coda il lotto
+                            </button>
+                          </div>
+                          <div className="table-wrap">
+                            <table className="data">
+                              <thead>
+                                <tr>
+                                  <th style={{ width: 28 }}><BulkCheckbox name="coda" /></th>
+                                  <ColonnaOrdinabile campo="nome">Prodotto</ColonnaOrdinabile>
+                                  <ColonnaOrdinabile campo="marca">Marca</ColonnaOrdinabile>
+                                  <ColonnaOrdinabile campo="fornitore">Fornitore</ColonnaOrdinabile>
+                                  <ColonnaOrdinabile campo="animale">Animale</ColonnaOrdinabile>
+                                  <ColonnaOrdinabile campo="promo">Promo</ColonnaOrdinabile>
+                                  <ColonnaOrdinabile campo="formato">Formato</ColonnaOrdinabile>
+                                  <th>Stampato da</th>
+                                  <th></th>
                                 </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </form>
+                              </thead>
+                              <tbody>
+                                {l.voci.map((c) => (
+                                  <tr key={c.id}
+                                    data-nome={c.nome} data-marca={c.marca} data-fornitore={c.fornitore}
+                                    data-animale={c.animale} data-promo={c.promo} data-formato={formatoDiCoda(c).name}>
+                                    <td><input type="checkbox" name="coda" value={c.id} title="Spunta per rimetterlo in coda" /></td>
+                                    <td style={{ opacity: 0.8 }}>{c.nome}</td>
+                                    <td>{c.marca}</td>
+                                    <td>{c.fornitore}</td>
+                                    <td>{c.animale}</td>
+                                    <td>{c.promo}</td>
+                                    <td>{formatoDiCoda(c).name}</td>
+                                    <td className="hint">
+                                      {c.userName}{c.stato === "arrivo" ? " · era in arrivo" : ""}
+                                    </td>
+                                    <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                                      <RigaAzione azione={rimettiInCodaInline.bind(null, c.id, scopeParam)}
+                                        etichetta="Rimetti" contatoreId="conta-stampati"
+                                        titolo="La stampa è andata male: rimettilo fra quelli da stampare" />
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </form>
+                      </details>
                     ))}
                   </details>
                 )}
@@ -622,11 +640,11 @@ export default async function ZooStampaPage({
                     <table className="data">
                       <thead>
                         <tr>
-                          <Col campo="nome">Prodotto</Col>
-                          <Col campo="marca">Marca</Col>
-                          <Col campo="fornitore">Fornitore</Col>
-                          <Col campo="animale">Animale</Col>
-                          <Col campo="promo">Promo</Col>
+                          <ColonnaOrdinabile campo="nome">Prodotto</ColonnaOrdinabile>
+                          <ColonnaOrdinabile campo="marca">Marca</ColonnaOrdinabile>
+                          <ColonnaOrdinabile campo="fornitore">Fornitore</ColonnaOrdinabile>
+                          <ColonnaOrdinabile campo="animale">Animale</ColonnaOrdinabile>
+                          <ColonnaOrdinabile campo="promo">Promo</ColonnaOrdinabile>
                           <th>Formato</th>
                           <th>Segnato da</th>
                           <th></th>
@@ -635,7 +653,8 @@ export default async function ZooStampaPage({
                       </thead>
                       <tbody>
                         {ordinaCoda(codaArrivo).map((c) => (
-                          <RigaCoda key={c.id} id={c.id} scopeParam={scopeParam} contatoreId="conta-arrivo" tabella>
+                          <RigaCoda key={c.id} id={c.id} scopeParam={scopeParam} contatoreId="conta-arrivo" tabella
+                            dati={{ nome: c.nome, marca: c.marca, fornitore: c.fornitore, animale: c.animale, promo: c.promo }}>
                             <td>{c.nome}</td>
                             <td>{c.marca}</td>
                             <td>{c.fornitore}</td>
@@ -644,10 +663,9 @@ export default async function ZooStampaPage({
                             <td>{formatoDiCoda(c).name}</td>
                             <td className="hint">{new Date(c.creato).toLocaleDateString("it-IT")} · {c.userName}</td>
                             <td style={{ whiteSpace: "nowrap" }}>
-                              <button className="btn btn-outline btn-sm" type="submit" formAction={segnaArrivato.bind(null, c.id, scopeParam)}
-                                title="La merce è arrivata: passa fra quelli da stampare">
-                                Arrivata
-                              </button>
+                              <RigaAzione azione={segnaArrivatoInline.bind(null, c.id, scopeParam)}
+                                etichetta="Arrivata" contatoreId="conta-arrivo"
+                                titolo="La merce è arrivata: passa fra quelli da stampare" />
                             </td>
                           </RigaCoda>
                         ))}
@@ -666,10 +684,10 @@ export default async function ZooStampaPage({
                     <table className="data">
                       <thead>
                         <tr>
-                          <Col campo="nome">Prodotto</Col>
+                          <ColonnaOrdinabile campo="nome">Prodotto</ColonnaOrdinabile>
                           <th>Articolo</th>
-                          <Col campo="marca">Marca</Col>
-                          <Col campo="animale">Animale</Col>
+                          <ColonnaOrdinabile campo="marca">Marca</ColonnaOrdinabile>
+                          <ColonnaOrdinabile campo="animale">Animale</ColonnaOrdinabile>
                           <th>Motivo</th>
                           <th>Segnalato da</th>
                           <th></th>
@@ -678,7 +696,8 @@ export default async function ZooStampaPage({
                       <tbody>
                         {nonConformiOrdinati.map((n) => (
                           <Fragment key={n.id}>
-                            <tr>
+                            <tr data-nome={n.nome} data-marca={n.marca} data-fornitore={n.fornitore}
+                              data-animale={n.animale} data-promo={n.promo}>
                               <td>
                                 {n.nome}
                                 {n.parentId && <> <DettagliPadre parentId={n.parentId} /></>}
@@ -689,11 +708,8 @@ export default async function ZooStampaPage({
                               <td>{n.motivo ? <em>«{n.motivo}»</em> : ""}</td>
                               <td className="hint">{new Date(n.at).toLocaleDateString("it-IT")} · {n.userName}</td>
                               <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                                <button className="btn btn-outline btn-sm" type="submit"
-                                  formAction={togliNonConforme.bind(null, n.offerId, scopeParam, "/stampe/zoo/stampa")}
-                                  title="Il cartello è stato sistemato: togli la segnalazione">
-                                  Sistemato
-                                </button>
+                                <RigaAzione azione={togliNonConformeInline.bind(null, n.offerId, scopeParam)}
+                                  etichetta="Sistemato" titolo="Il cartello è stato sistemato: togli la segnalazione" />
                               </td>
                             </tr>
                             {n.parentId && (
@@ -727,19 +743,20 @@ export default async function ZooStampaPage({
                       <thead>
                         <tr>
                           <th style={{ width: 28 }}><BulkCheckbox name="escluso" /></th>
-                          <Col campo="nome">Prodotto</Col>
+                          <ColonnaOrdinabile campo="nome">Prodotto</ColonnaOrdinabile>
                           <th>Codice</th>
-                          <Col campo="marca">Marca</Col>
-                          <Col campo="fornitore">Fornitore</Col>
-                          <Col campo="animale">Animale</Col>
-                          <Col campo="promo">Promo</Col>
+                          <ColonnaOrdinabile campo="marca">Marca</ColonnaOrdinabile>
+                          <ColonnaOrdinabile campo="fornitore">Fornitore</ColonnaOrdinabile>
+                          <ColonnaOrdinabile campo="animale">Animale</ColonnaOrdinabile>
+                          <ColonnaOrdinabile campo="promo">Promo</ColonnaOrdinabile>
                           <th></th>
                         </tr>
                       </thead>
                       <tbody>
                         {esclusiVoci.slice(0, 100).map((o) => (
                           <Fragment key={o.id}>
-                            <tr>
+                            <tr data-nome={o.nome} data-marca={o.marca} data-fornitore={o.fornitore}
+                              data-animale={o.animale} data-promo={o.promo}>
                               <td><input type="checkbox" name="escluso" value={o.id} title="Spunta per rimetterlo in stampa" /></td>
                               <td>
                                 {o.nome}
@@ -751,11 +768,8 @@ export default async function ZooStampaPage({
                               <td>{o.animale}</td>
                               <td>{o.promo}</td>
                               <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                                <button className="btn btn-outline btn-sm" type="submit"
-                                  formAction={toggleZooNoPrint.bind(null, o.id, scopeParam, "/stampe/zoo/stampa")}
-                                  title="Rimetti questo cartello fra quelli da stampare">
-                                  Rimetti in stampa
-                                </button>
+                                <RigaAzione azione={rimettiInStampaInline.bind(null, o.id, scopeParam)}
+                                  etichetta="Rimetti in stampa" titolo="Rimetti questo cartello fra quelli da stampare" />
                               </td>
                             </tr>
                             {o.parentId && (

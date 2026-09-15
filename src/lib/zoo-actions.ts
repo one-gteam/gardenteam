@@ -1527,6 +1527,69 @@ export async function mettiInCoda(
   return { ok: true, n };
 }
 
+/** Come rimettiInCoda, ma senza ricaricare la pagina: la riga sparisce dagli stampati. */
+export async function rimettiInCodaInline(id: string, scopeParam: string): Promise<{ ok: boolean }> {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  const riga = db.coda.find((c) => c.id === id && c.scopeType === scope.type && c.scopeId === scope.id);
+  if (!riga) return { ok: false };
+  delete riga.stampato;
+  await saveZooDb(db);
+  rigeneraZoo();
+  return { ok: true };
+}
+
+/** Come segnaArrivato, ma senza ricaricare la pagina. */
+export async function segnaArrivatoInline(id: string, scopeParam: string): Promise<{ ok: boolean }> {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  const riga = db.coda.find((c) => c.id === id && c.scopeType === scope.type && c.scopeId === scope.id);
+  if (!riga) return { ok: false };
+  riga.stato = "dopo";
+  await saveZooDb(db);
+  rigeneraZoo();
+  return { ok: true };
+}
+
+/** Come togliNonConforme, ma senza ricaricare la pagina. */
+export async function togliNonConformeInline(offerId: string, scopeParam: string): Promise<{ ok: boolean }> {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  const prima = db.nonConformi.length;
+  db.nonConformi = db.nonConformi.filter(
+    (n) => !(n.scopeType === scope.type && n.scopeId === scope.id && n.offerId === offerId)
+  );
+  if (db.nonConformi.length === prima) return { ok: false };
+  await saveZooDb(db);
+  rigeneraZoo();
+  return { ok: true };
+}
+
+/** Rimette in stampa un cartello escluso, senza ricaricare la pagina. */
+export async function rimettiInStampaInline(offerId: string, scopeParam: string): Promise<{ ok: boolean }> {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  if (scope.type === "system") return { ok: false };
+  const ean = db.offers.find((o) => o.id === offerId)?.ean ?? "";
+  const prima = db.noPrint.length;
+  db.noPrint = db.noPrint.filter((n) => {
+    if (n.scopeType !== scope.type || n.scopeId !== scope.id) return true;
+    return !(n.offerId === offerId || (ean && n.ean === ean));
+  });
+  if (db.noPrint.length === prima) return { ok: false };
+  await saveZooDb(db);
+  rigeneraZoo();
+  return { ok: true };
+}
+
 /** Rimette fra quelli da stampare un cartello già stampato (la stampa è andata male). */
 export async function rimettiInCoda(id: string, scopeParam: string) {
   const user = await requireZooUser();
@@ -1540,11 +1603,11 @@ export async function rimettiInCoda(id: string, scopeParam: string) {
 
 /**
  * Rimette fra quelli da stampare i cartelli già stampati: quelli spuntati
- * oppure, se non ne è spuntato nessuno, tutti quelli di quel formato
- * (`formatoId` vuoto = tutti). Serve quando la stampa è andata male o quando si
- * rifà lo stesso giro.
+ * oppure, se non ne è spuntato nessuno, tutti quelli del formato (`formatoId`)
+ * o del lotto di stampa (`lotto`, l'ora esatta di quel giro) indicati — vuoti =
+ * tutti. Serve quando la stampa è andata male o quando si rifà lo stesso giro.
  */
-export async function rimettiInCodaMulti(scopeParam: string, formatoId: string, formData: FormData) {
+export async function rimettiInCodaMulti(scopeParam: string, formatoId: string, lotto: string, formData: FormData) {
   const user = await requireZooUser();
   const db = await getZooDb();
   const academyDb = await getDb();
@@ -1555,6 +1618,8 @@ export async function rimettiInCodaMulti(scopeParam: string, formatoId: string, 
     if (solo.length > 0 && !solo.includes(c.id)) continue;
     // il pulsante è per formato: senza spunte rimette in coda solo quel giro
     if (formatoId && (c.impostazioni[`formato_${c.offerId}`] || "za4") !== formatoId) continue;
+    // lotto = l'ora esatta di quella stampa: "rimetti in coda" vale per quel giro
+    if (lotto && c.stampato !== lotto) continue;
     delete c.stampato;
   }
   await saveZooDb(db);

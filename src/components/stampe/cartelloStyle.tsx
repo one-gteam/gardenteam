@@ -1,6 +1,7 @@
 import type { LayoutItem, PrintField } from "@/lib/stampe";
 import { layoutFontCss } from "@/lib/layout-fonts";
 import { stickerShapeStyle } from "./stickerStyle";
+import FitText from "./FitText";
 
 /*
  * Regole grafiche del cartello, in un modulo a sé perché le usano sia la stampa
@@ -19,7 +20,12 @@ export const FONT_CN = '"Avenir Next LT Pro Cn", "Avenir Next LT Pro", "Segoe UI
  * finivano in basso invece che in alto. Un flex "allineati in alto" non
  * dipende dal motore di rendering: è pura disposizione dei riquadri.
  */
-export function Prezzo({ value, size, scale, font }: { value: string; size: number; scale: number; font?: string }) {
+export function Prezzo(
+  { value, size, scale, font, valign }:
+  { value: string; size: number; scale: number; font?: string; valign?: "top" | "middle" | "bottom" }
+) {
+  // dove sta il prezzo dentro al riquadro: lo decide il layout, come per i testi
+  const versoIlBasso = valign === "middle" ? "center" : valign === "bottom" ? "flex-end" : "flex-start";
   /*
    * Il simbolo di valuta va in apice come i centesimi: sul cartello deve saltare
    * all'occhio il numero, non l'euro. Si stacca dal resto solo se c'è davvero —
@@ -31,22 +37,39 @@ export function Prezzo({ value, size, scale, font }: { value: string; size: numb
    * solo sconto: si stampa grande come il prezzo, ma va a capo invece di uscire
    * dal riquadro, perché non ha centesimi da mettere in apice.
    */
+  /*
+   * Scritta al posto del prezzo ("SCONTO 20%"): si rimpicciolisce fino a
+   * starci dentro, come tutti gli altri campi. Prima usciva dal riquadro e
+   * finiva sopra al prezzo barrato.
+   */
   if (testo && !/^[€$£]?\s*\d/.test(testo)) {
     return (
-      <span style={{ fontFamily: font ?? FONT_CN, fontWeight: 800, lineHeight: 0.95, fontSize: (size * scale) / 2.4, whiteSpace: "pre-line" }}>
+      <FitText style={{
+        width: "100%", height: "100%", display: "flex", flexDirection: "column", justifyContent: versoIlBasso,
+        fontFamily: font ?? FONT_CN, fontWeight: 800, lineHeight: 0.95,
+        fontSize: (size * scale) / 2.4, whiteSpace: "pre-line", overflow: "hidden",
+      }}>
         {testoStampato(testo)}
-      </span>
+      </FitText>
     );
   }
   const valuta = /^[€$£]/.test(testo) ? testo[0] : "";
   const [int, cent] = (valuta ? testo.slice(1).trim() : testo).split(",");
   const fs = (size * scale) / 2.4;
+  /*
+   * Anche il prezzo si adatta al suo riquadro: se il corpo scelto nel layout è
+   * troppo grande per lo spazio, si riduce invece di uscire dai bordi.
+   */
   return (
-    <span style={{ fontFamily: font ?? FONT_CN, fontWeight: 800, lineHeight: 0.95, whiteSpace: "nowrap", fontSize: fs, display: "inline-flex", alignItems: "flex-start" }}>
-      {valuta && <span style={{ fontSize: "0.45em", marginRight: "0.08em" }}>{valuta}</span>}
+    <FitText style={{
+      width: "100%", height: "100%", display: "flex", alignItems: versoIlBasso, justifyContent: "inherit",
+      fontFamily: font ?? FONT_CN, fontWeight: 800, lineHeight: 0.95, whiteSpace: "nowrap",
+      fontSize: fs, overflow: "hidden",
+    }}>
+      {valuta && <span style={{ fontSize: "0.45em", marginRight: "0.08em", alignSelf: "flex-start" }}>{valuta}</span>}
       <span>{int}</span>
-      {cent !== undefined && <span style={{ fontSize: "0.5em", marginLeft: "0.05em" }}>,{cent}</span>}
-    </span>
+      {cent !== undefined && <span style={{ fontSize: "0.5em", marginLeft: "0.05em", alignSelf: "flex-start" }}>,{cent}</span>}
+    </FitText>
   );
 }
 

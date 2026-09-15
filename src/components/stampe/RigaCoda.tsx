@@ -8,10 +8,12 @@ import { togliDallaCodaInline } from "@/lib/zoo-actions";
  * ricaricare la pagina: la riga sparisce e il resto dell'elenco resta dov'è.
  */
 export default function RigaCoda({
-  id, scopeParam, contatoreId, tabella = false, children,
+  id, scopeParam, contatoreId, tabella = false, dati, children,
 }: {
   id: string;
   scopeParam: string;
+  /** valori della riga (marca, fornitore…): diventano data-* e servono all'ordinamento */
+  dati?: Record<string, string>;
   /** id (anche più d'uno, separati da virgola) delle pastiglie col numero, da tenere allineate senza ricaricare */
   contatoreId?: string;
   /** true = riga di tabella (i figli sono già celle), false = riga di elenco */
@@ -42,8 +44,9 @@ export default function RigaCoda({
     </>
   );
   if (tabella) {
+    const attributi = Object.fromEntries(Object.entries(dati ?? {}).map(([k, v]) => [`data-${k}`, v]));
     return (
-      <tr>
+      <tr {...attributi}>
         {children}
         <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>{bottone}</td>
       </tr>

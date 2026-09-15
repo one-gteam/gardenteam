@@ -627,7 +627,7 @@ export default function LayoutEditor({
                   onMouseDown={(e) => onMouseDown(e, i, "move")}
                 >
                   {raw && (
-                    <Prezzo value={raw} size={item.size ?? meta?.size ?? 11} scale={scale}
+                    <Prezzo value={raw} size={item.size ?? meta?.size ?? 11} scale={scale} valign={item.valign}
                       font={item.font !== undefined ? layoutFontCss(item.font) : undefined} />
                   )}
                   {canEdit && selected === i && (

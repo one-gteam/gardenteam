@@ -118,7 +118,7 @@ export default function Cartello({
            */
           return (
             <div key={i} style={{ ...box, overflow: "visible", display: "flex", justifyContent: justifyPrezzo(item), alignItems: alignPrezzo(item), color }}>
-              <Prezzo value={value} size={item.size ?? meta.size} scale={scale}
+              <Prezzo value={value} size={item.size ?? meta.size} scale={scale} valign={item.valign}
                 font={item.font !== undefined ? layoutFontCss(item.font) : undefined} />
             </div>
           );

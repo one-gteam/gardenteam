@@ -1256,7 +1256,18 @@ export function zooCartelloValues(
    */
   const tipoTesto = promoPvEtichetta || offer.meccanica || "";
   const tipoPromoStampato = scontoSecco || /^a\s*soli$/i.test(tipoTesto.trim()) ? "" : tipoTesto;
-  const condizioniSalvate = testoOfferta("condizioni");
+  /*
+   * Sui cartelli a solo sconto la percentuale è già scritta grande al posto del
+   * prezzo: nelle condizioni ("sconto 20% · Promozione valida dal…") sarebbe
+   * scritta due volte, quindi il pezzo che la ripete si toglie.
+   */
+  const condizioniSalvate = (() => {
+    const testo = testoOfferta("condizioni");
+    if (!scontoSecco || !testo) return testo;
+    const senzaSpazi = (t: string) => t.replace(/\s+/g, "").toLowerCase();
+    const doppione = senzaSpazi(`sconto${scontoSecco}`);
+    return testo.split("·").map((t) => t.trim()).filter((t) => senzaSpazi(t) !== doppione).join(" · ");
+  })();
   const condizioni = (db.settings.condizioniConValidita ?? true) && validita
     ? [condizioniSalvate, validita].filter(Boolean).join(" · ")
     : condizioniSalvate;
