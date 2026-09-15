@@ -21,8 +21,11 @@ export const FONT_CN = '"Avenir Next LT Pro Cn", "Avenir Next LT Pro", "Segoe UI
  * dipende dal motore di rendering: è pura disposizione dei riquadri.
  */
 export function Prezzo(
-  { value, size, scale, font, valign }:
-  { value: string; size: number; scale: number; font?: string; valign?: "top" | "middle" | "bottom" }
+  { value, size, scale, font, valign, align }:
+  {
+    value: string; size: number; scale: number; font?: string;
+    valign?: "top" | "middle" | "bottom"; align?: "left" | "center" | "right";
+  }
 ) {
   // dove sta il prezzo dentro al riquadro: lo decide il layout, come per i testi
   const versoIlBasso = valign === "middle" ? "center" : valign === "bottom" ? "flex-end" : "flex-start";
@@ -46,7 +49,7 @@ export function Prezzo(
     return (
       <FitText style={{
         width: "100%", height: "100%", display: "flex", flexDirection: "column", justifyContent: versoIlBasso,
-        fontFamily: font ?? FONT_CN, fontWeight: 800, lineHeight: 0.95,
+        fontFamily: font ?? FONT_CN, fontWeight: 800, lineHeight: 0.95, textAlign: align ?? "right",
         fontSize: (size * scale) / 2.4, whiteSpace: "pre-line", overflow: "hidden",
       }}>
         {testoStampato(testo)}

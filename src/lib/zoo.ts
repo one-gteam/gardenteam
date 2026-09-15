@@ -1264,9 +1264,20 @@ export function zooCartelloValues(
   const condizioniSalvate = (() => {
     const testo = testoOfferta("condizioni");
     if (!scontoSecco || !testo) return testo;
-    const senzaSpazi = (t: string) => t.replace(/\s+/g, "").toLowerCase();
-    const doppione = senzaSpazi(`sconto${scontoSecco}`);
-    return testo.split("·").map((t) => t.trim()).filter((t) => senzaSpazi(t) !== doppione).join(" · ");
+    const numero = scontoSecco.replace("%", "");
+    /*
+     * Toglie i pezzi che non dicono niente più della percentuale già stampata
+     * grande: "sconto 20%", "20%", "20 alle casse", "-20% alla cassa".
+     */
+    const soloLoSconto = (t: string) => {
+      if (!t.includes(numero)) return false;
+      const resto = t.toLowerCase()
+        .replace(/\d+([.,]\d+)?/g, " ")
+        .replace(/sconto|scontato|di sconto|alle casse|alla cassa|in cassa|casse|cassa/g, " ")
+        .replace(/[^a-zà-ú]/g, "");
+      return resto.length === 0;
+    };
+    return testo.split("·").map((t) => t.trim()).filter((t) => t && !soloLoSconto(t)).join(" · ");
   })();
   const condizioni = (db.settings.condizioniConValidita ?? true) && validita
     ? [condizioniSalvate, validita].filter(Boolean).join(" · ")

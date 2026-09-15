@@ -44,11 +44,21 @@ export default function Cartello({
    * riquadro del tipo di promozione, così la scritta non sparisce.
    */
   const valori = (() => {
-    const prezzo = (values.prezzoPromo ?? "").trim();
-    if (!prezzo || prezzo.startsWith("€") || values.tipoPromo) return values;
-    const haPrezzo = (activeItems ?? []).some((it) => it.fieldId === "prezzoPromo");
-    const haTipo = (activeItems ?? []).some((it) => it.fieldId === "tipoPromo");
-    return !haPrezzo && haTipo ? { ...values, tipoPromo: prezzo } : values;
+    const ci = (fid: string) => (activeItems ?? []).some((it) => it.fieldId === fid);
+    let v = values;
+    /*
+     * "Condizioni" si porta dietro la validità del volantino: se il layout ha
+     * anche il riquadro "Validità", la stessa frase uscirebbe due volte.
+     */
+    const validita = (v.validita ?? "").trim();
+    if (validita && ci("condizioni") && ci("validita") && (v.condizioni ?? "").includes(validita)) {
+      const ripulite = (v.condizioni ?? "")
+        .split("·").map((t) => t.trim()).filter((t) => t && t !== validita).join(" · ");
+      v = { ...v, condizioni: ripulite };
+    }
+    const prezzo = (v.prezzoPromo ?? "").trim();
+    if (!prezzo || prezzo.startsWith("€") || v.tipoPromo) return v;
+    return !ci("prezzoPromo") && ci("tipoPromo") ? { ...v, tipoPromo: prezzo } : v;
   })();
   return (
     <div
@@ -118,7 +128,7 @@ export default function Cartello({
            */
           return (
             <div key={i} style={{ ...box, overflow: "visible", display: "flex", justifyContent: justifyPrezzo(item), alignItems: alignPrezzo(item), color }}>
-              <Prezzo value={value} size={item.size ?? meta.size} scale={scale} valign={item.valign}
+              <Prezzo value={value} size={item.size ?? meta.size} scale={scale} valign={item.valign} align={item.align}
                 font={item.font !== undefined ? layoutFontCss(item.font) : undefined} />
             </div>
           );

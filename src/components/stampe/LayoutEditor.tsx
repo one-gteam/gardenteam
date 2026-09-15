@@ -428,6 +428,20 @@ export default function LayoutEditor({
   return (
     <div className="layout-editor">
       <div className="card" style={{ padding: 12 }}>
+        {/* qual è il campo scelto: sul foglio l'etichetta è piccola e a volte
+            finisce sotto un altro riquadro, qui si legge sempre */}
+        <div style={{
+          margin: "2px 0 10px", padding: "8px 10px", borderRadius: 8,
+          background: selItem ? "var(--green-50)" : "#f4f4f2",
+          border: `1px solid ${selItem ? "var(--green-500)" : "var(--line)"}`,
+        }}>
+          <div style={{ fontSize: 11, color: "var(--muted)", textTransform: "uppercase", letterSpacing: ".04em" }}>Campo scelto</div>
+          <strong style={{ fontSize: 13.5 }}>
+            {selItem
+              ? (selItem.fieldId === "__img" ? "Immagine libera" : fields.find((f) => f.id === selItem.fieldId)?.label ?? selItem.fieldId)
+              : "nessuno — clicca un campo sul foglio"}
+          </strong>
+        </div>
         <h3 style={{ margin: "2px 6px 10px" }}>Campi disponibili</h3>
         <div className="editor-fields">
           {fields.map((f) => (
@@ -627,7 +641,7 @@ export default function LayoutEditor({
                   onMouseDown={(e) => onMouseDown(e, i, "move")}
                 >
                   {raw && (
-                    <Prezzo value={raw} size={item.size ?? meta?.size ?? 11} scale={scale} valign={item.valign}
+                    <Prezzo value={raw} size={item.size ?? meta?.size ?? 11} scale={scale} valign={item.valign} align={item.align}
                       font={item.font !== undefined ? layoutFontCss(item.font) : undefined} />
                   )}
                   {canEdit && selected === i && (

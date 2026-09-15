@@ -30,6 +30,8 @@ export interface StampaPickerProps {
   scopeParam: string;
   filters: Record<string, string>;
   initialSelected: string[];
+  /** Prodotti già selezionati che i filtri hanno nascosto: restano in tabella. */
+  prodottiSelezionati?: ProdLite[];
   initialFormats: Record<string, string>;
   initialPrices: Record<string, string>;
   initialNoPrice: Record<string, boolean>;
@@ -65,6 +67,7 @@ export default function StampaPicker({
   scopeParam,
   filters,
   initialSelected,
+  prodottiSelezionati = [],
   initialFormats,
   initialPrices,
   initialNoPrice,
@@ -190,7 +193,13 @@ export default function StampaPicker({
     router.push(url);
   };
 
-  const selectedProds = selected.map((id) => products.find((p) => p.id === id)).filter(Boolean) as ProdLite[];
+  /*
+   * Un prodotto scelto prima e poi nascosto da un filtro restava selezionato —
+   * e nell'anteprima — ma spariva dalla tabella: sembrava comparire un cartello
+   * di troppo. Qui si guarda anche l'elenco dei selezionati fuori filtro.
+   */
+  const catalogo = [...products, ...prodottiSelezionati.filter((p) => !products.some((q) => q.id === p.id))];
+  const selectedProds = selected.map((id) => catalogo.find((p) => p.id === id)).filter(Boolean) as ProdLite[];
 
   return (
     <>

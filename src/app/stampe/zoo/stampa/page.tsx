@@ -175,19 +175,10 @@ export default async function ZooStampaPage({
     nonConforme: ncDi([o.id]),
     codiceGestionale: giacenze[o.ean]?.codice,
   });
-  const voci = vistaSingole
-    ? visible.map(voceSingola)
-    : (() => {
-        const gruppi = new Map<string, typeof visible>();
-        for (const o of visible) {
-          const product = db.products.find((p) => p.id === o.productId);
-          const key = product?.parentId ? `p:${product.parentId}` : `o:${o.id}`;
-          gruppi.set(key, [...(gruppi.get(key) ?? []), o]);
-        }
-        return [...gruppi.entries()].map(([key, gruppo]) => {
+  /** La voce di un prodotto padre con tutti i suoi articoli in offerta. */
+  const voceGruppo = (parentId: string, gruppo: typeof visible) => {
           const primo = gruppo[0];
-          if (!key.startsWith("p:") || gruppo.length === 0) return voceSingola(primo);
-          const parent = db.parents.find((x) => x.id === key.slice(2));
+          const parent = db.parents.find((x) => x.id === parentId);
           const prezzi = [...new Set(gruppo.map((g) => pvPriceFor(db, scope, g.ean, academyDb) ?? g.prezzoPromo).filter(Boolean))];
           return {
             id: primo.id,
@@ -200,8 +191,41 @@ export default async function ZooStampaPage({
             nonConforme: ncDi(gruppo.map((g) => g.id)),
             codiceGestionale: gruppo.length === 1 ? giacenze[primo.ean]?.codice : undefined,
           };
-        });
+  };
+  const voci = vistaSingole
+    ? visible.map(voceSingola)
+    : (() => {
+        const gruppi = new Map<string, typeof visible>();
+        for (const o of visible) {
+          const product = db.products.find((p) => p.id === o.productId);
+          const key = product?.parentId ? `p:${product.parentId}` : `o:${o.id}`;
+          gruppi.set(key, [...(gruppi.get(key) ?? []), o]);
+        }
+        return [...gruppi.entries()].map(([key, gruppo]) =>
+          key.startsWith("p:") && gruppo.length > 0 ? voceGruppo(key.slice(2), gruppo) : voceSingola(gruppo[0])
+        );
       })();
+
+  /*
+   * Un prodotto scelto e poi nascosto da un filtro (o dal limite dei 150)
+   * restava selezionato e finiva in anteprima, ma spariva dalla tabella dei
+   * selezionati: sembrava comparire un cartello di troppo. Le sue voci si
+   * costruiscono a parte e si passano al riquadro dei selezionati.
+   */
+  const selezionatiFuoriElenco = (sp.sel ?? "").split(",").filter(Boolean)
+    .filter((id) => !voci.some((v) => v.id === id))
+    .map((id) => {
+      const o = allOffers.find((x) => x.id === id);
+      if (!o) return undefined;
+      const { parent } = padreDi(o);
+      if (vistaSingole || !parent) return voceSingola(o);
+      const gruppo = allOffers.filter((g) => {
+        const p = db.products.find((x) => x.id === g.productId);
+        return p?.parentId === parent.id;
+      });
+      return voceGruppo(parent.id, gruppo.length > 0 ? gruppo : [o]);
+    })
+    .filter(Boolean) as typeof voci;
 
   // cartelli in coda per questo ambito, con il nome che si legge in elenco
   const nomeOfferta = (offerId: string) => {
@@ -990,6 +1014,7 @@ export default async function ZooStampaPage({
             totale: voci.length,
             mostraTuttiHref: `/stampe/zoo/stampa?${new URLSearchParams({ ...Object.fromEntries(Object.entries(sp).filter(([, v]) => v) as [string, string][]), tutti: "1" })}`,
             products: sp.tutti === "1" ? voci : voci.slice(0, 150),
+            prodottiSelezionati: selezionatiFuoriElenco,
             formats: ZOO_FORMATS.map((f) => ({ id: f.id, name: f.name })),
             scopeParam,
             filters: {
