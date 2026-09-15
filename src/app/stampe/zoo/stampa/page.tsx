@@ -27,6 +27,9 @@ import {
 } from "@/lib/zoo-actions";
 
 /** Stampa cartelli Offerte Zoo: stesso impianto dell'Arredo (selezione, formati per riga, stampa 1:1). */
+/** Il fuso di casa: le pagine sono disegnate dal server, che non sta in Italia. */
+const FUSO = "Europe/Rome";
+
 export default async function ZooStampaPage({
   searchParams,
 }: {
@@ -270,7 +273,11 @@ export default async function ZooStampaPage({
     const d = new Date(iso);
     return Number.isNaN(d.getTime())
       ? "data sconosciuta"
-      : `${d.toLocaleDateString("it-IT")} alle ${d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}`;
+      /*
+       * Ora italiana anche quando la pagina è disegnata dal server, che gira a
+       * Londra: senza il fuso i lotti comparivano con due ore in meno.
+       */
+      : `${d.toLocaleDateString("it-IT", { timeZone: FUSO })} alle ${d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit", timeZone: FUSO })}`;
   };
   /* Segnalati dal reparto: non conformi (il cartello non torna con lo scaffale)
      ed esclusi (segnati "Non stampare"). Stanno nelle stesse sezioni della coda
@@ -535,7 +542,7 @@ export default async function ZooStampaPage({
                                 <td>{c.fornitore}</td>
                                 <td>{c.animale}</td>
                                 <td>{c.promo}</td>
-                                <td className="hint">{new Date(c.creato).toLocaleDateString("it-IT")} · {c.userName}</td>
+                                <td className="hint">{new Date(c.creato).toLocaleDateString("it-IT", { timeZone: FUSO })} · {c.userName}</td>
                               </RigaCoda>
                               {c.parentId && (
                                 <tr><td colSpan={8} style={{ padding: 0 }}>
@@ -661,7 +668,7 @@ export default async function ZooStampaPage({
                             <td>{c.animale}</td>
                             <td>{c.promo}</td>
                             <td>{formatoDiCoda(c).name}</td>
-                            <td className="hint">{new Date(c.creato).toLocaleDateString("it-IT")} · {c.userName}</td>
+                            <td className="hint">{new Date(c.creato).toLocaleDateString("it-IT", { timeZone: FUSO })} · {c.userName}</td>
                             <td style={{ whiteSpace: "nowrap" }}>
                               <RigaAzione azione={segnaArrivatoInline.bind(null, c.id, scopeParam)}
                                 etichetta="Arrivata" contatoreId="conta-arrivo"
@@ -706,7 +713,7 @@ export default async function ZooStampaPage({
                               <td>{n.marca}</td>
                               <td>{n.animale}</td>
                               <td>{n.motivo ? <em>«{n.motivo}»</em> : ""}</td>
-                              <td className="hint">{new Date(n.at).toLocaleDateString("it-IT")} · {n.userName}</td>
+                              <td className="hint">{new Date(n.at).toLocaleDateString("it-IT", { timeZone: FUSO })} · {n.userName}</td>
                               <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                                 <RigaAzione azione={togliNonConformeInline.bind(null, n.offerId, scopeParam)}
                                   etichetta="Sistemato" titolo="Il cartello è stato sistemato: togli la segnalazione" />
