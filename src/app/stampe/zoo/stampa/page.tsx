@@ -17,7 +17,7 @@ import {
   getZooDb, nonConformiDi, effectiveZooLayout, pvPriceFor, isZooHidden,
   campagneStampabili, campagnaInCorso, campagnaInLavorazione, campaignStato,
   effectiveParentText, effectiveParentTag, printedAt, NO_VOLANTINO,
-  ZOO_FIELDS, ZOO_FORMATS, marcaEffettiva, pvPromoFor, noPrintSets, offertePerStampa, tagsPerLayout, valoriPerStampa, giacenzePer,
+  ZOO_FIELDS, ZOO_FORMATS, marcaEffettiva, pvPromoFor, noPrintSets, offertePerStampa, tagsPerLayout, valoriPerStampa, giacenzePer, tagsPerStampa,
 } from "@/lib/zoo";
 import {
   importPvPricesRighe, markZooPrinted, resetZooPrinted, toggleZooHidden, importZooNoPrintRighe, svuotaZooNoPrint,
@@ -335,7 +335,7 @@ export default async function ZooStampaPage({
 
   const scalePrint = 3.7795; // 1 mm = 3.7795 px a 96 dpi → stampa a dimensione reale
   const doppio = sp.doppio === "1";
-  const tagsFor = (o: (typeof allOffers)[number]) => tagsPerLayout(db, scope, academyDb, o);
+  const tagsFor = (o: (typeof allOffers)[number]) => tagsPerStampa(db, scope, academyDb, o, sp);
 
   if (sp.print === "1" && selected.length > 0) {
     const toPrint = selected.flatMap((o) => (doppio && formatFor(o.id).id === "za5" ? [o, o] : [o]));

@@ -15,6 +15,8 @@ export interface PrintField {
   type?: "text" | "image"; // i campi immagine mostrano un URL/percorso e vengono resi come <img>
   scopeType?: ScopeType; // campo personalizzato di un'insegna/PV (assente = campo di sistema)
   scopeId?: string;
+  /** Spiegazione breve: si legge nell'editor, sul pulsante e nel riquadro "Campo scelto". */
+  nota?: string;
 }
 
 /** Valore con ambito: usato per marchi, tipologie e colori aggiunti da insegne/PV. */

@@ -441,6 +441,13 @@ export default function LayoutEditor({
               ? (selItem.fieldId === "__img" ? "Immagine libera" : fields.find((f) => f.id === selItem.fieldId)?.label ?? selItem.fieldId)
               : "nessuno — clicca un campo sul foglio"}
           </strong>
+          {/* la spiegazione del campo: serve dove due campi si somigliano,
+              come "Meccanica promo" e "Tipo di promozione" */}
+          {selItem && fields.find((f) => f.id === selItem.fieldId)?.nota && (
+            <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 4, lineHeight: 1.3 }}>
+              {fields.find((f) => f.id === selItem.fieldId)?.nota}
+            </div>
+          )}
         </div>
         <h3 style={{ margin: "2px 6px 10px" }}>Campi disponibili</h3>
         <div className="editor-fields">
@@ -452,7 +459,7 @@ export default function LayoutEditor({
               style={{ textAlign: "left", opacity: usedFields.has(f.id) ? 0.45 : 1 }}
               onClick={() => addField(f.id)}
               disabled={!canEdit}
-              title={usedFields.has(f.id) ? "Già nel cartello (puoi aggiungerlo di nuovo)" : "Aggiungi al cartello"}
+              title={[f.nota, usedFields.has(f.id) ? "Già nel cartello (puoi aggiungerlo di nuovo)" : "Aggiungi al cartello"].filter(Boolean).join(" — ")}
             >
               ＋ {f.label}
             </button>

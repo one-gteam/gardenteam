@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
+import ColonnaOrdinabile from "@/components/stampe/ColonnaOrdinabile";
 import FiltriMobile from "@/components/FiltriMobile";
 import StampeHeader from "@/components/stampe/StampeHeader";
 import { canAccessArea, isZooEditor, scopesForUser, resolveScope } from "@/lib/stampe";
@@ -606,13 +607,13 @@ export default async function ZooOffertePage({
                     <tr>
                       {consortium && <th style={{ width: 30 }}><BulkCheckbox name="sel" also="selpadre" /></th>}
                       <th style={{ width: 56 }}>Foto</th>
-                      <th>{vistaArticoli ? "Offerta" : "Prodotto"}</th>
+                      <ColonnaOrdinabile campo="nome">{vistaArticoli ? "Offerta" : "Prodotto"}</ColonnaOrdinabile>
                       <th className="col-wide">Descrizione</th>
-                      <th>Animale</th>
-                      <th>Caratteristica</th>
+                      <ColonnaOrdinabile campo="animale">Animale</ColonnaOrdinabile>
+                      <ColonnaOrdinabile campo="caratt">Caratteristica</ColonnaOrdinabile>
                       <th>Pagina</th>
                       <th>Etichetta</th>
-                      <th title="Offerte a meccanica: 3x2, 1+1, -50% sul secondo…">Meccanica</th>
+                      <ColonnaOrdinabile campo="meccanica">Meccanica</ColonnaOrdinabile>
                       <th title="Condizioni stampate sul cartello">Condizioni</th>
                       <th>Focus</th>
                       <th>{vistaArticoli ? "EAN" : "Articoli"}</th>
@@ -644,7 +645,9 @@ export default async function ZooOffertePage({
                       const nome = parent ? effectiveParentText(db, scope, parent, "nome", academyDb).value : first.descrizione;
                       const descr = parent ? effectiveParentText(db, scope, parent, "descVolantino", academyDb).value : (first.condizioni ?? "");
                       return [
-                        <tr key={key}>
+                        <tr key={key}
+                          data-nome={nome} data-animale={animali.join(", ")} data-caratt={prodottoCarat.join(", ")}
+                          data-meccanica={first.meccanica ?? ""} data-marca={marcaEffettiva(db.products.find((p) => p.id === first.productId) ?? { marca: "", fornitore: "" })}>
                           {consortium && (
                             <td>
                               {parent

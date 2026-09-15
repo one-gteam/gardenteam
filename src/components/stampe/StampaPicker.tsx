@@ -44,7 +44,7 @@ export interface StampaPickerProps {
   initialListini?: Record<string, string>;
   /** Cartelli da stampare senza foto, anche se l'articolo ce l'ha. */
   initialNoPhoto?: Record<string, boolean>;
-  /** Cartelli senza il prezzo di partenza (resta il promo). */
+  /** Cartelli senza il prezzo di partenza: al suo posto esce «A SOLI». */
   initialNoListino?: Record<string, boolean>;
   /** Mette i cartelli selezionati in coda ("dopo" o "arrivo") con le loro impostazioni. */
   onQueue?: (stato: "dopo" | "arrivo", vociJson: string) => Promise<{ ok: boolean; n: number }>;
@@ -362,13 +362,13 @@ export default function StampaPicker({
                           prezzo
                         </label>
                         <label style={{ fontSize: 12, display: "flex", gap: 4, alignItems: "center" }}
-                          title="Stampa senza il prezzo di partenza barrato (resta il prezzo promo)">
+                          title="Stampa senza il prezzo di partenza: al suo posto esce «A SOLI» e il cartello usa il layout «Promo senza prezzo barrato»">
                           <input
                             type="checkbox"
                             checked={!!noListino[p.id]}
                             onChange={(e) => setNoListino((prev) => ({ ...prev, [p.id]: e.target.checked }))}
                           />{" "}
-                          partenza
+                          partenza → A SOLI
                         </label>
                         {/* senza foto si stampa il "foglio senza foto" del layout, con i campi ridisposti */}
                         <label style={{ fontSize: 12, display: "flex", gap: 4, alignItems: "center" }}
@@ -416,7 +416,7 @@ export default function StampaPicker({
             {/* stessa scelta su tutti i selezionati in un colpo: spunta = nascondi, togli la spunta = rimetti */}
             <div style={{ display: "flex", gap: 12, marginTop: 10, flexWrap: "wrap", alignItems: "center", fontSize: 12.5 }}>
               <strong>Su tutti i selezionati nascondi:</strong>
-              {([["prezzo", "prezzo"], ["listino", "prezzo di partenza"], ["foto", "foto"]] as const).map(([cosa, etichetta]) => {
+              {([["prezzo", "prezzo"], ["listino", "prezzo di partenza (esce «A SOLI»)"], ["foto", "foto"]] as const).map(([cosa, etichetta]) => {
                 const tutti = selected.length > 0 && selected.every((id) => (cosa === "prezzo" ? noPrice[id] : cosa === "listino" ? noListino[id] : noPhoto[id]));
                 return (
                   <label key={cosa} style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>

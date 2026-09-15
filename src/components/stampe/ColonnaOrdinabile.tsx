@@ -17,17 +17,25 @@ export default function ColonnaOrdinabile({ campo, children }: { campo: string; 
     if (!corpo) return;
     const nuovo: 1 | -1 = verso === 1 ? -1 : 1;
     const righe = [...corpo.querySelectorAll<HTMLTableRowElement>(`tr[data-${campo}]`)];
-    // ogni riga può avere sotto la riga del pannello dettagli: si sposta con lei
-    const codaDi = new Map<HTMLTableRowElement, HTMLTableRowElement | null>();
+    /*
+     * Sotto una riga possono starcene altre che le appartengono — gli articoli
+     * del prodotto padre, il pannello "dettagli" — e si riconoscono perché non
+     * hanno il dato della colonna: seguono la loro riga nello spostamento.
+     */
+    const codaDi = new Map<HTMLTableRowElement, HTMLTableRowElement[]>();
     for (const r of righe) {
-      const dopo = r.nextElementSibling as HTMLTableRowElement | null;
-      codaDi.set(r, dopo && !dopo.hasAttribute(`data-${campo}`) ? dopo : null);
+      const appese: HTMLTableRowElement[] = [];
+      let dopo = r.nextElementSibling as HTMLTableRowElement | null;
+      while (dopo && !dopo.hasAttribute(`data-${campo}`)) {
+        appese.push(dopo);
+        dopo = dopo.nextElementSibling as HTMLTableRowElement | null;
+      }
+      codaDi.set(r, appese);
     }
     righe.sort((a, b) => (a.getAttribute(`data-${campo}`) ?? "").localeCompare(b.getAttribute(`data-${campo}`) ?? "") * nuovo);
     for (const r of righe) {
       corpo.appendChild(r);
-      const sotto = codaDi.get(r);
-      if (sotto) corpo.appendChild(sotto);
+      for (const sotto of codaDi.get(r) ?? []) corpo.appendChild(sotto);
     }
     setVerso(nuovo);
   };

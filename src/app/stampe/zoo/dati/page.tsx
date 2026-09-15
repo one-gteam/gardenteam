@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
+import ColonnaOrdinabile from "@/components/stampe/ColonnaOrdinabile";
 import FiltriMobile from "@/components/FiltriMobile";
 import StampeHeader from "@/components/stampe/StampeHeader";
 import { canAccessArea, gestisceArea, isZooEditor, scopesForUser, resolveScope } from "@/lib/stampe";
@@ -460,12 +461,12 @@ export default async function ZooDatiPage({
                 <tr>
                   {(consortium || scope.type !== "system") && <th style={{ width: 30 }}><BulkCheckbox name="sel" also="selpadre" /></th>}
                   <th style={{ width: 56 }}>Foto</th>
-                  <th>{vistaArticoli ? "Articolo" : "Prodotto"}</th>
+                  <ColonnaOrdinabile campo="nome">{vistaArticoli ? "Articolo" : "Prodotto"}</ColonnaOrdinabile>
                   <th className="col-wide">Descrizione</th>
-                  <th>Animale</th>
-                  <th>Caratteristica</th>
+                  <ColonnaOrdinabile campo="animale">Animale</ColonnaOrdinabile>
+                  <ColonnaOrdinabile campo="caratt">Caratteristica</ColonnaOrdinabile>
                   <th>{vistaArticoli ? "EAN" : "Articoli"}</th>
-                  <th>Marca · Fornitore</th>
+                  <ColonnaOrdinabile campo="marca">Marca · Fornitore</ColonnaOrdinabile>
                   <th title="Volantini su cui l'articolo è stato stampato">Volantino</th>
                   <th title="Periodi in cui l'articolo è stato in promozione, anche senza andare a volantino">Promo</th>
                   {vistaArticoli && <th>Padre</th>}
@@ -489,7 +490,9 @@ export default async function ZooDatiPage({
                   const hidden = scope.type !== "system" && prods.length === 1 && isZooHidden(db, scope, first, academyDb);
                   const st = storicoDi(prods);
                   return [
-                    <tr key={key} style={hidden ? { opacity: 0.45 } : undefined}>
+                    <tr key={key} style={hidden ? { opacity: 0.45 } : undefined}
+                      data-nome={nome} data-animale={animali.join(", ")} data-caratt={prodottoCarat.join(", ")}
+                      data-marca={marcaEffettiva(first)}>
                       {(consortium || scope.type !== "system") && (
                         <td>
                           {parent

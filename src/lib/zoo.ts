@@ -846,6 +846,19 @@ export function tagsPerLayout(db: ZooDB, scope: Scope, academyDb: DB, o: ZooOffe
 }
 
 /**
+ * I tag per scegliere il layout tenendo conto delle scelte di stampa: se si
+ * stampa senza prezzo di partenza, il cartello è un "A SOLI" e va impaginato
+ * come tale, non come un prezzo barrato.
+ */
+export function tagsPerStampa(
+  db: ZooDB, scope: Scope, academyDb: DB, o: ZooOffer, sp: Record<string, string | undefined>
+): string[] {
+  const tags = tagsPerLayout(db, scope, academyDb, o);
+  if (sp[`nolistino_${o.id}`] !== "1" || !tags.includes(TIPO_BARRATO)) return tags;
+  return [...tags.filter((t) => t !== TIPO_BARRATO), TIPO_A_SOLI];
+}
+
+/**
  * Valori del cartello con le scelte fatte al momento della stampa: prezzo
  * scritto a mano, prezzo di partenza scritto a mano, "senza prezzo", campi
  * nascosti. Arrivano come parametri (prezzo_<id>, listino_<id>, noprezzo_<id>,
@@ -878,8 +891,14 @@ export function valoriPerStampa(
     delete vals.prezzoPromo;
     delete vals.prezzoListino;
   }
-  // solo il prezzo di partenza nascosto: resta il promo, senza barrato né "A SOLI"
-  if (sp[`nolistino_${o.id}`] === "1") delete vals.prezzoListino;
+  /*
+   * "Senza prezzo di partenza" non vuol dire "senza niente": il cartello
+   * diventa un "A SOLI", con la dicitura al posto del barrato. Il layout lo
+   * segue grazie a tagsPerStampa.
+   */
+  if (sp[`nolistino_${o.id}`] === "1") {
+    vals.prezzoListino = (vals.prezzoPromo ?? "").trim().startsWith("€") ? "A SOLI" : "";
+  }
   /*
    * Cartello senza foto anche se l'articolo ce l'ha: togliendo il valore entra
    * in gioco il "foglio senza foto" del layout, che dispone gli altri campi
@@ -1124,11 +1143,23 @@ export const ZOO_FIELDS: PrintField[] = [
   { id: "descrizioneArticolo", label: "Descrizione articolo", size: 14, bold: false },
   { id: "marca", label: "Marca", size: 14, bold: false },
   { id: "prezzoPromo", label: "Prezzo promo", size: 46, bold: true, font: "cn" },
-  { id: "prezzoListino", label: "Prezzo listino (barrato) / «A SOLI»", size: 16, bold: false },
+  {
+    id: "prezzoListino", label: "Prezzo listino (barrato) / «A SOLI»", size: 16, bold: false,
+    nota: "Il prezzo di partenza, stampato barrato. Quando non c'è (o si sceglie di stamparlo senza) al suo posto esce «A SOLI».",
+  },
   { id: "prezzoUnita", label: "Prezzo al kg / al litro", size: 11, bold: false },
-  { id: "meccanica", label: "Meccanica promo (3x2, 1+1…)", size: 30, bold: true, font: "cn" },
-  { id: "tipoPromo", label: "Tipo di promozione (3x2, 20%, A SOLI…)", size: 20, bold: true, font: "cn" },
-  { id: "sconto", label: "Sconto in percentuale (Sconto 10%)", size: 18, bold: true, font: "cn" },
+  {
+    id: "meccanica", label: "Meccanica promo (3x2, 1+1…)", size: 30, bold: true, font: "cn",
+    nota: "Solo la meccanica scritta dal Consorzio sull'offerta (3x2, 1+1). Resta vuota se l'offerta è a prezzo o se vale la promozione del punto vendita.",
+  },
+  {
+    id: "tipoPromo", label: "Tipo di promozione (3x2, 20%, A SOLI…)", size: 20, bold: true, font: "cn",
+    nota: "La promozione che vale davvero qui: quella del punto vendita se ha caricato il suo file (20%, 15%…), altrimenti la meccanica del Consorzio. È il campo da usare quasi sempre.",
+  },
+  {
+    id: "sconto", label: "Sconto in percentuale (Sconto 10%)", size: 18, bold: true, font: "cn",
+    nota: "Calcolato dai due prezzi del cartello: da 10,00 a 9,00 scrive «Sconto 10%». Vuoto se manca uno dei due prezzi.",
+  },
   { id: "label", label: "Etichetta (SOTTOCOSTO, NOVITÀ…)", size: 16, bold: true, font: "cn" },
   { id: "condizioni", label: "Condizioni", size: 11, bold: false },
   { id: "condizioniStandard", label: "Condizioni pronte (da Impostazioni)", size: 11, bold: false },

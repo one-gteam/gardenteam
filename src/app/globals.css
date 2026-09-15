@@ -842,4 +842,13 @@ table.data td { overflow-wrap: anywhere; }
   body { background: #fff; }
   .container { max-width: none; padding: 0; }
   .cartello { border: none; box-shadow: none; }
+  /*
+   * Gli sfondi colorati dei riquadri (il bollino rosso dello sconto, le fasce)
+   * per il browser sono "grafica di sfondo" e in stampa li salta: senza questa
+   * riga il cartello usciva con la scritta bianca su bianco, cioè invisibile.
+   */
+  .cartello, .cartello *, .vol-page, .vol-page * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
 }
