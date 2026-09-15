@@ -433,6 +433,11 @@ export default async function ZooStampaPage({
                         <BulkCheckbox name="coda" /> tutti
                       </label>
                       <span className="hint">Clic per spuntare, Maiusc+clic per un intervallo.</span>
+                      {g.formato.id === "za5" && (
+                        <label className="hint" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                          <input type="checkbox" name="doppio" value="1" /> stampa ogni cartello 2 volte (foglio A4 pieno)
+                        </label>
+                      )}
                       <button className="btn btn-sm" type="submit" style={{ marginLeft: "auto" }}
                         title={`Apre l'anteprima di stampa dei cartelli ${g.formato.name} (o dei soli spuntati) con le impostazioni salvate`}>
                         Stampa {g.formato.name} →

@@ -1637,6 +1637,8 @@ export async function stampaCoda(scopeParam: string, stato: "dopo" | "arrivo", f
   if (voci.length === 0) redirect(backUrl("/stampe/zoo/stampa", scopeParam));
   const params: Record<string, string> = { print: "1", sel: voci.map((v) => v.offerId).join(",") };
   for (const v of voci) for (const [k, val] of Object.entries(v.impostazioni)) if (val) params[k] = val;
+  // A5 due volte sullo stesso foglio A4 (la spunta del gruppo A5)
+  if (formData.get("doppio") === "1") params.doppio = "1";
   const adesso = new Date().toISOString();
   for (const v of voci) v.stampato = adesso;
   for (const v of voci) {
