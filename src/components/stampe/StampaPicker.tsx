@@ -1,6 +1,20 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+
+/**
+ * Interruttore a pillola: acceso = quella cosa esce sul cartello. Sostituisce
+ * le spunte "nascondi…", che si leggevano al contrario e occupavano tre righe.
+ */
+function Interruttore({ acceso, on, off, titolo, onClick }: {
+  acceso: boolean; on: string; off: string; titolo: string; onClick: () => void;
+}) {
+  return (
+    <button type="button" className={`chip ${acceso ? "on" : "off"}`} title={titolo} onClick={onClick}>
+      {acceso ? on : off}
+    </button>
+  );
+}
 import { useRouter } from "next/navigation";
 
 interface ProdLite {
@@ -55,6 +69,8 @@ export interface StampaPickerProps {
   onChange?: (query: string) => void;
   /** "Aggiorna anteprima": se c'è, sostituisce la navigazione alla stessa pagina. */
   onPreview?: () => void;
+  /** Apre il pannello dei testi del cartello di quella riga (Stampa Zoo). */
+  onPersonalizza?: (id: string) => void;
 }
 
 /** Selezione prodotti per la stampa: click per aggiungere, Shift+click per intervalli, formato per riga. */
@@ -82,6 +98,7 @@ export default function StampaPicker({
   onQueue,
   onChange,
   onPreview,
+  onPersonalizza,
 }: StampaPickerProps) {
   const router = useRouter();
   const [selected, setSelected] = useState<string[]>(initialSelected);
@@ -98,6 +115,7 @@ export default function StampaPicker({
   /* righe spuntate nella tabella dei selezionati: si tolgono in blocco, senza
      cliccare la ✕ una per una quando la lista è lunga */
   const [daTogliere, setDaTogliere] = useState<string[]>([]);
+  const menuCoda = useRef<HTMLDetailsElement>(null);
   /*
    * L'indirizzo della pagina segue la selezione: "Svuota" o "Togli gli spuntati"
    * cambiavano solo lo schermo, e al primo aggiornamento di pagina i prodotti
@@ -274,19 +292,13 @@ export default function StampaPicker({
       <div className="card">
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
           <h2 style={{ margin: 0, flex: 1 }}>Selezionati ({selectedProds.length})</h2>
-          <label style={{ fontSize: 12.5, fontWeight: 700 }}>
-            Formato{" "}
-            <select value={applyAll} onChange={(e) => setApplyAll(e.target.value)} style={{ marginTop: 0 }}>
+          <label style={{ fontSize: 12.5, fontWeight: 700 }} title="Il formato di tutti i cartelli selezionati; nella tabella si cambia riga per riga">
+            Formato per tutti{" "}
+            <select value={applyAll} style={{ marginTop: 0 }}
+              onChange={(e) => { setApplyAll(e.target.value); setRowFormat(Object.fromEntries(selected.map((id) => [id, e.target.value]))); }}>
               {formats.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
             </select>
           </label>
-          <button
-            type="button"
-            className="btn btn-outline btn-sm"
-            onClick={() => setRowFormat(Object.fromEntries(selected.map((id) => [id, applyAll])))}
-          >
-            Applica a tutti
-          </button>
           {selectedProds.length > 0 && (
             <>
               <button type="button" className="btn btn-outline btn-sm" disabled={daTogliere.length === 0}
@@ -302,7 +314,7 @@ export default function StampaPicker({
             </>
           )}
         </div>
-        {selectedProds.length === 0 && <p className="empty">Seleziona i prodotti dall&apos;elenco a sinistra (Shift+clic per più righe).</p>}
+        {selectedProds.length === 0 && <p className="empty">Seleziona i prodotti dall&apos;elenco a sinistra (Shift+clic per più righe): l&apos;anteprima compare a destra.</p>}
         {selectedProds.length > 0 && (
           <>
             <div className="table-wrap">
@@ -312,7 +324,8 @@ export default function StampaPicker({
                     <input type="checkbox" title="Spunta tutte" checked={daTogliere.length === selectedProds.length && selectedProds.length > 0}
                       onChange={(e) => setDaTogliere(e.target.checked ? selectedProds.map((p) => p.id) : [])} />
                   </th>
-                  <th>Prodotto</th><th>Formato</th><th>Prezzo cartello</th><th>Prezzo di partenza</th><th>Nascondi</th><th>Campi</th><th></th>
+                  <th>Prodotto</th><th>Formato</th><th>Prezzo cartello</th><th>Prezzo di partenza</th>
+                  <th title="Cosa esce sul cartello: acceso = si stampa, spento = no">Sul cartello</th><th></th>
                 </tr></thead>
                 <tbody>
                   {selectedProds.map((p) => (
@@ -353,38 +366,28 @@ export default function StampaPicker({
                         />
                       </td>
                       <td style={{ whiteSpace: "nowrap" }}>
-                        <label style={{ fontSize: 12, display: "flex", gap: 4, alignItems: "center" }}>
-                          <input
-                            type="checkbox"
-                            checked={!!noPrice[p.id]}
-                            onChange={(e) => setNoPrice((prev) => ({ ...prev, [p.id]: e.target.checked }))}
-                          />{" "}
-                          prezzo
-                        </label>
-                        <label style={{ fontSize: 12, display: "flex", gap: 4, alignItems: "center" }}
-                          title="Stampa senza il prezzo di partenza: al suo posto esce «A SOLI» e il cartello usa il layout «Promo senza prezzo barrato»">
-                          <input
-                            type="checkbox"
-                            checked={!!noListino[p.id]}
-                            onChange={(e) => setNoListino((prev) => ({ ...prev, [p.id]: e.target.checked }))}
-                          />{" "}
-                          partenza → A SOLI
-                        </label>
-                        {/* senza foto si stampa il "foglio senza foto" del layout, con i campi ridisposti */}
-                        <label style={{ fontSize: 12, display: "flex", gap: 4, alignItems: "center" }}
-                          title="Stampa questo cartello senza foto, anche se l'articolo ne ha una">
-                          <input
-                            type="checkbox"
-                            checked={!!noPhoto[p.id]}
-                            onChange={(e) => setNoPhoto((prev) => ({ ...prev, [p.id]: e.target.checked }))}
-                          />{" "}
-                          foto
-                        </label>
-                      </td>
-                      <td>
+                        <div className="chips">
+                          <Interruttore acceso={!noPrice[p.id]} on="€ prezzo" off="senza prezzo"
+                            titolo="Il prezzo promo sul cartello: spento = si stampa senza prezzo"
+                            onClick={() => setNoPrice((prev) => ({ ...prev, [p.id]: !prev[p.id] }))} />
+                          <Interruttore acceso={!noListino[p.id]} on="barrato" off="A SOLI"
+                            titolo="Il prezzo di partenza barrato: spento = al suo posto esce «A SOLI» e il cartello usa il layout «Promo senza prezzo barrato»"
+                            onClick={() => setNoListino((prev) => ({ ...prev, [p.id]: !prev[p.id] }))} />
+                          {/* senza foto si stampa il "foglio senza foto" del layout, con i campi ridisposti */}
+                          <Interruttore acceso={!noPhoto[p.id]} on="foto" off="senza foto"
+                            titolo="La foto dell'articolo: spento = si stampa il foglio senza foto, anche se l'articolo ce l'ha"
+                            onClick={() => setNoPhoto((prev) => ({ ...prev, [p.id]: !prev[p.id] }))} />
+                        </div>
+                        <div className="chips" style={{ marginTop: 4 }}>
+                        {onPersonalizza && (
+                          <button type="button" className="chip" onClick={() => onPersonalizza(p.id)}
+                            title="Correggi titolo, descrizione, prezzi e condizioni di questo cartello">
+                            ✎ Testi
+                          </button>
+                        )}
                         <details className="flag-details">
-                          <summary className="btn btn-outline btn-sm" style={{ opacity: 1, fontSize: 12 }} title="Nascondi campi in questo cartello">
-                            Campi{hiddenFields[p.id]?.length ? ` (${hiddenFields[p.id].length})` : ""}
+                          <summary className="chip" style={{ opacity: 1 }} title="Nascondi alcuni campi in questo cartello">
+                            Campi{hiddenFields[p.id]?.length ? ` (−${hiddenFields[p.id].length})` : ""}
                           </summary>
                           <div className="flag-popover" style={{ maxHeight: 240, overflowY: "auto" }}>
                             {fields.map((f) => (
@@ -404,9 +407,11 @@ export default function StampaPicker({
                             ))}
                           </div>
                         </details>
+                        </div>
                       </td>
                       <td>
-                        <button type="button" className="btn btn-outline btn-sm" onClick={() => setSelected((prev) => prev.filter((x) => x !== p.id))}>✕</button>
+                        <button type="button" className="btn btn-outline btn-sm" title="Togli dalla selezione"
+                          onClick={() => setSelected((prev) => prev.filter((x) => x !== p.id))}>✕</button>
                       </td>
                     </tr>
                   ))}
@@ -414,42 +419,52 @@ export default function StampaPicker({
               </table>
             </div>
             {/* stessa scelta su tutti i selezionati in un colpo: spunta = nascondi, togli la spunta = rimetti */}
-            <div style={{ display: "flex", gap: 12, marginTop: 10, flexWrap: "wrap", alignItems: "center", fontSize: 12.5 }}>
-              <strong>Su tutti i selezionati nascondi:</strong>
-              {([["prezzo", "prezzo"], ["listino", "prezzo di partenza (esce «A SOLI»)"], ["foto", "foto"]] as const).map(([cosa, etichetta]) => {
-                const tutti = selected.length > 0 && selected.every((id) => (cosa === "prezzo" ? noPrice[id] : cosa === "listino" ? noListino[id] : noPhoto[id]));
+            <div className="chips" style={{ marginTop: 10, alignItems: "center" }}>
+              <span className="hint" style={{ marginRight: 4 }}>Su tutti:</span>
+              {([["prezzo", "€ prezzo", "senza prezzo"], ["listino", "barrato", "A SOLI"], ["foto", "foto", "senza foto"]] as const).map(([cosa, on, off]) => {
+                const acceso = selected.some((id) => !(cosa === "prezzo" ? noPrice[id] : cosa === "listino" ? noListino[id] : noPhoto[id]));
                 return (
-                  <label key={cosa} style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
-                    <input type="checkbox" checked={tutti} onChange={(e) => nascondiSuTutti(cosa, e.target.checked)} /> {etichetta}
-                  </label>
+                  <Interruttore key={cosa} acceso={acceso} on={on} off={off}
+                    titolo="Accende o spegne questa cosa su tutti i cartelli selezionati insieme"
+                    onClick={() => nascondiSuTutti(cosa, acceso)} />
                 );
               })}
             </div>
             {esitoCoda && <div className="alert alert-green" style={{ marginTop: 8 }}>{esitoCoda}</div>}
-            <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap", alignItems: "center" }}>
+            <div className="azioni-stampa">
               {onQueue && (
-                <>
-                  <button type="button" className="btn btn-outline" onClick={() => inCoda("dopo")}
-                    title="Mette da parte i cartelli selezionati con tutte le impostazioni: si stampano dopo, in blocco">
-                    Stampa per dopo
-                  </button>
-                  <button type="button" className="btn btn-outline" onClick={() => inCoda("arrivo")}
-                    title="Merce non ancora arrivata: le impostazioni restano salvate, si stampa quando entra">
-                    Merce in arrivo
-                  </button>
-                </>
+                <details className="menu-tendina" ref={menuCoda}>
+                  <summary className="btn btn-outline" title="Mette da parte i cartelli selezionati con tutte le impostazioni">
+                    Metti in coda ▾
+                  </summary>
+                  <div>
+                    <button type="button" className="btn btn-outline btn-sm" onClick={() => { menuCoda.current?.removeAttribute("open"); inCoda("dopo"); }}
+                      title="Si stampano dopo, in blocco, dalla scheda Liste">
+                      Da stampare più tardi
+                    </button>
+                    <button type="button" className="btn btn-outline btn-sm" onClick={() => { menuCoda.current?.removeAttribute("open"); inCoda("arrivo"); }}
+                      title="Merce non ancora arrivata: le impostazioni restano salvate, si stampa quando entra">
+                      Merce in arrivo
+                    </button>
+                  </div>
+                </details>
               )}
+              {/* senza anteprima dal vivo (Arredo) il pulsante ricarica la pagina con la selezione */}
+              {!onChange && (
+                <button type="button" className="btn btn-outline" onClick={() => (onPreview ? onPreview() : router.push(buildUrl(false)))}>
+                  Aggiorna anteprima →
+                </button>
+              )}
+              <span style={{ flex: 1 }} />
               {anyA5 && (
                 <label style={{ fontSize: 12.5, display: "flex", gap: 5, alignItems: "center" }}>
                   <input type="checkbox" checked={doppio} onChange={(e) => setDoppio(e.target.checked)} />
-                  A5: stampa ogni cartello 2 volte (foglio A4 pieno)
+                  A5: ogni cartello 2 volte (foglio A4 pieno)
                 </label>
               )}
-              <button type="button" className="btn btn-outline" onClick={() => (onPreview ? onPreview() : router.push(buildUrl(false)))}>
-                Aggiorna anteprima →
-              </button>
-              <button type="button" className="btn" onClick={vaiAllaStampa}>
-                Anteprima di stampa / Esporta PDF
+              <button type="button" className="btn" onClick={vaiAllaStampa}
+                title="Apre l'anteprima di stampa: da lì Stampa o Salva come PDF (Ctrl+P)">
+                Stampa {selectedProds.length} {selectedProds.length === 1 ? "cartello" : "cartelli"} →
               </button>
             </div>
           </>

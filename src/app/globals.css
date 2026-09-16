@@ -590,8 +590,12 @@ table.data td { overflow-wrap: anywhere; }
 .reparto input, .reparto textarea { user-select: text; }
 
 /* Stampa cartelli: elenco, selezionati, anteprima. minmax(0) evita che la colonna centrale allarghi la pagina */
-.stampa-griglia { display: grid; grid-template-columns: 300px minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
-@media (max-width: 1100px) { .stampa-griglia { grid-template-columns: 1fr; } }
+.stampa-griglia { display: grid; grid-template-columns: 270px minmax(0, 1fr) 280px; gap: 16px; align-items: start; }
+/* le pillole "sul cartello" stanno su una riga, il nome del prodotto non va a capo lettera per lettera */
+.stampa-griglia table.data td:has(> .chips) { min-width: 215px; }
+.stampa-griglia table.data td:nth-child(2) { min-width: 130px; }
+/* minmax(0) anche da cellulare: con "1fr" secco la tabella dei selezionati allargava la colonna oltre lo schermo */
+@media (max-width: 1100px) { .stampa-griglia { grid-template-columns: minmax(0, 1fr); } }
 
 .layout-editor { display: grid; grid-template-columns: 200px 1fr 250px; gap: 16px; align-items: start; }
 @media (max-width: 1000px) { .layout-editor { grid-template-columns: 1fr; } }
@@ -851,4 +855,81 @@ table.data td { overflow-wrap: anywhere; }
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
+}
+
+/* ===== Stampa cartelli in tre schede: Stampa, Liste, Regole ===== */
+.stampa-testata { display: flex; gap: 14px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 12px; }
+.stampa-testata .subtitle { margin: 4px 0 0; }
+.stampa-testata form { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
+.stampa-testata form .field { margin-bottom: 0; }
+.stampa-testata form select { margin-top: 2px; max-width: 260px; }
+.schede { display: flex; gap: 2px; border-bottom: 2px solid var(--line); margin: 0 0 14px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+.schede::-webkit-scrollbar { display: none; }
+.schede a {
+  display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; margin-bottom: -2px;
+  border-bottom: 2px solid transparent; color: var(--muted); font-weight: 700; font-size: 14px; white-space: nowrap;
+}
+.schede a:hover { text-decoration: none; color: var(--green-700); }
+.schede a.attiva { color: var(--green-700); border-bottom-color: var(--green-700); }
+.schede .pill { font-size: 10.5px; padding: 1px 7px; }
+
+/* pillole-interruttore: accese = quella cosa esce sul cartello */
+.chips { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.chip {
+  display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border-radius: 999px;
+  border: 1px solid var(--line); background: #fff; font-size: 11.5px; font-weight: 600; color: var(--muted);
+  cursor: pointer; line-height: 1.5; user-select: none; font-family: inherit; white-space: nowrap;
+}
+.chip:hover { border-color: var(--green-500); color: var(--green-700); }
+.chip.on { background: var(--green-100); color: var(--green-700); border-color: var(--green-500); }
+.chip.off { background: #f6f5f1; text-decoration: line-through; }
+/* le marche nei filtri: la casella sta dentro la pillola e la colora */
+label.chip input { display: none; }
+label.chip:has(input:checked) { background: var(--green-100); color: var(--green-700); border-color: var(--green-500); }
+.filtri-stampa { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; align-items: end; }
+.filtri-stampa .field { margin-bottom: 0; }
+.filtri-stampa > .filtri-altro { grid-column: 1 / -1; }
+.filtri-altro > summary { cursor: pointer; font-weight: 700; font-size: 12.5px; list-style: none; }
+.filtri-altro > summary::-webkit-details-marker { display: none; }
+.filtri-altro > summary::before { content: "\25b8"; opacity: .6; margin-right: 4px; }
+.filtri-altro[open] > summary::before { content: "\25be"; }
+.filtri-altro > summary .hint { font-weight: 400; margin-left: 6px; }
+.filtri-altro > div { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 8px; }
+
+/* i pulsanti sotto ai selezionati: coda a sinistra, la stampa verde a destra */
+.azioni-stampa { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; align-items: center; }
+.menu-tendina { position: relative; display: inline-block; }
+.menu-tendina > summary { list-style: none; cursor: pointer; display: inline-block; }
+.menu-tendina > summary::-webkit-details-marker { display: none; }
+.menu-tendina > div {
+  position: absolute; left: 0; top: calc(100% + 4px); z-index: 30; min-width: 230px;
+  background: #fff; border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow);
+  padding: 6px; display: flex; flex-direction: column; gap: 4px;
+}
+.menu-tendina > div .btn { text-align: left; justify-content: flex-start; }
+
+/* il pannello dei testi di un cartello, sul lato destro */
+.pannello-velo { position: fixed; inset: 0; background: rgba(20, 40, 25, .28); z-index: 59; }
+.pannello-lato {
+  position: fixed; top: 0; right: 0; bottom: 0; width: 460px; max-width: 100vw; z-index: 60;
+  background: #fff; box-shadow: -8px 0 30px rgba(0,0,0,.18); overflow-y: auto; padding: 16px 18px 40px;
+}
+.pannello-anteprima { display: flex; justify-content: center; overflow: hidden; background: #f6f5f1; border-radius: 10px; padding: 8px; }
+.pannello-campo { margin-top: 10px; }
+.pannello-etichetta { font-size: 12px; font-weight: 700; margin-bottom: 3px; }
+.pannello-riga { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+/* le regole dell'insegna/PV: una scheda per argomento */
+.regole { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 14px; align-items: start; }
+.regole .card { padding: 14px; }
+.regole h3 { margin: 0 0 4px; font-size: 15px; }
+.regole .stato { font-size: 12.5px; color: var(--muted); margin: 0 0 10px; }
+
+@media screen and (max-width: 760px) {
+  .schede a { padding: 8px 10px; font-size: 13px; }
+  .pannello-lato { width: 100vw; padding: 12px 12px 40px; }
+  .pannello-riga { grid-template-columns: 1fr; }
+  .regole { grid-template-columns: 1fr; }
+  .azioni-stampa > span[style] { display: none; }
+  .azioni-stampa .btn:last-child { flex: 1 0 100%; text-align: center; }
 }

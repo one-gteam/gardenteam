@@ -8,6 +8,9 @@ import RigaCoda from "@/components/stampe/RigaCoda";
 import RigaAzione from "@/components/stampe/RigaAzione";
 import ColonnaOrdinabile from "@/components/stampe/ColonnaOrdinabile";
 import FiltriMobile from "@/components/FiltriMobile";
+import SchedeStampa from "@/components/stampe/SchedeStampa";
+import FormAutoInvia from "@/components/stampe/FormAutoInvia";
+import AutoSubmitSelect from "@/components/stampe/AutoSubmitSelect";
 import StampeHeader from "@/components/stampe/StampeHeader";
 import Cartello from "@/components/stampe/Cartello";
 import StampaWorkspace from "@/components/stampe/StampaWorkspace";
@@ -103,6 +106,23 @@ export default async function ZooStampaPage({
     .map((h) => h.value);
 
   const q = (sp.q ?? "").toLowerCase();
+  /*
+   * Un solo filtro "Stato" al posto di due tendine (già stampati / esclusi):
+   * i vecchi parametri restano validi per i link salvati.
+   */
+  const fStampati = sp.stato === "da" ? "no" : sp.stato === "si" ? "si" : sp.stato ? "" : (sp.stampati ?? "");
+  const fEsclusi = sp.stato === "esclusi" ? "si" : sp.stato === "soloesclusi" ? "solo" : sp.stato ? "" : (sp.nonstampabili ?? "");
+  const statoValore = fStampati === "no" ? "da" : fStampati === "si" ? "si" : fEsclusi === "si" ? "esclusi" : fEsclusi === "solo" ? "soloesclusi" : "";
+  /*
+   * La pagina è in tre schede: Stampa (il lavoro di tutti i giorni), Liste
+   * (coda, stampati, in arrivo, non conformi, esclusi) e Regole dell'ambito
+   * (prezzi propri, codici da non stampare, offerte proprie, marche). Le azioni
+   * delle regole e delle liste tornano qui coi loro avvisi: si riapre la scheda giusta.
+   */
+  const tab = sp.tab === "liste" || sp.tab === "regole" ? sp.tab
+    : sp.noprint !== undefined || sp.prezzi !== undefined || sp.azzerati !== undefined || sp.offerta ? "regole"
+    : sp.rimessi !== undefined ? "liste"
+    : "stampa";
   // giacenze e prezzi del gestionale collegato (se c'è), su tutte le offerte: servono anche al filtro
   const giacenze = await giacenzePer(db, scope, academyDb, allOffers.map((o) => o.ean));
   const giacenzaDi = (eans: string[]) => {
@@ -131,12 +151,12 @@ export default async function ZooStampaPage({
       if (sp.giacenza === "zero" && !(g && g.giacenza <= 0)) return false;
       if (sp.giacenza === "no" && g) return false;
     }
-    if (sp.nonstampabili !== "si" && sp.nonstampabili !== "solo" && escluso(o)) return false;
-    if (sp.nonstampabili === "solo" && !escluso(o)) return false;
+    if (fEsclusi !== "si" && fEsclusi !== "solo" && escluso(o)) return false;
+    if (fEsclusi === "solo" && !escluso(o)) return false;
     if (sp.volantino === "si" && !inVolantino(o)) return false;
     if (sp.volantino === "no" && inVolantino(o)) return false;
-    if (sp.stampati === "si" && !printedAt(db, scope, o.id)) return false;
-    if (sp.stampati === "no" && printedAt(db, scope, o.id)) return false;
+    if (fStampati === "si" && !printedAt(db, scope, o.id)) return false;
+    if (fStampati === "no" && printedAt(db, scope, o.id)) return false;
     if (q) {
       const testo = [
         o.descrizione, o.ean, marcaEffettiva(product ?? { marca: "", fornitore: "" }), product?.descrizione ?? "", product?.codice ?? "",
@@ -373,36 +393,64 @@ export default async function ZooStampaPage({
     );
   }
 
+  const filtriAttivi = [
+    sp.q && `«${sp.q}»`, sp.animale, sp.caratt,
+    fStampati === "no" && "da stampare", fStampati === "si" && "già stampati",
+    fEsclusi === "si" && "anche gli esclusi", fEsclusi === "solo" && "solo gli esclusi",
+    sp.volantino === "si" && "in volantino", sp.volantino === "no" && "non in volantino",
+    vistaSingole && "offerte singole",
+    sp.giacenza === "si" && "con giacenza", sp.giacenza === "zero" && "giacenza zero", sp.giacenza === "no" && "non nel gestionale",
+    marcheScelte.length > 0 && `${marcheScelte.length} ${marcheScelte.length === 1 ? "marca" : "marche"}`,
+  ];
+  const altroAttivi = [
+    sp.volantino === "si" && "in volantino", sp.volantino === "no" && "non in volantino",
+    vistaSingole && "offerte singole",
+    sp.giacenza === "si" && "con giacenza", sp.giacenza === "zero" && "giacenza zero", sp.giacenza === "no" && "non nel gestionale",
+  ].filter(Boolean) as string[];
+  const nCodiciNoPrint = noPrint.eans.size;
+  const nPrezziMiei = db.pvPrices.filter((p) => p.scopeType === scope.type && p.scopeId === scope.id).length;
+
   return (
     <div>
       <StampeHeader user={user} active="stampa" area="zoo" />
       <div className="container">
-        <div style={{ display: "flex", gap: 14, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 16 }}>
+        <div className="stampa-testata">
           <div style={{ flex: 1 }}>
             <h1 style={{ margin: 0 }}>Stampa cartelli</h1>
-            <p className="subtitle" style={{ margin: "4px 0 0" }}>
+            <p className="subtitle">
               {campaign ? `${campaign.nome} · versione dati e layout di: ` : "Nessun volantino da stampare · ambito: "}
               <strong>{scope.label}</strong>
             </p>
           </div>
-          {scope.type !== "system" && (
-          <details className="strumento" open={sp.prezzi !== undefined}>
-            <summary className="btn btn-outline btn-sm">Carica i tuoi prezzi</summary>
-          <div className="card" style={{ marginTop: 10, padding: 14 }}>
-            <strong>Carica i tuoi prezzi</strong>
-            <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "4px 0 8px" }}>
-              Se i prezzi di {scope.label} differiscono da quelli del Consorzio, carica un Excel con EAN (o CODICE
-              FORNITORE) e PREZZO: sostituirà il prezzo promo sui cartelli di questo ambito, articolo per articolo.{" "}
-              <a href={`/stampe/zoo/excel?prezzi=1&scope=${scopeParam}`}>Scarica il modello precompilato</a>
-            </p>
-            <ImportExcel
-              action={importPvPricesRighe.bind(null, scopeParam)}
-              colonne={["ean", "codice ean", "barcode", "codice fornitore", "cod. fornitore", "codice", "prezzo", "prezzo vendita", "prezzo pv"]}
-              etichetta="Importa prezzi"
-            />
-          </div>
-          </details>
-          )}
+          {/* periodo e ambito cambiano al volo: niente pulsanti da premere dopo */}
+          <form method="get">
+            {Object.entries(sp).map(([k, v]) => (k !== "scope" && k !== "campagna" && v ? <input key={k} type="hidden" name={k} value={v} /> : null))}
+            {stampabili.length > 1 && (
+              <label className="field">
+                Periodo promozionale
+                <AutoSubmitSelect name="campagna" defaultValue={campaign?.id ?? ""}
+                  options={stampabili.map((c) => ({ value: c.id, label: etichettaPeriodo(c) }))} />
+              </label>
+            )}
+            <label className="field">
+              Insegna / PV
+              <AutoSubmitSelect name="scope" defaultValue={scopeParam}
+                options={scopes.map((s) => ({ value: `${s.type}:${s.id}`, label: s.label }))} />
+            </label>
+          </form>
+        </div>
+
+        <SchedeStampa attiva={tab} schede={[
+          { id: "stampa", label: "Stampa" },
+          { id: "liste", label: "Liste", pillole: [
+            { n: codaDopo.length, label: "da stampare dopo", classe: "pill-orange" },
+            { n: codaStampati.length, label: "stampati", classe: "pill-gray" },
+            { n: codaArrivo.length, label: "in arrivo", classe: "pill-amber" },
+            { n: nonConformiVoci.length, label: "non conformi", classe: "pill-orange" },
+            { n: esclusiVoci.length, label: "esclusi", classe: "pill-red" },
+          ] },
+          { id: "regole", label: `Regole di ${scope.label}` },
+        ]} />
 
         {sp.noprint !== undefined && (
           sp.noprint === "consorzio" ? (
@@ -426,94 +474,166 @@ export default async function ZooStampaPage({
             </div>
           )
         )}
-
-          {scope.type !== "system" && (
-          <details className="strumento" open={sp.noprint !== undefined}>
-            <summary className="btn btn-outline btn-sm">Cartelli da non stampare</summary>
-          <div className="card" style={{ marginTop: 10, padding: 14 }}>
-            <strong>Cartelli da non stampare</strong>
-            <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "4px 0 8px" }}>
-              Carica un Excel con i codici a barre (o i CODICE FORNITORE) degli articoli che {scope.label} non espone:
-              spariscono dai cartelli senza toccare l&apos;offerta degli altri. L&apos;esclusione segue l&apos;articolo, quindi vale
-              anche per i volantini successivi. Se aggiungi la colonna NON STAMPARE, un &laquo;no&raquo; rimette il cartello in
-              stampa.{" "}
-              <a href={`/stampe/zoo/excel?nonstampare=1&scope=${scopeParam}`}>Scarica il modello precompilato</a>
-            </p>
-            <ImportExcel
-              action={importZooNoPrintRighe.bind(null, scopeParam)}
-              colonne={[
-                "ean", "codice ean", "barcode", "codice a barre", "cod. barre",
-                "codice fornitore", "cod. fornitore", "codice articolo", "codice",
-                "non stampare", "non stamparlo", "escludi", "stampa", "stampare",
-              ]}
-              etichetta="Importa i codici"
-            />
-            {noPrint.eans.size > 0 && (
-              <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 10, flexWrap: "wrap" }}>
-                <span style={{ fontSize: 12.5, color: "var(--muted)" }}>
-                  {noPrint.eans.size} {noPrint.eans.size === 1 ? "codice" : "codici"} in elenco,{" "}
-                  {allOffers.filter((o) => noPrint.eans.has(o.ean)).length} sui cartelli di questo periodo.
-                </span>
-                <a className="btn btn-outline btn-sm" href={`/stampe/zoo/stampa?scope=${scopeParam}&nonstampabili=si`}>Vedi gli esclusi</a>
-                <form action={svuotaZooNoPrint.bind(null, scopeParam)}>
-                  <button className="btn btn-outline btn-sm" type="submit">Svuota l&apos;elenco</button>
-                </form>
-              </div>
-            )}
-          </div>
-          </details>
-          )}
-
-          {/* periodo promozionale: quello in corso a scaffale o quello in preparazione */}
-          {stampabili.length > 1 && (
-            <form method="get" style={{ display: "flex", gap: 8, alignItems: "end" }}>
-              <input type="hidden" name="scope" value={scopeParam} />
-              <label className="field" style={{ marginBottom: 0 }}>
-                Periodo promozionale
-                <select name="campagna" defaultValue={campaign?.id ?? ""}>
-                  {stampabili.map((c) => (
-                    <option key={c.id} value={c.id}>{etichettaPeriodo(c)}</option>
-                  ))}
-                </select>
-              </label>
-              <button className="btn btn-sm" type="submit">Cambia</button>
-            </form>
-          )}
-          <form method="get" style={{ display: "flex", gap: 8, alignItems: "end" }}>
-            {Object.entries(sp).map(([k, v]) => (k !== "scope" && v ? <input key={k} type="hidden" name={k} value={v} /> : null))}
-            <label className="field" style={{ marginBottom: 0 }}>
-              Insegna / PV
-              <select name="scope" defaultValue={scopeParam}>
-                {scopes.map((s) => <option key={`${s.type}:${s.id}`} value={`${s.type}:${s.id}`}>{s.label}</option>)}
-              </select>
-            </label>
-            <button className="btn btn-sm" type="submit">OK</button>
-          </form>
-        </div>
-
         {sp.prezzi !== undefined && (
           <div className="alert alert-green">
             ✓ {sp.prezzi} prezzi caricati per {scope.label}: sostituiscono il prezzo promo del Consorzio sui cartelli di questo ambito.
           </div>
         )}
-
-        {sp.rimessi !== undefined && (
+        {sp.rimessi !== undefined && sp.noprint === undefined && (
           <div className="alert alert-green">✓ {sp.rimessi} cartelli rimessi fra quelli da stampare.</div>
         )}
-
         {sp.azzerati !== undefined && (
           <div className="alert alert-green">✓ Azzerato il &quot;già stampato&quot; su {sp.azzerati} cartelli.</div>
         )}
 
+        {/* ================= Stampa: filtra, scegli, prepara, stampa ================= */}
+        {tab === "stampa" && (
+          <>
+            <div className="card" style={{ marginBottom: 16, padding: 14 }}>
+              <FiltriMobile id="filtri-stampa" scelte={filtriAttivi}>
+                <FormAutoInvia className="filtri-stampa">
+                  <input type="hidden" name="scope" value={scopeParam} />
+                  <input type="hidden" name="sel" value={sp.sel ?? ""} />
+                  {campaign && <input type="hidden" name="campagna" value={campaign.id} />}
+                  <label className="field">
+                    Cerca
+                    <input type="text" name="q" defaultValue={sp.q ?? ""} placeholder="prodotto, EAN, marca — poi Invio" />
+                  </label>
+                  <label className="field">
+                    Tipologia animale
+                    <select name="animale" defaultValue={sp.animale ?? ""}>
+                      <option value="">Tutte</option>
+                      {db.settings.categorieAnimali.map((a) => <option key={a} value={a}>{a}</option>)}
+                    </select>
+                  </label>
+                  <label className="field">
+                    Caratteristica
+                    <select name="caratt" defaultValue={sp.caratt ?? ""}>
+                      <option value="">Tutte</option>
+                      {db.settings.caratteristicheProdotto.map((c) => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </label>
+                  <label className="field">
+                    Stato
+                    <select name="stato" defaultValue={statoValore}
+                      title="Gli esclusi sono i cartelli segnati «Non stampare» o caricati nell'elenco dei codici da non stampare">
+                      <option value="">Tutti i cartelli</option>
+                      <option value="da">Solo da stampare</option>
+                      <option value="si">Solo già stampati</option>
+                      <option value="esclusi">Anche gli esclusi</option>
+                      <option value="soloesclusi">Solo gli esclusi</option>
+                    </select>
+                  </label>
+                  <details className="filtri-altro" open={altroAttivi.length > 0}>
+                    <summary>
+                      Altro
+                      <span className="hint">{altroAttivi.length > 0 ? altroAttivi.join(" · ") : "volantino, elenco, giacenza"}</span>
+                    </summary>
+                    <div>
+                      <label className="field">
+                        Sul volantino
+                        <select name="volantino" defaultValue={sp.volantino ?? ""}>
+                          <option value="">Tutte</option>
+                          <option value="si">Solo le offerte in volantino</option>
+                          <option value="no">Solo quelle NON in volantino</option>
+                        </select>
+                      </label>
+                      <label className="field">
+                        Elenco
+                        <select name="vista" defaultValue={sp.vista ?? ""}>
+                          <option value="">Per prodotto padre</option>
+                          <option value="singole">Offerte singole</option>
+                        </select>
+                      </label>
+                      {Object.keys(giacenze).length > 0 && (
+                        <label className="field">
+                          Giacenza
+                          <select name="giacenza" defaultValue={sp.giacenza ?? ""}>
+                            <option value="">Qualsiasi</option>
+                            <option value="si">Solo con giacenza (&gt; 0)</option>
+                            <option value="zero">Solo giacenza zero</option>
+                            <option value="no">Non nel gestionale</option>
+                          </select>
+                        </label>
+                      )}
+                    </div>
+                  </details>
+                  <div className="chips" style={{ gridColumn: "1 / -1" }}
+                    title="Spunta una o più marche; nessuna spunta = tutte. La marca è quella del listino o, se manca, il fornitore.">
+                    <span className="hint" style={{ marginRight: 4 }}>Marche{marcheScelte.length > 0 ? ` (${marcheScelte.length})` : ""}:</span>
+                    {marche.length === 0 && <span className="hint">nessuna marca in questo periodo</span>}
+                    {marche.map((m) => (
+                      <label key={m} className="chip">
+                        <input type="checkbox" name="marca" value={m} defaultChecked={marcheScelte.includes(m)} />
+                        {m}
+                      </label>
+                    ))}
+                    {marcheScelte.length > 0 && (
+                      <a className="chip" href={`/stampe/zoo/stampa?${new URLSearchParams(Object.fromEntries(Object.entries(sp).filter(([k, v]) => v && k !== "marca") as [string, string][]))}`}>
+                        ✕ tutte le marche
+                      </a>
+                    )}
+                  </div>
+                  <noscript><button className="btn btn-sm" type="submit">Filtra</button></noscript>
+                </FormAutoInvia>
+              </FiltriMobile>
+            </div>
+
+            <StampaWorkspace
+              dettagliUrl="/stampe/zoo/stampa/dettagli"
+              fields={ZOO_FIELDS}
+              scopeParam={scopeParam}
+              picker={{
+                totale: voci.length,
+                mostraTuttiHref: `/stampe/zoo/stampa?${new URLSearchParams({ ...Object.fromEntries(Object.entries(sp).filter(([, v]) => v) as [string, string][]), tutti: "1" })}`,
+                products: sp.tutti === "1" ? voci : voci.slice(0, 150),
+                prodottiSelezionati: selezionatiFuoriElenco,
+                formats: ZOO_FORMATS.map((f) => ({ id: f.id, name: f.name })),
+                scopeParam,
+                filters: {
+                  q: sp.q ?? "", animale: sp.animale ?? "", caratt: sp.caratt ?? "", marca: marcheScelte.join(","), vista: sp.vista ?? "", giacenza: sp.giacenza ?? "",
+                  volantino: sp.volantino ?? "", stato: statoValore, campagna: campaign?.id ?? "",
+                },
+                printed: Object.fromEntries(
+                  visible.map((o) => [o.id, printedAt(db, scope, o.id) ?? ""]).filter(([, v]) => v)
+                ),
+                onPrint: markZooPrinted.bind(null, scopeParam),
+                initialSelected: selectedIds,
+                initialFormats: Object.fromEntries(
+                  selectedIds.map((id) => [id, sp[`formato_${id}`] ?? globalFormatId]).filter(([, v]) => v)
+                ),
+                initialPrices: Object.fromEntries(selectedIds.map((id) => [id, sp[`prezzo_${id}`] ?? ""]).filter(([, v]) => v)),
+                initialListini: Object.fromEntries(selectedIds.map((id) => [id, sp[`listino_${id}`] ?? ""]).filter(([, v]) => v)),
+                initialNoPrice: Object.fromEntries(selectedIds.map((id) => [id, sp[`noprezzo_${id}`] === "1"])),
+                initialNoPhoto: Object.fromEntries(selectedIds.map((id) => [id, sp[`senzafoto_${id}`] === "1"])),
+                initialNoListino: Object.fromEntries(selectedIds.map((id) => [id, sp[`nolistino_${id}`] === "1"])),
+                initialHidden: Object.fromEntries(
+                  selectedIds.map((id) => [id, (sp[`nascondi_${id}`] ?? "").split(",").filter(Boolean)])
+                ),
+                fields: ZOO_FIELDS.map((f) => ({ id: f.id, label: f.label })),
+                globalFormat: globalFormatId,
+                baseUrl: "/stampe/zoo/stampa",
+              }}
+            />
+          </>
+        )}
+
         {/*
-          * Cosa c'è da guardare prima di stampare, in sezioni che si aprono e si
-          * chiudono: la coda di stampa, la merce in arrivo, i cartelli segnati
-          * non conformi in reparto e quelli esclusi dalla stampa. Ogni elenco è
-          * una tabella con marca, fornitore, animale e tipo di promozione, e le
-          * intestazioni ordinano: si prepara il giro di uno scaffale per volta.
+          * ================= Liste: cosa c'è da guardare prima di stampare =================
+          * La coda di stampa, la merce in arrivo, i cartelli segnati non conformi
+          * in reparto e quelli esclusi dalla stampa, in sezioni che si aprono e
+          * si chiudono. Ogni elenco è una tabella con marca, fornitore, animale e
+          * tipo di promozione, e le intestazioni ordinano: si prepara il giro di
+          * uno scaffale per volta.
           */}
-        {(codaDopo.length > 0 || codaArrivo.length > 0 || codaStampati.length > 0 || nonConformiVoci.length > 0 || esclusiVoci.length > 0) && (
+        {tab === "liste" && (
           <div className="card sezioni" style={{ marginBottom: 16, padding: 14 }}>
+            {codaDopo.length === 0 && codaArrivo.length === 0 && codaStampati.length === 0 && nonConformiVoci.length === 0 && esclusiVoci.length === 0 && (
+              <p className="empty" style={{ margin: 0 }}>
+                Niente in lista per {scope.label}: qui compaiono i cartelli messi da parte («Metti in coda» dai selezionati o
+                dal reparto), quelli già stampati, la merce in arrivo, i non conformi e gli esclusi.
+              </p>
+            )}
             {(codaDopo.length > 0 || codaStampati.length > 0) && (
               <details className="sezione" open>
                 <summary>
@@ -570,7 +690,7 @@ export default async function ZooStampaPage({
                               </RigaCoda>
                               {c.parentId && (
                                 <tr><td colSpan={8} style={{ padding: 0 }}>
-                                  <PannelloPadre parentId={c.parentId} scopeParam={scopeParam} back="/stampe/zoo/stampa" />
+                                  <PannelloPadre parentId={c.parentId} scopeParam={scopeParam} back="/stampe/zoo/stampa?tab=liste" />
                                 </td></tr>
                               )}
                             </Fragment>
@@ -745,7 +865,7 @@ export default async function ZooStampaPage({
                             </tr>
                             {n.parentId && (
                               <tr><td colSpan={7} style={{ padding: 0 }}>
-                                <PannelloPadre parentId={n.parentId} scopeParam={scopeParam} back="/stampe/zoo/stampa" />
+                                <PannelloPadre parentId={n.parentId} scopeParam={scopeParam} back="/stampe/zoo/stampa?tab=liste" />
                               </td></tr>
                             )}
                           </Fragment>
@@ -805,7 +925,7 @@ export default async function ZooStampaPage({
                             </tr>
                             {o.parentId && (
                               <tr><td colSpan={8} style={{ padding: 0 }}>
-                                <PannelloPadre parentId={o.parentId} scopeParam={scopeParam} back="/stampe/zoo/stampa" />
+                                <PannelloPadre parentId={o.parentId} scopeParam={scopeParam} back="/stampe/zoo/stampa?tab=liste" />
                               </td></tr>
                             )}
                           </Fragment>
@@ -822,226 +942,168 @@ export default async function ZooStampaPage({
           </div>
         )}
 
-        <div className="card" style={{ marginBottom: 16, padding: 14 }}>
-          <FiltriMobile id="filtri-stampa" scelte={[
-            sp.q && `«${sp.q}»`, sp.animale, sp.caratt,
-            sp.volantino === "si" && "in volantino", sp.volantino === "no" && "non in volantino",
-            sp.stampati === "no" && "da stampare", sp.stampati === "si" && "già stampati",
-            sp.vista === "singole" ? "offerte singole" : "per prodotto padre",
-            sp.giacenza === "si" && "con giacenza", sp.giacenza === "zero" && "giacenza zero",
-            sp.giacenza === "no" && "non nel gestionale",
-            sp.nonstampabili === "1" && "solo non stampabili",
-          ]}>
-          <form method="get" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10, alignItems: "end" }}>
-            <input type="hidden" name="scope" value={scopeParam} />
-            <input type="hidden" name="sel" value={sp.sel ?? ""} />
-            {campaign && <input type="hidden" name="campagna" value={campaign.id} />}
-            <label className="field" style={{ marginBottom: 0 }}>Cerca<input type="text" name="q" defaultValue={sp.q ?? ""} placeholder="prodotto, articolo, EAN, marca" /></label>
-            <label className="field" style={{ marginBottom: 0 }}>
-              Tipologia animale
-              <select name="animale" defaultValue={sp.animale ?? ""}>
-                <option value="">Tutte</option>
-                {db.settings.categorieAnimali.map((a) => <option key={a} value={a}>{a}</option>)}
-              </select>
-            </label>
-            <label className="field" style={{ marginBottom: 0 }}>
-              Caratteristica
-              <select name="caratt" defaultValue={sp.caratt ?? ""}>
-                <option value="">Tutte</option>
-                {db.settings.caratteristicheProdotto.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </label>
-            <label className="field" style={{ marginBottom: 0 }}>
-              Sul volantino
-              <select name="volantino" defaultValue={sp.volantino ?? ""}>
-                <option value="">Tutte</option>
-                <option value="si">Solo le offerte in volantino</option>
-                <option value="no">Solo quelle NON in volantino</option>
-              </select>
-            </label>
-            <label className="field" style={{ marginBottom: 0 }}>
-              Già stampati
-              <select name="stampati" defaultValue={sp.stampati ?? ""}>
-                <option value="">Tutti</option>
-                <option value="no">Solo da stampare</option>
-                <option value="si">Solo già stampati</option>
-              </select>
-            </label>
-            <label className="field" style={{ marginBottom: 0 }}>
-              Elenco
-              <select name="vista" defaultValue={sp.vista ?? ""}>
-                <option value="">Per prodotto padre</option>
-                <option value="singole">Offerte singole</option>
-              </select>
-            </label>
-            {Object.keys(giacenze).length > 0 && (
-              <label className="field" style={{ marginBottom: 0 }}>
-                Giacenza
-                <select name="giacenza" defaultValue={sp.giacenza ?? ""}>
-                  <option value="">Qualsiasi</option>
-                  <option value="si">Solo con giacenza (&gt; 0)</option>
-                  <option value="zero">Solo giacenza zero</option>
-                  <option value="no">Non nel gestionale</option>
-                </select>
-              </label>
-            )}
-            <label className="field" style={{ marginBottom: 0 }}>
-              Cartelli esclusi
-              <select name="nonstampabili" defaultValue={sp.nonstampabili ?? ""} title="Gli esclusi sono i cartelli che avete segnato «Non stampare» o caricato nell'elenco dei codici da non stampare">
-                <option value="">Nascondi gli esclusi</option>
-                <option value="si">Mostra anche gli esclusi</option>
-                <option value="solo">Solo gli esclusi</option>
-              </select>
-            </label>
-            <button className="btn btn-sm" type="submit">Filtra</button>
-            <details style={{ gridColumn: "1 / -1" }} open={marcheScelte.length > 0}>
-              <summary style={{ cursor: "pointer", fontWeight: 700, fontSize: 12.5 }}>
-                Marche da stampare{marcheScelte.length > 0 ? ` — ${marcheScelte.length} selezionate` : " — tutte"}
-              </summary>
-              <span className="hint">
-                Spunta una o più marche; nessuna spunta = tutte. La marca è quella del listino o, se manca, il fornitore.
-              </span>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 6 }}>
-                {marche.length === 0 && <span className="hint">Nessuna marca in questo periodo.</span>}
-                {marche.map((m) => (
-                  <label key={m} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12.5 }}>
-                    <input type="checkbox" name="marca" value={m} defaultChecked={marcheScelte.includes(m)} />
-                    {m}
-                  </label>
-                ))}
+        {/* ================= Regole dell'insegna / PV: si toccano una volta a volantino ================= */}
+        {tab === "regole" && (
+          <div className="regole">
+            {scope.type === "system" ? (
+              <div className="card">
+                <h3>Regole del Consorzio</h3>
+                <p className="stato" style={{ margin: 0 }}>
+                  Prezzi propri, cartelli da non stampare, offerte proprie e marche trattate sono regole di ogni insegna o punto
+                  vendita: scegli l&apos;ambito in alto a destra. Le condizioni pronte e la testata dei cartelli sono in Impostazioni e Layout.
+                </p>
               </div>
-            </details>
-          </form>
-          </FiltriMobile>
-          {scope.type !== "system" && gestione && (
-            <details style={{ marginTop: 12, borderTop: "1px dashed var(--line)", paddingTop: 10 }} open={sp.offerta === "ok" || offerteProprie.length > 0}>
-              <summary style={{ cursor: "pointer", fontWeight: 700, fontSize: 12.5 }}>
-                Le offerte di {scope.label}{offerteProprie.length > 0 ? ` — ${offerteProprie.length}` : ""}
-              </summary>
-              <p className="hint" style={{ margin: "2px 0 8px" }}>
-                Promozioni vostre, fuori dal volantino del Consorzio: si stampano nei vostri cartelli insieme alle altre.
-                L&apos;articolo dev&apos;essere nel catalogo — il vostro o quello comune.
-              </p>
-              {sp.offerta === "ok" && <div className="alert alert-green">✓ Offerta aggiunta: la trovi nell&apos;elenco qui a sinistra.</div>}
-              {sp.offerta === "eliminata" && <div className="alert alert-green">✓ Offerta eliminata.</div>}
-              {sp.offerta === "dati" && <div className="alert alert-amber">Servono almeno il codice a barre e il prezzo.</div>}
-              {sp.offerta === "permessi" && <div className="alert alert-amber">Le offerte proprie le crea chi gestisce le Offerte Zoo per {scope.label}.</div>}
-              {sp.offerta === "sconosciuto" && (
-                <div className="alert alert-amber">
-                  Quel codice a barre non è fra i vostri articoli né in quelli del Consorzio: caricalo prima da Database prodotti.
+            ) : (
+              <>
+                <div className="card">
+                  <h3>I prezzi di {scope.label}</h3>
+                  <p className="stato">
+                    {nPrezziMiei > 0 ? `${nPrezziMiei} articoli con il vostro prezzo al posto di quello del Consorzio.` : "Nessun prezzo vostro: si stampano quelli del Consorzio."}
+                  </p>
+                  <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 8px" }}>
+                    Se i prezzi di {scope.label} differiscono da quelli del Consorzio, carica un Excel con EAN (o CODICE
+                    FORNITORE) e PREZZO: sostituirà il prezzo promo sui cartelli di questo ambito, articolo per articolo.{" "}
+                    <a href={`/stampe/zoo/excel?prezzi=1&scope=${scopeParam}`}>Scarica il modello precompilato</a>
+                  </p>
+                  <ImportExcel
+                    action={importPvPricesRighe.bind(null, scopeParam)}
+                    colonne={["ean", "codice ean", "barcode", "codice fornitore", "cod. fornitore", "codice", "prezzo", "prezzo vendita", "prezzo pv"]}
+                    etichetta="Importa prezzi"
+                  />
                 </div>
-              )}
-              <form action={creaOffertaPropria.bind(null, scopeParam)}
-                style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8, alignItems: "end" }}>
-                <label className="field" style={{ marginBottom: 0 }}>Codice a barre<input type="text" name="ean" required placeholder="8001234567890" /></label>
-                <label className="field" style={{ marginBottom: 0 }}>Descrizione<input type="text" name="descrizione" placeholder="(quella dell'articolo)" /></label>
-                <label className="field" style={{ marginBottom: 0 }}>Prezzo promo<input type="text" name="prezzoPromo" required placeholder="4,99" /></label>
-                <label className="field" style={{ marginBottom: 0 }}>Prezzo barrato<input type="text" name="prezzoListino" placeholder="6,99" /></label>
-                <label className="field" style={{ marginBottom: 0 }}>Meccanica<input type="text" name="meccanica" placeholder="es. 3x2" /></label>
-                <label className="field" style={{ marginBottom: 0 }}>Condizioni<input type="text" name="condizioni" placeholder="fino a esaurimento" /></label>
-                <button className="btn btn-sm" type="submit">Aggiungi offerta</button>
-              </form>
-              {offerteProprie.length > 0 && (
-                <div className="table-wrap" style={{ marginTop: 10 }}>
-                  <table className="data">
-                    <thead><tr><th>Articolo</th><th>EAN</th><th>Prezzo</th><th>Barrato</th><th>Meccanica</th><th></th></tr></thead>
-                    <tbody>
-                      {offerteProprie.map((o) => (
-                        <tr key={o.id}>
-                          <td style={{ fontSize: 12.5 }}>{o.descrizione}</td>
-                          <td style={{ fontSize: 12 }}>{o.ean}</td>
-                          <td><strong>€ {o.prezzoPromo}</strong></td>
-                          <td style={{ fontSize: 12 }}>{o.prezzoListino ? `€ ${o.prezzoListino}` : "—"}</td>
-                          <td style={{ fontSize: 12 }}>{o.meccanica || "—"}</td>
-                          <td>
-                            <form action={eliminaOffertaPropria.bind(null, o.id, scopeParam)}>
-                              <button className="btn btn-outline btn-sm" type="submit" style={{ color: "var(--red)", borderColor: "var(--red)" }}>Elimina</button>
-                            </form>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </details>
-          )}
-          {scope.type !== "system" && marche.length > 0 && (
-            <details style={{ marginTop: 12, borderTop: "1px dashed var(--line)", paddingTop: 10 }} open={marcheEscluse.length > 0}>
-              <summary style={{ cursor: "pointer", fontWeight: 700, fontSize: 12.5 }}>
-                Marche trattate da {scope.label}
-                {marcheEscluse.length > 0 ? ` — ${marcheEscluse.length} escluse` : " — le tratta tutte"}
-              </summary>
-              <p className="hint" style={{ margin: "2px 0 6px" }}>
-                Clicca una marca per cambiare stato. <span className="pill pill-green">verde = la trattate</span>{" "}
-                <span className="pill pill-gray">✕ grigio = non la trattate</span> — quelle escluse spariscono da stampa
-                cartelli e dal database prodotti, per questo volantino e per i prossimi, finché non le rimetti.
-              </p>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                {marche.map((m) => {
-                  const esclusa = marcheEscluse.includes(m);
-                  return (
-                    <form key={`ex_${m}`} action={toggleZooHidden.bind(null, scopeParam, "marca", m, "/stampe/zoo/stampa")}>
-                      <button type="submit" className={`pill ${esclusa ? "pill-gray" : "pill-green"}`}
-                        style={{ cursor: "pointer", border: "none" }}
-                        title={esclusa ? `Rimetti ${m} fra quelle trattate` : `Segna ${m} come non trattata`}>
-                        {esclusa ? `✕ ${m} — non trattata` : `${m}`}
-                      </button>
-                    </form>
-                  );
-                })}
-              </div>
-            </details>
-          )}
-          {campaign && nStampati > 0 && (
-            <form action={resetZooPrinted.bind(null, "/stampe/zoo/stampa", scopeParam, campaign.id)} style={{ marginTop: 10 }}>
-              <span style={{ fontSize: 12.5, color: "var(--muted)", marginRight: 8 }}>
-                {nStampati} cartelli risultano già stampati da {scope.label}.
-              </span>
-              <button className="btn btn-outline btn-sm" type="submit"
-                title="Rimette tutti i cartelli di questo periodo come «da stampare»">
-                Azzera &quot;già stampato&quot;
-              </button>
-            </form>
-          )}
-        </div>
 
-        <StampaWorkspace
-          dettagliUrl="/stampe/zoo/stampa/dettagli"
-          fields={ZOO_FIELDS}
-          scopeParam={scopeParam}
-          picker={{
-            totale: voci.length,
-            mostraTuttiHref: `/stampe/zoo/stampa?${new URLSearchParams({ ...Object.fromEntries(Object.entries(sp).filter(([, v]) => v) as [string, string][]), tutti: "1" })}`,
-            products: sp.tutti === "1" ? voci : voci.slice(0, 150),
-            prodottiSelezionati: selezionatiFuoriElenco,
-            formats: ZOO_FORMATS.map((f) => ({ id: f.id, name: f.name })),
-            scopeParam,
-            filters: {
-              q: sp.q ?? "", animale: sp.animale ?? "", caratt: sp.caratt ?? "", marca: marcheScelte.join(","), vista: sp.vista ?? "", giacenza: sp.giacenza ?? "",
-              volantino: sp.volantino ?? "", stampati: sp.stampati ?? "", campagna: campaign?.id ?? "",
-            },
-            printed: Object.fromEntries(
-              visible.map((o) => [o.id, printedAt(db, scope, o.id) ?? ""]).filter(([, v]) => v)
-            ),
-            onPrint: markZooPrinted.bind(null, scopeParam),
-            initialSelected: selectedIds,
-            initialFormats: Object.fromEntries(
-              selectedIds.map((id) => [id, sp[`formato_${id}`] ?? globalFormatId]).filter(([, v]) => v)
-            ),
-            initialPrices: Object.fromEntries(selectedIds.map((id) => [id, sp[`prezzo_${id}`] ?? ""]).filter(([, v]) => v)),
-            initialListini: Object.fromEntries(selectedIds.map((id) => [id, sp[`listino_${id}`] ?? ""]).filter(([, v]) => v)),
-            initialNoPrice: Object.fromEntries(selectedIds.map((id) => [id, sp[`noprezzo_${id}`] === "1"])),
-            initialNoPhoto: Object.fromEntries(selectedIds.map((id) => [id, sp[`senzafoto_${id}`] === "1"])),
-            initialNoListino: Object.fromEntries(selectedIds.map((id) => [id, sp[`nolistino_${id}`] === "1"])),
-            initialHidden: Object.fromEntries(
-              selectedIds.map((id) => [id, (sp[`nascondi_${id}`] ?? "").split(",").filter(Boolean)])
-            ),
-            fields: ZOO_FIELDS.map((f) => ({ id: f.id, label: f.label })),
-            globalFormat: globalFormatId,
-            baseUrl: "/stampe/zoo/stampa",
-          }}
-        />
+                <div className="card">
+                  <h3>Cartelli da non stampare</h3>
+                  <p className="stato">
+                    {nCodiciNoPrint > 0
+                      ? `${nCodiciNoPrint} ${nCodiciNoPrint === 1 ? "codice" : "codici"} in elenco, ${allOffers.filter((o) => noPrint.eans.has(o.ean)).length} sui cartelli di questo periodo.`
+                      : "Nessun codice in elenco."}
+                  </p>
+                  <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 8px" }}>
+                    Carica un Excel con i codici a barre (o i CODICE FORNITORE) degli articoli che {scope.label} non espone:
+                    spariscono dai cartelli senza toccare l&apos;offerta degli altri. L&apos;esclusione segue l&apos;articolo, quindi vale
+                    anche per i volantini successivi. Se aggiungi la colonna NON STAMPARE, un &laquo;no&raquo; rimette il cartello in
+                    stampa.{" "}
+                    <a href={`/stampe/zoo/excel?nonstampare=1&scope=${scopeParam}`}>Scarica il modello precompilato</a>
+                  </p>
+                  <ImportExcel
+                    action={importZooNoPrintRighe.bind(null, scopeParam)}
+                    colonne={[
+                      "ean", "codice ean", "barcode", "codice a barre", "cod. barre",
+                      "codice fornitore", "cod. fornitore", "codice articolo", "codice",
+                      "non stampare", "non stamparlo", "escludi", "stampa", "stampare",
+                    ]}
+                    etichetta="Importa i codici"
+                  />
+                  {nCodiciNoPrint > 0 && (
+                    <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 10, flexWrap: "wrap" }}>
+                      <a className="btn btn-outline btn-sm" href={`/stampe/zoo/stampa?scope=${scopeParam}&stato=soloesclusi`}>Vedi gli esclusi</a>
+                      <form action={svuotaZooNoPrint.bind(null, scopeParam)}>
+                        <button className="btn btn-outline btn-sm" type="submit">Svuota l&apos;elenco</button>
+                      </form>
+                    </div>
+                  )}
+                </div>
+
+                {gestione && (
+                  <div className="card">
+                    <h3>Le offerte di {scope.label}</h3>
+                    <p className="stato">
+                      {offerteProprie.length > 0 ? `${offerteProprie.length} ${offerteProprie.length === 1 ? "offerta vostra" : "offerte vostre"} in questo periodo.` : "Nessuna offerta vostra in questo periodo."}
+                    </p>
+                    <p className="hint" style={{ margin: "0 0 8px" }}>
+                      Promozioni vostre, fuori dal volantino del Consorzio: si stampano nei vostri cartelli insieme alle altre.
+                      L&apos;articolo dev&apos;essere nel catalogo — il vostro o quello comune.
+                    </p>
+                    {sp.offerta === "ok" && <div className="alert alert-green">✓ Offerta aggiunta: la trovi nell&apos;elenco della scheda Stampa.</div>}
+                    {sp.offerta === "eliminata" && <div className="alert alert-green">✓ Offerta eliminata.</div>}
+                    {sp.offerta === "dati" && <div className="alert alert-amber">Servono almeno il codice a barre e il prezzo.</div>}
+                    {sp.offerta === "permessi" && <div className="alert alert-amber">Le offerte proprie le crea chi gestisce le Offerte Zoo per {scope.label}.</div>}
+                    {sp.offerta === "sconosciuto" && (
+                      <div className="alert alert-amber">
+                        Quel codice a barre non è fra i vostri articoli né in quelli del Consorzio: caricalo prima da Database prodotti.
+                      </div>
+                    )}
+                    <form action={creaOffertaPropria.bind(null, scopeParam)}
+                      style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8, alignItems: "end" }}>
+                      <label className="field" style={{ marginBottom: 0 }}>Codice a barre<input type="text" name="ean" required placeholder="8001234567890" /></label>
+                      <label className="field" style={{ marginBottom: 0 }}>Descrizione<input type="text" name="descrizione" placeholder="(quella dell'articolo)" /></label>
+                      <label className="field" style={{ marginBottom: 0 }}>Prezzo promo<input type="text" name="prezzoPromo" required placeholder="4,99" /></label>
+                      <label className="field" style={{ marginBottom: 0 }}>Prezzo barrato<input type="text" name="prezzoListino" placeholder="6,99" /></label>
+                      <label className="field" style={{ marginBottom: 0 }}>Meccanica<input type="text" name="meccanica" placeholder="es. 3x2" /></label>
+                      <label className="field" style={{ marginBottom: 0 }}>Condizioni<input type="text" name="condizioni" placeholder="fino a esaurimento" /></label>
+                      <button className="btn btn-sm" type="submit">Aggiungi offerta</button>
+                    </form>
+                    {offerteProprie.length > 0 && (
+                      <div className="table-wrap" style={{ marginTop: 10 }}>
+                        <table className="data">
+                          <thead><tr><th>Articolo</th><th>EAN</th><th>Prezzo</th><th>Barrato</th><th>Meccanica</th><th></th></tr></thead>
+                          <tbody>
+                            {offerteProprie.map((o) => (
+                              <tr key={o.id}>
+                                <td style={{ fontSize: 12.5 }}>{o.descrizione}</td>
+                                <td style={{ fontSize: 12 }}>{o.ean}</td>
+                                <td><strong>€ {o.prezzoPromo}</strong></td>
+                                <td style={{ fontSize: 12 }}>{o.prezzoListino ? `€ ${o.prezzoListino}` : "—"}</td>
+                                <td style={{ fontSize: 12 }}>{o.meccanica || "—"}</td>
+                                <td>
+                                  <form action={eliminaOffertaPropria.bind(null, o.id, scopeParam)}>
+                                    <button className="btn btn-outline btn-sm" type="submit" style={{ color: "var(--red)", borderColor: "var(--red)" }}>Elimina</button>
+                                  </form>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {marche.length > 0 && (
+                  <div className="card">
+                    <h3>Marche trattate da {scope.label}</h3>
+                    <p className="stato">
+                      {marcheEscluse.length > 0 ? `${marcheEscluse.length} ${marcheEscluse.length === 1 ? "marca esclusa" : "marche escluse"} su ${marche.length}.` : `Le trattate tutte (${marche.length}).`}
+                    </p>
+                    <p className="hint" style={{ margin: "0 0 8px" }}>
+                      Clicca una marca per cambiare stato. <span className="pill pill-green">verde = la trattate</span>{" "}
+                      <span className="pill pill-gray">✕ grigio = non la trattate</span> — quelle escluse spariscono da stampa
+                      cartelli e dal database prodotti, per questo volantino e per i prossimi, finché non le rimetti.
+                    </p>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                      {marche.map((m) => {
+                        const esclusa = marcheEscluse.includes(m);
+                        return (
+                          <form key={`ex_${m}`} action={toggleZooHidden.bind(null, scopeParam, "marca", m, "/stampe/zoo/stampa?tab=regole")}>
+                            <button type="submit" className={`pill ${esclusa ? "pill-gray" : "pill-green"}`}
+                              style={{ cursor: "pointer", border: "none" }}
+                              title={esclusa ? `Rimetti ${m} fra quelle trattate` : `Segna ${m} come non trattata`}>
+                              {esclusa ? `✕ ${m} — non trattata` : `${m}`}
+                            </button>
+                          </form>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            {campaign && nStampati > 0 && (
+              <div className="card">
+                <h3>Segno &quot;già stampato&quot;</h3>
+                <p className="stato">{nStampati} cartelli risultano già stampati da {scope.label} in questo periodo.</p>
+                <form action={resetZooPrinted.bind(null, "/stampe/zoo/stampa?tab=regole", scopeParam, campaign.id)}>
+                  <button className="btn btn-outline btn-sm" type="submit"
+                    title="Rimette tutti i cartelli di questo periodo come «da stampare»">
+                    Azzera &quot;già stampato&quot;
+                  </button>
+                </form>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
