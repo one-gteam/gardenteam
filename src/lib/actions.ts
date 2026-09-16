@@ -9,6 +9,7 @@ import { uploadPublicFile } from "./supabase";
 import { mailerConfig, sendMail } from "./mailer";
 import { verifySsoToken } from "./sso";
 import { AUTH_COOKIE, OPZIONI_SESSIONE, requireUser, valoreSessione } from "./auth";
+import { attesaMinuti, azzera, ipChiamante, Regola, segnaErrore } from "./tentativi";
 import { assignableRolesFor, canManageUsers, coursesForUser, courseVisibleTo, dueDate, getProgress, hasStartedCourse, isCourseCompleted, pathsForUser } from "./logic";
 import {
   Course, CourseLevel, CourseSession, DB, DEFAULT_HOME_BLOCKS, DEFAULT_REMINDER_RULES, DEFAULT_WATCH_THRESHOLD,
@@ -1803,14 +1804,30 @@ export async function removeGroupMember(groupId: string, userId: string) {
 
 /* ================== Autenticazione con password ================== */
 
+/*
+ * Tentativi sbagliati: 5 per email ogni 15 minuti (chi prova le password di una
+ * persona), 30 per indirizzo ogni 15 minuti (chi prova tante email da una macchina).
+ */
+function regoleLogin(email: string, ip: string): Regola[] {
+  return [
+    { chiave: `login-email:${email}`, massimo: 5, minuti: 15 },
+    { chiave: `login-ip:${ip}`, massimo: 30, minuti: 15 },
+  ];
+}
+
 export async function loginWithPassword(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const password = String(formData.get("password") ?? "");
+  const regole = regoleLogin(email, await ipChiamante());
+  const attesa = await attesaMinuti(regole);
+  if (attesa > 0) redirect(`/login?errore=troppi&minuti=${attesa}`);
   const db = await getDb();
   const user = db.users.find((u) => u.email.toLowerCase() === email);
   if (!user || !user.passwordHash || !verifyPassword(password, user.passwordHash)) {
+    await segnaErrore(regole);
     redirect("/login?errore=credenziali");
   }
+  await azzera([regole[0].chiave]);
   if (user!.active === false) redirect("/login?disattivato=1");
   const store = await cookies();
   store.set(AUTH_COOKIE, valoreSessione(user!.id), OPZIONI_SESSIONE);
@@ -1823,9 +1840,16 @@ export async function activateAccount(formData: FormData) {
   const password2 = String(formData.get("password2") ?? "");
   if (password.length < 8) redirect("/attiva?errore=corta");
   if (password !== password2) redirect("/attiva?errore=diverse");
+  // chi cerca a tentoni quali email sono registrate: 10 errori l'ora per indirizzo
+  const regole: Regola[] = [{ chiave: `attiva-ip:${await ipChiamante()}`, massimo: 10, minuti: 60 }];
+  const attesa = await attesaMinuti(regole);
+  if (attesa > 0) redirect(`/attiva?errore=troppi&minuti=${attesa}`);
   const db = await getDb();
   const user = db.users.find((u) => u.email.toLowerCase() === email);
-  if (!user) redirect("/attiva?errore=nontrovato");
+  if (!user) {
+    await segnaErrore(regole);
+    redirect("/attiva?errore=nontrovato");
+  }
   if (user!.active === false) redirect("/login?disattivato=1");
   if (user!.passwordHash) redirect("/attiva?errore=giaattivo");
   user!.passwordHash = hashPassword(password);
@@ -1834,6 +1858,10 @@ export async function activateAccount(formData: FormData) {
 }
 
 export async function registerRequest(formData: FormData) {
+  // la parola segreta si indovina a tentoni: 10 errori l'ora per indirizzo
+  const regole: Regola[] = [{ chiave: `registrati-ip:${await ipChiamante()}`, massimo: 10, minuti: 60 }];
+  const attesa = await attesaMinuti(regole);
+  if (attesa > 0) redirect(`/registrati?errore=troppi&minuti=${attesa}`);
   const db = await getDb();
   const secret = String(formData.get("secret") ?? "").trim();
   const storeId = String(formData.get("storeId") ?? "");
@@ -1842,7 +1870,10 @@ export async function registerRequest(formData: FormData) {
   const tenant = db.tenants.find((t) => t.id === store!.tenantId)!;
   const validSecret =
     (store!.secretWord && secret === store!.secretWord) || (tenant.secretWord && secret === tenant.secretWord);
-  if (!secret || !validSecret) redirect("/registrati?errore=segreta");
+  if (!secret || !validSecret) {
+    await segnaErrore(regole);
+    redirect("/registrati?errore=segreta");
+  }
 
   const firstName = String(formData.get("firstName") ?? "").trim();
   const lastName = String(formData.get("lastName") ?? "").trim();

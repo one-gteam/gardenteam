@@ -5,9 +5,9 @@ import { SITE_NAME } from "@/lib/types";
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ disattivato?: string; errore?: string; attivato?: string }>;
+  searchParams: Promise<{ disattivato?: string; errore?: string; attivato?: string; minuti?: string }>;
 }) {
-  const { disattivato, errore, attivato } = await searchParams;
+  const { disattivato, errore, attivato, minuti } = await searchParams;
   const db = await getDb();
 
   return (
@@ -32,6 +32,12 @@ export default async function LoginPage({
         {errore === "credenziali" && (
           <div className="alert alert-amber">
             Email o password non corretti. Se non hai ancora impostato la password, usa <a href="/attiva">Attiva utente</a>.
+          </div>
+        )}
+        {errore === "troppi" && (
+          <div className="alert alert-amber">
+            <strong>Troppi tentativi sbagliati.</strong> Per sicurezza l&apos;accesso è bloccato per{" "}
+            {minuti ?? "qualche"} minut{minuti === "1" ? "o" : "i"}. Se hai dimenticato la password, chiedi al tuo responsabile.
           </div>
         )}
         {attivato && (

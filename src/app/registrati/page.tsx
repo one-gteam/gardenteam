@@ -13,9 +13,9 @@ const ERRORS: Record<string, string> = {
 export default async function RegisterPage({
   searchParams,
 }: {
-  searchParams: Promise<{ errore?: string; inviata?: string }>;
+  searchParams: Promise<{ errore?: string; inviata?: string; minuti?: string }>;
 }) {
-  const { errore, inviata } = await searchParams;
+  const { errore, inviata, minuti } = await searchParams;
   const db = await getDb();
 
   return (
@@ -47,7 +47,13 @@ export default async function RegisterPage({
               <strong>parola segreta</strong> del tuo negozio (chiedila al responsabile): serve a evitare
               registrazioni estranee. La richiesta verrà poi approvata dal punto vendita.
             </p>
-            {errore && <div className="alert alert-amber">{ERRORS[errore] ?? "Errore imprevisto, riprova."}</div>}
+            {errore && (
+          <div className="alert alert-amber">
+            {errore === "troppi"
+              ? `Troppi tentativi sbagliati: riprova fra ${minuti ?? "qualche"} minut${minuti === "1" ? "o" : "i"}.`
+              : ERRORS[errore] ?? "Errore imprevisto, riprova."}
+          </div>
+        )}
             <form action={registerRequest}>
               <div style={{ background: "var(--green-50)", borderRadius: 10, padding: "12px 14px", marginBottom: 14 }}>
                 <label className="field" style={{ marginBottom: 0 }}>

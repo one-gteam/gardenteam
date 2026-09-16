@@ -12,9 +12,9 @@ const ERRORS: Record<string, string> = {
 export default async function ActivatePage({
   searchParams,
 }: {
-  searchParams: Promise<{ errore?: string }>;
+  searchParams: Promise<{ errore?: string; minuti?: string }>;
 }) {
-  const { errore } = await searchParams;
+  const { errore, minuti } = await searchParams;
   const { settings } = await getDb();
 
   return (
@@ -28,7 +28,13 @@ export default async function ActivatePage({
         <p>Attiva il tuo account</p>
       </div>
       <div className="login-cards" style={{ maxWidth: 560 }}>
-        {errore && <div className="alert alert-amber">{ERRORS[errore] ?? "Errore imprevisto, riprova."}</div>}
+        {errore && (
+          <div className="alert alert-amber">
+            {errore === "troppi"
+              ? `Troppi tentativi sbagliati: riprova fra ${minuti ?? "qualche"} minut${minuti === "1" ? "o" : "i"}.`
+              : ERRORS[errore] ?? "Errore imprevisto, riprova."}
+          </div>
+        )}
 
         <div className="card">
           <h2>Attiva utente</h2>
