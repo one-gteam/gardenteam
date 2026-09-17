@@ -5,7 +5,10 @@ import { useRouter } from "next/navigation";
 import type { CardLayout, PrintField, PrintFormat } from "@/lib/stampe";
 import Cartello from "./Cartello";
 import StampaPicker, { EVENTO_SELEZIONA, type StampaPickerProps } from "./StampaPicker";
-import NuovoCartello from "./NuovoCartello";
+import NuovoCartello, { type LayoutScelta } from "./NuovoCartello";
+
+/** Evento del pulsante "Nuovo cartello" in cima alla pagina (sta fuori da questo riquadro). */
+export const EVENTO_NUOVO_CARTELLO = "stampa-nuovo-cartello";
 import PersonalizzaPannello, { type RigaPersonalizza } from "./PersonalizzaPannello";
 import { duplicaCartelloInline, mettiInCoda } from "@/lib/zoo-actions";
 
@@ -27,8 +30,10 @@ interface Dettagli {
  * riga, che si apre di lato e ridisegna il cartello a ogni salvataggio.
  */
 export default function StampaWorkspace({
-  picker, dettagliUrl, fields, scopeParam, scopeLabel, condizioniStandard,
+  picker, dettagliUrl, fields, scopeParam, scopeLabel, condizioniStandard, layouts,
 }: {
+  /** Layout che si possono scegliere per un cartello proprio. */
+  layouts: LayoutScelta[];
   picker: Omit<StampaPickerProps, "onChange" | "onQueue" | "onPersonalizza" | "onDuplica" | "nuovoCartello">;
   /** Nome dell'ambito e condizioni pronte: servono al pannello "Nuovo cartello". */
   scopeLabel: string;
@@ -75,8 +80,8 @@ export default function StampaWorkspace({
   const chiudiNuovo = useCallback(() => setNuovo(false), []);
 
   /** Un cartello proprio appena nato entra fra i selezionati e si apre coi suoi testi. */
-  const appenaCreato = (id: string, al?: string) => {
-    window.dispatchEvent(new CustomEvent(EVENTO_SELEZIONA, { detail: { id, al } }));
+  const appenaCreato = (id: string, al?: string, formato?: string) => {
+    window.dispatchEvent(new CustomEvent(EVENTO_SELEZIONA, { detail: { id, al, formato } }));
     setPersonalizzaId(id);
     // dopo che la selezione è finita nell'indirizzo: il server deve sapere che il nuovo cartello è scelto
     setTimeout(() => router.refresh(), 150);
@@ -88,19 +93,19 @@ export default function StampaWorkspace({
     else setAvviso("Non sono riuscito a duplicare il cartello.");
   };
 
+  useEffect(() => {
+    const apri = () => setNuovo(true);
+    window.addEventListener(EVENTO_NUOVO_CARTELLO, apri);
+    return () => window.removeEventListener(EVENTO_NUOVO_CARTELLO, apri);
+  }, []);
+
   return (
     <>
       <div className="stampa-griglia">
         <StampaPicker {...picker} onChange={(q) => setQuery(q)}
           onQueue={(stato, voci) => mettiInCoda(scopeParam, stato, voci)}
           onPersonalizza={(id) => setPersonalizzaId(id)}
-          onDuplica={duplica}
-          nuovoCartello={
-            <button type="button" className="btn btn-sm" onClick={() => setNuovo(true)}
-              title="Un cartello fuori dal volantino, fatto da zero">
-              ＋ Nuovo cartello
-            </button>
-          } />
+          onDuplica={duplica} />
         <div>
           {anteprima.map((c) => (
             <div key={c.id} style={{ marginBottom: 12, overflow: "hidden" }}>
@@ -139,6 +144,7 @@ export default function StampaWorkspace({
           onRefresh={() => carica(query)}
           onClose={chiudiPannello}
           onDuplica={duplica}
+          layouts={layouts}
           onEliminato={(id) => window.dispatchEvent(new CustomEvent(EVENTO_SELEZIONA, { detail: { id, togli: true } }))}
         />
       )}
@@ -148,8 +154,11 @@ export default function StampaWorkspace({
           scopeLabel={scopeLabel}
           consorzio={scopeParam.startsWith("system")}
           condizioniStandard={condizioniStandard}
+          layouts={layouts}
+          formats={picker.formats}
+          formatoIniziale={picker.globalFormat}
           onClose={chiudiNuovo}
-          onCreato={(id) => { setNuovo(false); appenaCreato(id); }}
+          onCreato={(id, formato) => { setNuovo(false); appenaCreato(id, undefined, formato); }}
         />
       )}
       {avviso && <div className="alert alert-amber" style={{ marginTop: 10 }}>{avviso}</div>}

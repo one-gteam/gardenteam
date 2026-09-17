@@ -10,6 +10,7 @@ import {
   toggleZooNoPrint, aggiornaCartelloProprio, condividiCartelloProprio, eliminaCartelloProprio,
 } from "@/lib/zoo-actions";
 import type { CampoCartelloProprio } from "@/lib/zoo-actions";
+import { OpzioniLayout, avvisoLayout, type LayoutScelta } from "./NuovoCartello";
 
 interface Valore { value: string; custom: boolean }
 
@@ -35,7 +36,10 @@ export interface RigaPersonalizza {
   codiceGestionale?: string;
   escluso: boolean;
   /** Cartello proprio: mia = l'ha fatto questo ambito e lo può correggere. */
-  propria?: { mia: boolean; condivisa: boolean; titolo: string; descCartello: string; marca: string; autore: string };
+  propria?: {
+    mia: boolean; condivisa: boolean; titolo: string; descCartello: string; marca: string; autore: string;
+    layoutId: string; contenuto: string;
+  };
 }
 
 /**
@@ -46,7 +50,7 @@ export interface RigaPersonalizza {
  */
 export default function PersonalizzaPannello({
   riga, cartello, fields, scopeType, scopeLabel, scopeParam, categorieAnimali, caratteristicheProdotto, condizioniStandard,
-  onRefresh, onClose, onDuplica, onEliminato,
+  onRefresh, onClose, onDuplica, onEliminato, layouts = [],
 }: {
   riga?: RigaPersonalizza;
   cartello?: { format: PrintFormat; layout: CardLayout; values: Record<string, string> };
@@ -63,6 +67,8 @@ export default function PersonalizzaPannello({
   onDuplica?: (id: string) => void;
   /** Il cartello proprio è stato eliminato. */
   onEliminato?: (id: string) => void;
+  /** Layout che si possono scegliere per un cartello proprio. */
+  layouts?: LayoutScelta[];
 }) {
   const [pending, startTransition] = useTransition();
   const consorzio = scopeType === "system";
@@ -125,6 +131,7 @@ export default function PersonalizzaPannello({
             )}
             {riga.propria?.mia ? (
               <CartelloProprio riga={riga} scopeParam={scopeParam} consorzio={consorzio} onRefresh={onRefresh}
+                layouts={layouts} formato={cartello?.format}
                 condizioniStandard={condizioniStandard} onDuplica={onDuplica}
                 onEliminato={() => { onEliminato?.(riga.id); onClose(); }} Campo={Campo} />
             ) : (<>
@@ -246,8 +253,10 @@ export default function PersonalizzaPannello({
  * una copia si corregge senza toccare l'originale.
  */
 function CartelloProprio({
-  riga, scopeParam, consorzio, condizioniStandard, onRefresh, onDuplica, onEliminato, Campo,
+  riga, scopeParam, consorzio, condizioniStandard, onRefresh, onDuplica, onEliminato, Campo, layouts, formato,
 }: {
+  layouts: LayoutScelta[];
+  formato?: { id: string; name: string };
   riga: RigaPersonalizza;
   scopeParam: string;
   consorzio: boolean;
@@ -261,6 +270,21 @@ function CartelloProprio({
   const [condivisa, setCondivisa] = useState(riga.propria?.condivisa ?? false);
   const [conferma, setConferma] = useState(false);
   const salva = (campo: CampoCartelloProprio) => aggiornaCartelloProprio.bind(null, riga.id, scopeParam, campo);
+  const [layoutId, setLayoutId] = useState(riga.propria?.layoutId ?? "");
+  // 3x2, 1+1: un prezzo solo, quello del pezzo (gli sconti in % restano a prezzi)
+  const aMeccanica = Boolean(riga.meccanica && !/%/.test(riga.meccanica));
+  const [erroreLayout, setErroreLayout] = useState(false);
+  const cambiaLayout = (v: string) => {
+    const prima = layoutId;
+    setLayoutId(v);
+    setErroreLayout(false);
+    aggiornaCartelloProprio(riga.id, scopeParam, "layoutId", v)
+      .catch(() => ({ ok: false }))
+      .then((r) => { if (r.ok) onRefresh(); else { setLayoutId(prima); setErroreLayout(true); } });
+  };
+  // se il layout scelto è di un altro formato, in stampa si cerca il suo equivalente
+  const sceltoAltroFormato = layoutId && formato && !layouts.some((l) => l.id === layoutId && l.formatId === formato.id);
+  const avviso = formato ? avvisoLayout(layouts, formato.id, formato.name, riga.meccanica ?? "", layoutId) : "";
   return (
     <>
       <div className="pannello-avviso verde">
@@ -289,13 +313,34 @@ function CartelloProprio({
         </Campo>
       </div>
       <div className="pannello-riga">
-        <Campo label="Prezzo promo">
-          <InlineEdit value={riga.prezzoPromo} placeholder="es. 9,99" onSaved={onRefresh} onSave={salva("prezzoPromo")} />
+        <Campo label="Contenuto" nota="per il prezzo al kg">
+          <InlineEdit value={riga.propria?.contenuto ?? ""} placeholder="12 kg, 400 g, 1,5 l" onSaved={onRefresh} onSave={salva("contenuto")} />
         </Campo>
-        <Campo label="Prezzo di partenza" nota="vuoto = A SOLI">
-          <InlineEdit value={riga.prezzoListino ?? ""} placeholder="es. 12,99" onSaved={onRefresh} onSave={salva("prezzoListino")} />
+        <Campo label={`Layout${formato ? ` (${formato.name})` : ""}`}>
+          {formato ? (
+            <select value={sceltoAltroFormato ? "" : layoutId} onChange={(e) => cambiaLayout(e.target.value)} style={{ marginTop: 0 }}>
+              <OpzioniLayout layouts={layouts} formatId={formato.id} />
+            </select>
+          ) : <span className="hint">—</span>}
+          {sceltoAltroFormato && <div className="hint">Scelto in un altro formato: qui si usa quello dello stesso tipo.</div>}
+          {erroreLayout && <div className="hint" style={{ color: "var(--red)" }}>non salvato</div>}
         </Campo>
       </div>
+      {avviso && <div className="alert alert-amber" style={{ margin: "6px 0 0" }}>{avviso}</div>}
+      {aMeccanica ? (
+        <Campo label="Prezzo del pezzo" nota={`quello che si paga un pezzo, col ${riga.meccanica}`}>
+          <InlineEdit value={riga.prezzoListino || riga.prezzoPromo} placeholder="es. 1,15" onSaved={onRefresh} onSave={salva("prezzoListino")} />
+        </Campo>
+      ) : (
+        <div className="pannello-riga">
+          <Campo label="Prezzo promo">
+            <InlineEdit value={riga.prezzoPromo} placeholder="es. 9,99" onSaved={onRefresh} onSave={salva("prezzoPromo")} />
+          </Campo>
+          <Campo label="Prezzo di partenza" nota="vuoto = A SOLI">
+            <InlineEdit value={riga.prezzoListino ?? ""} placeholder="es. 12,99" onSaved={onRefresh} onSave={salva("prezzoListino")} />
+          </Campo>
+        </div>
+      )}
       <Campo label="Condizioni">
         {condizioniStandard.length > 0 && (
           <InlineSelect value={condizioniStandard.includes(riga.cond.value) ? riga.cond.value : ""}

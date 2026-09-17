@@ -1005,3 +1005,8 @@ label.chip:has(input:checked) { background: var(--green-100); color: var(--green
   .schede a.attiva { padding-bottom: 9px; }
   .elenco-prodotti { max-height: 60vh; }
 }
+
+/* "Nuovo cartello" in alto a destra, accanto all'ambito */
+.stampa-testata .nuovo-cartello-btn { align-self: flex-end; margin-bottom: 2px; }
+.riquadro-stampa { border: 1px solid var(--line); background: #f6f8f2; border-radius: 10px; padding: 8px 10px 10px; margin: 6px 0 8px; }
+.riquadro-stampa .field { margin-bottom: 4px; }

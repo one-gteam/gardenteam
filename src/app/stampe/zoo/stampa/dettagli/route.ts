@@ -3,7 +3,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { canAccessArea, resolveScope } from "@/lib/stampe";
 import {
-  getZooDb, campagnaPerStampa, offertePerStampa, tagsPerStampa, valoriPerStampa, effectiveZooLayout, condizioniPer,
+  getZooDb, campagnaPerStampa, offertePerStampa, tagsPerStampa, valoriPerStampa, layoutPerOfferta, condizioniPer, testoContenuto,
   effectiveParentText, effectiveParentTag, effectiveOfferText, pvPriceFor, pvListinoFor, noPrintSets, ZOO_FORMATS, giacenzePer, prezzoDaNumero,
 } from "@/lib/zoo";
 
@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
     return {
       id: o.id,
       format,
-      layout: effectiveZooLayout(db, scope, format.id, academyDb, tagsPerStampa(db, scope, academyDb, o, sp)),
+      layout: layoutPerOfferta(db, scope, format.id, academyDb, o, tagsPerStampa(db, scope, academyDb, o, sp)),
       values: valoriPerStampa(db, scope, academyDb, o, sp, gestionale),
     };
   });
@@ -76,6 +76,8 @@ export async function GET(req: NextRequest) {
         descCartello: o.descCartello ?? "",
         marca: o.marca ?? "",
         autore: o.autore ?? "",
+        layoutId: o.layoutId ?? "",
+        contenuto: testoContenuto(o.contenuto),
       } : undefined,
     };
   });

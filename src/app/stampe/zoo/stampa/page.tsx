@@ -11,6 +11,7 @@ import FiltriMobile from "@/components/FiltriMobile";
 import SchedeStampa from "@/components/stampe/SchedeStampa";
 import FormAutoInvia from "@/components/stampe/FormAutoInvia";
 import RigheAlterne from "@/components/stampe/RigheAlterne";
+import ApriNuovoCartello from "@/components/stampe/ApriNuovoCartello";
 import AutoSubmitSelect from "@/components/stampe/AutoSubmitSelect";
 import StampeHeader from "@/components/stampe/StampeHeader";
 import Cartello from "@/components/stampe/Cartello";
@@ -18,7 +19,7 @@ import StampaWorkspace from "@/components/stampe/StampaWorkspace";
 import ImportExcel from "@/components/stampe/ImportExcel";
 import { canAccessArea, gestisceArea, scopesForUser, resolveScope } from "@/lib/stampe";
 import {
-  getZooDb, nonConformiDi, effectiveZooLayout, pvPriceFor, isZooHidden,
+  getZooDb, nonConformiDi, layoutPerOfferta, layoutScegliibili, pvPriceFor, isZooHidden,
   campagneStampabili, campagnaInCorso, campagnaInLavorazione, campaignStato,
   effectiveParentText, effectiveParentTag, printedAt, NO_VOLANTINO,
   ZOO_FIELDS, ZOO_FORMATS, marcaEffettiva, condizioniPer, ownScopeVisible, pvPromoFor, noPrintSets, offertePerStampa, tagsPerLayout, valoriPerStampa, giacenzePer, tagsPerStampa,
@@ -388,7 +389,7 @@ export default async function ZooStampaPage({
     const cartello = (o: (typeof allOffers)[number]) => (
       <Cartello
         format={formatFor(o.id)}
-        layout={effectiveZooLayout(db, scope, formatFor(o.id).id, academyDb, tagsFor(o))}
+        layout={layoutPerOfferta(db, scope, formatFor(o.id).id, academyDb, o, tagsFor(o))}
         fields={ZOO_FIELDS}
         values={valuesFor(o)}
         scale={scalePrint}
@@ -461,6 +462,7 @@ export default async function ZooStampaPage({
               <strong>{scope.label}</strong>
             </p>
           </div>
+          {tab === "stampa" && <ApriNuovoCartello />}
           {/* periodo e ambito cambiano al volo: niente pulsanti da premere dopo */}
           <form method="get">
             {Object.entries(sp).map(([k, v]) => (k !== "scope" && k !== "campagna" && v ? <input key={k} type="hidden" name={k} value={v} /> : null))}
@@ -622,6 +624,7 @@ export default async function ZooStampaPage({
               scopeParam={scopeParam}
               scopeLabel={scope.label}
               condizioniStandard={condizioniPer(db, scope, academyDb).condizioniStandard}
+              layouts={layoutScegliibili(db, scope, academyDb)}
               picker={{
                 totale: voci.length,
                 mostraTuttiHref: `/stampe/zoo/stampa?${new URLSearchParams({ ...Object.fromEntries(Object.entries(sp).filter(([, v]) => v) as [string, string][]), tutti: "1" })}`,

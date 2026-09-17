@@ -165,6 +165,14 @@ export interface ZooOffer {
   condivisa?: boolean;
   /** Chi l'ha fatto, per chi lo trova condiviso. */
   autore?: string;
+  /**
+   * Layout scelto a mano per il cartello proprio (3x2, sconto, barrato…):
+   * vince sulla scelta automatica. In un altro formato si cerca il layout con
+   * le stesse tipologie.
+   */
+  layoutId?: string;
+  /** Contenuto della confezione per il prezzo al kg/litro, quando non c'è un articolo in catalogo. */
+  contenuto?: { quantita: number; unita: "kg" | "l" };
 }
 
 /** Valore di `paginaId` per le offerte escluse dal volantino. */
@@ -1331,6 +1339,39 @@ export function effectiveZooLayout(
 }
 
 /**
+ * Il layout di un cartello in stampa: quello scelto a mano sul cartello
+ * proprio, se è di questo formato; in un altro formato quello automatico con
+ * le stesse tipologie del layout scelto (un "3x2" resta un 3x2 anche in A5);
+ * altrimenti la scelta automatica di sempre.
+ */
+export function layoutPerOfferta(
+  db: ZooDB, scope: Scope, formatId: string, academyDb: DB, offer: ZooOffer, tags: string[]
+): ZooLayout {
+  const scelto = offer.layoutId ? db.zooLayouts.find((l) => l.id === offer.layoutId) : undefined;
+  if (scelto && ownScopeVisible(scope, academyDb, scelto)) {
+    if (scelto.formatId === formatId) return conTestataDiScopo(scelto, testataPer(db, scope, academyDb));
+    if ((scelto.tipologie ?? []).length > 0) return effectiveZooLayout(db, scope, formatId, academyDb, scelto.tipologie);
+  }
+  return effectiveZooLayout(db, scope, formatId, academyDb, tags);
+}
+
+/** I layout che un ambito può scegliere per un cartello, con un nome leggibile. */
+export function layoutScegliibili(
+  db: ZooDB, scope: Scope, academyDb: DB
+): { id: string; formatId: string; nome: string; tipologie: string[]; proprio: boolean }[] {
+  return db.zooLayouts
+    .filter((l) => ownScopeVisible(scope, academyDb, l))
+    .map((l) => ({
+      id: l.id,
+      formatId: l.formatId,
+      nome: l.nome || ((l.tipologie ?? []).length > 0 ? l.tipologie.join(", ") : "Layout generico"),
+      tipologie: l.tipologie ?? [],
+      proprio: l.scopeType !== "system",
+    }))
+    .sort((a, b) => a.nome.localeCompare(b.nome));
+}
+
+/**
  * La prima immagine libera in cima al foglio è la testata: se l'ambito ne ha una
  * sua, si sostituisce solo quella e il resto del layout resta come l'ha fatto il
  * Consorzio. Così un'insegna cambia la fascia col proprio logo senza doversi
@@ -1362,8 +1403,17 @@ export function testoValidita(campaign?: ZooCampaign): string {
 
 /** Valori del cartello per un'offerta (con prezzo del PV se caricato). */
 export function zooCartelloValues(
-  db: ZooDB, offer: ZooOffer, scope?: Scope, academyDb?: DB
+  db: ZooDB, offertaSalvata: ZooOffer, scope?: Scope, academyDb?: DB
 ): Record<string, string> {
+  /*
+   * Cartello proprio a meccanica (3x2) salvato col prezzo nel promo: il prezzo
+   * del pezzo va nel prezzo di partenza, come nei 3x2 del Consorzio, altrimenti
+   * il layout 3x2 stampa "A SOLI" senza prezzo.
+   */
+  const offer: ZooOffer = offertaSalvata.scopeType && offertaSalvata.meccanica && !scontoDaTesto(offertaSalvata.meccanica)
+    && offertaSalvata.prezzoPromo && !offertaSalvata.prezzoListino
+    ? { ...offertaSalvata, prezzoListino: offertaSalvata.prezzoPromo, prezzoPromo: "" }
+    : offertaSalvata;
   const product = db.products.find((p) => p.id === offer.productId);
   const parent = product?.parentId ? db.parents.find((x) => x.id === product.parentId) : undefined;
   // il cartello è per il codice padre: elenca gli EAN di tutte le sue varianti, non solo quella dell'offerta
@@ -1465,7 +1515,8 @@ export function zooCartelloValues(
       return p ? `Sconto ${p}` : "";
     })(),
     // prezzo al chilo/litro: sul cartello è obbligatorio per legge sugli alimenti confezionati
-    prezzoUnita: prezzoUnitaDi(offer, product, offer.prezzoPromo),
+    // nei 3x2 il prezzo è quello del pezzo, che sta nel prezzo di partenza
+    prezzoUnita: prezzoUnitaDi(offer, product, offer.prezzoPromo || (offer.meccanica ? offer.prezzoListino ?? "" : "")),
     /*
      * Tipo di promozione, uno solo. Vale quella del punto vendita quando c'è (è il
      * loro file, sono le loro offerte), altrimenti la meccanica del Consorzio.
@@ -1539,7 +1590,7 @@ export function testoContenuto(c?: { quantita: number; unita: "kg" | "l" }): str
  */
 export function prezzoUnitaDi(offer: ZooOffer, product: ZooProduct | undefined, prezzo: string): string {
   if (offer.prezzoUnita) return offer.prezzoUnita;
-  const c = product?.contenuto ?? (product ? contenutoDa(product.descrizione) : undefined);
+  const c = offer.contenuto ?? product?.contenuto ?? (product ? contenutoDa(product.descrizione) : undefined);
   const n = Number((prezzo || "").replace(/[^\d,.-]/g, "").replace(/\.(?=\d{3})/g, "").replace(",", "."));
   if (!c || !Number.isFinite(n) || n <= 0) return "";
   const unitario = n / c.quantita;

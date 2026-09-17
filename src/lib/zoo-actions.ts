@@ -9,7 +9,7 @@ import { postLoginPath } from "./types";
 import { LAYOUT_FONTS } from "./layout-fonts";
 import {
   getZooDb, saveZooDb, ZooDB, ZooParent, ZooProduct, campagnaInLavorazione, campagnaInCorso, campaignStato, NO_VOLANTINO,
-  ZOO_FORMATS, PV_PROMO_CODES_DEFAULT, ownScopeVisible, apiKeyFor, contenutoDaTesto, zooCartelloValues,
+  ZOO_FORMATS, PV_PROMO_CODES_DEFAULT, ownScopeVisible, apiKeyFor, contenutoDaTesto, zooCartelloValues, layoutScegliibili, scontoDaTesto,
   type ZooOffer,
 } from "./zoo";
 import type { LayoutItem } from "./stampe";
@@ -2714,6 +2714,18 @@ function cartelloMio(o: ZooOffer | undefined, scope: { type: string; id: string 
   return Boolean(o && o.scopeType && o.scopeType === scope.type && (o.scopeId ?? "") === scope.id);
 }
 
+/*
+ * Nei cartelli a meccanica (3x2, 1+1) il prezzo che si stampa è quello del
+ * singolo pezzo, e sta nel prezzo di partenza: così sono fatti i 3x2 del
+ * Consorzio e così li legge il loro layout. Scritto nel prezzo promo, il
+ * layout 3x2 mostrava "A SOLI" senza prezzo.
+ */
+function prezziDelPezzo(o: { meccanica?: string; prezzoPromo: string; prezzoListino?: string }) {
+  if (!o.meccanica || scontoDaTesto(o.meccanica) || !o.prezzoPromo || o.prezzoListino) return;
+  o.prezzoListino = o.prezzoPromo;
+  o.prezzoPromo = "";
+}
+
 function campagnaPerCartelli(db: ZooDB) {
   return campagnaInCorso(db) ?? campagnaInLavorazione(db) ?? db.campaigns[db.campaigns.length - 1];
 }
@@ -2761,6 +2773,11 @@ export async function creaCartelloNuovo(
   const meccanica = String(formData.get("meccanica") ?? "").trim();
   if (!titolo) return { ok: false, errore: "Serve almeno il titolo del cartello." };
   if (!prezzoPromo && !meccanica) return { ok: false, errore: "Serve il prezzo promo oppure una promozione (3x2, sconto 20%…)." };
+  const testoContenuto = String(formData.get("contenuto") ?? "").trim();
+  const contenuto = testoContenuto ? contenutoDaTesto(testoContenuto) : undefined;
+  if (testoContenuto && !contenuto) return { ok: false, errore: `Non capisco il contenuto «${testoContenuto}»: scrivilo come 12 kg, 400 g, 1,5 l o 750 ml.` };
+  const layoutId = String(formData.get("layoutId") ?? "");
+  if (layoutId && !layoutScegliibili(db, scope, academyDb).some((l) => l.id === layoutId)) return { ok: false, errore: "Quel layout non è disponibile." };
   const ean = String(formData.get("ean") ?? "").trim().replace(/\s/g, "");
   // se il codice è di un articolo che l'ambito vede, il cartello si aggancia a lui (foto, animale, prezzo al kg)
   const prodotto = ean ? db.products.find((p) => p.ean === ean && ownScopeVisible(scope, academyDb, p)) : undefined;
@@ -2793,27 +2810,40 @@ export async function creaCartelloNuovo(
     scopeId: scope.id,
     condivisa: scope.type !== "system" && formData.get("condivisa") === "1" ? true : undefined,
     autore: `${user.firstName} ${user.lastName}`,
+    layoutId: layoutId || undefined,
+    contenuto,
   });
+  prezziDelPezzo(db.offers[db.offers.length - 1]);
   await saveZooDb(db);
   rigeneraZoo();
   return { ok: true, id };
 }
 
-const CAMPI_PROPRI = ["titolo", "descCartello", "descrizione", "marca", "prezzoPromo", "prezzoListino", "meccanica", "condizioni"] as const;
+const CAMPI_PROPRI = [
+  "titolo", "descCartello", "descrizione", "marca", "prezzoPromo", "prezzoListino", "meccanica", "condizioni", "contenuto", "layoutId",
+] as const;
 export type CampoCartelloProprio = (typeof CAMPI_PROPRI)[number];
 
 /** Corregge un testo o un prezzo di un cartello proprio. */
 export async function aggiornaCartelloProprio(
   offerId: string, scopeParam: string, campo: CampoCartelloProprio, valore: string
 ): Promise<{ ok: boolean }> {
-  const { db, scope } = await ambitoCartelliPropri(scopeParam);
+  const { db, academyDb, scope } = await ambitoCartelliPropri(scopeParam);
   const o = db.offers.find((x) => x.id === offerId);
   if (!cartelloMio(o, scope) || !CAMPI_PROPRI.includes(campo)) return { ok: false };
   const v = valore.trim();
-  if (campo === "prezzoPromo") {
+  if (campo === "contenuto") {
+    const c = v ? contenutoDaTesto(v) : undefined;
+    if (v && !c) return { ok: false };
+    o.contenuto = c;
+  } else if (campo === "layoutId") {
+    if (v && !layoutScegliibili(db, scope, academyDb).some((l) => l.id === v)) return { ok: false };
+    o.layoutId = v || undefined;
+  } else if (campo === "prezzoPromo") {
     const p = priceOrEmpty(v);
     if (!p && !o.meccanica) return { ok: false };
     o.prezzoPromo = p;
+    prezziDelPezzo(o);
   } else if (campo === "prezzoListino") {
     o.prezzoListino = priceOrEmpty(v) || undefined;
   } else if (campo === "titolo") {
@@ -2826,6 +2856,7 @@ export async function aggiornaCartelloProprio(
     o.descrizione = v;
   } else {
     o[campo] = v || undefined;
+    if (campo === "meccanica") prezziDelPezzo(o);
   }
   await saveZooDb(db);
   rigeneraZoo();

@@ -165,14 +165,15 @@ export default function StampaPicker({
   // un duplicato o un cartello nuovo arriva da fuori: entra fra i selezionati
   useEffect(() => {
     const ascolta = (e: Event) => {
-      const { id, al, togli } = (e as CustomEvent<{ id: string; al?: string; togli?: boolean }>).detail;
+      const { id, al, togli, formato } = (e as CustomEvent<{ id: string; al?: string; togli?: boolean; formato?: string }>).detail;
       if (togli) { setSelected((prev) => prev.filter((x) => x !== id)); return; }
       setSelected((prev) => {
         if (prev.includes(id)) return prev;
         const dopo = al ? prev.indexOf(al) : -1;
         return dopo >= 0 ? [...prev.slice(0, dopo + 1), id, ...prev.slice(dopo + 1)] : [...prev, id];
       });
-      if (al) setRowFormat((prev) => (prev[al] ? { ...prev, [id]: prev[al] } : prev));
+      if (formato) setRowFormat((prev) => ({ ...prev, [id]: formato }));
+      else if (al) setRowFormat((prev) => (prev[al] ? { ...prev, [id]: prev[al] } : prev));
     };
     window.addEventListener(EVENTO_SELEZIONA, ascolta);
     return () => window.removeEventListener(EVENTO_SELEZIONA, ascolta);
