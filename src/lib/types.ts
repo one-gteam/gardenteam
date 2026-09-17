@@ -383,9 +383,10 @@ export interface Feedback {
 
 export type EmailType =
   | "benvenuto" | "assegnazione" | "mai_iniziato" | "promemoria" | "scadenza" | "completamento" | "certificato"
-  | "convocazione" | "promemoria_sessione";
+  | "convocazione" | "promemoria_sessione" | "reimposta";
 
 export const EMAIL_TYPE_LABELS: Record<EmailType, { label: string; emoji: string }> = {
+  reimposta: { label: "Reimposta la password", emoji: "🔑" },
   benvenuto: { label: "Benvenuto", emoji: "👋" },
   assegnazione: { label: "Nuovo corso assegnato", emoji: "📬" },
   mai_iniziato: { label: "Corso assegnato mai iniziato", emoji: "👀" },

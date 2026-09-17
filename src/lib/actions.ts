@@ -8,7 +8,7 @@ import { getDb, saveDb } from "./db";
 import { uploadPublicFile } from "./supabase";
 import { mailerConfig, sendMail } from "./mailer";
 import { verifySsoToken } from "./sso";
-import { AUTH_COOKIE, OPZIONI_SESSIONE, requireUser, valoreSessione } from "./auth";
+import { AUTH_COOKIE, OPZIONI_SESSIONE, requireUser, valoreSessione, tokenReimposta, idDaTokenReimposta } from "./auth";
 import { attesaMinuti, azzera, ipChiamante, Regola, segnaErrore } from "./tentativi";
 import { assignableRolesFor, canManageUsers, coursesForUser, courseVisibleTo, dueDate, getProgress, hasStartedCourse, isCourseCompleted, pathsForUser } from "./logic";
 import {
@@ -1832,6 +1832,59 @@ export async function loginWithPassword(formData: FormData) {
   const store = await cookies();
   store.set(AUTH_COOKIE, valoreSessione(user!.id), OPZIONI_SESSIONE);
   redirect(postLoginPath(user!));
+}
+
+/*
+ * "Ho dimenticato la password": si manda per email un link firmato che scade in
+ * due ore. La risposta è sempre la stessa, anche se l'email non esiste:
+ * altrimenti la pagina direbbe a chiunque chi ha un account.
+ */
+export async function richiediReimposta(formData: FormData) {
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const regole: Regola[] = [
+    { chiave: `reimposta-email:${email}`, massimo: 3, minuti: 60 },
+    { chiave: `reimposta-ip:${await ipChiamante()}`, massimo: 10, minuti: 60 },
+  ];
+  const attesa = await attesaMinuti(regole);
+  if (attesa > 0) redirect(`/reimposta?errore=troppi&minuti=${attesa}`);
+  await segnaErrore(regole);
+  const db = await getDb();
+  const user = db.users.find((u) => u.email.toLowerCase() === email);
+  if (user && user.active !== false) {
+    const token = tokenReimposta(user.id, user.passwordHash);
+    if (token) {
+      const link = `${siteUrl()}/reimposta?token=${token}`;
+      const subject = "🔑 Reimposta la password di GT One";
+      const body = `Ciao ${user.firstName},
+
+hai chiesto di ${user.passwordHash ? "reimpostare" : "impostare"} la password di GT One. Aprilo qui entro due ore:
+${link}
+
+Se non hai chiesto tu niente, ignora questa email: la password resta quella di prima.`;
+      await pushEmail(db, user, "reimposta", subject, body);
+      await saveDb(db);
+    }
+  }
+  redirect("/reimposta?inviata=1");
+}
+
+/** La nuova password, dal link ricevuto per email. */
+export async function reimpostaPassword(formData: FormData) {
+  const token = String(formData.get("token") ?? "");
+  const password = String(formData.get("password") ?? "");
+  const password2 = String(formData.get("password2") ?? "");
+  const indietro = `/reimposta?token=${encodeURIComponent(token)}`;
+  if (password.length < 8) redirect(`${indietro}&errore=corta`);
+  if (password !== password2) redirect(`${indietro}&errore=diverse`);
+  const db = await getDb();
+  const id = idDaTokenReimposta(token, (x) => db.users.find((u) => u.id === x)?.passwordHash);
+  const user = id ? db.users.find((u) => u.id === id) : undefined;
+  if (!user || user.active === false) redirect("/reimposta?errore=scaduto");
+  user!.passwordHash = hashPassword(password);
+  await saveDb(db);
+  // il link appena usato non vale più: la firma comprende la password di prima
+  await azzera([`login-email:${user!.email.toLowerCase()}`]);
+  redirect("/login?reimpostata=1");
 }
 
 export async function activateAccount(formData: FormData) {

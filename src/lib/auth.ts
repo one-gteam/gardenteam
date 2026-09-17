@@ -37,6 +37,37 @@ function idDaBiscotto(valore: string): string | null {
   return id;
 }
 
+/*
+ * Gettone per reimpostare la password: porta l'id e la scadenza, firmati con un
+ * segreto del server insieme alla password di adesso. Così il link vale una
+ * volta sola (appena la password cambia, la firma non torna più) e non serve
+ * salvare niente nel database.
+ */
+const ORE_REIMPOSTA = 2;
+
+export function tokenReimposta(userId: string, passwordHash?: string): string {
+  const segreto = segretoSessione();
+  if (!segreto) return "";
+  const corpo = Buffer.from(`${userId}.${Date.now() + ORE_REIMPOSTA * 3600_000}`).toString("base64url");
+  return `${corpo}.${createHmac("sha256", segreto + (passwordHash ?? "senza")).update(corpo).digest("base64url")}`;
+}
+
+/** L'id dentro al gettone, se la firma torna e non è scaduto. */
+export function idDaTokenReimposta(token: string, passwordHashDi: (id: string) => string | undefined): string | null {
+  const segreto = segretoSessione();
+  const punto = token.lastIndexOf(".");
+  if (!segreto || punto <= 0) return null;
+  const corpo = token.slice(0, punto);
+  const [id, scadenza] = Buffer.from(corpo, "base64url").toString().split(".");
+  if (!id || !scadenza || Number(scadenza) < Date.now()) return null;
+  const firma = Buffer.from(token.slice(punto + 1));
+  const attesa = Buffer.from(
+    createHmac("sha256", segreto + (passwordHashDi(id) ?? "senza")).update(corpo).digest("base64url")
+  );
+  if (firma.length !== attesa.length || !timingSafeEqual(firma, attesa)) return null;
+  return id;
+}
+
 /** Come si scrive il biscotto: solo server, solo https in produzione, un mese. */
 export const OPZIONI_SESSIONE = {
   httpOnly: true as const,

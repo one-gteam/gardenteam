@@ -165,7 +165,7 @@ table.data td a:hover strong { color: var(--green-700); }
 .btn-sm { padding: 6px 12px; font-size: 13px; border-radius: 8px; }
 
 label.field { display: block; font-size: 13px; font-weight: 600; margin-bottom: 12px; }
-input[type="text"], input[type="email"], input[type="number"], input[type="date"], input[type="color"], select, textarea {
+input[type="text"], input[type="email"], input[type="password"], input[type="number"], input[type="date"], input[type="search"], input[type="tel"], input[type="color"], select, textarea {
   width: 100%; padding: 9px 12px; margin-top: 4px;
   border: 1.5px solid var(--line); border-radius: 9px; font-size: 14px; font-family: inherit;
   background: #fff;
@@ -1010,3 +1010,11 @@ label.chip:has(input:checked) { background: var(--green-100); color: var(--green
 .stampa-testata .nuovo-cartello-btn { align-self: flex-end; margin-bottom: 2px; }
 .riquadro-stampa { border: 1px solid var(--line); background: #f6f8f2; border-radius: 10px; padding: 8px 10px 10px; margin: 6px 0 8px; }
 .riquadro-stampa .field { margin-bottom: 4px; }
+
+/* Accesso: il modulo è la cosa principale, il resto sono link piccoli sotto */
+.login-accedi { max-width: 420px; margin: 0 auto; }
+.login-aiuti { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 14px; font-size: 13px; color: var(--muted); }
+.login-aiuti span { opacity: .5; }
+
+/* Reimposta password: stessa larghezza del modulo di accesso */
+.login-stretto .card { max-width: 420px; margin-left: auto; margin-right: auto; }

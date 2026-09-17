@@ -5,9 +5,9 @@ import { SITE_NAME } from "@/lib/types";
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ disattivato?: string; errore?: string; attivato?: string; minuti?: string }>;
+  searchParams: Promise<{ disattivato?: string; errore?: string; attivato?: string; minuti?: string; reimpostata?: string }>;
 }) {
-  const { disattivato, errore, attivato, minuti } = await searchParams;
+  const { disattivato, errore, attivato, minuti, reimpostata } = await searchParams;
   const db = await getDb();
 
   return (
@@ -31,56 +31,44 @@ export default async function LoginPage({
         )}
         {errore === "credenziali" && (
           <div className="alert alert-amber">
-            Email o password non corretti. Se non hai ancora impostato la password, usa <a href="/attiva">Attiva utente</a>.
+            Email o password non corretti. Se l&apos;hai dimenticata, <a href="/reimposta">te ne mandiamo una nuova per email</a>.
           </div>
         )}
         {errore === "troppi" && (
           <div className="alert alert-amber">
             <strong>Troppi tentativi sbagliati.</strong> Per sicurezza l&apos;accesso è bloccato per{" "}
-            {minuti ?? "qualche"} minut{minuti === "1" ? "o" : "i"}. Se hai dimenticato la password, chiedi al tuo responsabile.
+            {minuti ?? "qualche"} minut{minuti === "1" ? "o" : "i"}. Se hai dimenticato la password,{" "}
+            <a href="/reimposta">fattene mandare una nuova per email</a>.
           </div>
         )}
         {attivato && (
           <div className="alert alert-green">✓ Account attivato! Ora accedi con la tua email e la password appena scelta.</div>
         )}
+        {reimpostata && (
+          <div className="alert alert-green">✓ Password cambiata. Entra con quella nuova.</div>
+        )}
 
-        <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", alignItems: "stretch" }}>
-          <div className="card">
-            <h2>Accedi</h2>
-            <form action={loginWithPassword}>
-              <label className="field">
-                Email
-                <input type="text" name="email" required placeholder="nome@insegna.it" />
-              </label>
-              <label className="field">
-                Password
-                <input type="password" name="password" required />
-              </label>
-              <button className="btn" type="submit" style={{ width: "100%" }}>Entra</button>
-            </form>
-          </div>
-
-          <div className="card">
-            <h2>Primo accesso?</h2>
-            <p style={{ fontSize: 14, color: "var(--muted)" }}>
-              <strong>Sei già stato inserito dal tuo punto vendita?</strong>
-              <br />
-              Attiva il tuo account impostando la password.
-            </p>
-            <a className="btn btn-outline" href="/attiva" style={{ display: "block", marginBottom: 14 }}>
-              Attiva utente
-            </a>
-            <p style={{ fontSize: 14, color: "var(--muted)" }}>
-              <strong>Non sei ancora stato inserito?</strong>
-              <br />
-              Registrati con la parola segreta del tuo punto vendita: la richiesta verrà approvata dal responsabile.
-            </p>
-            <a className="btn btn-outline" href="/registrati" style={{ display: "block" }}>
-              Richiedi la registrazione
-            </a>
+        <div className="card login-accedi">
+          <h2>Accedi</h2>
+          <form action={loginWithPassword}>
+            <label className="field">
+              Email
+              <input type="text" name="email" required placeholder="nome@insegna.it" />
+            </label>
+            <label className="field">
+              Password
+              <input type="password" name="password" required />
+            </label>
+            <button className="btn" type="submit" style={{ width: "100%" }}>Entra</button>
+          </form>
+          <div className="login-aiuti">
+            <a href="/reimposta">Password dimenticata</a>
+            <span>·</span>
+            <a href="/attiva">Primo accesso</a>
+            <span>·</span>
+            <a href="/registrati">Chiedi la registrazione</a>
           </div>
         </div>
-
       </div>
     </div>
   );
