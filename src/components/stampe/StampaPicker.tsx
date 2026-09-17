@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
+
+/** Evento con cui altri pezzi della pagina aggiungono un cartello ai selezionati (duplicati, cartelli nuovi). */
+export const EVENTO_SELEZIONA = "stampa-seleziona";
+
+/** Il testo in cui si cerca, senza accenti e maiuscole. */
+const piano = (t: string) => t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
 /**
  * Interruttore a pillola: acceso = quella cosa esce sul cartello. Sostituisce
@@ -15,7 +22,6 @@ function Interruttore({ acceso, on, off, titolo, onClick }: {
     </button>
   );
 }
-import { useRouter } from "next/navigation";
 
 interface ProdLite {
   id: string;
@@ -31,6 +37,10 @@ interface ProdLite {
   codiceGestionale?: string;
   /** Segnato non conforme da chi è in reparto: il motivo, se l'ha scritto. */
   nonConforme?: string;
+  /** Altro testo in cui cercare (descrizioni degli articoli, EAN, marca, fornitore). */
+  cerca?: string;
+  /** Cartello proprio: l'etichetta da mostrare ("vostro", "condiviso da …"). */
+  propria?: string;
 }
 
 export interface StampaPickerProps {
@@ -71,6 +81,17 @@ export interface StampaPickerProps {
   onPreview?: () => void;
   /** Apre il pannello dei testi del cartello di quella riga (Stampa Zoo). */
   onPersonalizza?: (id: string) => void;
+  /** Duplica il cartello di quella riga in uno proprio. */
+  onDuplica?: (id: string) => void;
+  /**
+   * La ricerca filtra l'elenco nel browser, subito, senza tornare al server; e
+   * la selezione resta mentre si cercano altri prodotti.
+   */
+  cercaNelBrowser?: boolean;
+  /** Testo iniziale della ricerca (dall'indirizzo). */
+  cercaIniziale?: string;
+  /** Pulsante "Nuovo cartello" da mettere in testa all'elenco. */
+  nuovoCartello?: ReactNode;
 }
 
 /** Selezione prodotti per la stampa: click per aggiungere, Shift+click per intervalli, formato per riga. */
@@ -99,6 +120,10 @@ export default function StampaPicker({
   onChange,
   onPreview,
   onPersonalizza,
+  onDuplica,
+  cercaNelBrowser = false,
+  cercaIniziale = "",
+  nuovoCartello,
 }: StampaPickerProps) {
   const router = useRouter();
   const [selected, setSelected] = useState<string[]>(initialSelected);
@@ -111,32 +136,54 @@ export default function StampaPicker({
   const [esitoCoda, setEsitoCoda] = useState("");
   const [hiddenFields, setHiddenFields] = useState<Record<string, string[]>>(initialHidden);
   const [applyAll, setApplyAll] = useState(globalFormat);
-  const [doppio, setDoppio] = useState(false);
+  /* A5: di serie due cartelli per foglio A4, ognuno stampato due volte */
+  const [doppio, setDoppio] = useState(true);
+  const [cerca, setCerca] = useState(cercaIniziale);
+  const [limite, setLimite] = useState(200);
+  /*
+   * La ricerca gira qui, sull'elenco già arrivato: prima ogni ricerca era un
+   * giro dal server (lento), e cercare un secondo prodotto azzerava i
+   * selezionati. Ogni parola deve comparire da qualche parte nella riga.
+   */
+  const indice = useMemo(
+    () => new Map(products.map((p) => [p.id, piano(`${p.titolo} ${p.codice} ${p.tipologia} ${p.codiceGestionale ?? ""} ${p.cerca ?? ""}`)])),
+    [products],
+  );
+  const filtrati = useMemo(() => {
+    const parole = piano(cerca).split(/\s+/).filter(Boolean);
+    if (!cercaNelBrowser || parole.length === 0) return products;
+    return products.filter((p) => parole.every((w) => indice.get(p.id)?.includes(w)));
+  }, [products, cerca, cercaNelBrowser, indice]);
+  useEffect(() => { setLimite(200); }, [cerca]);
+  const mostrati = cercaNelBrowser ? filtrati.slice(0, limite) : products;
   /* righe spuntate nella tabella dei selezionati: si tolgono in blocco, senza
      cliccare la ✕ una per una quando la lista è lunga */
   const [daTogliere, setDaTogliere] = useState<string[]>([]);
   const menuCoda = useRef<HTMLDetailsElement>(null);
-  /*
-   * L'indirizzo della pagina segue la selezione: "Svuota" o "Togli gli spuntati"
-   * cambiavano solo lo schermo, e al primo aggiornamento di pagina i prodotti
-   * tornavano su, perché l'elenco dei selezionati veniva riletto dall'indirizzo.
-   */
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const url = new URL(window.location.href);
-    const attuale = url.searchParams.get("sel") ?? "";
-    const nuovo = selected.join(",");
-    if (attuale === nuovo) return;
-    if (nuovo) url.searchParams.set("sel", nuovo); else url.searchParams.delete("sel");
-    window.history.replaceState(null, "", url.toString());
-  }, [selected]);
   const lastIndex = useRef<number | null>(null);
 
+  // un duplicato o un cartello nuovo arriva da fuori: entra fra i selezionati
+  useEffect(() => {
+    const ascolta = (e: Event) => {
+      const { id, al, togli } = (e as CustomEvent<{ id: string; al?: string; togli?: boolean }>).detail;
+      if (togli) { setSelected((prev) => prev.filter((x) => x !== id)); return; }
+      setSelected((prev) => {
+        if (prev.includes(id)) return prev;
+        const dopo = al ? prev.indexOf(al) : -1;
+        return dopo >= 0 ? [...prev.slice(0, dopo + 1), id, ...prev.slice(dopo + 1)] : [...prev, id];
+      });
+      if (al) setRowFormat((prev) => (prev[al] ? { ...prev, [id]: prev[al] } : prev));
+    };
+    window.addEventListener(EVENTO_SELEZIONA, ascolta);
+    return () => window.removeEventListener(EVENTO_SELEZIONA, ascolta);
+  }, []);
+
   const toggle = (index: number, shift: boolean) => {
-    const id = products[index].id;
-    if (shift && lastIndex.current !== null) {
+    const elenco = mostrati;
+    const id = elenco[index].id;
+    if (shift && lastIndex.current !== null && lastIndex.current < elenco.length) {
       const [a, b] = [Math.min(lastIndex.current, index), Math.max(lastIndex.current, index)];
-      const range = products.slice(a, b + 1).map((p) => p.id);
+      const range = elenco.slice(a, b + 1).map((p) => p.id);
       setSelected((prev) => [...prev, ...range.filter((x) => !prev.includes(x))]);
     } else {
       setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -158,10 +205,28 @@ export default function StampaPicker({
       if (noListino[id]) params.set(`nolistino_${id}`, "1");
       if (hiddenFields[id]?.length) params.set(`nascondi_${id}`, hiddenFields[id].join(","));
     }
-    if (doppio) params.set("doppio", "1");
+    if (!doppio) params.set("doppio", "0");
     if (print) params.set("print", "1");
     return `${baseUrl}?${params.toString()}`;
   };
+
+  /*
+   * L'indirizzo della pagina segue selezione e impostazioni: "Svuota" o "Togli
+   * gli spuntati" cambiavano solo lo schermo, e al primo aggiornamento i
+   * prodotti tornavano su. E cambiando un filtro (che ricarica la pagina) i
+   * selezionati restano, con i loro formati e prezzi.
+   */
+  const indirizzo = buildUrl(false).split("?")[1];
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    const gestiti = (k: string) =>
+      ["sel", "formato", "doppio", "print"].includes(k) || /^(formato|prezzo|listino|noprezzo|senzafoto|nolistino|nascondi)_/.test(k);
+    for (const k of [...url.searchParams.keys()]) if (gestiti(k)) url.searchParams.delete(k);
+    for (const [k, v] of new URLSearchParams(indirizzo)) if (gestiti(k) && v) url.searchParams.set(k, v);
+    if (selected.length === 0) url.searchParams.delete("sel");
+    if (url.toString() !== window.location.href) window.history.replaceState(null, "", url.toString());
+  }, [indirizzo, selected.length]);
 
   const anyA5 = selected.some((id) => ["a5", "za5"].includes(rowFormat[id] ?? applyAll));
 
@@ -217,14 +282,32 @@ export default function StampaPicker({
    * di troppo. Qui si guarda anche l'elenco dei selezionati fuori filtro.
    */
   const catalogo = [...products, ...prodottiSelezionati.filter((p) => !products.some((q) => q.id === p.id))];
-  const selectedProds = selected.map((id) => catalogo.find((p) => p.id === id)).filter(Boolean) as ProdLite[];
+  // un cartello appena creato arriva prima dei suoi dati: intanto ha una riga provvisoria
+  const selectedProds = selected.map((id) => catalogo.find((p) => p.id === id)
+    ?? (cercaNelBrowser ? { id, titolo: "Nuovo cartello…", codice: "", prezzo: "", tipologia: "" } : undefined))
+    .filter(Boolean) as ProdLite[];
 
   return (
     <>
       {/* elenco con selezione multipla */}
-      <div className="card" style={{ padding: 8, maxHeight: 680, overflowY: "auto" }}>
-        <div style={{ padding: "4px 10px", fontSize: 12.5, color: "var(--muted)", fontWeight: 700 }}>
-          {totale !== undefined && totale > products.length ? (
+      <div className="card elenco-prodotti">
+        {cercaNelBrowser && (
+          <div className="elenco-cerca">
+            <input type="search" value={cerca} onChange={(e) => setCerca(e.target.value)}
+              placeholder="Cerca prodotto, EAN, marca…" aria-label="Cerca nell'elenco" />
+            {cerca && <button type="button" className="chip" onClick={() => setCerca("")} title="Svuota la ricerca">✕</button>}
+          </div>
+        )}
+        <div style={{ padding: "4px 6px", fontSize: 12, color: "var(--muted)", fontWeight: 600 }}>
+          {cercaNelBrowser ? (
+            <>
+              {filtrati.length} {filtrati.length === 1 ? "prodotto" : "prodotti"}{cerca ? ` su ${products.length}` : ""}
+              {filtrati.length > mostrati.length && (
+                <> · ne vedi {mostrati.length}: <button type="button" className="link-btn" onClick={() => setLimite(Infinity)}>mostrali tutti</button></>
+              )}
+              {" "}· <strong>+</strong> aggiunge ai selezionati e puoi cercare il prossimo
+            </>
+          ) : totale !== undefined && totale > products.length ? (
             <>
               {products.length} prodotti di {totale} — restringi la ricerca, oppure{" "}
               {mostraTuttiHref
@@ -232,60 +315,65 @@ export default function StampaPicker({
                 : "mostrali tutti"} (la pagina diventa più lenta)
             </>
           ) : (
-            <>{products.length} prodotti</>
-          )}{" "}
-          — clic per selezionare, <kbd>Shift</kbd>+clic per intervalli
+            <>{products.length} prodotti — clic per selezionare, <kbd>Shift</kbd>+clic per intervalli</>
+          )}
         </div>
-        <div style={{ display: "flex", gap: 6, padding: "0 10px 8px" }}>
+        <div style={{ display: "flex", gap: 6, padding: "0 6px 8px", flexWrap: "wrap" }}>
           <button
             type="button"
             className="btn btn-outline btn-sm"
-            title="Seleziona tutti i prodotti dell'elenco filtrato"
-            onClick={() => setSelected((prev) => [...prev, ...products.map((p) => p.id).filter((id) => !prev.includes(id))])}
+            title="Aggiunge ai selezionati tutti i prodotti che vedi nell'elenco"
+            onClick={() => setSelected((prev) => [...prev, ...filtrati.map((p) => p.id).filter((id) => !prev.includes(id))])}
           >
-            Seleziona tutti ({products.length})
+            Aggiungi tutti ({filtrati.length})
           </button>
-          {selected.length > 0 && (
-            <button type="button" className="btn btn-outline btn-sm" onClick={() => setSelected([])}>
-              Nessuno
-            </button>
-          )}
+          {nuovoCartello}
         </div>
-        {products.map((p, i) => {
+        {mostrati.map((p, i) => {
           const isSel = selected.includes(p.id);
           return (
-            <button
+            <div
               key={p.id}
-              type="button"
+              role="button"
+              tabIndex={0}
               className={`prod-item ${isSel ? "active" : ""}`}
-              style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", userSelect: "none" }}
               onClick={(e) => toggle(i, e.shiftKey)}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(i, e.shiftKey); } }}
             >
-              {isSel ? "☑" : "☐"} {p.titolo}
-              {p.nonConforme !== undefined && (
-                <span className="pill pill-orange" style={{ marginLeft: 6, fontSize: 9.5 }}
-                  title={p.nonConforme || "Segnato non conforme dal reparto: da sistemare prima di stampare"}>
-                  ⚠ non conforme
-                </span>
-              )}
-              {dataStampa(p.id) && (
-                <span className="pill pill-gray" style={{ marginLeft: 6, fontSize: 9.5 }} title={`Già stampato il ${dataStampa(p.id)}`}>
-                  ✓ stampato
-                </span>
-              )}
-              <div style={{ fontSize: 11, color: "var(--muted)" }}>
-                {p.codice} · {p.prezzo ? `€ ${p.prezzo}` : <span style={{ color: "#b45309" }}>prezzo da definire</span>} · {p.tipologia}
-                {p.giacenza !== undefined && (
-                  <span className={`pill ${Number(p.giacenza) > 0 ? "pill-green" : "pill-red"}`} style={{ marginLeft: 6, fontSize: 9.5 }}
-                    title="Giacenza dal gestionale">
-                    giac. {p.giacenza}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                {p.titolo}
+                {p.propria && <span className="pill pill-blue" style={{ marginLeft: 6, fontSize: 9.5 }} title="Cartello fatto da un'insegna o da un punto vendita">{p.propria}</span>}
+                {p.nonConforme !== undefined && (
+                  <span className="pill pill-orange" style={{ marginLeft: 6, fontSize: 9.5 }}
+                    title={p.nonConforme || "Segnato non conforme dal reparto: da sistemare prima di stampare"}>
+                    ⚠ non conforme
                   </span>
                 )}
-                {p.codiceGestionale && <span className="hint" style={{ marginLeft: 6 }} title="Codice nel gestionale">cod. {p.codiceGestionale}</span>}
+                {dataStampa(p.id) && (
+                  <span className="pill pill-gray" style={{ marginLeft: 6, fontSize: 9.5 }} title={`Già stampato il ${dataStampa(p.id)}`}>
+                    ✓ stampato
+                  </span>
+                )}
+                <div style={{ fontSize: 11, color: "var(--muted)" }}>
+                  {p.codice} · {p.prezzo ? `€ ${p.prezzo}` : <span style={{ color: "#b45309" }}>prezzo da definire</span>} · {p.tipologia}
+                  {p.giacenza !== undefined && (
+                    <span className={`pill ${Number(p.giacenza) > 0 ? "pill-green" : "pill-red"}`} style={{ marginLeft: 6, fontSize: 9.5 }}
+                      title="Giacenza dal gestionale">
+                      giac. {p.giacenza}
+                    </span>
+                  )}
+                  {p.codiceGestionale && <span className="hint" style={{ marginLeft: 6 }} title="Codice nel gestionale">cod. {p.codiceGestionale}</span>}
+                </div>
               </div>
-            </button>
+              <button type="button" className={`aggiungi ${isSel ? "dentro" : ""}`}
+                title={isSel ? "È fra i selezionati: clic per toglierlo" : "Aggiungi ai selezionati"}
+                onClick={(e) => { e.stopPropagation(); toggle(i, e.shiftKey); }}>
+                {isSel ? "✓" : "+"}
+              </button>
+            </div>
           );
         })}
+        {mostrati.length === 0 && <p className="empty" style={{ padding: 10 }}>Nessun prodotto{cerca ? ` con «${cerca}»` : ""}.</p>}
       </div>
 
       {/* selezionati */}
@@ -365,7 +453,7 @@ export default function StampaPicker({
                           style={{ width: 85, marginTop: 0 }}
                         />
                       </td>
-                      <td style={{ whiteSpace: "nowrap" }}>
+                      <td className="cella-chips">
                         <div className="chips">
                           <Interruttore acceso={!noPrice[p.id]} on="€ prezzo" off="senza prezzo"
                             titolo="Il prezzo promo sul cartello: spento = si stampa senza prezzo"
@@ -383,6 +471,12 @@ export default function StampaPicker({
                           <button type="button" className="chip" onClick={() => onPersonalizza(p.id)}
                             title="Correggi titolo, descrizione, prezzi e condizioni di questo cartello">
                             ✎ Testi
+                          </button>
+                        )}
+                        {onDuplica && (
+                          <button type="button" className="chip" onClick={() => onDuplica(p.id)}
+                            title="Fa una copia di questo cartello, solo vostra, da correggere a piacere">
+                            ⧉ Duplica
                           </button>
                         )}
                         <details className="flag-details">
@@ -457,9 +551,10 @@ export default function StampaPicker({
               )}
               <span style={{ flex: 1 }} />
               {anyA5 && (
-                <label style={{ fontSize: 12.5, display: "flex", gap: 5, alignItems: "center" }}>
+                <label className={`interruttore-grande ${doppio ? "acceso" : ""}`}
+                  title="Gli A5 escono sempre due per foglio A4 orizzontale. Acceso: ogni cartello due volte sullo stesso foglio. Spento: due cartelli diversi per foglio.">
                   <input type="checkbox" checked={doppio} onChange={(e) => setDoppio(e.target.checked)} />
-                  A5: ogni cartello 2 volte (foglio A4 pieno)
+                  <span>A5 · {doppio ? "ogni cartello 2 volte" : "2 cartelli diversi"} per foglio A4</span>
                 </label>
               )}
               <button type="button" className="btn" onClick={vaiAllaStampa}

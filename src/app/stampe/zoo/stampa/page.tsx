@@ -10,6 +10,7 @@ import ColonnaOrdinabile from "@/components/stampe/ColonnaOrdinabile";
 import FiltriMobile from "@/components/FiltriMobile";
 import SchedeStampa from "@/components/stampe/SchedeStampa";
 import FormAutoInvia from "@/components/stampe/FormAutoInvia";
+import RigheAlterne from "@/components/stampe/RigheAlterne";
 import AutoSubmitSelect from "@/components/stampe/AutoSubmitSelect";
 import StampeHeader from "@/components/stampe/StampeHeader";
 import Cartello from "@/components/stampe/Cartello";
@@ -20,7 +21,7 @@ import {
   getZooDb, nonConformiDi, effectiveZooLayout, pvPriceFor, isZooHidden,
   campagneStampabili, campagnaInCorso, campagnaInLavorazione, campaignStato,
   effectiveParentText, effectiveParentTag, printedAt, NO_VOLANTINO,
-  ZOO_FIELDS, ZOO_FORMATS, marcaEffettiva, pvPromoFor, noPrintSets, offertePerStampa, tagsPerLayout, valoriPerStampa, giacenzePer, tagsPerStampa,
+  ZOO_FIELDS, ZOO_FORMATS, marcaEffettiva, condizioniPer, ownScopeVisible, pvPromoFor, noPrintSets, offertePerStampa, tagsPerLayout, valoriPerStampa, giacenzePer, tagsPerStampa,
 } from "@/lib/zoo";
 import {
   importPvPricesRighe, markZooPrinted, resetZooPrinted, toggleZooHidden, importZooNoPrintRighe, svuotaZooNoPrint,
@@ -105,7 +106,6 @@ export default async function ZooStampaPage({
     .filter((h) => h.scopeType === scope.type && h.scopeId === scope.id && h.kind === "marca")
     .map((h) => h.value);
 
-  const q = (sp.q ?? "").toLowerCase();
   /*
    * Un solo filtro "Stato" al posto di due tendine (già stampati / esclusi):
    * i vecchi parametri restano validi per i link salvati.
@@ -134,10 +134,38 @@ export default async function ZooStampaPage({
    * dell'articolo: la descrizione dell'offerta da sola ("NUTRIMI 70GR TONNO")
    * non conteneva il nome con cui la gente lo cerca ("Life Pet Care").
    */
+  /*
+   * Indici per id: con centinaia di offerte e migliaia di articoli, cercare con
+   * find() dentro ogni ciclo rendeva la pagina lenta a ogni filtro.
+   */
+  const prodById = new Map(db.products.map((p) => [p.id, p]));
+  const parentById = new Map(db.parents.map((p) => [p.id, p]));
   const padreDi = (o: (typeof allOffers)[number]) => {
-    const product = db.products.find((p) => p.id === o.productId);
-    const parent = product?.parentId ? db.parents.find((x) => x.id === product.parentId) : undefined;
+    const product = o.productId ? prodById.get(o.productId) : undefined;
+    const parent = product?.parentId ? parentById.get(product.parentId) : undefined;
     return { product, parent };
+  };
+  const nomePadre = new Map<string, string>();
+  const nomeDelPadre = (parent: (typeof db.parents)[number]) => {
+    if (!nomePadre.has(parent.id)) nomePadre.set(parent.id, effectiveParentText(db, scope, parent, "nome", academyDb).value);
+    return nomePadre.get(parent.id) ?? "";
+  };
+  /** Il titolo che si legge in elenco: quello del cartello proprio, del padre, o la descrizione. */
+  const titoloDi = (o: (typeof allOffers)[number]) => {
+    if (o.titolo) return o.titolo;
+    const { parent } = padreDi(o);
+    return (parent ? nomeDelPadre(parent) : "") || o.descrizione;
+  };
+  /** Cartello proprio: "vostro", oppure "condiviso da ..." se viene da un'altra insegna. */
+  const etichettaPropria = (o: (typeof allOffers)[number]) => {
+    if (!o.scopeType) return undefined;
+    const mio = o.scopeType === scope.type && (o.scopeId ?? "") === scope.id;
+    if (mio) return o.condivisa ? "vostro · condiviso" : "vostro";
+    if (o.scopeType === "system") return "Consorzio";
+    const chi = o.scopeType === "store"
+      ? academyDb.stores.find((x) => x.id === o.scopeId)?.name
+      : academyDb.tenants.find((x) => x.id === o.scopeId)?.name;
+    return o.condivisa && !ownScopeVisible(scope, academyDb, o) ? `condiviso da ${chi ?? "un'insegna"}` : (chi ?? "proprio");
   };
   const visible = allOffers.filter((o) => {
     const { product, parent } = padreDi(o);
@@ -157,13 +185,6 @@ export default async function ZooStampaPage({
     if (sp.volantino === "no" && inVolantino(o)) return false;
     if (fStampati === "si" && !printedAt(db, scope, o.id)) return false;
     if (fStampati === "no" && printedAt(db, scope, o.id)) return false;
-    if (q) {
-      const testo = [
-        o.descrizione, o.ean, marcaEffettiva(product ?? { marca: "", fornitore: "" }), product?.descrizione ?? "", product?.codice ?? "",
-        parent ? effectiveParentText(db, scope, parent, "nome", academyDb).value : "",
-      ].join(" ").toLowerCase();
-      if (!testo.includes(q)) return false;
-    }
     return true;
   });
   const nStampati = allOffers.filter((o) => printedAt(db, scope, o.id)).length;
@@ -175,9 +196,14 @@ export default async function ZooStampaPage({
    */
   const vistaSingole = sp.vista === "singole";
   const marcaDi = (o: (typeof allOffers)[number]) => {
-    const product = db.products.find((p) => p.id === o.productId);
-    return product ? marcaEffettiva(product) : "";
+    const { product } = padreDi(o);
+    return o.marca || (product ? marcaEffettiva(product) : "");
   };
+  /** Il testo in cui la ricerca del browser guarda, oltre al titolo. */
+  const testoRicerca = (gruppo: (typeof allOffers)[number][]) => [...new Set(gruppo.flatMap((o) => {
+    const { product } = padreDi(o);
+    return [o.descrizione, o.ean, product?.descrizione ?? "", product?.codice ?? "", product?.fornitore ?? "", marcaDi(o), o.meccanica ?? ""];
+  }))].join(" ");
   const nonConformi = nonConformiDi(db, scope);
   /** undefined = conforme; stringa (anche vuota) = segnato non conforme, col motivo. */
   const ncDi = (ids: string[]) => {
@@ -186,7 +212,7 @@ export default async function ZooStampaPage({
   };
   const voceSingola = (o: (typeof allOffers)[number]) => ({
     id: o.id,
-    titolo: o.descrizione,
+    titolo: o.titolo || o.descrizione,
     codice: o.ean,
     prezzo: pvPriceFor(db, scope, o.ean, academyDb) ?? o.prezzoPromo,
     listino: o.prezzoListino,
@@ -194,15 +220,17 @@ export default async function ZooStampaPage({
     giacenza: giacenzaDi([o.ean]),
     nonConforme: ncDi([o.id]),
     codiceGestionale: giacenze[o.ean]?.codice,
+    cerca: testoRicerca([o]),
+    propria: etichettaPropria(o),
   });
   /** La voce di un prodotto padre con tutti i suoi articoli in offerta. */
   const voceGruppo = (parentId: string, gruppo: typeof visible) => {
           const primo = gruppo[0];
-          const parent = db.parents.find((x) => x.id === parentId);
+          const parent = parentById.get(parentId);
           const prezzi = [...new Set(gruppo.map((g) => pvPriceFor(db, scope, g.ean, academyDb) ?? g.prezzoPromo).filter(Boolean))];
           return {
             id: primo.id,
-            titolo: parent ? effectiveParentText(db, scope, parent, "nome", academyDb).value || primo.descrizione : primo.descrizione,
+            titolo: (parent ? nomeDelPadre(parent) : "") || primo.descrizione,
             codice: gruppo.length > 1 ? `${gruppo.length} articoli` : primo.ean,
             prezzo: prezzi.length > 1 ? `da ${[...prezzi].sort()[0]}` : (prezzi[0] ?? ""),
             listino: primo.prezzoListino,
@@ -210,6 +238,8 @@ export default async function ZooStampaPage({
             giacenza: giacenzaDi(gruppo.map((g) => g.ean)),
             nonConforme: ncDi(gruppo.map((g) => g.id)),
             codiceGestionale: gruppo.length === 1 ? giacenze[primo.ean]?.codice : undefined,
+            cerca: testoRicerca(gruppo),
+            propria: undefined as string | undefined,
           };
   };
   const voci = vistaSingole
@@ -217,8 +247,9 @@ export default async function ZooStampaPage({
     : (() => {
         const gruppi = new Map<string, typeof visible>();
         for (const o of visible) {
-          const product = db.products.find((p) => p.id === o.productId);
-          const key = product?.parentId ? `p:${product.parentId}` : `o:${o.id}`;
+          // i cartelli propri stanno da soli: un duplicato non si fonde col padre da cui è nato
+          const { product } = padreDi(o);
+          const key = product?.parentId && !o.scopeType ? `p:${product.parentId}` : `o:${o.id}`;
           gruppi.set(key, [...(gruppi.get(key) ?? []), o]);
         }
         return [...gruppi.entries()].map(([key, gruppo]) =>
@@ -238,11 +269,8 @@ export default async function ZooStampaPage({
       const o = allOffers.find((x) => x.id === id);
       if (!o) return undefined;
       const { parent } = padreDi(o);
-      if (vistaSingole || !parent) return voceSingola(o);
-      const gruppo = allOffers.filter((g) => {
-        const p = db.products.find((x) => x.id === g.productId);
-        return p?.parentId === parent.id;
-      });
+      if (vistaSingole || !parent || o.scopeType) return voceSingola(o);
+      const gruppo = allOffers.filter((g) => !g.scopeType && padreDi(g).product?.parentId === parent.id);
       return voceGruppo(parent.id, gruppo.length > 0 ? gruppo : [o]);
     })
     .filter(Boolean) as typeof voci;
@@ -250,9 +278,7 @@ export default async function ZooStampaPage({
   // cartelli in coda per questo ambito, con il nome che si legge in elenco
   const nomeOfferta = (offerId: string) => {
     const o = allOffers.find((x) => x.id === offerId);
-    if (!o) return offerId;
-    const { parent } = padreDi(o);
-    return parent ? effectiveParentText(db, scope, parent, "nome", academyDb).value || o.descrizione : o.descrizione;
+    return o ? titoloDi(o) : offerId;
   };
   /*
    * Ogni riga porta anche marca, fornitore, animale e tipo di promozione: gli
@@ -354,47 +380,59 @@ export default async function ZooStampaPage({
   };
 
   const scalePrint = 3.7795; // 1 mm = 3.7795 px a 96 dpi → stampa a dimensione reale
-  const doppio = sp.doppio === "1";
+  /* A5: di serie ogni cartello due volte sullo stesso foglio; "doppio=0" = due cartelli diversi per foglio */
+  const doppio = sp.doppio !== "0";
   const tagsFor = (o: (typeof allOffers)[number]) => tagsPerStampa(db, scope, academyDb, o, sp);
 
   if (sp.print === "1" && selected.length > 0) {
-    const toPrint = selected.flatMap((o) => (doppio && formatFor(o.id).id === "za5" ? [o, o] : [o]));
+    const cartello = (o: (typeof allOffers)[number]) => (
+      <Cartello
+        format={formatFor(o.id)}
+        layout={effectiveZooLayout(db, scope, formatFor(o.id).id, academyDb, tagsFor(o))}
+        fields={ZOO_FIELDS}
+        values={valuesFor(o)}
+        scale={scalePrint}
+      />
+    );
+    /*
+     * Gli A5 vanno sempre due per foglio A4 orizzontale (148+148 mm stanno nei
+     * 297 dell'A4 girato): hanno una pagina con un nome suo, così nella stessa
+     * stampa gli A4 restano in verticale. Prima uscivano uno per foglio, e il
+     * foglio si girava per tutti solo con la spunta.
+     */
+    const a5 = selected.filter((o) => formatFor(o.id).id === "za5").flatMap((o) => (doppio ? [o, o] : [o]));
+    const altri = selected.filter((o) => formatFor(o.id).id !== "za5");
+    const fogliA5 = Array.from({ length: Math.ceil(a5.length / 2) }, (_, i) => a5.slice(i * 2, i * 2 + 2));
+    const totale = altri.length + a5.length;
     return (
       <div>
-        {/*
-          * Due A5 stanno su un foglio solo se il foglio è orizzontale: 148+148 mm
-          * entrano nei 297 mm dell'A4 in orizzontale, non nei 210 dell'A4 in
-          * verticale. Senza questa riga la spunta "foglio A4 pieno" mandava ogni
-          * copia su una pagina sua, cioè il contrario di quello che prometteva.
-          */}
-        {doppio && <style>{`@page { size: 297mm 210mm; margin: 0; }`}</style>}
+        <style>{`@page foglioA5 { size: 297mm 210mm; margin: 0; }${altri.length === 0 ? " @page { size: 297mm 210mm; margin: 0; }" : ""}`}</style>
         <div className="no-print" style={{ padding: 14, display: "flex", gap: 10, alignItems: "center", background: "var(--green-50)", flexWrap: "wrap" }}>
-          <strong>Anteprima di stampa — {toPrint.length} cartelli</strong>
+          <strong>Anteprima di stampa — {totale} cartelli</strong>
           <a className="btn btn-outline btn-sm" href={`/stampe/zoo/stampa?${qsBack()}`}>← Torna all&apos;elenco</a>
           <span style={{ fontSize: 12.5, color: "var(--muted)" }}>
             Usa il pulsante Stampa del browser (Ctrl+P) e scegli &quot;Salva come PDF&quot;.
-            {doppio && " Il foglio esce orizzontale: due A5 affiancati per pagina."}
+            {fogliA5.length > 0 && ` Gli A5 escono due per foglio A4 orizzontale (${fogliA5.length} ${fogliA5.length === 1 ? "foglio" : "fogli"}${doppio ? ", ogni cartello due volte" : ""}).`}
           </span>
         </div>
-        <div style={{ display: "flex", flexWrap: "wrap" }}>
-          {toPrint.map((o, i) => (
-            <div key={`${o.id}_${i}`} style={{ pageBreakInside: "avoid" }}>
-              <Cartello
-                format={formatFor(o.id)}
-                layout={effectiveZooLayout(db, scope, formatFor(o.id).id, academyDb, tagsFor(o))}
-                fields={ZOO_FIELDS}
-                values={valuesFor(o)}
-                scale={scalePrint}
-              />
-            </div>
-          ))}
-        </div>
+        {altri.length > 0 && (
+          <div style={{ display: "flex", flexWrap: "wrap" }}>
+            {altri.map((o, i) => (
+              <div key={`${o.id}_${i}`} style={{ pageBreakInside: "avoid" }}>{cartello(o)}</div>
+            ))}
+          </div>
+        )}
+        {fogliA5.map((coppia, i) => (
+          <div key={`a5_${i}`} className="foglio-a5">
+            {coppia.map((o, j) => <div key={`${o.id}_${j}`}>{cartello(o)}</div>)}
+          </div>
+        ))}
       </div>
     );
   }
 
   const filtriAttivi = [
-    sp.q && `«${sp.q}»`, sp.animale, sp.caratt,
+    sp.animale, sp.caratt,
     fStampati === "no" && "da stampare", fStampati === "si" && "già stampati",
     fEsclusi === "si" && "anche gli esclusi", fEsclusi === "solo" && "solo gli esclusi",
     sp.volantino === "si" && "in volantino", sp.volantino === "no" && "non in volantino",
@@ -403,6 +441,7 @@ export default async function ZooStampaPage({
     marcheScelte.length > 0 && `${marcheScelte.length} ${marcheScelte.length === 1 ? "marca" : "marche"}`,
   ];
   const altroAttivi = [
+    marcheScelte.length > 0 && (marcheScelte.length <= 2 ? marcheScelte.join(", ") : `${marcheScelte.length} marche`),
     sp.volantino === "si" && "in volantino", sp.volantino === "no" && "non in volantino",
     vistaSingole && "offerte singole",
     sp.giacenza === "si" && "con giacenza", sp.giacenza === "zero" && "giacenza zero", sp.giacenza === "no" && "non nel gestionale",
@@ -441,15 +480,15 @@ export default async function ZooStampaPage({
         </div>
 
         <SchedeStampa attiva={tab} schede={[
-          { id: "stampa", label: "Stampa" },
-          { id: "liste", label: "Liste", pillole: [
+          { id: "stampa", label: "🖨 Stampa" },
+          { id: "liste", label: "📋 Liste", pillole: [
             { n: codaDopo.length, label: "da stampare dopo", classe: "pill-orange" },
             { n: codaStampati.length, label: "stampati", classe: "pill-gray" },
             { n: codaArrivo.length, label: "in arrivo", classe: "pill-amber" },
             { n: nonConformiVoci.length, label: "non conformi", classe: "pill-orange" },
             { n: esclusiVoci.length, label: "esclusi", classe: "pill-red" },
           ] },
-          { id: "regole", label: `Regole di ${scope.label}` },
+          { id: "regole", label: `⚙ Regole di ${scope.label}` },
         ]} />
 
         {sp.noprint !== undefined && (
@@ -486,19 +525,15 @@ export default async function ZooStampaPage({
           <div className="alert alert-green">✓ Azzerato il &quot;già stampato&quot; su {sp.azzerati} cartelli.</div>
         )}
 
+        <div className={`scheda-pannello scheda-${tab}`}>
         {/* ================= Stampa: filtra, scegli, prepara, stampa ================= */}
         {tab === "stampa" && (
           <>
-            <div className="card" style={{ marginBottom: 16, padding: 14 }}>
+            <div className="filtri-riquadro">
               <FiltriMobile id="filtri-stampa" scelte={filtriAttivi}>
                 <FormAutoInvia className="filtri-stampa">
                   <input type="hidden" name="scope" value={scopeParam} />
-                  <input type="hidden" name="sel" value={sp.sel ?? ""} />
                   {campaign && <input type="hidden" name="campagna" value={campaign.id} />}
-                  <label className="field">
-                    Cerca
-                    <input type="text" name="q" defaultValue={sp.q ?? ""} placeholder="prodotto, EAN, marca — poi Invio" />
-                  </label>
                   <label className="field">
                     Tipologia animale
                     <select name="animale" defaultValue={sp.animale ?? ""}>
@@ -527,7 +562,7 @@ export default async function ZooStampaPage({
                   <details className="filtri-altro" open={altroAttivi.length > 0}>
                     <summary>
                       Altro
-                      <span className="hint">{altroAttivi.length > 0 ? altroAttivi.join(" · ") : "volantino, elenco, giacenza"}</span>
+                      <span className="hint">{altroAttivi.length > 0 ? altroAttivi.join(" · ") : "marche, volantino, elenco, giacenza"}</span>
                     </summary>
                     <div>
                       <label className="field">
@@ -556,24 +591,26 @@ export default async function ZooStampaPage({
                           </select>
                         </label>
                       )}
+                      <div className="chips filtri-marche"
+                        title="Spunta una o più marche; nessuna spunta = tutte. La marca è quella del listino o, se manca, il fornitore.">
+                        <span className="hint" style={{ marginRight: 4 }}>
+                          Marche{marcheScelte.length > 0 ? ` (${marcheScelte.length} scelte)` : " (tutte)"}:
+                        </span>
+                        {marche.length === 0 && <span className="hint">nessuna marca in questo periodo</span>}
+                        {marche.map((m) => (
+                          <label key={m} className="chip">
+                            <input type="checkbox" name="marca" value={m} defaultChecked={marcheScelte.includes(m)} />
+                            {m}
+                          </label>
+                        ))}
+                        {marcheScelte.length > 0 && (
+                          <button type="button" className="chip" data-svuota="marca" title="Torna a tutte le marche">
+                            ✕ tutte le marche
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </details>
-                  <div className="chips" style={{ gridColumn: "1 / -1" }}
-                    title="Spunta una o più marche; nessuna spunta = tutte. La marca è quella del listino o, se manca, il fornitore.">
-                    <span className="hint" style={{ marginRight: 4 }}>Marche{marcheScelte.length > 0 ? ` (${marcheScelte.length})` : ""}:</span>
-                    {marche.length === 0 && <span className="hint">nessuna marca in questo periodo</span>}
-                    {marche.map((m) => (
-                      <label key={m} className="chip">
-                        <input type="checkbox" name="marca" value={m} defaultChecked={marcheScelte.includes(m)} />
-                        {m}
-                      </label>
-                    ))}
-                    {marcheScelte.length > 0 && (
-                      <a className="chip" href={`/stampe/zoo/stampa?${new URLSearchParams(Object.fromEntries(Object.entries(sp).filter(([k, v]) => v && k !== "marca") as [string, string][]))}`}>
-                        ✕ tutte le marche
-                      </a>
-                    )}
-                  </div>
                   <noscript><button className="btn btn-sm" type="submit">Filtra</button></noscript>
                 </FormAutoInvia>
               </FiltriMobile>
@@ -583,15 +620,19 @@ export default async function ZooStampaPage({
               dettagliUrl="/stampe/zoo/stampa/dettagli"
               fields={ZOO_FIELDS}
               scopeParam={scopeParam}
+              scopeLabel={scope.label}
+              condizioniStandard={condizioniPer(db, scope, academyDb).condizioniStandard}
               picker={{
                 totale: voci.length,
                 mostraTuttiHref: `/stampe/zoo/stampa?${new URLSearchParams({ ...Object.fromEntries(Object.entries(sp).filter(([, v]) => v) as [string, string][]), tutti: "1" })}`,
-                products: sp.tutti === "1" ? voci : voci.slice(0, 150),
+                products: voci,
+                cercaNelBrowser: true,
+                cercaIniziale: sp.q ?? "",
                 prodottiSelezionati: selezionatiFuoriElenco,
                 formats: ZOO_FORMATS.map((f) => ({ id: f.id, name: f.name })),
                 scopeParam,
                 filters: {
-                  q: sp.q ?? "", animale: sp.animale ?? "", caratt: sp.caratt ?? "", marca: marcheScelte.join(","), vista: sp.vista ?? "", giacenza: sp.giacenza ?? "",
+                  animale: sp.animale ?? "", caratt: sp.caratt ?? "", marca: marcheScelte.join(","), vista: sp.vista ?? "", giacenza: sp.giacenza ?? "",
                   volantino: sp.volantino ?? "", stato: statoValore, campagna: campaign?.id ?? "",
                 },
                 printed: Object.fromEntries(
@@ -627,7 +668,7 @@ export default async function ZooStampaPage({
           * uno scaffale per volta.
           */}
         {tab === "liste" && (
-          <div className="card sezioni" style={{ marginBottom: 16, padding: 14 }}>
+          <RigheAlterne className="sezioni">
             {codaDopo.length === 0 && codaArrivo.length === 0 && codaStampati.length === 0 && nonConformiVoci.length === 0 && esclusiVoci.length === 0 && (
               <p className="empty" style={{ margin: 0 }}>
                 Niente in lista per {scope.label}: qui compaiono i cartelli messi da parte («Metti in coda» dai selezionati o
@@ -648,10 +689,14 @@ export default async function ZooStampaPage({
                       <span className="pill pill-orange" id={`conta-${g.formato.id}`}>{g.voci.length}</span>
                       <span className="hint">Clic per spuntare, Maiusc+clic per un intervallo.</span>
                       {g.formato.id === "za5" && (
-                        <label className="hint" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-                          <input type="checkbox" name="doppio" value="1" /> stampa ogni cartello 2 volte (foglio A4 pieno)
+                        <label className="interruttore-grande acceso"
+                          title="Gli A5 escono sempre due per foglio A4 orizzontale. Acceso: ogni cartello due volte sullo stesso foglio. Spento: due cartelli diversi per foglio.">
+                          <input type="checkbox" name="doppio" value="1" defaultChecked />
+                          <span>Ogni cartello 2 volte per foglio A4</span>
                         </label>
                       )}
+                      {/* viene letto solo se la spunta sopra è tolta: FormData prende il primo valore */}
+                      {g.formato.id === "za5" && <input type="hidden" name="doppio" value="0" />}
                       <button className="btn btn-sm" type="submit" style={{ marginLeft: "auto" }}
                         title={`Apre l'anteprima di stampa dei cartelli ${g.formato.name} (o dei soli spuntati) con le impostazioni salvate`}>
                         Stampa {g.formato.name} →
@@ -939,7 +984,7 @@ export default async function ZooStampaPage({
                 </form>
               </details>
             )}
-          </div>
+          </RigheAlterne>
         )}
 
         {/* ================= Regole dell'insegna / PV: si toccano una volta a volantino ================= */}
@@ -1104,6 +1149,7 @@ export default async function ZooStampaPage({
             )}
           </div>
         )}
+        </div>
       </div>
     </div>
   );

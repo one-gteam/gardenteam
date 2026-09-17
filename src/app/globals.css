@@ -592,7 +592,7 @@ table.data td { overflow-wrap: anywhere; }
 /* Stampa cartelli: elenco, selezionati, anteprima. minmax(0) evita che la colonna centrale allarghi la pagina */
 .stampa-griglia { display: grid; grid-template-columns: 270px minmax(0, 1fr) 280px; gap: 16px; align-items: start; }
 /* le pillole "sul cartello" stanno su una riga, il nome del prodotto non va a capo lettera per lettera */
-.stampa-griglia table.data td:has(> .chips) { min-width: 215px; }
+.stampa-griglia table.data td.cella-chips { min-width: 160px; max-width: 230px; }
 .stampa-griglia table.data td:nth-child(2) { min-width: 130px; }
 /* minmax(0) anche da cellulare: con "1fr" secco la tabella dei selezionati allargava la colonna oltre lo schermo */
 @media (max-width: 1100px) { .stampa-griglia { grid-template-columns: minmax(0, 1fr); } }
@@ -863,15 +863,26 @@ table.data td { overflow-wrap: anywhere; }
 .stampa-testata form { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
 .stampa-testata form .field { margin-bottom: 0; }
 .stampa-testata form select { margin-top: 2px; max-width: 260px; }
-.schede { display: flex; gap: 2px; border-bottom: 2px solid var(--line); margin: 0 0 14px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+/* linguette vere: quella attiva è bianca e si attacca al pannello sotto */
+.schede { display: flex; gap: 4px; margin: 0; padding: 0 6px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; position: relative; z-index: 1; }
 .schede::-webkit-scrollbar { display: none; }
 .schede a {
-  display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; margin-bottom: -2px;
-  border-bottom: 2px solid transparent; color: var(--muted); font-weight: 700; font-size: 14px; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 6px; padding: 10px 16px; white-space: nowrap;
+  background: #e9ede4; color: var(--muted); font-weight: 700; font-size: 14px;
+  border: 1px solid var(--line); border-bottom: none; border-radius: 12px 12px 0 0;
 }
-.schede a:hover { text-decoration: none; color: var(--green-700); }
-.schede a.attiva { color: var(--green-700); border-bottom-color: var(--green-700); }
+.schede a:hover { text-decoration: none; color: var(--green-700); background: #f1f5ec; }
+.schede a.attiva {
+  background: #fff; color: var(--green-700); box-shadow: inset 0 3px 0 var(--green-700);
+  margin-bottom: -1px; padding-bottom: 11px;
+}
 .schede .pill { font-size: 10.5px; padding: 1px 7px; }
+.scheda-pannello {
+  background: #fff; border: 1px solid var(--line); border-radius: 0 14px 14px 14px;
+  padding: 16px; box-shadow: var(--shadow); margin-bottom: 20px;
+}
+.scheda-pannello.scheda-regole { background: #fbfcf8; }
+.filtri-riquadro { background: #f6f8f2; border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-bottom: 16px; }
 
 /* pillole-interruttore: accese = quella cosa esce sul cartello */
 .chips { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
@@ -926,10 +937,71 @@ label.chip:has(input:checked) { background: var(--green-100); color: var(--green
 .regole .stato { font-size: 12.5px; color: var(--muted); margin: 0 0 10px; }
 
 @media screen and (max-width: 760px) {
-  .schede a { padding: 8px 10px; font-size: 13px; }
   .pannello-lato { width: 100vw; padding: 12px 12px 40px; }
   .pannello-riga { grid-template-columns: 1fr; }
   .regole { grid-template-columns: 1fr; }
   .azioni-stampa > span[style] { display: none; }
   .azioni-stampa .btn:last-child { flex: 1 0 100%; text-align: center; }
+}
+
+/* pulsante acceso in rosso: "Non trattata" in Scelta offerte Volantino */
+.btn.btn-rosso { background: var(--red); border-color: var(--red); color: #fff; }
+
+/* Stampa: due A5 affiancati su un foglio A4 orizzontale (pagina con nome, vedi stampa/page.tsx) */
+.foglio-a5 { display: flex; width: 297mm; height: 210mm; overflow: hidden; }
+@media screen { .foglio-a5 { margin: 12px 0; outline: 1px dashed #bbb; } }
+@media print { .foglio-a5 { page: foglioA5; break-after: page; break-inside: avoid; } }
+
+/* Stampa cartelli: elenco di sinistra con ricerca e pulsante + */
+.elenco-prodotti { padding: 8px; max-height: 720px; overflow-y: auto; }
+.elenco-cerca { position: sticky; top: -8px; z-index: 2; background: #fff; padding: 2px 0 6px; display: flex; gap: 6px; align-items: center; }
+.elenco-cerca input { margin: 0; flex: 1; font-size: 14px; }
+.elenco-prodotti .prod-item { display: flex; gap: 8px; align-items: center; cursor: pointer; user-select: none; }
+.elenco-prodotti .prod-item:focus-visible { outline: 2px solid var(--green-500); outline-offset: -2px; }
+.elenco-prodotti .prod-item .aggiungi {
+  flex: none; width: 30px; height: 30px; border-radius: 50%; border: 1.5px solid var(--green-600);
+  background: #fff; color: var(--green-700); font-size: 18px; font-weight: 700; line-height: 1; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; font-family: inherit;
+}
+.elenco-prodotti .prod-item .aggiungi:hover { background: var(--green-700); color: #fff; }
+.elenco-prodotti .prod-item .aggiungi.dentro { background: var(--green-700); color: #fff; border-color: var(--green-700); font-size: 15px; }
+.link-btn { background: none; border: none; padding: 0; color: var(--green-700); font: inherit; font-weight: 700; cursor: pointer; text-decoration: underline; }
+.filtri-marche { grid-column: 1 / -1; }
+
+/* Liste: righe alterne e più stacco fra una riga e l'altra */
+.sezioni table.data tbody tr.riga-pari > td { background: #f3f6ee; }
+.sezioni table.data tbody tr:hover > td { background: #e6f0da; }
+.sezioni table.data tbody tr > td { border-bottom: 1px solid #e6e9df; }
+.sezioni table.data thead th { background: #eef2e8; }
+.sezioni .sezione > summary { padding: 8px 10px; background: #f6f8f2; border-radius: 8px; }
+.sezioni .sezione[open] > summary { margin-bottom: 6px; }
+.sezioni .sezione .sezione > summary { background: transparent; padding: 4px 6px; }
+.sezioni .sezione-azioni { padding: 8px 10px; background: #fafbf7; border: 1px solid #eceee6; border-radius: 8px; }
+
+/* interruttore grande (A5 due per foglio, condividi): si vede che è una scelta */
+.interruttore-grande {
+  display: inline-flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;
+  padding: 6px 12px; border-radius: 999px; border: 1.5px solid var(--line); background: #fff;
+  font-size: 13px; font-weight: 700; color: var(--muted);
+}
+.interruttore-grande input { width: 18px; height: 18px; margin: 0; accent-color: var(--green-700); }
+.interruttore-grande:has(input:checked), .interruttore-grande.acceso:not(:has(input)) {
+  background: var(--green-100); border-color: var(--green-600); color: var(--green-700);
+}
+
+/* avvisi nel pannello dei testi */
+.pannello-avviso {
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 4px 0 8px;
+  padding: 8px 10px; border-radius: 10px; background: var(--amber-bg); color: var(--amber); font-size: 12.5px;
+}
+.pannello-avviso > span { flex: 1; min-width: 180px; }
+.pannello-avviso.verde { background: var(--green-50); color: var(--green-700); }
+.form-nuovo-cartello .field { margin-bottom: 8px; }
+.form-nuovo-cartello textarea { width: 100%; }
+
+@media screen and (max-width: 760px) {
+  .scheda-pannello { padding: 10px; border-radius: 0 10px 10px 10px; }
+  .schede a { padding: 8px 10px; font-size: 13px; }
+  .schede a.attiva { padding-bottom: 9px; }
+  .elenco-prodotti { max-height: 60vh; }
 }

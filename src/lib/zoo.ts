@@ -152,6 +152,19 @@ export interface ZooOffer {
    */
   scopeType?: ScopeType;
   scopeId?: string;
+  /**
+   * Cartello proprio (duplicato o fatto da zero): i suoi testi stanno qui e non
+   * sul prodotto padre, così correggerli non tocca il cartello da cui è nato.
+   * Vuoti = valgono quelli del padre/articolo.
+   */
+  titolo?: string;
+  descCartello?: string;
+  marca?: string;
+  immagine?: string;
+  /** Il cartello proprio è offerto a tutto il Consorzio: lo vedono e lo stampano tutti, lo modifica solo chi l'ha creato. */
+  condivisa?: boolean;
+  /** Chi l'ha fatto, per chi lo trova condiviso. */
+  autore?: string;
 }
 
 /** Valore di `paginaId` per le offerte escluse dal volantino. */
@@ -880,7 +893,7 @@ export function campagnaPerStampa(db: ZooDB, id?: string): ZooCampaign | undefin
  * le proprie, che vivono fuori dal volantino comune ma vanno a scaffale insieme.
  */
 export function offertePerStampa(db: ZooDB, scope: Scope, academyDb: DB, campaign?: ZooCampaign): ZooOffer[] {
-  const proprie = db.offers.filter((o) => o.scopeType && ownScopeVisible(scope, academyDb, o));
+  const proprie = db.offers.filter((o) => o.scopeType && (o.condivisa || ownScopeVisible(scope, academyDb, o)));
   return [
     ...(campaign ? db.offers.filter((o) => o.campaignId === campaign.id && !o.scopeType) : []),
     ...proprie,
@@ -1367,7 +1380,7 @@ export function zooCartelloValues(
   };
   const testoOfferta = (field: "descrizione" | "condizioni") =>
     perScope ? effectiveOfferText(db, scope, offer, field, academyDb).value : offer[field] ?? "";
-  const foto = zooImageUrl(product, parent);
+  const foto = offer.immagine || zooImageUrl(product, parent);
   const campaign = db.campaigns.find((c) => c.id === offer.campaignId);
   const validita = testoValidita(campaign);
   /*
@@ -1424,12 +1437,12 @@ export function zooCartelloValues(
      * senza nome: succede sugli articoli propri di un punto vendita, che nascono
      * senza raggruppamento. In quel caso vale la descrizione dell'articolo.
      */
-    titolo: testoPadre("nome") || product?.descrizione || offer.descrizione,
-    descCartello: testoPadre("descCartello"),
+    titolo: offer.titolo || testoPadre("nome") || product?.descrizione || offer.descrizione,
+    descCartello: offer.descCartello ?? testoPadre("descCartello"),
     descrizione: testoOfferta("descrizione"),
     descrizioneArticolo: product?.descrizione ?? "",
     // i listini dei fornitori spesso non hanno la marca: meglio il fornitore che un campo vuoto
-    marca: product?.marca || product?.fornitore || "",
+    marca: offer.marca || product?.marca || product?.fornitore || "",
     /*
      * Quando l'offerta è il solo sconto — niente prezzo promo, niente prezzo di
      * partenza — al posto del prezzo si scrive "SCONTO 20%": è quello il numero

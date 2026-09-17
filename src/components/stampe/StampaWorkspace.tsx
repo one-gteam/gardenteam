@@ -1,11 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { CardLayout, PrintField, PrintFormat } from "@/lib/stampe";
 import Cartello from "./Cartello";
-import StampaPicker, { type StampaPickerProps } from "./StampaPicker";
+import StampaPicker, { EVENTO_SELEZIONA, type StampaPickerProps } from "./StampaPicker";
+import NuovoCartello from "./NuovoCartello";
 import PersonalizzaPannello, { type RigaPersonalizza } from "./PersonalizzaPannello";
-import { mettiInCoda } from "@/lib/zoo-actions";
+import { duplicaCartelloInline, mettiInCoda } from "@/lib/zoo-actions";
 
 interface Dettagli {
   scopeType: string;
@@ -25,9 +27,12 @@ interface Dettagli {
  * riga, che si apre di lato e ridisegna il cartello a ogni salvataggio.
  */
 export default function StampaWorkspace({
-  picker, dettagliUrl, fields, scopeParam,
+  picker, dettagliUrl, fields, scopeParam, scopeLabel, condizioniStandard,
 }: {
-  picker: Omit<StampaPickerProps, "onChange" | "onQueue" | "onPersonalizza">;
+  picker: Omit<StampaPickerProps, "onChange" | "onQueue" | "onPersonalizza" | "onDuplica" | "nuovoCartello">;
+  /** Nome dell'ambito e condizioni pronte: servono al pannello "Nuovo cartello". */
+  scopeLabel: string;
+  condizioniStandard: string[];
   /** Indirizzo dell'anteprima dal vivo (senza parametri). */
   dettagliUrl: string;
   fields: PrintField[];
@@ -37,6 +42,9 @@ export default function StampaWorkspace({
   const [dati, setDati] = useState<Dettagli | null>(null);
   const [caricamento, setCaricamento] = useState(false);
   const [personalizzaId, setPersonalizzaId] = useState<string | null>(null);
+  const [nuovo, setNuovo] = useState(false);
+  const [avviso, setAvviso] = useState("");
+  const router = useRouter();
   const ultimaRichiesta = useRef(0);
 
   const carica = useCallback(async (q: string) => {
@@ -62,14 +70,37 @@ export default function StampaWorkspace({
   }, [query, carica]);
 
   const anteprima = dati?.cartelli.slice(0, 2) ?? [];
-  const chiudiPannello = useCallback(() => setPersonalizzaId(null), []);
+  // chiudendo il pannello si aggiorna l'elenco (un titolo corretto, un cartello condiviso)
+  const chiudiPannello = useCallback(() => { setPersonalizzaId(null); router.refresh(); }, [router]);
+  const chiudiNuovo = useCallback(() => setNuovo(false), []);
+
+  /** Un cartello proprio appena nato entra fra i selezionati e si apre coi suoi testi. */
+  const appenaCreato = (id: string, al?: string) => {
+    window.dispatchEvent(new CustomEvent(EVENTO_SELEZIONA, { detail: { id, al } }));
+    setPersonalizzaId(id);
+    // dopo che la selezione è finita nell'indirizzo: il server deve sapere che il nuovo cartello è scelto
+    setTimeout(() => router.refresh(), 150);
+  };
+  const duplica = async (id: string) => {
+    setAvviso("");
+    const r = await duplicaCartelloInline(id, scopeParam).catch(() => ({ ok: false, id: undefined }));
+    if (r.ok && r.id) appenaCreato(r.id, id);
+    else setAvviso("Non sono riuscito a duplicare il cartello.");
+  };
 
   return (
     <>
       <div className="stampa-griglia">
         <StampaPicker {...picker} onChange={(q) => setQuery(q)}
           onQueue={(stato, voci) => mettiInCoda(scopeParam, stato, voci)}
-          onPersonalizza={(id) => setPersonalizzaId(id)} />
+          onPersonalizza={(id) => setPersonalizzaId(id)}
+          onDuplica={duplica}
+          nuovoCartello={
+            <button type="button" className="btn btn-sm" onClick={() => setNuovo(true)}
+              title="Un cartello fuori dal volantino, fatto da zero">
+              ＋ Nuovo cartello
+            </button>
+          } />
         <div>
           {anteprima.map((c) => (
             <div key={c.id} style={{ marginBottom: 12, overflow: "hidden" }}>
@@ -107,8 +138,21 @@ export default function StampaWorkspace({
           condizioniStandard={dati?.condizioniStandard ?? []}
           onRefresh={() => carica(query)}
           onClose={chiudiPannello}
+          onDuplica={duplica}
+          onEliminato={(id) => window.dispatchEvent(new CustomEvent(EVENTO_SELEZIONA, { detail: { id, togli: true } }))}
         />
       )}
+      {nuovo && (
+        <NuovoCartello
+          scopeParam={scopeParam}
+          scopeLabel={scopeLabel}
+          consorzio={scopeParam.startsWith("system")}
+          condizioniStandard={condizioniStandard}
+          onClose={chiudiNuovo}
+          onCreato={(id) => { setNuovo(false); appenaCreato(id); }}
+        />
+      )}
+      {avviso && <div className="alert alert-amber" style={{ marginTop: 10 }}>{avviso}</div>}
     </>
   );
 }

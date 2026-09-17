@@ -5,10 +5,11 @@ import { canAccessArea, isZooEditor, scopesForUser, resolveScope } from "@/lib/s
 import { getDb } from "@/lib/db";
 import { getZooDb, campagnaInLavorazione, zooImageUrl, effectiveParentText, animaliDi } from "@/lib/zoo";
 import {
-  voteZooOffer, voteZooOffersBulk, toggleOfferSelected, toggleOffersGroupSelected, updateOfferVolantino,
+  updateOfferVolantino,
   renameScheda, addScheda, resolveZooSuggestion, sendZooSuggestion,
 } from "@/lib/zoo-actions";
 import ShiftChecks from "@/components/stampe/ShiftChecks";
+import { SceltaVolantino, VotoOfferta, VotoSpuntate } from "@/components/stampe/VotoOfferta";
 
 const RIGHE_MAX = 300;
 
@@ -295,13 +296,8 @@ export default async function ZooVolantinoPage({
             <ShiftChecks />
             {sp.votate && <div className="alert alert-green">✓ Voto registrato su {sp.votate} offerte.</div>}
             {/* le spunte in tabella appartengono a questo form via attributo form="bulkform" */}
-            <form id="bulkform" action={voteZooOffersBulk.bind(null, "preferita", scopeParam)}
-              style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
-              <button className="btn btn-sm" type="submit">Proponi le offerte spuntate</button>
-              <button className="btn btn-outline btn-sm" formAction={voteZooOffersBulk.bind(null, "nontrattato", scopeParam)}>
-                Segna spuntate come non trattate
-              </button>
-            </form>
+            <form id="bulkform" />
+            <VotoSpuntate scopeParam={scopeParam} formId="bulkform" />
             <div className="card table-wrap">
               <table className="data">
                 <thead>
@@ -406,35 +402,7 @@ export default async function ZooVolantinoPage({
                           {pref.length === 0 && non.length === 0 && <span style={{ color: "var(--muted)" }}>—</span>}
                         </td>
                         <td className="no-print" style={{ whiteSpace: "nowrap" }}>
-                          {isGroup ? (
-                            <>
-                              <form action={voteZooOffersBulk.bind(null, "preferita", scopeParam)} style={{ display: "inline" }}>
-                                {ids.map((id) => <input key={id} type="hidden" name="zsel" value={id} />)}
-                                <button className={`btn btn-sm ${myPref ? "" : "btn-outline"}`} type="submit" title="Proponi tutte le varianti (clic di nuovo per togliere il tuo voto)">
-                                  Proponi
-                                </button>
-                              </form>{" "}
-                              <form action={voteZooOffersBulk.bind(null, "nontrattato", scopeParam)} style={{ display: "inline" }}>
-                                {ids.map((id) => <input key={id} type="hidden" name="zsel" value={id} />)}
-                                <button className={`btn btn-sm ${myNon ? "" : "btn-outline"}`} type="submit" title="Non tratto nessuna variante (clic di nuovo per togliere)">
-                                  Non tratto
-                                </button>
-                              </form>
-                            </>
-                          ) : (
-                            <>
-                              <form action={voteZooOffer.bind(null, first.id, "preferita", scopeParam)} style={{ display: "inline" }}>
-                                <button className={`btn btn-sm ${myPref ? "" : "btn-outline"}`} type="submit" title="La proporrei nel volantino (clic di nuovo per togliere)">
-                                  Proponi
-                                </button>
-                              </form>{" "}
-                              <form action={voteZooOffer.bind(null, first.id, "nontrattato", scopeParam)} style={{ display: "inline" }}>
-                                <button className={`btn btn-sm ${myNon ? "" : "btn-outline"}`} type="submit" title="Non ho in vendita questo prodotto (clic di nuovo per togliere)">
-                                  Non tratto
-                                </button>
-                              </form>
-                            </>
-                          )}{" "}
+                          <VotoOfferta ids={ids} scopeParam={scopeParam} proposta={myPref} nonTrattata={myNon} />{" "}
                           <details className="flag-details" style={{ display: "inline-block" }}>
                             <summary className="mini-btn" title="Segnala un errore o un'incongruenza su questa offerta">⚑</summary>
                             <form action={sendZooSuggestion.bind(null, scopeParam)} className="flag-popover">
@@ -448,18 +416,11 @@ export default async function ZooVolantinoPage({
                         {consortium && (
                           <td style={{ whiteSpace: "nowrap" }}>
                             {isGroup ? (
-                              <form action={toggleOffersGroupSelected.bind(null, ids, scopeParam)} style={{ display: "inline" }}>
-                                <button className={`btn btn-sm ${selCountGroup === offs.length ? "" : "btn-outline"}`} type="submit">
-                                  {selCountGroup === offs.length ? "✓ Nel volantino" : selCountGroup > 0 ? `${selCountGroup}/${offs.length} nel volantino` : "Aggiungi tutte"}
-                                </button>
-                              </form>
+                              <SceltaVolantino ids={ids} dentro={selCountGroup === offs.length}
+                                parziale={selCountGroup > 0 ? `${selCountGroup}/${offs.length} nel volantino` : undefined} />
                             ) : (
                               <>
-                                <form action={toggleOfferSelected.bind(null, first.id, scopeParam)} style={{ display: "inline" }}>
-                                  <button className={`btn btn-sm ${first.selezionata ? "" : "btn-outline"}`} type="submit">
-                                    {first.selezionata ? "✓ Nel volantino" : "Aggiungi"}
-                                  </button>
-                                </form>{" "}
+                                <SceltaVolantino ids={ids} dentro={Boolean(first.selezionata)} />{" "}
                                 <a className="btn btn-outline btn-sm" href={`/stampe/zoo/volantino?scope=${scopeParam}${schedaFilter ? `&scheda=${schedaFilter}` : ""}&offerta=${first.id}`}>Modifica</a>
                               </>
                             )}

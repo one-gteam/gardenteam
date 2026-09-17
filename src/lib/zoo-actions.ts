@@ -9,7 +9,8 @@ import { postLoginPath } from "./types";
 import { LAYOUT_FONTS } from "./layout-fonts";
 import {
   getZooDb, saveZooDb, ZooDB, ZooParent, ZooProduct, campagnaInLavorazione, campagnaInCorso, campaignStato, NO_VOLANTINO,
-  ZOO_FORMATS, PV_PROMO_CODES_DEFAULT, ownScopeVisible, apiKeyFor, contenutoDaTesto,
+  ZOO_FORMATS, PV_PROMO_CODES_DEFAULT, ownScopeVisible, apiKeyFor, contenutoDaTesto, zooCartelloValues,
+  type ZooOffer,
 } from "./zoo";
 import type { LayoutItem } from "./stampe";
 import { groupAndDescribe, groupAndDescribeBatched, type AiGroup } from "./zoo-ai";
@@ -1307,6 +1308,68 @@ export async function voteZooOffer(offerId: string, tipo: "preferita" | "nontrat
   redirect(backUrl("/stampe/zoo/volantino", scopeParam));
 }
 
+/** Tutte le varianti dello stesso padre, nella stessa campagna, delle offerte date. */
+function conVariantiDelPadre(db: ZooDB, scelte: string[]): Set<string> {
+  const prodById = new Map(db.products.map((p) => [p.id, p]));
+  const ids = new Set<string>();
+  for (const offerId of scelte) {
+    const o = db.offers.find((x) => x.id === offerId);
+    if (!o) continue;
+    ids.add(o.id);
+    const parentId = prodById.get(o.productId ?? "")?.parentId;
+    if (!parentId) continue;
+    for (const v of db.offers) {
+      if (v.campaignId === o.campaignId && prodById.get(v.productId ?? "")?.parentId === parentId) ids.add(v.id);
+    }
+  }
+  return ids;
+}
+
+/**
+ * Voto senza ricaricare la pagina: "Proponi" e "Non tratto" di Scelta offerte
+ * Volantino. `attivo` è lo stato voluto: true mette il voto su tutte le
+ * varianti del padre, false lo toglie. Le due scelte si escludono: chi propone
+ * un prodotto non può dire insieme di non trattarlo.
+ */
+export async function votaOfferteInline(
+  offerIds: string[], tipo: "preferita" | "nontrattato", attivo: boolean, scopeParam: string
+): Promise<{ ok: boolean; n: number }> {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  const ids = conVariantiDelPadre(db, offerIds);
+  if (ids.size === 0) return { ok: false, n: 0 };
+  const altro = tipo === "preferita" ? "nontrattato" : "preferita";
+  db.votes = db.votes.filter((v) => !(ids.has(v.offerId) && v.userId === user.id && (v.tipo === tipo || (attivo && v.tipo === altro))));
+  if (attivo) {
+    for (const offerId of ids) {
+      db.votes.push({
+        offerId, userId: user.id, userName: `${user.firstName} ${user.lastName}`,
+        scopeLabel: scope.label.replace(/^[^\s]+\s/, ""), tipo,
+        date: new Date().toISOString(),
+      });
+    }
+  }
+  await saveZooDb(db);
+  revalidatePath("/stampe/zoo/volantino");
+  return { ok: true, n: ids.size };
+}
+
+/** "Aggiungi / Nel volantino" del Consorzio, senza ricaricare la pagina. */
+export async function selezionaOfferteInline(offerIds: string[], dentro: boolean): Promise<{ ok: boolean }> {
+  const user = await requireZooUser();
+  if (!isZooEditor(user)) return { ok: false };
+  const db = await getZooDb();
+  for (const o of db.offers.filter((x) => offerIds.includes(x.id))) {
+    o.selezionata = dentro;
+    if (!dentro) o.schedaId = undefined;
+  }
+  await saveZooDb(db);
+  revalidatePath("/stampe/zoo/volantino");
+  return { ok: true };
+}
+
 /** Voto in blocco sulle offerte spuntate: aggiunge il voto dove manca (non toglie). */
 export async function voteZooOffersBulk(tipo: "preferita" | "nontrattato", scopeParam: string, formData: FormData) {
   const user = await requireZooUser();
@@ -1711,8 +1774,11 @@ export async function stampaCoda(scopeParam: string, stato: "dopo" | "arrivo", f
   if (voci.length === 0) redirect(backUrl("/stampe/zoo/stampa", scopeParam));
   const params: Record<string, string> = { print: "1", sel: voci.map((v) => v.offerId).join(",") };
   for (const v of voci) for (const [k, val] of Object.entries(v.impostazioni)) if (val) params[k] = val;
-  // A5 due volte sullo stesso foglio A4 (la spunta del gruppo A5)
-  if (formData.get("doppio") === "1") params.doppio = "1";
+  /*
+   * Gli A5 escono sempre due per foglio A4; la spunta del gruppo A5 dice se
+   * ogni cartello va stampato due volte (di serie sì). Tolta, arriva "0".
+   */
+  if (formData.get("doppio") === "0") params.doppio = "0";
   const adesso = new Date().toISOString();
   for (const v of voci) v.stampato = adesso;
   for (const v of voci) {
@@ -2622,4 +2688,170 @@ export async function adottaProdotto(productId: string, scopeParam: string, back
     rigeneraZoo();
   }
   redirect(backUrl(back, scopeParam, { adottato: "1" }));
+}
+
+
+/* ================== Cartelli propri: duplicati e fatti da zero ================== */
+
+/*
+ * Un cartello proprio è un'offerta con l'ambito di chi l'ha fatto: si stampa
+ * solo lì, a meno che non la si condivida con tutto il Consorzio. I testi
+ * (titolo, descrizione, marca, foto) stanno sull'offerta stessa, così un
+ * duplicato si corregge senza toccare il cartello da cui è nato.
+ * Il Consorzio può farne anche lui: i suoi valgono per tutti.
+ */
+async function ambitoCartelliPropri(scopeParam: string) {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  const puo = scope.type !== "system" || isZooEditor(user);
+  return { user, db, academyDb, scope, puo };
+}
+
+/** Lo modifica solo l'ambito che l'ha fatto (non chi lo trova condiviso). */
+function cartelloMio(o: ZooOffer | undefined, scope: { type: string; id: string }): o is ZooOffer {
+  return Boolean(o && o.scopeType && o.scopeType === scope.type && (o.scopeId ?? "") === scope.id);
+}
+
+function campagnaPerCartelli(db: ZooDB) {
+  return campagnaInCorso(db) ?? campagnaInLavorazione(db) ?? db.campaigns[db.campaigns.length - 1];
+}
+
+/** Copia un cartello in un cartello proprio, con i testi di adesso: poi si corregge a parte. */
+export async function duplicaCartelloInline(offerId: string, scopeParam: string): Promise<{ ok: boolean; id?: string }> {
+  const { user, db, academyDb, scope, puo } = await ambitoCartelliPropri(scopeParam);
+  if (!puo) return { ok: false };
+  const o = db.offers.find((x) => x.id === offerId);
+  if (!o || (o.scopeType && !o.condivisa && !ownScopeVisible(scope, academyDb, o))) return { ok: false };
+  const valori = zooCartelloValues(db, o, scope, academyDb);
+  const id = `zo_pv_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  db.offers.push({
+    id,
+    campaignId: o.campaignId || campagnaPerCartelli(db)?.id || "",
+    ean: o.ean,
+    productId: o.productId,
+    descrizione: valori.descrizione || o.descrizione,
+    prezzoPromo: o.prezzoPromo,
+    prezzoListino: o.prezzoListino,
+    condizioni: o.condizioni,
+    meccanica: o.meccanica,
+    label: o.label,
+    titolo: `${valori.titolo} (copia)`,
+    descCartello: valori.descCartello ?? "",
+    marca: o.marca,
+    immagine: o.immagine,
+    scopeType: scope.type,
+    scopeId: scope.id,
+    autore: `${user.firstName} ${user.lastName}`,
+  });
+  await saveZooDb(db);
+  rigeneraZoo();
+  return { ok: true, id };
+}
+
+/** Un cartello fatto da zero: non serve che l'articolo sia in catalogo. */
+export async function creaCartelloNuovo(
+  scopeParam: string, formData: FormData
+): Promise<{ ok: boolean; id?: string; errore?: string }> {
+  const { user, db, academyDb, scope, puo } = await ambitoCartelliPropri(scopeParam);
+  if (!puo) return { ok: false, errore: "I cartelli del Consorzio li crea chi gestisce i contenuti Zoo." };
+  const titolo = String(formData.get("titolo") ?? "").trim();
+  const prezzoPromo = priceOrEmpty(String(formData.get("prezzoPromo") ?? ""));
+  const meccanica = String(formData.get("meccanica") ?? "").trim();
+  if (!titolo) return { ok: false, errore: "Serve almeno il titolo del cartello." };
+  if (!prezzoPromo && !meccanica) return { ok: false, errore: "Serve il prezzo promo oppure una promozione (3x2, sconto 20%…)." };
+  const ean = String(formData.get("ean") ?? "").trim().replace(/\s/g, "");
+  // se il codice è di un articolo che l'ambito vede, il cartello si aggancia a lui (foto, animale, prezzo al kg)
+  const prodotto = ean ? db.products.find((p) => p.ean === ean && ownScopeVisible(scope, academyDb, p)) : undefined;
+  let immagine: string | undefined;
+  const foto = formData.get("foto") as File | null;
+  if (foto && foto.size > 0 && foto.type.startsWith("image/")) {
+    if (foto.size > 8 * 1024 * 1024) return { ok: false, errore: "La foto è troppo grande (massimo 8 MB)." };
+    const ext = (foto.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 5) || "jpg";
+    immagine = await uploadPublicFile(
+      `uploads/zoo-cartelli/${scope.type}_${scope.id || "sys"}_${Date.now()}.${ext}`,
+      Buffer.from(await foto.arrayBuffer()), foto.type,
+    );
+  }
+  const id = `zo_pv_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  db.offers.push({
+    id,
+    campaignId: campagnaPerCartelli(db)?.id ?? "",
+    ean,
+    productId: prodotto?.id,
+    descrizione: String(formData.get("descrizione") ?? "").trim() || prodotto?.descrizione || titolo,
+    prezzoPromo,
+    prezzoListino: priceOrEmpty(String(formData.get("prezzoListino") ?? "")) || undefined,
+    condizioni: String(formData.get("condizioni") ?? "").trim() || undefined,
+    meccanica: meccanica || undefined,
+    titolo,
+    descCartello: String(formData.get("descCartello") ?? "").trim(),
+    marca: String(formData.get("marca") ?? "").trim() || undefined,
+    immagine,
+    scopeType: scope.type,
+    scopeId: scope.id,
+    condivisa: scope.type !== "system" && formData.get("condivisa") === "1" ? true : undefined,
+    autore: `${user.firstName} ${user.lastName}`,
+  });
+  await saveZooDb(db);
+  rigeneraZoo();
+  return { ok: true, id };
+}
+
+const CAMPI_PROPRI = ["titolo", "descCartello", "descrizione", "marca", "prezzoPromo", "prezzoListino", "meccanica", "condizioni"] as const;
+export type CampoCartelloProprio = (typeof CAMPI_PROPRI)[number];
+
+/** Corregge un testo o un prezzo di un cartello proprio. */
+export async function aggiornaCartelloProprio(
+  offerId: string, scopeParam: string, campo: CampoCartelloProprio, valore: string
+): Promise<{ ok: boolean }> {
+  const { db, scope } = await ambitoCartelliPropri(scopeParam);
+  const o = db.offers.find((x) => x.id === offerId);
+  if (!cartelloMio(o, scope) || !CAMPI_PROPRI.includes(campo)) return { ok: false };
+  const v = valore.trim();
+  if (campo === "prezzoPromo") {
+    const p = priceOrEmpty(v);
+    if (!p && !o.meccanica) return { ok: false };
+    o.prezzoPromo = p;
+  } else if (campo === "prezzoListino") {
+    o.prezzoListino = priceOrEmpty(v) || undefined;
+  } else if (campo === "titolo") {
+    if (!v) return { ok: false };
+    o.titolo = v;
+  } else if (campo === "descCartello") {
+    o.descCartello = v;
+  } else if (campo === "descrizione") {
+    if (!v) return { ok: false };
+    o.descrizione = v;
+  } else {
+    o[campo] = v || undefined;
+  }
+  await saveZooDb(db);
+  rigeneraZoo();
+  return { ok: true };
+}
+
+/** Offre (o ritira) un cartello proprio a tutto il Consorzio. */
+export async function condividiCartelloProprio(offerId: string, scopeParam: string, condivisa: boolean): Promise<{ ok: boolean }> {
+  const { db, scope } = await ambitoCartelliPropri(scopeParam);
+  const o = db.offers.find((x) => x.id === offerId);
+  if (!cartelloMio(o, scope) || scope.type === "system") return { ok: false };
+  o.condivisa = condivisa || undefined;
+  await saveZooDb(db);
+  rigeneraZoo();
+  return { ok: true };
+}
+
+/** Elimina un cartello proprio. */
+export async function eliminaCartelloProprio(offerId: string, scopeParam: string): Promise<{ ok: boolean }> {
+  const { db, scope } = await ambitoCartelliPropri(scopeParam);
+  const o = db.offers.find((x) => x.id === offerId);
+  if (!cartelloMio(o, scope)) return { ok: false };
+  db.offers = db.offers.filter((x) => x.id !== offerId);
+  db.votes = db.votes.filter((v) => v.offerId !== offerId);
+  db.coda = db.coda.filter((c) => c.offerId !== offerId);
+  await saveZooDb(db);
+  rigeneraZoo();
+  return { ok: true };
 }

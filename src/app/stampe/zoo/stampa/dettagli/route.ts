@@ -68,6 +68,15 @@ export async function GET(req: NextRequest) {
       giacenza: gestionale[o.ean]?.giacenza,
       codiceGestionale: gestionale[o.ean]?.codice,
       escluso: noPrint.offerIds.has(o.id) || noPrint.eans.has(o.ean),
+      /* cartello proprio (duplicato o fatto da zero): i suoi testi si correggono sull'offerta */
+      propria: o.scopeType ? {
+        mia: o.scopeType === scope.type && (o.scopeId ?? "") === scope.id,
+        condivisa: Boolean(o.condivisa),
+        titolo: o.titolo ?? "",
+        descCartello: o.descCartello ?? "",
+        marca: o.marca ?? "",
+        autore: o.autore ?? "",
+      } : undefined,
     };
   });
 
