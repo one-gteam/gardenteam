@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { requireAreaUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import Header from "@/components/Header";
+import { PulsanteAzione } from "@/components/AzioneSenzaRicarica";
 import { importUsersCsv, toggleUserActive, approveRegistration, rejectRegistration } from "@/lib/actions";
 import { scopeUsers, coursesForUser, getProgress, isCourseCompleted, isNewHire, canManageUsers } from "@/lib/logic";
 import { isAcademyAdmin, ruoloEsteso } from "@/lib/types";
@@ -262,15 +263,10 @@ export default async function UsersPage({
                         <span className="pill pill-red">Cessato</span>
                       )}
                       {u.id !== user.id && u.role !== "system_admin" && (
-                        <form action={toggleUserActive.bind(null, u.id)} style={{ display: "inline", marginLeft: 6 }}>
-                          <button
-                            className="btn btn-outline btn-sm"
-                            type="submit"
-                            title={u.active !== false ? "Blocca l'accesso (cessazione)" : "Riattiva l'accesso"}
-                          >
-                            {u.active !== false ? "Disattiva" : "Riattiva"}
-                          </button>
-                        </form>
+                        <PulsanteAzione azione={toggleUserActive.bind(null, u.id)} style={{ marginLeft: 6 }}
+                          title={u.active !== false ? "Blocca l'accesso (cessazione)" : "Riattiva l'accesso"}>
+                          {u.active !== false ? "Disattiva" : "Riattiva"}
+                        </PulsanteAzione>
                       )}
                     </td>
                   </tr>

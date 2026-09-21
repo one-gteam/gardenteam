@@ -106,6 +106,12 @@ export interface User {
   birthDate?: string;
   taxCode?: string;
   groupIds?: string[]; // gruppi di appartenenza
+  /**
+   * Incarico "gestisce utenti e ruoli": senza essere amministratore, entra in
+   * Utenti e ruoli e gestisce le persone del proprio livello (Consorzio,
+   * insegna o punto vendita). Non tocca gli amministratori e non ne nomina.
+   */
+  gestioneUtenti?: boolean;
   gender?: "m" | "f"; // per declinare i testi delle email ([benvenuto|benvenuta])
   sites?: SiteId[]; // macroaree accessibili (nessuna = nessun accesso)
   /** Per il gestore: le aree su cui ha la gestione (le altre in `sites` le usa da operativo). */
@@ -507,6 +513,10 @@ export interface PortalSettings {
   colorAccent: string; // verde chiaro GT
   welcome?: string; // messaggio per tutti gli studenti del consorzio
   supportEmail?: string;
+  /** Parola segreta comune a tutto il Consorzio: vale per registrarsi in qualsiasi punto vendita. */
+  secretWord?: string;
+  /** Foto di copertina delle aree nella pagina Scegli, scelte dall'amministratore di sistema. */
+  fotoAree?: Record<string, string>;
   font?: string; // "system" | "inter" | "nunito" | "poppins" | "quicksand"
   urgentDays?: number; // giorni prima della scadenza per l'avviso urgente (default 7)
   watchThreshold?: number; // % di video da guardare perché la lezione risulti vista (default 90)

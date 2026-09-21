@@ -4,6 +4,8 @@ import { requireAreaUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import Header from "@/components/Header";
 import { updateUser, toggleUserActive } from "@/lib/actions";
+import ModuloAutoSalva from "@/components/ModuloAutoSalva";
+import { PulsanteAzione } from "@/components/AzioneSenzaRicarica";
 import { ROLE_LABELS, Role, userSites, isAcademyAdmin, ruoloEsteso } from "@/lib/types";
 import { coursesForUser, getProgress, isCourseCompleted, canManageUsers } from "@/lib/logic";
 
@@ -73,7 +75,7 @@ export default async function EditUserPage({
         {salvato && <div className="alert alert-green">✓ Modifiche salvate.</div>}
 
         <div className="card">
-          <form action={action}>
+          <ModuloAutoSalva azione={action}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <label className="field">Nome<input type="text" name="firstName" defaultValue={u.firstName} required /></label>
               <label className="field">Cognome<input type="text" name="lastName" defaultValue={u.lastName} required /></label>
@@ -157,8 +159,7 @@ export default async function EditUserPage({
                 Dati da registrazione: {u.birthDate ? `nato/a il ${new Date(u.birthDate).toLocaleDateString("it-IT")}` : ""}{u.birthDate && u.taxCode ? " · " : ""}{u.taxCode ? `CF ${u.taxCode}` : ""}
               </p>
             )}
-            <button className="btn" type="submit">Salva collaboratore</button>
-          </form>
+          </ModuloAutoSalva>
         </div>
 
         {u.id !== admin.id && u.role !== "system_admin" && (
@@ -172,11 +173,11 @@ export default async function EditUserPage({
                     : "Ripristina l'accesso alla piattaforma."}
                 </p>
               </div>
-              <form action={toggleUserActive.bind(null, u.id)}>
-                <button className="btn btn-outline" type="submit" style={u.active !== false ? { color: "var(--red)", borderColor: "var(--red)" } : {}}>
-                  {u.active !== false ? "Disattiva accesso" : "Riattiva accesso"}
-                </button>
-              </form>
+              <PulsanteAzione azione={toggleUserActive.bind(null, u.id)} className="btn btn-outline"
+                style={u.active !== false ? { color: "var(--red)", borderColor: "var(--red)" } : {}}
+                conferma={u.active !== false ? `Bloccare l'accesso di ${u.firstName} ${u.lastName}?` : undefined}>
+                {u.active !== false ? "Disattiva accesso" : "Riattiva accesso"}
+              </PulsanteAzione>
             </div>
           </div>
         )}

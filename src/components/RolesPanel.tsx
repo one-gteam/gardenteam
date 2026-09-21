@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition, type MouseEvent, type ReactNode } from "react";
-import { deleteUsers, quickSetManages, quickSetRole, quickSetSites, quickToggleActive, setTenantUserDelegation } from "@/lib/actions";
+import { deleteUsers, quickSetGestioneUtenti, quickSetManages, quickSetRole, quickSetSites, quickToggleActive, setTenantUserDelegation } from "@/lib/actions";
 import { ROLE_LABELS, Role, SITE_LABELS_BREVI, SiteId } from "@/lib/types";
 
 const SITES: SiteId[] = ["academy", "arredo", "zoo", "piante"];
@@ -18,6 +18,8 @@ interface RowUser {
   sites: SiteId[]; // aree assegnate: nessuna = nessun accesso
   manages: SiteId[]; // per il gestore: aree su cui ha la gestione
   editabile: boolean; // dentro il perimetro di chi guarda (e non se stesso)
+  gestioneUtenti: boolean; // incarico "gestisce utenti e ruoli"
+  amministratore: boolean; // ruolo da amministratore: l'incarico non serve
 }
 
 interface DelegaTenant {
@@ -42,11 +44,14 @@ export default function RolesPanel({
   assignableRoles,
   deleghe,
   showInsegna,
+  puoDelegare = false,
 }: {
   users: RowUser[];
   assignableRoles: Role[];
   deleghe: DelegaTenant[]; // vuoto = chi guarda non gestisce deleghe
   showInsegna: boolean;
+  /** Chi guarda è un amministratore: può dare l'incarico "gestisce utenti". */
+  puoDelegare?: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -62,13 +67,40 @@ export default function RolesPanel({
       router.refresh();
     });
 
+  /*
+   * Le modifiche in riga (ruolo, aree, stato, incarico) si vedono subito: la
+   * tabella non si blocca e non si ridisegna tutta a ogni clic. Il server
+   * salva in fila; appena ha ridisegnato la pagina coi dati veri la modifica
+   * locale si toglie, e se qualcosa non va la riga torna com'era.
+   */
+  const [modifiche, setModifiche] = useState<Record<string, Partial<RowUser>>>({});
+  const [, startRefresh] = useTransition();
+  const cambia = (u: RowUser, parte: Partial<RowUser>, fn: () => Promise<{ ok: boolean; error?: string }>) => {
+    setModifiche((m) => ({ ...m, [u.id]: { ...m[u.id], ...parte } }));
+    setErrore("");
+    fn()
+      .catch(() => ({ ok: false, error: "Non salvato: controlla la connessione" }))
+      .then((res) => {
+        if (!res.ok) {
+          setErrore(`${u.nome}: ${res.error ?? "operazione non riuscita"}`);
+          setModifiche((m) => { const { [u.id]: _, ...resto } = m; return resto; });
+          return;
+        }
+        startRefresh(() => {
+          router.refresh();
+          setModifiche((m) => { const { [u.id]: _, ...resto } = m; return resto; });
+        });
+      });
+  };
+  const righe = users.map((u) => ({ ...u, ...modifiche[u.id] }));
+
   const toggleSite = (u: RowUser, site: SiteId) => {
     const next = u.sites.includes(site) ? u.sites.filter((s) => s !== site) : [...u.sites, site];
-    run(() => quickSetSites(u.id, next));
+    cambia(u, { sites: next }, () => quickSetSites(u.id, next));
   };
   const toggleManages = (u: RowUser, site: SiteId) => {
     const next = u.manages.includes(site) ? u.manages.filter((s) => s !== site) : [...u.manages, site];
-    run(() => quickSetManages(u.id, next));
+    cambia(u, { manages: next }, () => quickSetManages(u.id, next));
   };
 
   // ---------- colonne, riordinabili trascinando l'intestazione ----------
@@ -94,8 +126,7 @@ export default function RolesPanel({
           u.editabile && assignableRoles.includes(u.ruolo) ? (
             <select
               value={u.ruolo}
-              disabled={pending}
-              onChange={(e) => run(() => quickSetRole(u.id, e.target.value as Role))}
+              onChange={(e) => { const r = e.target.value as Role; cambia(u, { ruolo: r }, () => quickSetRole(u.id, r)); }}
               style={{ marginTop: 0, minWidth: 190 }}
             >
               {assignableRoles.map((r) => (
@@ -118,7 +149,7 @@ export default function RolesPanel({
                   checked={u.sites.includes(site)}
                   // l'amministratore di sistema ha sempre tutte le aree: è la valvola
                   // di sicurezza del portale, e le caselle non si tolgono
-                  disabled={!u.editabile || pending || u.ruolo === "system_admin"}
+                  disabled={!u.editabile || u.ruolo === "system_admin"}
                   title={u.ruolo === "system_admin" ? "L'amministratore di sistema ha sempre tutte le aree" : undefined}
                   onChange={() => toggleSite(u, site)}
                 />
@@ -129,7 +160,7 @@ export default function RolesPanel({
                     type="button"
                     className={`pill ${u.manages.includes(site) ? "pill-green" : "pill-gray"}`}
                     style={{ cursor: u.editabile ? "pointer" : "default", border: "none", fontSize: 10, padding: "0 6px" }}
-                    disabled={!u.editabile || pending}
+                    disabled={!u.editabile}
                     title={u.manages.includes(site) ? "Gestisce quest'area: clic per renderlo operativo" : "Operativo: clic per dargli la gestione"}
                     onClick={() => toggleManages(u, site)}
                   >
@@ -149,8 +180,7 @@ export default function RolesPanel({
             <button
               type="button"
               className={`btn btn-sm ${u.attivo ? "btn-outline" : ""}`}
-              disabled={pending}
-              onClick={() => run(() => quickToggleActive(u.id))}
+              onClick={() => cambia(u, { attivo: !u.attivo }, () => quickToggleActive(u.id))}
               title={u.attivo ? "Blocca l'accesso (cessazione)" : "Riattiva l'accesso"}
             >
               {u.attivo ? "Attivo" : "Cessato"}
@@ -160,9 +190,28 @@ export default function RolesPanel({
           ),
       }
     );
+    cols.push({
+      key: "utenti",
+      label: "Gestisce utenti",
+      cell: (u) =>
+        u.amministratore ? (
+          <span className="hint" title="Gli amministratori gestiscono già gli utenti del loro ambito">sì, da ruolo</span>
+        ) : (
+          <label style={{ fontSize: 12.5, display: "inline-flex", gap: 5, alignItems: "center" }}
+            title="Può entrare in Utenti e ruoli e gestire le persone del suo livello (non gli amministratori)">
+            <input
+              type="checkbox"
+              checked={u.gestioneUtenti}
+              disabled={!puoDelegare || !u.editabile}
+              onChange={(e) => { const v = e.target.checked; cambia(u, { gestioneUtenti: v }, () => quickSetGestioneUtenti(u.id, v)); }}
+            />
+            {u.gestioneUtenti ? "sì" : "no"}
+          </label>
+        ),
+    });
     return cols;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showInsegna, assignableRoles, pending]);
+  }, [showInsegna, assignableRoles, puoDelegare, modifiche]);
 
   const [order, setOrder] = useState<string[]>(baseColumns.map((c) => c.key));
 
@@ -349,7 +398,7 @@ export default function RolesPanel({
             </tr>
           </thead>
           <tbody>
-            {users.map((u, index) => (
+            {righe.map((u, index) => (
               <tr key={u.id} style={{ opacity: u.attivo ? 1 : 0.55 }}>
                 <td>
                   <input

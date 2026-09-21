@@ -10,7 +10,7 @@ import { mailerConfig, sendMail } from "./mailer";
 import { verifySsoToken } from "./sso";
 import { AUTH_COOKIE, OPZIONI_SESSIONE, requireUser, valoreSessione, tokenReimposta, idDaTokenReimposta } from "./auth";
 import { attesaMinuti, azzera, ipChiamante, Regola, segnaErrore } from "./tentativi";
-import { assignableRolesFor, canManageUsers, coursesForUser, courseVisibleTo, dueDate, getProgress, hasStartedCourse, isCourseCompleted, pathsForUser } from "./logic";
+import { assignableRolesFor, canManageUsers, delegatoUtenti, livelloGestioneUtenti, RUOLI_AMMINISTRATORE, coursesForUser, courseVisibleTo, dueDate, getProgress, hasStartedCourse, isCourseCompleted, pathsForUser } from "./logic";
 import {
   Course, CourseLevel, CourseSession, DB, DEFAULT_HOME_BLOCKS, DEFAULT_REMINDER_RULES, DEFAULT_WATCH_THRESHOLD,
   EmailType, Lesson, LessonAttachment, LessonType, ReminderRule, ReminderStage, Role, SiteId, User, postLoginPath, userSites, gestisce, gestisceConsorzio, livelloDi, isAcademyAdmin } from "./types";
@@ -149,14 +149,15 @@ function canSendStage(db: DB, user: User, type: EmailType, rule: ReminderRule, s
   return daysSince(previous[previous.length - 1].date) >= rule.intervalDays;
 }
 
-export async function saveSsoDefaults(formData: FormData) {
+export async function saveSsoDefaults(formData: FormData): Promise<{ ok: boolean; error?: string }> {
   const admin = await requireUser();
-  if (admin.role !== "system_admin") redirect("/admin");
+  if (admin.role !== "system_admin") return { ok: false, error: "Solo l'amministratore di sistema" };
   const db = await getDb();
   db.settings.ssoDefaultTenantId = String(formData.get("ssoDefaultTenantId") ?? "") || undefined;
   db.settings.ssoDefaultStoreId = String(formData.get("ssoDefaultStoreId") ?? "") || undefined;
   await saveDb(db);
-  redirect("/ruoli/organizzazione/consorzio?salvato=1");
+  revalidatePath("/ruoli", "layout");
+  return { ok: true };
 }
 
 function hashPassword(password: string): string {
@@ -1005,20 +1006,17 @@ export async function runReminders() {
   redirect(`/admin/email?promemoria=${sent}&convocazioni=${reminded}&assegnazioni=${assigned}`);
 }
 
-export async function toggleUserActive(userId: string) {
+export async function toggleUserActive(userId: string): Promise<{ ok: boolean; error?: string }> {
   const admin = await requireUser();
   const db = await getDb();
   const target = db.users.find((u) => u.id === userId);
-  if (!target || target.id === admin.id || target.role === "system_admin") redirect("/admin/utenti");
-  const allowed =
-    admin.role === "system_admin" ||
-    (admin.role === "group_admin" && target!.tenantId === admin.tenantId) ||
-    (admin.role === "store_admin" && target!.storeId === admin.storeId && canManageUsers(db, admin));
-  if (!allowed) redirect("/admin/utenti");
-  target!.active = !target!.active;
+  if (!target || target.id === admin.id || target.role === "system_admin") return { ok: false, error: "Non consentito" };
+  if (!canTouchUser(db, admin, target)) return { ok: false, error: "Fuori dal tuo ambito" };
+  target.active = target.active === false;
   await saveDb(db);
   revalidatePath("/admin/utenti");
-  redirect("/admin/utenti");
+  revalidatePath("/ruoli");
+  return { ok: true };
 }
 
 export async function deleteQuestion(courseId: string, questionId: string) {
@@ -1096,56 +1094,85 @@ function canManageTenant(admin: User, tenantId: string): boolean {
   return admin.role === "system_admin" || (admin.role === "group_admin" && admin.tenantId === tenantId);
 }
 
-export async function updateTenant(tenantId: string, formData: FormData) {
+/*
+ * Le schede di Organizzazione si salvano da sole (ModuloAutoSalva): le azioni
+ * rispondono { ok, error } invece di rimandare alla pagina, che così non si
+ * ricarica a ogni modifica.
+ */
+export async function updateTenant(tenantId: string, formData: FormData): Promise<{ ok: boolean; error?: string }> {
   const admin = await requireUser();
-  if (!canManageTenant(admin, tenantId)) redirect("/ruoli/organizzazione");
+  if (!canManageTenant(admin, tenantId)) return { ok: false, error: "Non puoi modificare questa insegna" };
   const db = await getDb();
   const t = db.tenants.find((x) => x.id === tenantId);
-  if (!t) redirect("/ruoli/organizzazione");
+  if (!t) return { ok: false, error: "Insegna non trovata" };
   const name = String(formData.get("name") ?? "").trim();
-  if (name) t!.name = name;
+  if (name) t.name = name;
   const color = String(formData.get("color") ?? "").trim();
-  if (/^#[0-9a-fA-F]{6}$/.test(color)) t!.color = color;
+  if (/^#[0-9a-fA-F]{6}$/.test(color)) t.color = color;
   const emoji = String(formData.get("emoji") ?? "").trim();
-  if (emoji) t!.emoji = emoji.slice(0, 4);
-  t!.welcome = String(formData.get("welcome") ?? "").trim() || undefined;
-  t!.secretWord = String(formData.get("secretWord") ?? "").trim() || undefined;
-  t!.approvalEmail = String(formData.get("approvalEmail") ?? "").trim() || undefined;
+  if (emoji) t.emoji = emoji.slice(0, 4);
+  t.welcome = String(formData.get("welcome") ?? "").trim() || undefined;
+  t.secretWord = String(formData.get("secretWord") ?? "").trim() || undefined;
+  t.approvalEmail = String(formData.get("approvalEmail") ?? "").trim() || undefined;
   const logo = formData.get("logo") as File | null;
   if (logo && logo.size > 0) {
+    if (!logo.type.startsWith("image/")) return { ok: false, error: "Il logo dev'essere un'immagine" };
     const ext = (logo.name.split(".").pop() || "png").toLowerCase().replace(/[^a-z0-9]/g, "");
     const file = `${tenantId}_${Date.now()}.${ext}`;
-    t!.logoUrl = await uploadPublicFile(`loghi/${file}`, Buffer.from(await logo.arrayBuffer()), logo.type);
+    t.logoUrl = await uploadPublicFile(`loghi/${file}`, Buffer.from(await logo.arrayBuffer()), logo.type);
   }
   await saveDb(db);
-  redirect(`/ruoli/organizzazione/insegna/${tenantId}?salvato=1`);
+  revalidatePath("/ruoli", "layout");
+  return { ok: true };
 }
 
-export async function updateStore(storeId: string, formData: FormData) {
+/** Un'insegna aggiunge un suo punto vendita (o il Consorzio per lei). */
+export async function creaPuntoVendita(tenantId: string, formData: FormData): Promise<{ ok: boolean; error?: string }> {
+  const admin = await requireUser();
+  if (!canManageTenant(admin, tenantId)) return { ok: false, error: "Non puoi aggiungere punti vendita a questa insegna" };
+  const db = await getDb();
+  if (!db.tenants.some((t) => t.id === tenantId)) return { ok: false, error: "Insegna non trovata" };
+  const name = String(formData.get("name") ?? "").trim();
+  if (!name) return { ok: false, error: "Serve il nome del punto vendita" };
+  if (db.stores.some((st) => st.tenantId === tenantId && st.name.toLowerCase() === name.toLowerCase())) {
+    return { ok: false, error: "C'è già un punto vendita con questo nome" };
+  }
+  // id progressivo come gli altri (s1, s2…): il primo numero libero
+  const usati = new Set(db.stores.map((st) => st.id));
+  let n = db.stores.length + 1;
+  while (usati.has(`s${n}`)) n++;
+  db.stores.push({ id: `s${n}`, tenantId, name, city: String(formData.get("city") ?? "").trim() });
+  await saveDb(db);
+  revalidatePath("/ruoli", "layout");
+  return { ok: true };
+}
+
+export async function updateStore(storeId: string, formData: FormData): Promise<{ ok: boolean; error?: string }> {
   const admin = await requireUser();
   const db = await getDb();
   const s = db.stores.find((x) => x.id === storeId);
-  if (!s) redirect("/ruoli/organizzazione");
+  if (!s) return { ok: false, error: "Punto vendita non trovato" };
   const allowed =
     admin.role === "system_admin" ||
-    (admin.role === "group_admin" && admin.tenantId === s!.tenantId) ||
+    (admin.role === "group_admin" && admin.tenantId === s.tenantId) ||
     (admin.role === "store_admin" && admin.storeId === storeId);
-  if (!allowed) redirect("/ruoli/organizzazione");
+  if (!allowed) return { ok: false, error: "Non puoi modificare questo punto vendita" };
   const name = String(formData.get("name") ?? "").trim();
-  if (name) s!.name = name;
-  s!.city = String(formData.get("city") ?? "").trim();
-  s!.welcome = String(formData.get("welcome") ?? "").trim() || undefined;
-  s!.secretWord = String(formData.get("secretWord") ?? "").trim() || undefined;
-  s!.approvalEmail = String(formData.get("approvalEmail") ?? "").trim() || undefined;
+  if (name) s.name = name;
+  s.city = String(formData.get("city") ?? "").trim();
+  s.welcome = String(formData.get("welcome") ?? "").trim() || undefined;
+  s.secretWord = String(formData.get("secretWord") ?? "").trim() || undefined;
+  s.approvalEmail = String(formData.get("approvalEmail") ?? "").trim() || undefined;
   await saveDb(db);
-  redirect(`/ruoli/organizzazione/pv/${storeId}?salvato=1`);
+  revalidatePath("/ruoli", "layout");
+  return { ok: true };
 }
 
 /* ================== Impostazioni del consorzio (portale) ================== */
 
-export async function updateSettings(formData: FormData) {
+export async function updateSettings(formData: FormData): Promise<{ ok: boolean; error?: string }> {
   const admin = await requireUser();
-  if (admin.role !== "system_admin") redirect("/admin");
+  if (admin.role !== "system_admin") return { ok: false, error: "Solo l'amministratore di sistema" };
   const db = await getDb();
   const s = db.settings;
   const portalName = String(formData.get("portalName") ?? "").trim();
@@ -1156,6 +1183,8 @@ export async function updateSettings(formData: FormData) {
   if (/^#[0-9a-fA-F]{6}$/.test(colorAccent)) s.colorAccent = colorAccent;
   s.welcome = String(formData.get("welcome") ?? "").trim() || undefined;
   s.supportEmail = String(formData.get("supportEmail") ?? "").trim() || undefined;
+  // parola segreta comune: vale per registrarsi in qualsiasi punto vendita
+  s.secretWord = String(formData.get("secretWord") ?? "").trim() || undefined;
   const font = String(formData.get("font") ?? "");
   if (font) s.font = font;
   const logo = formData.get("logo") as File | null;
@@ -1164,14 +1193,54 @@ export async function updateSettings(formData: FormData) {
     const file = `consorzio_${Date.now()}.${ext}`;
     s.logoUrl = await uploadPublicFile(`loghi/${file}`, Buffer.from(await logo.arrayBuffer()), logo.type);
   }
-  if (formData.get("resetColors") === "on") {
-    s.colorPrimary = "#00652e";
-    s.colorAccent = "#8dc63f";
-  }
   s.leaderboardAnonymous = formData.get("leaderboardAnonymous") === "on";
   await saveDb(db);
   revalidatePath("/", "layout");
-  redirect("/ruoli/organizzazione/consorzio?salvato=1");
+  return { ok: true };
+}
+
+/* ---------- Foto delle aree nella pagina Scegli ---------- */
+const CHIAVI_AREE = ["academy", "arredo", "zoo", "piante", "ruoli", "archivio"];
+
+/** L'amministratore di sistema cambia la foto di copertina di un'area (vale per tutti). */
+export async function cambiaFotoArea(chiave: string, formData: FormData): Promise<{ ok: boolean; error?: string }> {
+  const admin = await requireUser();
+  if (admin.role !== "system_admin") return { ok: false, error: "Solo l'amministratore di sistema" };
+  if (!CHIAVI_AREE.includes(chiave)) return { ok: false, error: "Area sconosciuta" };
+  const foto = formData.get("foto") as File | null;
+  if (!foto || foto.size === 0) return { ok: false, error: "Nessuna foto scelta" };
+  if (!foto.type.startsWith("image/")) return { ok: false, error: "Dev'essere un'immagine" };
+  if (foto.size > 8 * 1024 * 1024) return { ok: false, error: "Foto troppo grande (massimo 8 MB)" };
+  const ext = (foto.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 5) || "jpg";
+  const url = await uploadPublicFile(`aree/${chiave}_${Date.now()}.${ext}`, Buffer.from(await foto.arrayBuffer()), foto.type);
+  const db = await getDb();
+  db.settings.fotoAree = { ...(db.settings.fotoAree ?? {}), [chiave]: url };
+  await saveDb(db);
+  revalidatePath("/scegli");
+  return { ok: true };
+}
+
+/** Torna alla foto di serie. */
+export async function ripristinaFotoArea(chiave: string): Promise<{ ok: boolean; error?: string }> {
+  const admin = await requireUser();
+  if (admin.role !== "system_admin") return { ok: false, error: "Solo l'amministratore di sistema" };
+  const db = await getDb();
+  if (db.settings.fotoAree) delete db.settings.fotoAree[chiave];
+  await saveDb(db);
+  revalidatePath("/scegli");
+  return { ok: true };
+}
+
+/** "Ripristina i verdi Garden Team": un pulsante a parte, non una spunta che si salva da sola. */
+export async function ripristinaColori(): Promise<{ ok: boolean; error?: string }> {
+  const admin = await requireUser();
+  if (admin.role !== "system_admin") return { ok: false, error: "Solo l'amministratore di sistema" };
+  const db = await getDb();
+  db.settings.colorPrimary = "#00652e";
+  db.settings.colorAccent = "#8dc63f";
+  await saveDb(db);
+  revalidatePath("/", "layout");
+  return { ok: true };
 }
 
 /** Ordine e visibilità dei blocchi della home studente, configurabili senza sviluppo. */
@@ -1221,12 +1290,33 @@ function sitesAssegnabili(admin: User, target: User, scelte: SiteId[]): SiteId[]
 
 /** Il bersaglio è nel perimetro dell'admin e l'admin ha la gestione utenti attiva? */
 function canTouchUser(db: DB, admin: User, target: User): boolean {
-  if (!canManageUsers(db, admin)) return false;
+  const livello = livelloGestioneUtenti(db, admin);
+  if (!livello) return false;
   if (target.role === "system_admin" && admin.role !== "system_admin") return false;
-  if (admin.role === "system_admin") return true;
-  if (admin.role === "group_admin") return target.tenantId === admin.tenantId;
-  if (admin.role === "store_admin") return target.storeId === admin.storeId;
-  return false;
+  // chi ha solo l'incarico non tocca gli amministratori (nemmeno per cessarli)
+  if (delegatoUtenti(admin) && RUOLI_AMMINISTRATORE.includes(target.role)) return false;
+  if (livello === "consorzio") return true;
+  if (livello === "insegna") return target.tenantId === admin.tenantId;
+  return target.storeId === admin.storeId;
+}
+
+/**
+ * Dà o toglie l'incarico "gestisce utenti e ruoli". Lo decide solo un
+ * amministratore (di sistema, insegna o punto vendita) per le persone del suo
+ * ambito: chi ha l'incarico non lo può passare ad altri.
+ */
+export async function quickSetGestioneUtenti(userId: string, attivo: boolean) {
+  const admin = await requireUser();
+  const db = await getDb();
+  const target = db.users.find((u) => u.id === userId);
+  if (!target || target.id === admin.id) return { ok: false as const, error: "Non consentito" };
+  if (!RUOLI_AMMINISTRATORE.includes(admin.role)) return { ok: false as const, error: "Lo decide un amministratore" };
+  if (!canTouchUser(db, admin, target)) return { ok: false as const, error: "Fuori dal tuo ambito" };
+  if (RUOLI_AMMINISTRATORE.includes(target.role)) return { ok: false as const, error: "Gli amministratori gestiscono già gli utenti" };
+  target.gestioneUtenti = attivo || undefined;
+  await saveDb(db);
+  revalidatePath("/ruoli");
+  return { ok: true as const };
 }
 
 export async function quickSetRole(userId: string, role: Role) {
@@ -1305,12 +1395,13 @@ export async function creaUtente(formData: FormData) {
   if (!assignableRolesFor(admin).includes(role)) return { ok: false as const, error: "Ruolo non assegnabile dal tuo profilo" };
 
   // insegna e punto vendita: il Consorzio sceglie, gli altri restano nel proprio perimetro
-  const storeId = admin.role === "store_admin" ? admin.storeId : (String(formData.get("storeId") ?? "") || undefined);
+  const livello = livelloGestioneUtenti(db, admin)!;
+  const storeId = livello === "pv" ? admin.storeId : (String(formData.get("storeId") ?? "") || undefined);
   const store = storeId ? db.stores.find((s) => s.id === storeId) : undefined;
-  const tenantId = admin.role === "system_admin"
+  const tenantId = livello === "consorzio"
     ? (store?.tenantId ?? (String(formData.get("tenantId") ?? "") || undefined))
     : admin.tenantId;
-  if (admin.role === "group_admin" && store && store.tenantId !== admin.tenantId) {
+  if (livello === "insegna" && store && store.tenantId !== admin.tenantId) {
     return { ok: false as const, error: "Quel punto vendita non è della tua insegna" };
   }
 
@@ -1381,16 +1472,15 @@ export async function setTenantUserDelegation(tenantId: string, allow: boolean) 
 
 /* ================== Modifica utenti ================== */
 
-export async function updateUser(userId: string, formData: FormData) {
+export async function updateUser(userId: string, formData: FormData): Promise<{ ok: boolean; error?: string }> {
   const admin = await requireUser();
   const db = await getDb();
   const target = db.users.find((u) => u.id === userId);
-  if (!target) redirect("/admin/utenti");
-  const allowed =
-    admin.role === "system_admin" ||
-    (admin.role === "group_admin" && target!.tenantId === admin.tenantId) ||
-    (admin.role === "store_admin" && target!.storeId === admin.storeId && canManageUsers(db, admin));
-  if (!allowed || (target!.role === "system_admin" && admin.id !== target!.id)) redirect("/admin/utenti");
+  if (!target) return { ok: false, error: "Utente non trovato" };
+  const allowed = canTouchUser(db, admin, target) || (admin.id === target.id && admin.role === "system_admin");
+  if (!allowed || (target.role === "system_admin" && admin.id !== target.id)) return { ok: false, error: "Fuori dal tuo ambito" };
+  // chi ha solo l'incarico non si cambia da sé ruolo e aree
+  const suSeStesso = admin.id === target.id && delegatoUtenti(admin);
 
   const firstName = String(formData.get("firstName") ?? "").trim();
   const lastName = String(formData.get("lastName") ?? "").trim();
@@ -1403,7 +1493,7 @@ export async function updateUser(userId: string, formData: FormData) {
   if (/^\d{4}-\d{2}-\d{2}$/.test(hireDate)) target!.hireDate = hireDate;
   const gender = String(formData.get("gender") ?? "");
   target!.gender = gender === "m" || gender === "f" ? gender : undefined;
-  if (formData.get("sitesForm") === "1") {
+  if (formData.get("sitesForm") === "1" && !suSeStesso) {
     const sites: SiteId[] = [];
     if (formData.get("siteAcademy") === "on") sites.push("academy");
     if (formData.get("siteArredo") === "on") sites.push("arredo");
@@ -1413,7 +1503,7 @@ export async function updateUser(userId: string, formData: FormData) {
   }
 
   const role = String(formData.get("role") ?? "") as Role;
-  if (role && assignableRolesFor(admin).includes(role)) target!.role = role;
+  if (role && !suSeStesso && assignableRolesFor(admin).includes(role)) target!.role = role;
   // aree gestite (solo per il gestore): come le aree di accesso, si danno solo quelle che si hanno
   if (formData.get("managesForm") === "1") {
     const scelte = (formData.getAll("manages") as string[]).filter(Boolean) as SiteId[];
@@ -1423,10 +1513,11 @@ export async function updateUser(userId: string, formData: FormData) {
   const storeId = String(formData.get("storeId") ?? "");
   if (storeId) {
     const store = db.stores.find((x) => x.id === storeId);
+    const livello = livelloGestioneUtenti(db, admin);
     const canMove =
-      admin.role === "system_admin" ||
-      (admin.role === "group_admin" && store?.tenantId === admin.tenantId) ||
-      (admin.role === "store_admin" && storeId === admin.storeId);
+      livello === "consorzio" ||
+      (livello === "insegna" && store?.tenantId === admin.tenantId) ||
+      (livello === "pv" && storeId === admin.storeId);
     if (store && canMove) {
       target!.storeId = store.id;
       target!.tenantId = store.tenantId;
@@ -1442,7 +1533,9 @@ export async function updateUser(userId: string, formData: FormData) {
 
   await notifyNewAssignments(db, target!);
   await saveDb(db);
-  redirect(`/admin/utenti/${userId}?salvato=1`);
+  revalidatePath("/admin/utenti");
+  revalidatePath("/ruoli");
+  return { ok: true };
 }
 
 /**
@@ -1700,18 +1793,18 @@ function deptScopeAllowed(admin: User, d: { tenantId?: string; storeId?: string 
   return false;
 }
 
-export async function saveDepartment(deptId: string | null, formData: FormData) {
+export async function saveDepartment(deptId: string | null, formData: FormData): Promise<{ ok: boolean; error?: string }> {
   const admin = await requireUser();
-  if (!["system_admin", "group_admin", "store_admin"].includes(admin.role)) redirect("/admin");
+  if (!["system_admin", "group_admin", "store_admin"].includes(admin.role)) return { ok: false, error: "Non consentito" };
   const db = await getDb();
   const name = String(formData.get("name") ?? "").trim();
-  if (!name) redirect("/ruoli/organizzazione");
+  if (!name) return { ok: false, error: "Serve il nome del reparto" };
   const emoji = String(formData.get("emoji") ?? "").trim() || "🏷️";
   if (deptId) {
     const d = db.departments.find((x) => x.id === deptId);
-    if (!d || !deptScopeAllowed(admin, d)) redirect("/ruoli/organizzazione");
-    d!.name = name;
-    d!.emoji = emoji.slice(0, 4);
+    if (!d || !deptScopeAllowed(admin, d)) return { ok: false, error: "Non puoi modificare questo reparto" };
+    d.name = name;
+    d.emoji = emoji.slice(0, 4);
   } else {
     db.departments.push({
       id: `d_${Date.now()}`,
@@ -1722,33 +1815,36 @@ export async function saveDepartment(deptId: string | null, formData: FormData) 
     });
   }
   await saveDb(db);
-  redirect("/ruoli/organizzazione?salvato=1");
+  revalidatePath("/ruoli", "layout");
+  return { ok: true };
 }
 
-export async function deleteDepartment(deptId: string) {
+export async function deleteDepartment(deptId: string): Promise<{ ok: boolean; error?: string }> {
   const admin = await requireUser();
   const db = await getDb();
   const d = db.departments.find((x) => x.id === deptId);
-  if (!d || !deptScopeAllowed(admin, d)) redirect("/ruoli/organizzazione");
+  if (!d || !deptScopeAllowed(admin, d)) return { ok: false, error: "Non puoi eliminare questo reparto" };
   db.departments = db.departments.filter((x) => x.id !== deptId);
   for (const u of db.users) if (u.departmentId === deptId) u.departmentId = undefined;
   for (const c of db.courses) if (c.departments) c.departments = c.departments.filter((x) => x !== deptId);
+  for (const p of db.paths ?? []) if (p.departments) p.departments = p.departments.filter((x) => x !== deptId);
   await saveDb(db);
-  redirect("/ruoli/organizzazione?salvato=1");
+  revalidatePath("/ruoli", "layout");
+  return { ok: true };
 }
 
-export async function saveGroup(groupId: string | null, formData: FormData) {
+export async function saveGroup(groupId: string | null, formData: FormData): Promise<{ ok: boolean; error?: string }> {
   const admin = await requireUser();
-  if (!["system_admin", "group_admin", "store_admin"].includes(admin.role)) redirect("/admin");
+  if (!["system_admin", "group_admin", "store_admin"].includes(admin.role)) return { ok: false, error: "Non consentito" };
   const db = await getDb();
   const name = String(formData.get("name") ?? "").trim();
-  if (!name) redirect("/ruoli/organizzazione");
+  if (!name) return { ok: false, error: "Serve il nome del gruppo" };
   const emoji = String(formData.get("emoji") ?? "").trim() || "👥";
   if (groupId) {
     const g = db.groups.find((x) => x.id === groupId);
-    if (!g || !deptScopeAllowed(admin, g)) redirect("/ruoli/organizzazione");
-    g!.name = name;
-    g!.emoji = emoji.slice(0, 4);
+    if (!g || !deptScopeAllowed(admin, g)) return { ok: false, error: "Non puoi modificare questo gruppo" };
+    g.name = name;
+    g.emoji = emoji.slice(0, 4);
   } else {
     db.groups.push({
       id: `g_${Date.now()}`,
@@ -1759,47 +1855,50 @@ export async function saveGroup(groupId: string | null, formData: FormData) {
     });
   }
   await saveDb(db);
-  redirect("/ruoli/organizzazione?salvato=1");
+  revalidatePath("/ruoli", "layout");
+  return { ok: true };
 }
 
-export async function deleteGroup(groupId: string) {
+export async function deleteGroup(groupId: string): Promise<{ ok: boolean; error?: string }> {
   const admin = await requireUser();
   const db = await getDb();
   const g = db.groups.find((x) => x.id === groupId);
-  if (!g || !deptScopeAllowed(admin, g)) redirect("/ruoli/organizzazione");
+  if (!g || !deptScopeAllowed(admin, g)) return { ok: false, error: "Non puoi eliminare questo gruppo" };
   db.groups = db.groups.filter((x) => x.id !== groupId);
   for (const u of db.users) if (u.groupIds) u.groupIds = u.groupIds.filter((x) => x !== groupId);
   for (const c of db.courses) if (c.groups) c.groups = c.groups.filter((x) => x !== groupId);
   await saveDb(db);
-  redirect("/ruoli/organizzazione?salvato=1");
+  revalidatePath("/ruoli", "layout");
+  return { ok: true };
 }
 
-export async function addGroupMember(groupId: string, formData: FormData) {
+export async function addGroupMember(groupId: string, formData: FormData): Promise<{ ok: boolean; error?: string }> {
   const admin = await requireUser();
   const db = await getDb();
   const g = db.groups.find((x) => x.id === groupId);
-  if (!g || !deptScopeAllowed(admin, g)) redirect("/ruoli/organizzazione");
+  if (!g || !deptScopeAllowed(admin, g)) return { ok: false, error: "Non puoi modificare questo gruppo" };
   const userId = String(formData.get("userId") ?? "");
   const u = db.users.find((x) => x.id === userId);
-  if (u) {
-    u.groupIds = u.groupIds ?? [];
-    if (!u.groupIds.includes(groupId)) u.groupIds.push(groupId);
-    await saveDb(db);
-  }
-  redirect("/ruoli/organizzazione?salvato=1");
+  if (!u) return { ok: false, error: "Scegli una persona" };
+  u.groupIds = u.groupIds ?? [];
+  if (!u.groupIds.includes(groupId)) u.groupIds.push(groupId);
+  await saveDb(db);
+  revalidatePath("/ruoli", "layout");
+  return { ok: true };
 }
 
-export async function removeGroupMember(groupId: string, userId: string) {
+export async function removeGroupMember(groupId: string, userId: string): Promise<{ ok: boolean; error?: string }> {
   const admin = await requireUser();
   const db = await getDb();
   const g = db.groups.find((x) => x.id === groupId);
-  if (!g || !deptScopeAllowed(admin, g)) redirect("/ruoli/organizzazione");
+  if (!g || !deptScopeAllowed(admin, g)) return { ok: false, error: "Non puoi modificare questo gruppo" };
   const u = db.users.find((x) => x.id === userId);
   if (u?.groupIds) {
     u.groupIds = u.groupIds.filter((x) => x !== groupId);
     await saveDb(db);
   }
-  redirect("/ruoli/organizzazione?salvato=1");
+  revalidatePath("/ruoli", "layout");
+  return { ok: true };
 }
 
 /* ================== Autenticazione con password ================== */
@@ -1921,8 +2020,10 @@ export async function registerRequest(formData: FormData) {
   const store = db.stores.find((s) => s.id === storeId);
   if (!store) redirect("/registrati?errore=pv");
   const tenant = db.tenants.find((t) => t.id === store!.tenantId)!;
+  // vale la parola del punto vendita, dell'insegna o quella comune del Consorzio
   const validSecret =
-    (store!.secretWord && secret === store!.secretWord) || (tenant.secretWord && secret === tenant.secretWord);
+    (store!.secretWord && secret === store!.secretWord) || (tenant.secretWord && secret === tenant.secretWord)
+    || (db.settings.secretWord && secret === db.settings.secretWord);
   if (!secret || !validSecret) {
     await segnaErrore(regole);
     redirect("/registrati?errore=segreta");

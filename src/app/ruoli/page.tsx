@@ -4,7 +4,7 @@ import { getDb } from "@/lib/db";
 import RolesPanel from "@/components/RolesPanel";
 import RuoliHeader from "@/components/RuoliHeader";
 import NuovoUtente from "@/components/NuovoUtente";
-import { assignableRolesFor, canManageUsers, scopeUsers } from "@/lib/logic";
+import { assignableRolesFor, canManageUsers, livelloGestioneUtenti, RUOLI_AMMINISTRATORE, scopeUsers } from "@/lib/logic";
 import { userSites } from "@/lib/types";
 
 /**
@@ -22,9 +22,11 @@ export default async function RuoliPage({
   if (!user) redirect("/login");
   const db = await getDb();
   const canManage = canManageUsers(db, user);
-  const allowed =
-    user.role === "system_admin" || user.role === "group_admin" || (user.role === "store_admin" && canManage);
-  if (!allowed) redirect("/scegli");
+  // amministratori e chi ha l'incarico "gestisce utenti"; il PV solo se l'insegna glielo consente
+  const livello = livelloGestioneUtenti(db, user);
+  if (!livello) redirect("/scegli");
+  // l'incarico lo danno solo gli amministratori
+  const puoDelegare = RUOLI_AMMINISTRATORE.includes(user.role);
   const sp = await searchParams;
   const q = (sp.q ?? "").trim().toLowerCase();
 
@@ -41,7 +43,10 @@ export default async function RuoliPage({
       attivo: u.active !== false,
       sites: userSites(u),
       manages: u.manages ?? [],
-      editabile: canManage && u.id !== user.id && (u.role !== "system_admin" || user.role === "system_admin"),
+      editabile: canManage && u.id !== user.id && (u.role !== "system_admin" || user.role === "system_admin")
+        && (puoDelegare || !RUOLI_AMMINISTRATORE.includes(u.role)),
+      gestioneUtenti: !!u.gestioneUtenti,
+      amministratore: RUOLI_AMMINISTRATORE.includes(u.role),
     }));
 
   // deleghe mostrate: al Consorzio tutte le insegne, all'insegna solo la propria
@@ -75,7 +80,7 @@ export default async function RuoliPage({
             Cerca
             <input type="text" name="q" defaultValue={sp.q ?? ""} placeholder="nome o email" />
           </label>
-          {user.role === "system_admin" && (
+          {livello === "consorzio" && (
             <label className="field" style={{ marginBottom: 0, width: 220 }}>
               Insegna
               <select name="insegna" defaultValue={sp.insegna ?? ""}>
@@ -92,11 +97,11 @@ export default async function RuoliPage({
             ruoli={assignableRolesFor(user)}
             insegne={db.tenants.map((t) => ({ id: t.id, nome: t.name }))}
             puntiVendita={db.stores
-              .filter((s) => user.role === "system_admin" || s.tenantId === user.tenantId)
+              .filter((s) => livello === "consorzio" || (livello === "insegna" ? s.tenantId === user.tenantId : s.id === user.storeId))
               .map((s) => ({ id: s.id, nome: s.name, tenantId: s.tenantId }))}
             reparti={db.departments.map((d) => ({ id: d.id, nome: d.name }))}
-            mostraInsegna={user.role === "system_admin"}
-            mostraPuntoVendita={user.role !== "store_admin"}
+            mostraInsegna={livello === "consorzio"}
+            mostraPuntoVendita={livello !== "pv"}
           />
         )}
 
@@ -104,7 +109,8 @@ export default async function RuoliPage({
           users={users}
           assignableRoles={assignableRolesFor(user)}
           deleghe={deleghe}
-          showInsegna={user.role === "system_admin"}
+          showInsegna={livello === "consorzio"}
+          puoDelegare={puoDelegare}
         />
       </div>
     </div>

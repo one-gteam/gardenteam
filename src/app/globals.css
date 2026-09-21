@@ -1018,3 +1018,20 @@ label.chip:has(input:checked) { background: var(--green-100); color: var(--green
 
 /* Reimposta password: stessa larghezza del modulo di accesso */
 .login-stretto .card { max-width: 420px; margin-left: auto; margin-right: auto; }
+
+/* Scegli: il pulsante per cambiare la foto di un'area sta sopra la foto, fuori dal link */
+.area-card-box { position: relative; display: flex; }
+.area-card-box > .area-card { flex: 1; }
+.foto-area-comandi { position: absolute; top: 8px; right: 8px; z-index: 2; display: flex; gap: 4px; align-items: center; }
+.foto-area-btn {
+  border: none; border-radius: 999px; padding: 4px 10px; font-size: 12px; font-weight: 700; cursor: pointer;
+  background: rgba(255, 255, 255, .92); color: var(--green-700); box-shadow: 0 1px 4px rgba(0,0,0,.2); font-family: inherit;
+}
+.foto-area-btn:hover { background: #fff; }
+.foto-area-errore { background: var(--red-bg); color: var(--red); font-size: 11.5px; border-radius: 8px; padding: 3px 8px; }
+
+/* salvataggio automatico dei moduli */
+.autosalva-stato { font-size: 12.5px; margin-top: 6px; min-height: 18px; }
+.autosalva-stato .salvato { color: var(--green-700); font-weight: 700; }
+.autosalva-stato .errore, .errore-inline { color: var(--red); font-weight: 600; font-size: 12.5px; margin-left: 6px; }
+form[aria-busy="true"] { opacity: .6; }

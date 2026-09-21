@@ -13,9 +13,12 @@ import HeaderMenu from "@/components/HeaderMenu";
  */
 export default async function RuoliHeader({ user, active }: { user: User; active: "ruoli" | "organizzazione" }) {
   const db = await getDb();
+  // chi ha solo l'incarico "gestisce utenti" non tocca insegne, reparti e parole segrete
   const voci = [
     { href: "/ruoli", label: "Utenti e ruoli", key: "ruoli" as const },
-    { href: "/ruoli/organizzazione", label: "Organizzazione", key: "organizzazione" as const },
+    ...(["system_admin", "group_admin", "store_admin"].includes(user.role)
+      ? [{ href: "/ruoli/organizzazione", label: "Organizzazione", key: "organizzazione" as const }]
+      : []),
   ];
 
   return (

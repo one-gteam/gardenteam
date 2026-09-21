@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import RuoliHeader from "@/components/RuoliHeader";
 import { updateStore } from "@/lib/actions";
+import ModuloAutoSalva from "@/components/ModuloAutoSalva";
 import { ruoloEsteso } from "@/lib/types";
 
 export default async function StorePage({
@@ -50,7 +51,7 @@ export default async function StorePage({
 
         <div className="card">
           <h2>Personalizzazione punto vendita</h2>
-          <form action={action}>
+          <ModuloAutoSalva azione={action}>
             <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 12 }}>
               <label className="field">
                 Nome punto vendita
@@ -75,8 +76,7 @@ export default async function StorePage({
                 <input type="email" name="approvalEmail" defaultValue={s.approvalEmail ?? ""} placeholder={t.approvalEmail ? `vuota = usa ${t.approvalEmail}` : "es. negozio@insegna.it"} />
               </label>
             </div>
-            <button className="btn" type="submit">Salva punto vendita</button>
-          </form>
+          </ModuloAutoSalva>
         </div>
 
         <div className="section">

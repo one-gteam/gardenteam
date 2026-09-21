@@ -3,7 +3,9 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import RuoliHeader from "@/components/RuoliHeader";
-import { updateSettings, saveSsoDefaults } from "@/lib/actions";
+import { updateSettings, saveSsoDefaults, ripristinaColori } from "@/lib/actions";
+import ModuloAutoSalva from "@/components/ModuloAutoSalva";
+import { PulsanteAzione } from "@/components/AzioneSenzaRicarica";
 import { DEFAULT_HOME_BLOCKS, FONT_OPTIONS } from "@/lib/types";
 import HomeBlocksPanel from "@/components/HomeBlocksPanel";
 
@@ -40,7 +42,8 @@ export default async function ConsorzioPage({
 
         <div className="card">
           <h2>Identità del portale</h2>
-          <form action={updateSettings}>
+          {/* la chiave cambia coi colori: dopo "Ripristina i verdi" i selettori mostrano quelli nuovi */}
+          <ModuloAutoSalva azione={updateSettings} key={`${s.colorPrimary}${s.colorAccent}`}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <label className="field">
                 Nome del portale
@@ -60,9 +63,11 @@ export default async function ConsorzioPage({
                 Colore accento (barre, evidenze)
                 <input type="color" name="colorAccent" defaultValue={s.colorAccent} style={{ width: "100%", height: 40, padding: 2, border: "1.5px solid var(--line)", borderRadius: 9 }} />
               </label>
-              <label className="checkbox-row" style={{ marginBottom: 14 }}>
-                <input type="checkbox" name="resetColors" /> Ripristina i verdi Garden Team
-              </label>
+              <div style={{ marginBottom: 14 }}>
+                <PulsanteAzione azione={ripristinaColori} conferma="Tornare ai verdi Garden Team per tutto il portale?">
+                  Ripristina i verdi Garden Team
+                </PulsanteAzione>
+              </div>
             </div>
             <label className="field" style={{ maxWidth: 420 }}>
               Font del portale
@@ -80,12 +85,18 @@ export default async function ConsorzioPage({
               Email di supporto del consorzio
               <input type="email" name="supportEmail" defaultValue={s.supportEmail ?? ""} placeholder="es. academy@gardenteam.biz" />
             </label>
+            <label className="field" style={{ maxWidth: 420 }}>
+              Parola segreta comune per l&apos;auto-registrazione
+              <input type="text" name="secretWord" defaultValue={s.secretWord ?? ""} placeholder="vuota = solo quelle di insegna e punto vendita" />
+              <span className="hint">
+                Vale per registrarsi in qualsiasi punto vendita, in aggiunta a quelle di insegna e PV. La richiesta va comunque approvata.
+              </span>
+            </label>
             <label className="checkbox-row">
               <input type="checkbox" name="leaderboardAnonymous" defaultChecked={!!s.leaderboardAnonymous} />
               Classifica generale anonima: ognuno vede solo la propria posizione, non i nomi degli altri
             </label>
-            <button className="btn" type="submit">Salva impostazioni portale</button>
-          </form>
+          </ModuloAutoSalva>
         </div>
 
         <div className="section">
@@ -111,7 +122,7 @@ export default async function ConsorzioPage({
               Chi arriva dal link della Formazione su My Rosaflor e non ha ancora un account qui viene
               creato al volo con questi valori (il reparto viene abbinato per nome, se coincide con uno dei vostri).
             </p>
-            <form action={saveSsoDefaults} style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
+            <ModuloAutoSalva azione={saveSsoDefaults} style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
               <label className="field" style={{ marginBottom: 0, maxWidth: 260 }}>
                 Insegna assegnata
                 <select name="ssoDefaultTenantId" defaultValue={s.ssoDefaultTenantId ?? ""}>
@@ -126,8 +137,7 @@ export default async function ConsorzioPage({
                   {db.stores.map((st) => <option key={st.id} value={st.id}>{st.name}</option>)}
                 </select>
               </label>
-              <button className="btn btn-sm" type="submit">Salva</button>
-            </form>
+            </ModuloAutoSalva>
           </div>
         </div>
 

@@ -11,6 +11,8 @@ import {
   addGroupMember,
   removeGroupMember,
 } from "@/lib/actions";
+import ModuloAutoSalva from "@/components/ModuloAutoSalva";
+import { ModuloInvio, PulsanteAzione } from "@/components/AzioneSenzaRicarica";
 
 export default async function OrgPage({
   searchParams,
@@ -117,7 +119,7 @@ export default async function OrgPage({
                     </div>
                     <div style={{ marginTop: 10, display: "flex", gap: 6, flexWrap: "wrap" }}>
                       <span className="pill" style={{ background: t.color, color: "#fff" }}>{t.color}</span>
-                      {t.secretWord ? <span className="pill pill-green">Parola segreta</span> : <span className="pill pill-gray">Nessuna parola segreta</span>}
+                      {t.secretWord ? <span className="pill pill-green">Parola segreta</span> : db.settings.secretWord ? <span className="pill pill-gray">Usa quella comune</span> : <span className="pill pill-gray">Nessuna parola segreta</span>}
                       {t.approvalEmail ? <span className="pill pill-green">{t.approvalEmail}</span> : <span className="pill pill-gray">Email approvazione mancante</span>}
                     </div>
                   </a>
@@ -170,17 +172,16 @@ export default async function OrgPage({
               return (
                 <div className="card" key={d.id}>
                   {editable ? (
-                    <form action={saveDepartment.bind(null, d.id)}>
+                    <ModuloAutoSalva azione={saveDepartment.bind(null, d.id)}>
                       <div style={{ display: "grid", gridTemplateColumns: "60px 1fr", gap: 8 }}>
                         <label className="field">Emoji<input type="text" name="emoji" defaultValue={d.emoji} maxLength={4} /></label>
                         <label className="field">Nome reparto<input type="text" name="name" defaultValue={d.name} required /></label>
                       </div>
                       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                        <button className="btn btn-sm" type="submit">Salva</button>
                         <span className="pill pill-gray">{scopeLabel(d)}</span>
                         <span className="pill pill-blue">{inUse} persone</span>
                       </div>
-                    </form>
+                    </ModuloAutoSalva>
                   ) : (
                     <div>
                       <strong>{d.emoji} {d.name}</strong>
@@ -191,18 +192,19 @@ export default async function OrgPage({
                     </div>
                   )}
                   {editable && (
-                    <form action={deleteDepartment.bind(null, d.id)} style={{ marginTop: 8 }}>
-                      <button className="btn btn-outline btn-sm" type="submit" style={{ color: "var(--red)", borderColor: "var(--red)" }}>
+                    <div style={{ marginTop: 8 }}>
+                      <PulsanteAzione azione={deleteDepartment.bind(null, d.id)} style={{ color: "var(--red)", borderColor: "var(--red)" }}
+                        conferma={inUse > 0 ? `Eliminare «${d.name}»? ${inUse} persone resteranno senza reparto.` : `Eliminare «${d.name}»?`}>
                         Elimina reparto
-                      </button>
-                    </form>
+                      </PulsanteAzione>
+                    </div>
                   )}
                 </div>
               );
             })}
             <div className="card" style={{ background: "var(--green-50)" }}>
               <h3 style={{ marginTop: 0 }}>Nuovo reparto</h3>
-              <form action={saveDepartment.bind(null, null)}>
+              <ModuloInvio azione={saveDepartment.bind(null, null)}>
                 <div style={{ display: "grid", gridTemplateColumns: "60px 1fr", gap: 8 }}>
                   <label className="field">Emoji<input type="text" name="emoji" placeholder="" maxLength={4} /></label>
                   <label className="field">Nome reparto<input type="text" name="name" required placeholder="es. Vivaio esterno" /></label>
@@ -211,7 +213,7 @@ export default async function OrgPage({
                 <p style={{ fontSize: 12, color: "var(--muted)", margin: "8px 0 0" }}>
                   {user.role === "system_admin" ? "Sarà un reparto di sistema (tutte le insegne)." : user.role === "group_admin" ? "Sarà un reparto della tua insegna." : "Sarà un reparto del tuo punto vendita."}
                 </p>
-              </form>
+              </ModuloInvio>
             </div>
           </div>
         </div>
@@ -230,13 +232,12 @@ export default async function OrgPage({
               return (
                 <div className="card" key={g.id}>
                   {editable ? (
-                    <form action={saveGroup.bind(null, g.id)}>
-                      <div style={{ display: "grid", gridTemplateColumns: "60px 1fr auto", gap: 8, alignItems: "end" }}>
+                    <ModuloAutoSalva azione={saveGroup.bind(null, g.id)}>
+                      <div style={{ display: "grid", gridTemplateColumns: "60px 1fr", gap: 8, alignItems: "end" }}>
                         <label className="field" style={{ marginBottom: 0 }}>Emoji<input type="text" name="emoji" defaultValue={g.emoji} maxLength={4} /></label>
                         <label className="field" style={{ marginBottom: 0 }}>Nome gruppo<input type="text" name="name" defaultValue={g.name} required /></label>
-                        <button className="btn btn-sm" type="submit">Salva</button>
                       </div>
-                    </form>
+                    </ModuloAutoSalva>
                   ) : (
                     <strong>{g.emoji} {g.name}</strong>
                   )}
@@ -252,9 +253,7 @@ export default async function OrgPage({
                           <span style={{ color: "var(--muted)", fontSize: 12 }}> · {db.stores.find((s) => s.id === m.storeId)?.name ?? "Consorzio"}</span>
                         </span>
                         {editable && (
-                          <form action={removeGroupMember.bind(null, g.id, m.id)}>
-                            <button className="btn btn-outline btn-sm" type="submit" title="Rimuovi dal gruppo">✕</button>
-                          </form>
+                          <PulsanteAzione azione={removeGroupMember.bind(null, g.id, m.id)} title="Rimuovi dal gruppo">✕</PulsanteAzione>
                         )}
                       </div>
                     ))}
@@ -262,7 +261,7 @@ export default async function OrgPage({
                   </div>
                   {editable && (
                     <>
-                      <form action={addGroupMember.bind(null, g.id)} style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                      <ModuloInvio azione={addGroupMember.bind(null, g.id)} style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
                         <select name="userId" required defaultValue="" style={{ flex: 1, marginTop: 0 }}>
                           <option value="" disabled>— Aggiungi una persona —</option>
                           {addable.map((u) => (
@@ -272,12 +271,13 @@ export default async function OrgPage({
                           ))}
                         </select>
                         <button className="btn btn-sm" type="submit">Aggiungi</button>
-                      </form>
-                      <form action={deleteGroup.bind(null, g.id)} style={{ marginTop: 8 }}>
-                        <button className="btn btn-outline btn-sm" type="submit" style={{ color: "var(--red)", borderColor: "var(--red)" }}>
+                      </ModuloInvio>
+                      <div style={{ marginTop: 8 }}>
+                        <PulsanteAzione azione={deleteGroup.bind(null, g.id)} style={{ color: "var(--red)", borderColor: "var(--red)" }}
+                          conferma={`Eliminare il gruppo «${g.name}»?`}>
                           Elimina gruppo
-                        </button>
-                      </form>
+                        </PulsanteAzione>
+                      </div>
                     </>
                   )}
                 </div>
@@ -285,7 +285,7 @@ export default async function OrgPage({
             })}
             <div className="card" style={{ background: "var(--green-50)" }}>
               <h3 style={{ marginTop: 0 }}>Nuovo gruppo</h3>
-              <form action={saveGroup.bind(null, null)}>
+              <ModuloInvio azione={saveGroup.bind(null, null)}>
                 <div style={{ display: "grid", gridTemplateColumns: "60px 1fr", gap: 8 }}>
                   <label className="field">Emoji<input type="text" name="emoji" placeholder="" maxLength={4} /></label>
                   <label className="field">Nome gruppo<input type="text" name="name" required placeholder="es. Referenti sicurezza" /></label>
@@ -294,7 +294,7 @@ export default async function OrgPage({
                 <p style={{ fontSize: 12, color: "var(--muted)", margin: "8px 0 0" }}>
                   {user.role === "system_admin" ? "Sarà un gruppo di sistema (tutte le insegne)." : user.role === "group_admin" ? "Sarà un gruppo della tua insegna." : "Sarà un gruppo del tuo punto vendita."}
                 </p>
-              </form>
+              </ModuloInvio>
             </div>
           </div>
         </div>

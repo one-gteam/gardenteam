@@ -3,7 +3,9 @@ import { notFound, redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import RuoliHeader from "@/components/RuoliHeader";
-import { updateTenant } from "@/lib/actions";
+import { updateTenant, creaPuntoVendita } from "@/lib/actions";
+import ModuloAutoSalva from "@/components/ModuloAutoSalva";
+import { ModuloInvio } from "@/components/AzioneSenzaRicarica";
 import { ruoloEsteso } from "@/lib/types";
 
 export default async function TenantPage({
@@ -53,7 +55,7 @@ export default async function TenantPage({
 
         <div className="card">
           <h2>Personalizzazione insegna</h2>
-          <form action={action}>
+          <ModuloAutoSalva azione={action}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 110px 110px", gap: 12 }}>
               <label className="field">
                 Nome insegna
@@ -79,15 +81,15 @@ export default async function TenantPage({
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <label className="field">
                 Parola segreta per l&apos;auto-registrazione
-                <input type="text" name="secretWord" defaultValue={t.secretWord ?? ""} placeholder="es. rosa2026 — da comunicare ai collaboratori" />
+                <input type="text" name="secretWord" defaultValue={t.secretWord ?? ""}
+                  placeholder={db.settings.secretWord ? `vuota = vale solo quella comune (${db.settings.secretWord})` : "es. rosa2026 — da comunicare ai collaboratori"} />
               </label>
               <label className="field">
                 Email che riceve le richieste di registrazione
                 <input type="email" name="approvalEmail" defaultValue={t.approvalEmail ?? ""} placeholder="es. formazione@insegna.it" />
               </label>
             </div>
-            <button className="btn" type="submit">Salva insegna</button>
-          </form>
+          </ModuloAutoSalva>
         </div>
 
         <div className="section">
@@ -99,6 +101,14 @@ export default async function TenantPage({
                 <div style={{ fontSize: 12.5, color: "var(--muted)" }}>{s.city || "—"}</div>
               </a>
             ))}
+            <div className="card" style={{ background: "var(--green-50)" }}>
+              <h3 style={{ marginTop: 0 }}>Nuovo punto vendita</h3>
+              <ModuloInvio azione={creaPuntoVendita.bind(null, id)}>
+                <label className="field">Nome<input type="text" name="name" required placeholder={`es. ${t.name} Verona`} /></label>
+                <label className="field">Città<input type="text" name="city" placeholder="es. Verona (VR)" /></label>
+                <button className="btn btn-sm" type="submit">Aggiungi punto vendita</button>
+              </ModuloInvio>
+            </div>
           </div>
         </div>
 

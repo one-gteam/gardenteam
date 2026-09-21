@@ -126,7 +126,34 @@ export function storeRanking(db: DB) {
 }
 
 /** Ruoli che un amministratore può assegnare, in base al proprio. */
+/** Ruoli da amministratore: chi li ha non si tocca da chi ha solo l'incarico. */
+export const RUOLI_AMMINISTRATORE: Role[] = ["system_admin", "group_admin", "store_admin"];
+
+/** Ha l'incarico "gestisce utenti e ruoli" senza essere amministratore. */
+export function delegatoUtenti(user: User): boolean {
+  return !!user.gestioneUtenti && !RUOLI_AMMINISTRATORE.includes(user.role) && user.active !== false;
+}
+
+/**
+ * A che livello gestisce utenti e ruoli: gli amministratori dal ruolo, gli
+ * altri dall'incarico "gestisce utenti" (al livello dove sono collocati). Il
+ * punto vendita solo se la sua insegna non ha tolto la delega ai PV.
+ */
+export function livelloGestioneUtenti(db: DB, user: User): "consorzio" | "insegna" | "pv" | null {
+  const pvConsentito = () => db.tenants.find((t) => t.id === user.tenantId)?.pvGestioneUtenti !== false;
+  if (user.role === "system_admin") return "consorzio";
+  if (user.role === "group_admin") return user.tenantId ? "insegna" : null;
+  if (user.role === "store_admin") return user.storeId && pvConsentito() ? "pv" : null;
+  if (delegatoUtenti(user)) {
+    const livello = livelloDi(user);
+    return livello === "pv" && !pvConsentito() ? null : livello;
+  }
+  return null;
+}
+
 export function assignableRolesFor(admin: User): Role[] {
+  // chi ha solo l'incarico gestisce le persone ma non nomina amministratori
+  if (delegatoUtenti(admin)) return ["manager", "dept_head", "student"];
   if (admin.role === "system_admin")
     return ["system_admin", "group_admin", "store_admin", "manager", "dept_head", "student"];
   // insegna e punto vendita possono nominare un gestore per le aree del loro ambito
@@ -140,17 +167,19 @@ export function assignableRolesFor(admin: User): Role[] {
  * se la sua insegna non ha revocato la delega (Tenant.pvGestioneUtenti).
  */
 export function canManageUsers(db: DB, admin: User): boolean {
-  if (admin.role === "system_admin" || admin.role === "group_admin") return true;
-  if (admin.role === "store_admin") {
-    const tenant = db.tenants.find((t) => t.id === admin.tenantId);
-    return tenant?.pvGestioneUtenti !== false;
-  }
-  return false;
+  return livelloGestioneUtenti(db, admin) !== null;
 }
 
 /** Ambito visibile a un utente amministrativo. */
 export function scopeUsers(db: DB, admin: User): User[] {
   if (admin.role === "system_admin") return db.users;
+  // chi ha l'incarico "gestisce utenti" vede le persone del suo livello
+  if (delegatoUtenti(admin)) {
+    const livello = livelloDi(admin);
+    if (livello === "consorzio") return db.users;
+    if (livello === "insegna") return db.users.filter((u) => u.tenantId === admin.tenantId);
+    return db.users.filter((u) => u.storeId === admin.storeId);
+  }
   // il gestore della formazione vede le persone del suo livello: Consorzio, insegna o PV
   if (admin.role === "manager" && gestisce(admin, "academy")) {
     const livello = livelloDi(admin);
