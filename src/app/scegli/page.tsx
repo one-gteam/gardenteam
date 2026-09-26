@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { GraduationCap, Armchair, PawPrint, Flower2, Users, HardDrive, ArrowRight } from "lucide-react";
+import { GraduationCap, Armchair, PawPrint, Flower2, Users, HardDrive, ArrowRight, Newspaper } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { userSites, postLoginPath, SITE_NAME, isAcademyAdmin } from "@/lib/types";
@@ -7,6 +7,7 @@ import { canManageUsers } from "@/lib/logic";
 import { puoVedereArchivio } from "@/lib/storage-audit";
 import { logout } from "@/lib/actions";
 import CambiaFotoArea from "@/components/CambiaFotoArea";
+import { getArticoliDb, vedeArticoli, articoliVisibili } from "@/lib/articoli";
 
 /** Schede delle macroaree, con fotografia di copertina in stile My Rosaflor. */
 export default async function ScegliPage() {
@@ -19,10 +20,14 @@ export default async function ScegliPage() {
   const showRuoli = canManageUsers(db, user);
 
   const showArchivio = puoVedereArchivio(user);
+  // gli articoli informativi: chi rientra nei destinatari dell'area, chi pubblica, chi gestisce
+  const articoliDb = await getArticoliDb();
+  const showArticoli = vedeArticoli(user, articoliDb);
+  const articoliDaLeggere = showArticoli ? articoliVisibili(user, articoliDb).filter((a) => !a.letture[user.id]).length : 0;
   // con una sola area si entra dritti, ma non se la sua destinazione è questa pagina
   // (è il caso di "piante", ancora in preparazione): si finirebbe in un rimbalzo infinito
   const casa = postLoginPath(user);
-  if (sites.length === 1 && !showRuoli && !showArchivio && casa !== "/scegli") redirect(casa);
+  if (sites.length === 1 && !showRuoli && !showArchivio && !showArticoli && casa !== "/scegli") redirect(casa);
 
   // chi non gestisce la formazione entra dalla parte del corsista, non dal pannello
   const academyHome = isAcademyAdmin(user) ? "/admin" : "/studente";
@@ -53,6 +58,12 @@ export default async function ScegliPage() {
       ? [{
           chiave: "piante", href: "#", foto: foto("piante", "/immagini/aree/piante.jpg"), icona: <Flower2 size={18} />,
           titolo: "Cartelli Piante", desc: "In preparazione", attiva: false,
+        }]
+      : []),
+    ...(showArticoli
+      ? [{
+          chiave: "articoli", href: "/articoli", foto: foto("articoli", "/immagini/aree/formazione.jpg"), icona: <Newspaper size={18} />,
+          titolo: "Articoli", desc: articoliDaLeggere > 0 ? `${articoliDaLeggere} da leggere` : "Comunicazioni, schede e novità", attiva: true,
         }]
       : []),
     ...(showRuoli

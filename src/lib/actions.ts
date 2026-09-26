@@ -1200,7 +1200,7 @@ export async function updateSettings(formData: FormData): Promise<{ ok: boolean;
 }
 
 /* ---------- Foto delle aree nella pagina Scegli ---------- */
-const CHIAVI_AREE = ["academy", "arredo", "zoo", "piante", "ruoli", "archivio"];
+const CHIAVI_AREE = ["academy", "arredo", "zoo", "piante", "ruoli", "archivio", "articoli"];
 
 /** L'amministratore di sistema cambia la foto di copertina di un'area (vale per tutti). */
 export async function cambiaFotoArea(chiave: string, formData: FormData): Promise<{ ok: boolean; error?: string }> {
