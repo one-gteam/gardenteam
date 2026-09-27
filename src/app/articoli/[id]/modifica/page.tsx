@@ -4,7 +4,7 @@ import { getDb } from "@/lib/db";
 import ArticoliHeader from "@/components/articoli/ArticoliHeader";
 import ArticoloForm from "@/components/articoli/ArticoloForm";
 import SceltaDestinatari from "@/components/articoli/SceltaDestinatari";
-import { getArticoliDb, pubblicaArticoli, gestisceArticoli, modificaArticolo } from "@/lib/articoli";
+import { getArticoliDb, pubblicaArticoli, gestisceArticoli, modificaArticolo, programmato, isoInOraRoma } from "@/lib/articoli";
 
 export default async function ModificaArticoloPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
@@ -23,7 +23,8 @@ export default async function ModificaArticoloPage({ params }: { params: Promise
         {a.origine === "email" && a.stato === "bozza" && (
           <div className="alert alert-amber">Arrivato per email da {a.mittenteEmail}: controlla titolo e testo, scegli chi lo vede, poi Pubblica.</div>
         )}
-        <ArticoloForm articolo={a} categorie={db.categorie} gestore={gestisceArticoli(user, db)}
+        <ArticoloForm articolo={a} categorie={db.categorie} gestore={gestisceArticoli(user, db)} modelli={db.modelli}
+          programmato={programmato(a)} esceIl={programmato(a) ? isoInOraRoma(a.pubblicato) : ""}
           destinatari={<SceltaDestinatari prefisso="dest" academy={academy} valore={a.destinatari} vuotoVuolDire="tutti quelli che hanno accesso agli articoli" conTutti={false} />} />
       </div>
     </div>

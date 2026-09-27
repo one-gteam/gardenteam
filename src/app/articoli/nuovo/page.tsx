@@ -19,7 +19,7 @@ export default async function NuovoArticoloPage() {
         <p className="subtitle">
           Titolo, descrizione e allegati. {db.email.attiva && db.email.indirizzo && <>Oppure spedisci un&apos;email a <strong>{db.email.indirizzo}</strong>: l&apos;oggetto diventa il titolo, il corpo la descrizione, gli allegati restano allegati.</>}
         </p>
-        <ArticoloForm categorie={db.categorie} gestore={gestisceArticoli(user, db)}
+        <ArticoloForm categorie={db.categorie} gestore={gestisceArticoli(user, db)} modelli={db.modelli}
           destinatari={<SceltaDestinatari prefisso="dest" academy={academy} vuotoVuolDire="tutti quelli che hanno accesso agli articoli" conTutti={false} />} />
       </div>
     </div>

@@ -10,7 +10,7 @@ export default async function ArticoliHeader({
   user, active, pubblica, gestisce,
 }: {
   user: User;
-  active: "articoli" | "nuovo" | "gestione";
+  active: "articoli" | "nuovo" | "gestione" | "statistiche";
   pubblica: boolean;
   gestisce: boolean;
 }) {
@@ -18,6 +18,7 @@ export default async function ArticoliHeader({
   const voci = [
     { href: "/articoli", label: "Articoli", key: "articoli" },
     ...(pubblica ? [{ href: "/articoli/nuovo", label: "＋ Nuovo articolo", key: "nuovo" }] : []),
+    ...(pubblica ? [{ href: "/articoli/statistiche", label: "Statistiche", key: "statistiche" }] : []),
     ...(gestisce ? [{ href: "/articoli/gestione", label: "Gestione", key: "gestione" }] : []),
   ];
   return (

@@ -80,8 +80,24 @@ export interface SendResult {
   id?: string;
 }
 
+/** Opzioni in più: HTML già composto (newsletter), nome del mittente, intestazioni. */
+export interface OpzioniMail {
+  html?: string;
+  /** Il nome che si legge come mittente ("GT One"); l'indirizzo resta quello di EMAIL_FROM. */
+  nomeMittente?: string;
+  headers?: Record<string, string>;
+}
+
+/** "Academy GT <noreply@x>" con un altro nome davanti: l'indirizzo verificato non cambia. */
+function mittenteCon(from: string, nome?: string): string {
+  if (!nome) return from;
+  const m = /<([^>]+)>/.exec(from);
+  const indirizzo = (m ? m[1] : from).trim();
+  return `${nome.replace(/[<>"]/g, "")} <${indirizzo}>`;
+}
+
 /** Invia una singola email. Non solleva mai: gli errori tornano nel risultato. */
-export async function sendMail(to: string, subject: string, body: string): Promise<SendResult> {
+export async function sendMail(to: string, subject: string, body: string, opzioni: OpzioniMail = {}): Promise<SendResult> {
   const cfg = mailerConfig();
   if (!cfg.enabled) return { sent: null };
 
@@ -97,11 +113,14 @@ export async function sendMail(to: string, subject: string, body: string): Promi
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: cfg.from,
+        from: mittenteCon(cfg.from!, opzioni.nomeMittente),
         to: [realTo],
         subject,
         text,
-        html: wrap(subject, text),
+        html: opzioni.html
+          ? (cfg.testTo ? opzioni.html.replace("<body", `<body data-prova="${escapeHtml(to)}"`) : opzioni.html)
+          : wrap(subject, text),
+        ...(opzioni.headers ? { headers: opzioni.headers } : {}),
         ...(cfg.replyTo ? { reply_to: cfg.replyTo } : {}),
       }),
       signal: AbortSignal.timeout(15000),

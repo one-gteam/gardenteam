@@ -63,6 +63,46 @@ export interface Articolo {
   letture: Record<string, string>;
   /** Gli articoli già inclusi in una newsletter non si rimandano. */
   inNewsletter?: string;
+  /** Il modello da cui è nato (circolare, scheda prodotto…). */
+  modelloId?: string;
+  /** Ultima modifica sostanziale (testo o allegati) dopo la pubblicazione. */
+  aggiornato?: string;
+  /** Com'era prima di ogni modifica sostanziale: testo e allegati di allora. */
+  versioni?: VersioneArticolo[];
+}
+
+export interface VersioneArticolo {
+  data: string;
+  autoreNome: string;
+  titolo: string;
+  testo: string;
+  allegati: Allegato[];
+}
+
+/**
+ * Modello di articolo: categoria, scheletro del testo, destinatari e istruzioni
+ * per l'AI già pronti. "Circolare", "Scheda prodotto", "Procedura".
+ */
+export interface ModelloArticolo {
+  id: string;
+  nome: string;
+  emoji?: string;
+  categoriaId?: string;
+  /** HTML di partenza dell'editor. */
+  testo: string;
+  /** Come deve scrivere l'AI per questo tipo di articolo. */
+  istruzioniAi?: string;
+  destinatari?: Destinatari;
+}
+
+/** Un'email letta dalla casella: cosa ne è stato. */
+export interface VoceRegistroEmail {
+  data: string;
+  da: string;
+  oggetto: string;
+  esito: "pubblicato" | "bozza" | "rifiutato" | "errore";
+  nota?: string;
+  articoloId?: string;
 }
 
 export interface Categoria {
@@ -87,6 +127,18 @@ export interface EmailIngresso {
   indirizzo?: string;
   /** Email da mittenti non riconosciuti: rifiutate, o messe in bozza da rivedere. */
   sconosciuti: "rifiuta" | "bozza";
+  /**
+   * La casella letta via IMAP (Zoho, Gmail…): la imposta solo l'amministratore
+   * di sistema. La password è cifrata e non torna mai al browser.
+   */
+  imap?: { host: string; porta: number; utente: string; passwordCifrata?: string; cartella: string };
+  ultimoControllo?: string;
+  ultimoErrore?: string;
+  /** Un giro alla volta: chi trova questo segno recente non riparte. */
+  inCorso?: string;
+  /** Message-ID già lette, per non importare due volte (le ultime 500). */
+  visti?: string[];
+  registro?: VoceRegistroEmail[];
 }
 
 export interface ArticoliDB {
@@ -97,7 +149,27 @@ export interface ArticoliDB {
   gestori: Destinatari;
   newsletter: Newsletter;
   email: EmailIngresso;
+  modelli: ModelloArticolo[];
 }
+
+/** I modelli di partenza: si creano la prima volta, poi si correggono dalla Gestione. */
+const MODELLI_INIZIALI: ModelloArticolo[] = [
+  {
+    id: "mod_circolare", nome: "Circolare", emoji: "📣",
+    testo: "<h3>Cosa cambia</h3><p></p><h3>Da quando</h3><p></p><h3>Cosa fare in negozio</h3><ul><li></li></ul><p><b>Riferimento:</b> </p>",
+    istruzioniAi: "È una circolare: di' subito cosa cambia, da quando vale e cosa deve fare il personale in negozio. Chiudi con il referente se c'è.",
+  },
+  {
+    id: "mod_scheda", nome: "Scheda prodotto", emoji: "🏷️",
+    testo: "<h3>Il prodotto</h3><p></p><h3>Punti di forza da dire al cliente</h3><ul><li></li></ul><h3>Come si usa</h3><p></p>",
+    istruzioniAi: "È una scheda prodotto per il venditore: cos'è, a chi si consiglia, 3-4 argomenti di vendita in elenco, come si usa. Riporta prezzi e formati se ci sono.",
+  },
+  {
+    id: "mod_procedura", nome: "Procedura", emoji: "🧭",
+    testo: "<h3>Quando si applica</h3><p></p><h3>Passo per passo</h3><ol><li></li></ol><h3>Attenzione a</h3><ul><li></li></ul>",
+    istruzioniAi: "È una procedura operativa: quando si applica, i passi numerati nell'ordine in cui si fanno, gli errori da evitare.",
+  },
+];
 
 const VUOTO: ArticoliDB = {
   articoli: [],
@@ -107,6 +179,7 @@ const VUOTO: ArticoliDB = {
   gestori: {},
   newsletter: { attiva: false, ogni: "settimana", minimo: 1, iscritti: [] },
   email: { attiva: false, sconosciuti: "rifiuta" },
+  modelli: MODELLI_INIZIALI,
 };
 
 export async function getArticoliDb(): Promise<ArticoliDB> {
@@ -116,6 +189,7 @@ export async function getArticoliDb(): Promise<ArticoliDB> {
   out.categorie ??= [];
   out.newsletter = { ...VUOTO.newsletter, ...(out.newsletter ?? {}) };
   out.email = { ...VUOTO.email, ...(out.email ?? {}) };
+  out.modelli ??= MODELLI_INIZIALI.map((m) => ({ ...m }));
   for (const a of out.articoli) {
     a.allegati ??= [];
     a.link ??= [];
@@ -167,11 +241,36 @@ export function vedeArticoli(user: User, db: ArticoliDB): boolean {
 }
 
 /** L'articolo è per questa persona? Pubblicato, non scaduto, e nei suoi destinatari. */
+/** Pubblicato e con la data di uscita già arrivata (i programmati aspettano la loro ora). */
+export function uscito(a: Articolo, oggi = new Date()): boolean {
+  return a.stato === "pubblicato" && !!a.pubblicato && new Date(a.pubblicato) <= oggi;
+}
+
+/** Scaduto: passa in archivio, fuori dall'elenco. */
+export function scaduto(a: Articolo, oggi = new Date()): boolean {
+  return !!a.scadenza && new Date(`${a.scadenza}T23:59:59`) < oggi;
+}
+
+/** La persona rientra fra chi lo vede (a prescindere da uscita e scadenza). */
+export function destinatarioDi(user: User, a: Articolo, db: ArticoliDB): boolean {
+  return vedeArticoli(user, db) && (destinatariVuoti(a.destinatari) || corrisponde(user, a.destinatari));
+}
+
 export function articoloPer(user: User, a: Articolo, db: ArticoliDB, oggi = new Date()): boolean {
-  if (!vedeArticoli(user, db)) return false;
-  if (a.stato !== "pubblicato") return false;
-  if (a.scadenza && new Date(`${a.scadenza}T23:59:59`) < oggi) return false;
-  return destinatariVuoti(a.destinatari) || corrisponde(user, a.destinatari);
+  return uscito(a, oggi) && !scaduto(a, oggi) && destinatarioDi(user, a, db);
+}
+
+/** L'archivio: gli articoli scaduti che la persona avrebbe visto, dal più recente. */
+export function articoliArchivio(user: User, db: ArticoliDB): Articolo[] {
+  const oggi = new Date();
+  return db.articoli
+    .filter((a) => uscito(a, oggi) && scaduto(a, oggi) && destinatarioDi(user, a, db))
+    .sort((a, b) => (b.pubblicato ?? b.creato).localeCompare(a.pubblicato ?? a.creato));
+}
+
+/** Programmati: pubblicati con la data di uscita nel futuro. */
+export function programmato(a: Articolo, oggi = new Date()): boolean {
+  return a.stato === "pubblicato" && !!a.pubblicato && new Date(a.pubblicato) > oggi;
 }
 
 /** Lo può modificare: chi gestisce, o chi l'ha scritto. */
@@ -292,6 +391,40 @@ export function newsletterDovuta(n: Newsletter, adesso = new Date()): boolean {
 }
 
 export const FUSO_ARTICOLI = "Europe/Rome";
+
+/**
+ * "2026-10-01T08:00" scritto da una persona in Italia → istante vero. Il
+ * server gira in UTC: senza questo conto un articolo programmato alle 8
+ * usciva alle 10 d'estate e alle 9 d'inverno.
+ */
+export function oraRomaInIso(locale: string): string | undefined {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(locale);
+  if (!m) return undefined;
+  const [, a, me, g, h, mi] = m.map(Number) as unknown as number[];
+  const comeUtc = Date.UTC(a, me - 1, g, h, mi);
+  // quanto è avanti Roma rispetto a UTC in quel momento (1 o 2 ore)
+  const parti = new Intl.DateTimeFormat("en-GB", {
+    timeZone: FUSO_ARTICOLI, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false,
+  }).formatToParts(new Date(comeUtc));
+  const v = (t: string) => Number(parti.find((p) => p.type === t)?.value);
+  const romaComeUtc = Date.UTC(v("year"), v("month") - 1, v("day"), v("hour") % 24, v("minute"));
+  return new Date(comeUtc - (romaComeUtc - comeUtc)).toISOString();
+}
+
+/** L'istante in ora italiana, nel formato del campo datetime-local. */
+export function isoInOraRoma(iso?: string): string {
+  if (!iso) return "";
+  const parti = new Intl.DateTimeFormat("en-GB", {
+    timeZone: FUSO_ARTICOLI, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false,
+  }).formatToParts(new Date(iso));
+  const v = (t: string) => parti.find((p) => p.type === t)?.value ?? "";
+  return `${v("year")}-${v("month")}-${v("day")}T${v("hour") === "24" ? "00" : v("hour")}:${v("minute")}`;
+}
+
+export function dataOraItaliana(iso: string): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "" : `${d.toLocaleDateString("it-IT", { day: "numeric", month: "long", timeZone: FUSO_ARTICOLI })} alle ${d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit", timeZone: FUSO_ARTICOLI })}`;
+}
 
 export function dataItaliana(iso: string): string {
   const d = new Date(iso);

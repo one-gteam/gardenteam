@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { createHmac, timingSafeEqual } from "crypto";
+import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from "crypto";
 import { getDb } from "./db";
 import { postLoginPath, SiteId, User, userSites } from "./types";
 
@@ -35,6 +35,50 @@ function idDaBiscotto(valore: string): string | null {
   const attesa = Buffer.from(createHmac("sha256", segreto).update(id).digest("base64url"));
   if (firma.length !== attesa.length || !timingSafeEqual(firma, attesa)) return null;
   return id;
+}
+
+/*
+ * Firma per uno scopo preciso ("disiscrivi", …): stesso segreto della sessione
+ * ma col nome dello scopo davanti, così un link spedito per email non vale mai
+ * come biscotto di accesso (e viceversa).
+ */
+export function firmaPer(scopo: string, valore: string): string {
+  const segreto = segretoSessione();
+  if (!segreto) return "";
+  return createHmac("sha256", `${scopo}:${segreto}`).update(valore).digest("base64url");
+}
+
+export function firmaValida(scopo: string, valore: string, firma: string): boolean {
+  const attesa = firmaPer(scopo, valore);
+  if (!attesa || !firma) return false;
+  const a = Buffer.from(attesa), b = Buffer.from(firma);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+/*
+ * Cifratura dei segreti salvati nel database (la password della casella email
+ * degli articoli): AES-256-GCM con una chiave ricavata dal segreto del server.
+ * Chi legge il database senza il segreto non legge la password.
+ */
+function chiaveCifratura(): Buffer {
+  const segreto = segretoSessione();
+  if (!segreto) throw new Error("Manca AUTH_COOKIE_SECRET/SSO_SHARED_SECRET: impossibile cifrare");
+  return createHash("sha256").update(`cifratura:${segreto}`).digest();
+}
+
+export function cifra(testo: string): string {
+  const iv = randomBytes(12);
+  const c = createCipheriv("aes-256-gcm", chiaveCifratura(), iv);
+  const dati = Buffer.concat([c.update(testo, "utf8"), c.final()]);
+  return `v1.${iv.toString("base64url")}.${c.getAuthTag().toString("base64url")}.${dati.toString("base64url")}`;
+}
+
+export function decifra(cifrato: string): string {
+  const [v, iv, tag, dati] = cifrato.split(".");
+  if (v !== "v1" || !iv || !tag || !dati) throw new Error("Formato cifrato sconosciuto");
+  const d = createDecipheriv("aes-256-gcm", chiaveCifratura(), Buffer.from(iv, "base64url"));
+  d.setAuthTag(Buffer.from(tag, "base64url"));
+  return Buffer.concat([d.update(Buffer.from(dati, "base64url")), d.final()]).toString("utf8");
 }
 
 /*

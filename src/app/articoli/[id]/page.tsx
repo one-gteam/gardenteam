@@ -4,7 +4,8 @@ import { getDb } from "@/lib/db";
 import ArticoliHeader from "@/components/articoli/ArticoliHeader";
 import { SegnaLetto } from "@/components/articoli/StrumentiArticolo";
 import {
-  getArticoliDb, vedeArticoli, pubblicaArticoli, gestisceArticoli, articoloPer, modificaArticolo, dataItaliana, testoDestinatari,
+  getArticoliDb, vedeArticoli, pubblicaArticoli, gestisceArticoli, modificaArticolo, dataItaliana, testoDestinatari,
+  destinatarioDi, uscito, scaduto, programmato, dataOraItaliana,
 } from "@/lib/articoli";
 import { ROLE_LABELS } from "@/lib/types";
 
@@ -18,8 +19,8 @@ export default async function ArticoloPage({ params }: { params: Promise<{ id: s
   const a = db.articoli.find((x) => x.id === id);
   if (!a) notFound();
   const modifica = modificaArticolo(user, a, db);
-  // una bozza la vede solo chi la può modificare
-  if (!articoloPer(user, a, db) && !modifica) notFound();
+  // bozze e programmati li vede solo chi li può modificare; gli scaduti restano leggibili (archivio)
+  if (!modifica && !(uscito(a) && destinatarioDi(user, a, db))) notFound();
   const cat = db.categorie.find((c) => c.id === a.categoriaId);
   const letture = Object.entries(a.letture).map(([uid, quando]) => {
     const u = academy.users.find((x) => x.id === uid);
@@ -36,6 +37,8 @@ export default async function ArticoloPage({ params }: { params: Promise<{ id: s
         <article className="articolo-pagina">
           <div className="chips" style={{ marginBottom: 8 }}>
             {a.stato === "bozza" && <span className="pill pill-amber">Bozza — non ancora pubblicato</span>}
+            {programmato(a) && <span className="pill pill-blue">🕒 Programmato: esce il {dataOraItaliana(a.pubblicato!)}</span>}
+            {scaduto(a) && <span className="pill pill-gray">In archivio — scaduto il {dataItaliana(`${a.scadenza}T12:00:00`)}</span>}
             {a.inEvidenza && <span className="pill pill-orange">In evidenza</span>}
             {cat && <span className="pill pill-green">{cat.emoji ? `${cat.emoji} ` : ""}{cat.nome}</span>}
             {a.origine === "email" && <span className="pill pill-gray" title={`Spedito da ${a.mittenteEmail}`}>✉ arrivato per email</span>}
@@ -43,7 +46,8 @@ export default async function ArticoloPage({ params }: { params: Promise<{ id: s
           <h1 style={{ margin: "0 0 6px" }}>{a.titolo}</h1>
           <p className="subtitle" style={{ marginTop: 0 }}>
             {dataItaliana(a.pubblicato ?? a.creato)} · {a.autoreNome}
-            {a.scadenza && <> · valido fino al {dataItaliana(`${a.scadenza}T12:00:00`)}</>}
+            {a.aggiornato && <> · <strong>aggiornato il {dataItaliana(a.aggiornato)}</strong></>}
+            {a.scadenza && !scaduto(a) && <> · valido fino al {dataItaliana(`${a.scadenza}T12:00:00`)}</>}
           </p>
           {modifica && (
             <div className="chips" style={{ marginBottom: 14 }}>
@@ -76,6 +80,33 @@ export default async function ArticoloPage({ params }: { params: Promise<{ id: s
                 {a.link.map((l) => <li key={l.url}><a href={l.url} target="_blank" rel="noopener noreferrer">{l.titolo || l.url}</a></li>)}
               </ul>
             </div>
+          )}
+          {(a.versioni?.length ?? 0) > 0 && (
+            <details className="card" style={{ marginTop: 14 }}>
+              <summary style={{ cursor: "pointer", fontWeight: 700 }}>
+                Versioni precedenti ({a.versioni!.length})
+              </summary>
+              <p className="hint" style={{ margin: "6px 0 10px" }}>Com&apos;era prima di ogni aggiornamento: testo e allegati di allora.</p>
+              {a.versioni!.map((v, i) => (
+                <details key={i} className="versione">
+                  <summary>
+                    <strong>{dataItaliana(v.data)}</strong>
+                    {v.titolo !== a.titolo && <span className="hint"> · «{v.titolo}»</span>}
+                    {v.allegati.length > 0 && <span className="hint"> · 📎 {v.allegati.map((x) => x.nome).join(", ")}</span>}
+                  </summary>
+                  <div className="articolo-testo versione-testo" dangerouslySetInnerHTML={{ __html: v.testo || "<p><i>Senza descrizione.</i></p>" }} />
+                  {v.allegati.length > 0 && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
+                      {v.allegati.map((x) => (
+                        <a key={x.url} href={x.url} target="_blank" rel="noopener noreferrer" className="allegato-riga">
+                          {x.tipo === "application/pdf" ? "📄" : "🖼"} {x.nome} <span className="hint">versione del {dataItaliana(v.data)}</span>
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </details>
+              ))}
+            </details>
           )}
           {modifica && letture.length > 0 && (
             <details className="card" style={{ marginTop: 14 }}>

@@ -23,6 +23,8 @@ const IMMAGINI = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"])
 const MAX_BYTES = 20 * 1024 * 1024;
 
 export async function descrizioneConAi(dati: {
+  /** Come scrivere per questo tipo di articolo (dal modello). */
+  istruzioni?: string;
   titolo: string;
   testo?: string;
   link?: string[];
@@ -44,6 +46,7 @@ export async function descrizioneConAi(dati: {
   }
   const richiesta = [
     `Titolo dell'articolo: ${dati.titolo || "(senza titolo)"}`,
+    dati.istruzioni ?? "",
     dati.testo ? `Appunti già scritti dall'autore:\n${dati.testo}` : "",
     dati.link?.length ? `Link collegati:\n${dati.link.join("\n")}` : "",
     "",

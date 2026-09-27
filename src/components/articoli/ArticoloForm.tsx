@@ -4,7 +4,7 @@ import { useRef, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import EditorTesto, { type EditorTestoHandle } from "./EditorTesto";
 import { salvaArticolo, descrizioneAi, eliminaArticolo } from "@/lib/articoli-actions";
-import type { Allegato, Articolo, Categoria, LinkEsterno } from "@/lib/articoli";
+import type { Allegato, Articolo, Categoria, LinkEsterno, ModelloArticolo } from "@/lib/articoli";
 
 /**
  * Il modulo dell'articolo, per crearlo e per correggerlo: titolo, categoria,
@@ -14,12 +14,16 @@ import type { Allegato, Articolo, Categoria, LinkEsterno } from "@/lib/articoli"
  * e mette il testo nell'editor, da correggere.
  */
 export default function ArticoloForm({
-  articolo, categorie, destinatari, gestore,
+  articolo, categorie, destinatari, gestore, modelli = [], esceIl = "", programmato = false,
 }: {
   articolo?: Articolo;
   categorie: Categoria[];
   destinatari: ReactNode;
   gestore: boolean;
+  modelli?: ModelloArticolo[];
+  /** "Esce il" già scritto in ora italiana (articolo programmato). */
+  esceIl?: string;
+  programmato?: boolean;
 }) {
   const router = useRouter();
   const editor = useRef<EditorTestoHandle>(null);
@@ -30,6 +34,27 @@ export default function ArticoloForm({
   const [link, setLink] = useState<LinkEsterno[]>(articolo?.link?.length ? articolo.link : []);
   const [allegatiEsistenti, setAllegatiEsistenti] = useState<Allegato[]>(articolo?.allegati ?? []);
   const [nuoviFile, setNuoviFile] = useState<string[]>([]);
+  const [modelloId, setModelloId] = useState(articolo?.modelloId ?? "");
+  const categoria = useRef<HTMLSelectElement>(null);
+  const [quando, setQuando] = useState(esceIl);
+
+  /*
+   * Scegliere un modello: categoria, scheletro del testo e destinatari già
+   * pronti. Se nell'editor c'è già del testo si chiede prima di sostituirlo.
+   */
+  const applicaModello = (id: string) => {
+    setModelloId(id);
+    const m = modelli.find((x) => x.id === id);
+    if (!m || !form.current) return;
+    if (m.categoriaId && categoria.current) categoria.current.value = m.categoriaId;
+    const attuale = (editor.current?.html() ?? "").replace(/<[^>]+>/g, "").trim();
+    if (m.testo && (!attuale || window.confirm("Sostituire il testo scritto con lo schema del modello?"))) editor.current?.imposta(m.testo);
+    const d = m.destinatari ?? {};
+    const scelti = new Set([...(d.ruoli ?? []), ...(d.tenantIds ?? []), ...(d.storeIds ?? []), ...(d.departmentIds ?? []), ...(d.groupIds ?? []), ...(d.userIds ?? [])]);
+    if (scelti.size > 0) {
+      for (const c of form.current.querySelectorAll<HTMLInputElement>('input[type="checkbox"][name^="dest_"]')) c.checked = scelti.has(c.value);
+    }
+  };
 
   const invia = (stato: "pubblicato" | "bozza") => {
     if (!form.current) return;
@@ -66,12 +91,24 @@ export default function ArticoloForm({
 
   return (
     <form ref={form} className="articolo-form" onSubmit={(e) => { e.preventDefault(); invia("pubblicato"); }}>
+      <input type="hidden" name="modelloId" value={modelloId} />
+      {modelli.length > 0 && !articolo && (
+        <div className="modelli-scelta">
+          <span className="hint">Parti da un modello:</span>
+          {modelli.map((m) => (
+            <button key={m.id} type="button" className={`chip ${modelloId === m.id ? "on" : ""}`} onClick={() => applicaModello(m.id)}>
+              {m.emoji ? `${m.emoji} ` : ""}{m.nome}
+            </button>
+          ))}
+          {modelloId && <button type="button" className="chip" onClick={() => setModelloId("")}>✕ nessun modello</button>}
+        </div>
+      )}
       <div className="card">
         <div style={{ display: "grid", gridTemplateColumns: "1fr 220px", gap: 12 }}>
           <label className="field">Titolo *<input type="text" name="titolo" required defaultValue={articolo?.titolo ?? ""} placeholder="es. Nuove regole per i resi" autoFocus /></label>
           <label className="field">
             Categoria
-            <select name="categoriaId" defaultValue={articolo?.categoriaId ?? ""}>
+            <select ref={categoria} name="categoriaId" defaultValue={articolo?.categoriaId ?? ""}>
               <option value="">— nessuna —</option>
               {categorie.map((c) => <option key={c.id} value={c.id}>{c.emoji ? `${c.emoji} ` : ""}{c.nome}</option>)}
             </select>
@@ -138,10 +175,21 @@ export default function ArticoloForm({
             </label>
           )}
           <label className="field" style={{ marginBottom: 0 }}>
-            Scade il <span className="hint">(dopo sparisce dall&apos;elenco)</span>
+            Esce il <span className="hint">(vuoto = subito)</span>
+            <input type="datetime-local" name="esceIl" value={quando} onChange={(e) => setQuando(e.target.value)} />
+          </label>
+          <label className="field" style={{ marginBottom: 0 }}>
+            Scade il <span className="hint">(poi va in archivio)</span>
             <input type="date" name="scadenza" defaultValue={articolo?.scadenza ?? ""} />
           </label>
         </div>
+        {articolo?.stato === "pubblicato" && !programmato && (
+          <label className="interruttore-grande" style={{ marginTop: 12 }}
+            title="Se cambi testo o allegati, chi l'aveva già letto lo ritrova fra i nuovi. La versione di prima resta consultabile.">
+            <input type="checkbox" name="rileggere" value="1" />
+            Cambio importante: segnalo come da rileggere
+          </label>
+        )}
       </div>
 
       {errore && <div className="alert alert-amber" style={{ marginTop: 12 }}>{errore}</div>}
@@ -154,7 +202,9 @@ export default function ArticoloForm({
         )}
         <span style={{ flex: 1 }} />
         <button type="button" className="btn btn-outline" disabled={pending} onClick={() => invia("bozza")}>Salva come bozza</button>
-        <button type="submit" className="btn" disabled={pending}>{pending ? "Salvo…" : articolo?.stato === "pubblicato" ? "Salva" : "Pubblica"}</button>
+        <button type="submit" className="btn" disabled={pending}>
+          {pending ? "Salvo…" : quando && new Date(quando) > new Date() ? "Programma" : articolo?.stato === "pubblicato" ? "Salva" : "Pubblica"}
+        </button>
       </div>
     </form>
   );
