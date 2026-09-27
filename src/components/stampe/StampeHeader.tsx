@@ -48,6 +48,7 @@ export default async function StampeHeader({
         { href: "/stampe/arredo/dati", label: "Dati prodotti", key: "dati" },
         ...(gestArredo ? [{ href: "/stampe/arredo/layout", label: "Layout", key: "layout" }] : []),
         { href: "/stampe/arredo/stampa", label: "Stampa cartelli", key: "stampa" },
+        ...(gestArredo ? [{ href: "/stampe/arredo/scheda", label: "Scheda online", key: "scheda" }] : []),
         { href: "/stampe/arredo/linee-guida", label: "Linee guida", key: "linee-guida" },
         ...(gestArredo ? [{ href: "/stampe/impostazioni", label: "Impostazioni", key: "impostazioni" }] : []),
         ...(sites.length > 1 ? [{ href: "/scegli", label: "⇄ Cambia area", key: "academy" }] : []),

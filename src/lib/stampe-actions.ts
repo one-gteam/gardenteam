@@ -16,7 +16,9 @@ import {
   effectiveValue,
   ScopeType,
   sanitizeMargins,
+  Cornice,
 } from "./stampe";
+import { ELEMENTO_IMMAGINE, ELEMENTO_QR, ELEMENTO_RIQUADRO, gruppoDi } from "./cartello-campi";
 import { postLoginPath } from "./types";
 import { LAYOUT_FONTS } from "./layout-fonts";
 
@@ -122,12 +124,85 @@ export async function toggleFieldHidden(fieldId: string, scopeParam: string, pro
     (p) => p.scopeType === scope.type && p.scopeId === scope.id && p.fieldId === fieldId
   );
   if (existing) {
-    db.fieldPrefs = db.fieldPrefs.filter((p) => p !== existing);
+    existing.hidden = !existing.hidden;
+    // scelta tornata quella di default (sul cartello e online): la riga non serve più
+    if (!existing.hidden && existing.online !== false) db.fieldPrefs = db.fieldPrefs.filter((p) => p !== existing);
   } else {
     db.fieldPrefs.push({ scopeType: scope.type, scopeId: scope.id, fieldId, hidden: true });
   }
   await saveStampeDb(db);
   redirect(backUrl("/stampe/arredo/dati", scopeParam, { prodotto: productId }));
+}
+
+/* ================== Scheda online: cosa va sul cartello e cosa dal QR ================== */
+
+/** Scrive (o toglie, se è quella di default) la visibilità di un campo nell'ambito. */
+function impostaVisibilita(db: Awaited<ReturnType<typeof getStampeDb>>, scope: { type: ScopeType; id: string }, fieldId: string, cartello: boolean, online: boolean) {
+  db.fieldPrefs = db.fieldPrefs.filter((p) => !(p.scopeType === scope.type && p.scopeId === scope.id && p.fieldId === fieldId));
+  if (cartello && online) return;
+  db.fieldPrefs.push({ scopeType: scope.type, scopeId: scope.id, fieldId, hidden: !cartello, ...(online ? {} : { online: false }) });
+}
+
+/** Le due spunte di un campo nella pagina Scheda online: "sul cartello" e "online". */
+export async function salvaVisibilitaCampo(fieldId: string, scopeParam: string, fd: FormData): Promise<{ ok: boolean; error?: string }> {
+  const user = await requireStampeUser();
+  const db = await getStampeDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  if (!gestisceArea(user, "arredo", scope, academyDb) || isStoreBlocked(db, scope)) return { ok: false, error: "Non puoi modificare questo ambito." };
+  if (!db.fields.some((f) => f.id === fieldId)) return { ok: false, error: "Campo non trovato." };
+  impostaVisibilita(db, scope, fieldId, fd.get("cartello") === "on", fd.get("online") === "on");
+  await saveStampeDb(db);
+  revalidatePath("/stampe/arredo/scheda");
+  return { ok: true };
+}
+
+/** Stessa scelta per tutti i campi di un gruppo (es. "Misure e imballo" solo online). */
+export async function salvaVisibilitaGruppo(gruppo: string, scopeParam: string, modo: "entrambi" | "cartello" | "online"): Promise<{ ok: boolean; error?: string }> {
+  const user = await requireStampeUser();
+  const db = await getStampeDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  if (!gestisceArea(user, "arredo", scope, academyDb) || isStoreBlocked(db, scope)) return { ok: false, error: "Non puoi modificare questo ambito." };
+  for (const f of db.fields) {
+    if (gruppoDi(f) !== gruppo) continue;
+    impostaVisibilita(db, scope, f.id, modo !== "online", modo !== "cartello");
+  }
+  await saveStampeDb(db);
+  revalidatePath("/stampe/arredo/scheda");
+  return { ok: true };
+}
+
+/** Accesa/spenta, cosa mostra e frase di benvenuto della scheda online dell'ambito. */
+export async function salvaSchedaOnline(scopeParam: string, fd: FormData): Promise<{ ok: boolean; error?: string }> {
+  const user = await requireStampeUser();
+  const db = await getStampeDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  if (!gestisceArea(user, "arredo", scope, academyDb) || isStoreBlocked(db, scope)) return { ok: false, error: "Non puoi modificare questo ambito." };
+  const attiva = fd.get("attiva") === "on";
+  const modo = fd.get("modo") === "extra" ? "extra" as const : "tutto" as const;
+  const benvenuto = String(fd.get("benvenuto") ?? "").trim().slice(0, 200);
+  db.schedaOnline = db.schedaOnline.filter((p) => !(p.scopeType === scope.type && p.scopeId === scope.id));
+  db.schedaOnline.push({ scopeType: scope.type, scopeId: scope.id, attiva, modo, ...(benvenuto ? { benvenuto } : {}) });
+  await saveStampeDb(db);
+  revalidatePath("/stampe/arredo/scheda");
+  return { ok: true };
+}
+
+/** Il gruppo di un campo (solo Consorzio): vale per tutti gli ambiti. */
+export async function salvaGruppoCampo(fieldId: string, fd: FormData): Promise<{ ok: boolean; error?: string }> {
+  const user = await requireStampeUser();
+  if (!isConsortiumEditor(user)) return { ok: false, error: "Solo il Consorzio classifica i campi." };
+  const db = await getStampeDb();
+  const f = db.fields.find((x) => x.id === fieldId);
+  if (!f) return { ok: false, error: "Campo non trovato." };
+  const nuovo = String(fd.get("gruppoNuovo") ?? "").trim() || String(fd.get("gruppo") ?? "").trim();
+  f.gruppo = nuovo.slice(0, 40) || undefined;
+  await saveStampeDb(db);
+  revalidatePath("/stampe/impostazioni");
+  revalidatePath("/stampe/arredo/scheda");
+  return { ok: true };
 }
 
 export async function reportFieldError(productId: string, fieldId: string, scopeParam: string, formData: FormData) {
@@ -322,7 +397,8 @@ export async function addField(formData: FormData) {
   const label = String(formData.get("label") ?? "").trim();
   if (!label) redirect("/stampe/impostazioni");
   const id = `f_${label.toLowerCase().replace(/[^a-z0-9]+/g, "_").slice(0, 24)}_${Date.now() % 10000}`;
-  db.fields.push({ id, label, size: 11, bold: false, custom: true });
+  const gruppo = String(formData.get("gruppo") ?? "").trim().slice(0, 40);
+  db.fields.push({ id, label, size: 11, bold: false, custom: true, ...(gruppo ? { gruppo } : {}) });
   await saveStampeDb(db);
   redirect("/stampe/impostazioni?salvato=1");
 }
@@ -637,6 +713,24 @@ export async function uploadLayoutImage(scopeParam: string, formData: FormData) 
 
 /* ================== Layout ================== */
 
+const COLORE = /^#[0-9a-fA-F]{3,8}$/;
+
+/** La cornice del riquadro, entro limiti ragionevoli; se non resta niente di valido non si salva. */
+function sanitizeCornice(c: Record<string, unknown>): { cornice?: Cornice } {
+  const out: Cornice = {};
+  if (typeof c.titolo === "string" && c.titolo.trim()) out.titolo = c.titolo.slice(0, 80);
+  if (typeof c.icona === "string" && c.icona.trim()) out.icona = [...c.icona.trim()].slice(0, 2).join("");
+  if (["linee", "fascia", "semplice"].includes(c.stile as string)) out.stile = c.stile as Cornice["stile"];
+  if (typeof c.colore === "string" && COLORE.test(c.colore)) out.colore = c.colore;
+  if (typeof c.sfondo === "string" && COLORE.test(c.sfondo)) out.sfondo = c.sfondo;
+  if (Number.isFinite(Number(c.size)) && Number(c.size) > 0) out.size = Math.max(4, Math.min(120, Number(c.size)));
+  if (typeof c.bordoColore === "string" && COLORE.test(c.bordoColore)) out.bordoColore = c.bordoColore;
+  if (Number.isFinite(Number(c.bordoSpessore)) && Number(c.bordoSpessore) > 0) out.bordoSpessore = Math.max(0.1, Math.min(10, Number(c.bordoSpessore)));
+  if (["tutti", "sopra", "sotto", "sopra-sotto"].includes(c.bordoLati as string)) out.bordoLati = c.bordoLati as Cornice["bordoLati"];
+  if (Number.isFinite(Number(c.padding)) && Number(c.padding) > 0) out.padding = Math.max(0, Math.min(30, Number(c.padding)));
+  return Object.keys(out).length ? { cornice: out } : {};
+}
+
 /** Ripulisce un array di LayoutItem grezzo dal client: stessa validazione per il foglio normale e per quello senza foto. */
 function sanitizeLayoutItems(raw: unknown, isKnownField: (fieldId: string) => boolean) {
   if (!Array.isArray(raw)) return [];
@@ -644,7 +738,9 @@ function sanitizeLayoutItems(raw: unknown, isKnownField: (fieldId: string) => bo
     .filter(
       (i) =>
         typeof i.fieldId === "string" &&
-        (i.fieldId === "__img" ? typeof i.imageUrl === "string" : isKnownField(i.fieldId))
+        (i.fieldId === ELEMENTO_IMMAGINE ? typeof i.imageUrl === "string"
+          : i.fieldId === ELEMENTO_RIQUADRO || i.fieldId === ELEMENTO_QR ? true
+          : isKnownField(i.fieldId))
     )
     .map((i) => ({
       fieldId: i.fieldId as string,
@@ -661,6 +757,9 @@ function sanitizeLayoutItems(raw: unknown, isKnownField: (fieldId: string) => bo
       ...(typeof i.font === "string" && LAYOUT_FONTS.some((f) => f.id === i.font) ? { font: i.font as string } : {}),
       ...(typeof i.bg === "string" && /^#[0-9a-fA-F]{3,8}$/.test(i.bg) ? { bg: i.bg } : {}),
       ...(Number.isFinite(Number(i.radius)) ? { radius: Math.max(0, Math.min(40, Number(i.radius))) } : {}),
+      ...(typeof i.testo === "string" && i.testo.trim() ? { testo: i.testo.slice(0, 200) } : {}),
+      ...(typeof i.prefisso === "string" && i.prefisso.trim() ? { prefisso: i.prefisso.trim().slice(0, 6) } : {}),
+      ...(i.cornice && typeof i.cornice === "object" ? sanitizeCornice(i.cornice as Record<string, unknown>) : {}),
       ...(i.sticker && typeof i.sticker === "object"
         ? {
             sticker: {

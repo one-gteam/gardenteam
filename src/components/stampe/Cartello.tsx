@@ -1,9 +1,11 @@
-import type { CardLayout, PrintField, PrintFormat } from "@/lib/stampe";
-import { isImageField } from "@/lib/cartello-campi";
+import type { CardLayout, LayoutItem, PrintField, PrintFormat } from "@/lib/stampe";
+import { ELEMENTO_IMMAGINE, ELEMENTO_QR, ELEMENTO_RIQUADRO, isImageField } from "@/lib/cartello-campi";
 import FitText from "./FitText";
+import QrSvg from "./QrSvg";
 import { layoutFontCss } from "@/lib/layout-fonts";
 import {
-  Prezzo, alignPrezzo, coloreCampo, isPrezzoField, justifyPrezzo, stileStickerCartello, stileTestoCartello, testoStampato,
+  CorniceCampo, Prezzo, alignPrezzo, bordoRiquadro, coloreCampo, conPrefisso, isPrezzoField, justifyPrezzo,
+  stileStickerCartello, stileTestoCartello, testoStampato,
 } from "./cartelloStyle";
 
 /** Anteprima di un cartello: campi posizionati in % sul formato scelto. */
@@ -29,7 +31,7 @@ export default function Cartello({
    * foto del prodotto.
    */
   const mancaLaFoto = (layout?.items ?? []).some((it) => {
-    if (it.fieldId === "__img") return false;
+    if (it.fieldId === ELEMENTO_IMMAGINE) return false;
     const meta = fields.find((f) => f.id === it.fieldId);
     return isImageField(meta, it.fieldId) && !values[it.fieldId];
   });
@@ -60,6 +62,21 @@ export default function Cartello({
     if (!prezzo || prezzo.startsWith("€") || v.tipoPromo) return v;
     return !ci("prezzoPromo") && ci("tipoPromo") ? { ...v, tipoPromo: prezzo } : v;
   })();
+
+  /** Il riquadro dell'elemento: posizione, sfondo, angoli e bordo della cornice. */
+  const riquadro = (item: LayoutItem, extra: React.CSSProperties = {}): React.CSSProperties => ({
+    position: "absolute",
+    left: `${item.x}%`,
+    top: `${item.y}%`,
+    width: `${item.w}%`,
+    height: `${item.h}%`,
+    overflow: "hidden",
+    background: item.bg,
+    borderRadius: item.radius ? item.radius * scale : undefined,
+    ...bordoRiquadro(item, scale),
+    ...extra,
+  });
+
   return (
     <div
       className="cartello"
@@ -77,21 +94,40 @@ export default function Cartello({
         </div>
       )}
       {activeItems?.map((item, i) => {
-        const box: React.CSSProperties = {
-          position: "absolute",
-          left: `${item.x}%`,
-          top: `${item.y}%`,
-          width: `${item.w}%`,
-          height: `${item.h}%`,
-          overflow: "hidden",
-          background: item.bg,
-          borderRadius: item.radius ? item.radius * scale : undefined,
-        };
         // immagine/logo libero posizionato dall'editor
-        if (item.fieldId === "__img" && item.imageUrl) {
+        if (item.fieldId === ELEMENTO_IMMAGINE && item.imageUrl) {
           return (
             // eslint-disable-next-line @next/next/no-img-element
-            <img key={i} src={item.imageUrl} alt="" style={{ ...box, objectFit: "contain", objectPosition: "left top", mixBlendMode: "multiply" }} />
+            <img key={i} src={item.imageUrl} alt="" style={{ ...riquadro(item), objectFit: "contain", objectPosition: "left top", mixBlendMode: "multiply" }} />
+          );
+        }
+        // riquadro libero: fascia colorata, cornice o scritta fissa — si stampa sempre
+        if (item.fieldId === ELEMENTO_RIQUADRO) {
+          return (
+            <div key={i} style={riquadro(item)}>
+              <CorniceCampo item={item} scale={scale}>
+                {item.testo && (
+                  <FitText style={{ width: "100%", height: "100%", ...stileTestoCartello(item, undefined, item.testo, scale) }}>
+                    {testoStampato(item.testo)}
+                  </FitText>
+                )}
+              </CorniceCampo>
+            </div>
+          );
+        }
+        // QR code della scheda online: c'è solo se la scheda per questo ambito è accesa
+        if (item.fieldId === ELEMENTO_QR) {
+          const url = valori[ELEMENTO_QR];
+          if (!url) return null;
+          return (
+            <div key={i} style={riquadro(item, { display: "flex", flexDirection: "column", alignItems: "center" })}>
+              <QrSvg testo={url} colore={item.color} style={{ flex: 1, minHeight: 0, width: "100%" }} />
+              {item.testo && (
+                <div style={{ flex: "none", fontSize: ((item.size ?? 7) * scale) / 2.4, lineHeight: 1.1, textAlign: "center", color: coloreCampo(item), whiteSpace: "pre-line", padding: `${0.5 * scale}px 0 0` }}>
+                  {item.testo}
+                </div>
+              )}
+            </div>
           );
         }
         const meta = fields.find((f) => f.id === item.fieldId);
@@ -103,7 +139,7 @@ export default function Cartello({
             <div
               key={i}
               style={{
-                ...box,
+                ...riquadro(item),
                 overflow: "visible",
                 transform: `rotate(${item.sticker.rotation}deg)`,
               }}
@@ -116,10 +152,11 @@ export default function Cartello({
           return (
             // eslint-disable-next-line @next/next/no-img-element
             // il blend "multiply" elimina lo sfondo bianco dei loghi jpg
-            <img key={i} src={value} alt="" style={{ ...box, objectFit: "contain", objectPosition: "left top", mixBlendMode: "multiply" }} />
+            <img key={i} src={value} alt="" style={{ ...riquadro(item), objectFit: "contain", objectPosition: "left top", mixBlendMode: "multiply" }} />
           );
         }
         const color = coloreCampo(item);
+        const testo = conPrefisso(item, value);
         if (isPrezzoField(item.fieldId)) {
           /*
            * Niente ritaglio sul prezzo: è scritto in corpo grande e con poco
@@ -127,16 +164,24 @@ export default function Cartello({
            * mangerebbe la parte bassa delle cifre invece di lasciarle uscire.
            */
           return (
-            <div key={i} style={{ ...box, overflow: "visible", display: "flex", justifyContent: justifyPrezzo(item), alignItems: alignPrezzo(item), color }}>
-              <Prezzo value={value} size={item.size ?? meta.size} scale={scale} valign={item.valign} align={item.align}
-                font={item.font !== undefined ? layoutFontCss(item.font) : undefined} />
+            <div key={i} style={riquadro(item, { overflow: "visible", color })}>
+              <CorniceCampo item={item} scale={scale}>
+                <div style={{ width: "100%", height: "100%", display: "flex", justifyContent: justifyPrezzo(item), alignItems: alignPrezzo(item), overflow: "visible" }}>
+                  <Prezzo value={testo} size={item.size ?? meta.size} scale={scale} valign={item.valign} align={item.align}
+                    font={item.font !== undefined ? layoutFontCss(item.font) : undefined} />
+                </div>
+              </CorniceCampo>
             </div>
           );
         }
         return (
-          <FitText key={i} style={{ ...box, ...stileTestoCartello(item, meta, value, scale) }}>
-            {testoStampato(value)}
-          </FitText>
+          <div key={i} style={riquadro(item)}>
+            <CorniceCampo item={item} scale={scale}>
+              <FitText style={{ width: "100%", height: "100%", overflow: "hidden", ...stileTestoCartello(item, meta, testo, scale) }}>
+                {testoStampato(testo)}
+              </FitText>
+            </CorniceCampo>
+          </div>
         );
       })}
     </div>

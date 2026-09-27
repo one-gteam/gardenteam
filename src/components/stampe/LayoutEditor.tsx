@@ -1,13 +1,19 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import type { LayoutItem, LayoutMargins, PrintField, PrintFormat, StickerStyle } from "@/lib/stampe";
+import type { Cornice, LayoutItem, LayoutMargins, PrintField, PrintFormat, StickerStyle } from "@/lib/stampe";
 import { LAYOUT_FONTS, layoutFontCss } from "@/lib/layout-fonts";
 import { saveLayout } from "@/lib/stampe-actions";
 import { saveZooLayout } from "@/lib/zoo-actions";
+import { ELEMENTO_IMMAGINE, ELEMENTO_QR, ELEMENTO_RIQUADRO } from "@/lib/cartello-campi";
+import QrSvg from "./QrSvg";
 import {
-  Prezzo, alignPrezzo, coloreCampo, isPrezzoField, justifyPrezzo, stileStickerCartello, stileTestoCartello, testoStampato,
+  CorniceCampo, Prezzo, alignPrezzo, bordoRiquadro, coloreCampo, conPrefisso, isPrezzoField, justifyPrezzo,
+  stileStickerCartello, stileTestoCartello, testoStampato,
 } from "./cartelloStyle";
+
+/** Icone pronte per il titolo di un riquadro: quelle del cartello Garden Team più qualche altra. */
+const ICONE_TITOLO = ["✳", "m", "C", "▣", "☘", "★", "!", "i", "€", "✓"];
 
 /** Riquadro del pannello di destra richiudibile, per non dover scorrere fra tante sezioni aperte. */
 function Sezione({
@@ -252,6 +258,32 @@ export default function LayoutEditor({
     setSelected(activeItems.length);
   };
 
+  /** Riquadro libero: una fascia colorata, una cornice o una scritta fissa — si stampa sempre. */
+  const addRiquadro = (conTesto: boolean) => {
+    if (!canEdit) return;
+    const next: LayoutItem[] = [
+      ...activeItems,
+      conTesto
+        ? { fieldId: ELEMENTO_RIQUADRO, x: 10, y: 10, w: 40, h: 5, testo: "Scritta fissa", size: 12, bold: true }
+        : { fieldId: ELEMENTO_RIQUADRO, x: 0, y: 5, w: 100, h: 5, bg: "#a6c788" },
+    ];
+    setActiveItems(next);
+    pushHistory(next);
+    setSelected(activeItems.length);
+  };
+
+  /** QR code che porta alla scheda online del prodotto (stampato solo se la scheda è accesa). */
+  const addQr = () => {
+    if (!canEdit) return;
+    const next: LayoutItem[] = [
+      ...activeItems,
+      { fieldId: ELEMENTO_QR, x: 60, y: 86, w: 10, h: 9, testo: "Scheda completa", size: 7 },
+    ];
+    setActiveItems(next);
+    pushHistory(next);
+    setSelected(activeItems.length);
+  };
+
   const addSticker = () => {
     if (!canEdit) return;
     const next: LayoutItem[] = [
@@ -312,12 +344,17 @@ export default function LayoutEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected, canEdit, mode, activeItems]);
 
-  const updateSelected = (patch: Partial<LayoutItem> | { sticker: Partial<StickerStyle> }) => {
+  const updateSelected = (patch: Partial<LayoutItem> | { sticker: Partial<StickerStyle> } | { cornice: Partial<Cornice> | undefined }) => {
     if (selected === null) return;
     const next = activeItems.map((it, i) => {
       if (i !== selected) return it;
       if ("sticker" in patch && it.sticker) {
         return { ...it, sticker: { ...it.sticker, ...(patch.sticker as Partial<StickerStyle>) } };
+      }
+      if ("cornice" in patch) {
+        // la cornice si aggiorna un pezzo alla volta; undefined la toglie del tutto
+        if (patch.cornice === undefined) { const { cornice: _via, ...resto } = it; void _via; return resto; }
+        return { ...it, cornice: { ...(it.cornice ?? {}), ...patch.cornice } };
       }
       return { ...it, ...(patch as Partial<LayoutItem>) };
     });
@@ -438,7 +475,10 @@ export default function LayoutEditor({
           <div style={{ fontSize: 11, color: "var(--muted)", textTransform: "uppercase", letterSpacing: ".04em" }}>Campo scelto</div>
           <strong style={{ fontSize: 13.5 }}>
             {selItem
-              ? (selItem.fieldId === "__img" ? "Immagine libera" : fields.find((f) => f.id === selItem.fieldId)?.label ?? selItem.fieldId)
+              ? (selItem.fieldId === ELEMENTO_IMMAGINE ? "Immagine libera"
+                : selItem.fieldId === ELEMENTO_RIQUADRO ? (selItem.testo ? "Scritta fissa" : "Riquadro / fascia")
+                : selItem.fieldId === ELEMENTO_QR ? "QR code della scheda online"
+                : fields.find((f) => f.id === selItem.fieldId)?.label ?? selItem.fieldId)
               : "nessuno — clicca un campo sul foglio"}
           </strong>
           {/* la spiegazione del campo: serve dove due campi si somigliano,
@@ -468,6 +508,25 @@ export default function LayoutEditor({
         <button type="button" className="btn btn-outline btn-sm" style={{ marginTop: 10, width: "100%" }} onClick={addSticker} disabled={!canEdit}>
           Aggiungi sticker / bollino
         </button>
+        <h3 style={{ margin: "14px 6px 8px" }}>Grafica</h3>
+        <div className="editor-fields">
+          <button type="button" className="btn btn-outline btn-sm" style={{ textAlign: "left" }} onClick={() => addRiquadro(false)} disabled={!canEdit}
+            title="Una fascia o un riquadro colorato, con o senza bordo: si stampa sempre">
+            ▬ Fascia / riquadro colorato
+          </button>
+          <button type="button" className="btn btn-outline btn-sm" style={{ textAlign: "left" }} onClick={() => addRiquadro(true)} disabled={!canEdit}
+            title="Una scritta uguale su tutti i cartelli, es. «il nostro prezzo:»">
+            Aa Scritta fissa
+          </button>
+          <button type="button" className="btn btn-outline btn-sm" style={{ textAlign: "left" }} onClick={addQr} disabled={!canEdit}
+            title="Porta il cliente alla scheda online del prodotto (pagina Scheda online)">
+            ▦ QR code scheda online
+          </button>
+        </div>
+        <p className="hint" style={{ margin: "6px 6px 0", fontSize: 11.5 }}>
+          Il titolo di un campo (es. «misure imballo:» con l&apos;icona) si imposta nel pannello «Cornice e titolo» del campo scelto:
+          se il prodotto non ha quel dato, sparisce anche il titolo.
+        </p>
         {images.length > 0 && (
           <>
             <h3 style={{ margin: "14px 6px 8px" }}>Le tue immagini</h3>
@@ -592,19 +651,54 @@ export default function LayoutEditor({
                 </div>
               );
             }
+            const etichettaMisure = canEdit && selected === i && (
+              <span style={{ position: "absolute", left: 0, top: -18, fontSize: 10.5, color: "#274b7a", background: "#fff", padding: "0 4px", border: "1px solid var(--line)", borderRadius: 3, whiteSpace: "nowrap" }}>
+                {inUnita(mmX(item.w))} × {inUnita(mmY(item.h))} {unita}
+              </span>
+            );
+            const maniglia = canEdit && <span className="resize-handle" onMouseDown={(e) => onMouseDown(e, i, "resize")} />;
+            const stileBase: React.CSSProperties = {
+              left: `${item.x}%`, top: `${item.y}%`, width: `${item.w}%`, height: `${item.h}%`,
+              cursor: canEdit ? "move" : "default",
+              background: item.bg,
+              borderRadius: item.radius ? item.radius * scale : undefined,
+              ...bordoRiquadro(item, scale),
+            };
+            if (item.fieldId === ELEMENTO_RIQUADRO) {
+              return (
+                <div key={i} className={`editor-item ${selected === i ? "selected" : ""}`} style={stileBase} onMouseDown={(e) => onMouseDown(e, i, "move")}>
+                  <CorniceCampo item={item} scale={scale}>
+                    {item.testo
+                      ? <div style={{ width: "100%", height: "100%", ...stileTestoCartello(item, undefined, item.testo, scale) }}>{testoStampato(item.testo)}</div>
+                      : !item.bg && !item.cornice ? <span style={{ fontSize: 11, color: "#999" }}>Riquadro</span> : null}
+                  </CorniceCampo>
+                  {etichettaMisure}
+                  {maniglia}
+                </div>
+              );
+            }
+            if (item.fieldId === ELEMENTO_QR) {
+              return (
+                <div key={i} className={`editor-item ${selected === i ? "selected" : ""}`} style={{ ...stileBase, display: "flex", flexDirection: "column", alignItems: "center" }} onMouseDown={(e) => onMouseDown(e, i, "move")}>
+                  <QrSvg testo={previewValues[ELEMENTO_QR] || "https://gardenteam.vercel.app/scheda"} colore={item.color} style={{ flex: 1, minHeight: 0, width: "100%", pointerEvents: "none" }} />
+                  {item.testo && (
+                    <div style={{ flex: "none", fontSize: ((item.size ?? 7) * scale) / 2.4, lineHeight: 1.1, textAlign: "center", color: coloreCampo(item), whiteSpace: "pre-line", padding: `${0.5 * scale}px 0 0` }}>
+                      {item.testo}
+                    </div>
+                  )}
+                  {etichettaMisure}
+                  {maniglia}
+                </div>
+              );
+            }
             const isImage = isImageField(item.fieldId);
-            const imgSrc = item.fieldId === "__img" ? item.imageUrl : previewValues[item.fieldId];
+            const imgSrc = item.fieldId === ELEMENTO_IMMAGINE ? item.imageUrl : previewValues[item.fieldId];
             if (isImage) {
               return (
                 <div
                   key={i}
                   className={`editor-item ${selected === i ? "selected" : ""}`}
-                  style={{
-                    left: `${item.x}%`, top: `${item.y}%`, width: `${item.w}%`, height: `${item.h}%`,
-                    cursor: canEdit ? "move" : "default",
-                    background: item.bg,
-                    borderRadius: item.radius ? item.radius * scale : undefined,
-                  }}
+                  style={stileBase}
                   onMouseDown={(e) => onMouseDown(e, i, "move")}
                 >
                   {imgSrc ? (
@@ -628,7 +722,7 @@ export default function LayoutEditor({
              * sui due spazi. Quando erano scritte due volte, l'anteprima
              * dell'editor mostrava un cartello diverso da quello stampato.
              */
-            const raw = previewValues[item.fieldId] ?? "";
+            const raw = conPrefisso(item, previewValues[item.fieldId] ?? "");
             const testo = raw || meta?.label || "";
             if (isPrezzoField(item.fieldId)) {
               return (
@@ -636,21 +730,21 @@ export default function LayoutEditor({
                   key={i}
                   className={`editor-item ${selected === i ? "selected" : ""}`}
                   style={{
-                    left: `${item.x}%`, top: `${item.y}%`, width: `${item.w}%`, height: `${item.h}%`,
-                    cursor: canEdit ? "move" : "default",
-                    background: item.bg,
-                    borderRadius: item.radius ? item.radius * scale : undefined,
+                    ...stileBase,
                     // il prezzo esce dal riquadro invece di essere tagliato, come in stampa
                     overflow: "visible",
-                    display: "flex", justifyContent: justifyPrezzo(item), alignItems: alignPrezzo(item),
                     color: coloreCampo(item),
                   }}
                   onMouseDown={(e) => onMouseDown(e, i, "move")}
                 >
-                  {raw && (
-                    <Prezzo value={raw} size={item.size ?? meta?.size ?? 11} scale={scale} valign={item.valign} align={item.align}
-                      font={item.font !== undefined ? layoutFontCss(item.font) : undefined} />
-                  )}
+                  <CorniceCampo item={item} scale={scale}>
+                    <div style={{ width: "100%", height: "100%", display: "flex", justifyContent: justifyPrezzo(item), alignItems: alignPrezzo(item), overflow: "visible" }}>
+                      {raw && (
+                        <Prezzo value={raw} size={item.size ?? meta?.size ?? 11} scale={scale} valign={item.valign} align={item.align}
+                          font={item.font !== undefined ? layoutFontCss(item.font) : undefined} />
+                      )}
+                    </div>
+                  </CorniceCampo>
                   {canEdit && selected === i && (
                     <span style={{ position: "absolute", left: 0, top: -18, fontSize: 10.5, color: "#274b7a", background: "#fff", padding: "0 4px", border: "1px solid var(--line)", borderRadius: 3, whiteSpace: "nowrap" }}>
                       {inUnita(mmX(item.w))} × {inUnita(mmY(item.h))} {unita}
@@ -665,21 +759,18 @@ export default function LayoutEditor({
                 key={i}
                 className={`editor-item ${selected === i ? "selected" : ""}`}
                 style={{
-                  left: `${item.x}%`,
-                  top: `${item.y}%`,
-                  width: `${item.w}%`,
-                  height: `${item.h}%`,
-                  cursor: canEdit ? "move" : "default",
-                  background: item.bg,
-                  borderRadius: item.radius ? item.radius * scale : undefined,
-                  ...stileTestoCartello(item, meta, testo, scale),
+                  ...stileBase,
                   // campo senza valore d'esempio: si vede il nome del campo, sbiadito,
                   // perché non venga scambiato per un testo che verrà stampato
                   opacity: raw ? undefined : 0.45,
                 }}
                 onMouseDown={(e) => onMouseDown(e, i, "move")}
               >
-                {testoStampato(testo)}
+                <CorniceCampo item={item} scale={scale}>
+                  <div style={{ width: "100%", height: "100%", overflow: "hidden", ...stileTestoCartello(item, meta, testo, scale) }}>
+                    {testoStampato(testo)}
+                  </div>
+                </CorniceCampo>
                 {canEdit && selected === i && (
                   <span style={{ position: "absolute", left: 0, top: -18, fontSize: 10.5, color: "#274b7a", background: "#fff", padding: "0 4px", border: "1px solid var(--line)", borderRadius: 3, whiteSpace: "nowrap" }}>
                     {inUnita(mmX(item.w))} × {inUnita(mmY(item.h))} {unita}
@@ -742,6 +833,131 @@ export default function LayoutEditor({
               Dimensione testo: {selItem.sticker.size}
               <input type="range" min={6} max={60} value={selItem.sticker.size} onChange={(e) => updateSelected({ sticker: { size: Number(e.target.value) } })} style={{ width: "100%" }} />
             </label>
+          </Sezione>
+          </div>
+        )}
+        {/* scritta fissa / didascalia del QR: il testo che si stampa uguale su tutti i cartelli */}
+        {selItem && (selItem.fieldId === ELEMENTO_RIQUADRO || selItem.fieldId === ELEMENTO_QR) && canEdit && (
+          <div className="panel-campo">
+          <Sezione titolo={selItem.fieldId === ELEMENTO_QR ? "QR code" : "Scritta fissa"}>
+            {selItem.fieldId === ELEMENTO_QR && (
+              <p style={{ fontSize: 12, color: "var(--muted)", margin: "0 0 8px" }}>
+                Porta alla scheda online del prodotto, con i campi scelti nella pagina «Scheda online».
+                Tienilo almeno 15 mm di lato. Se la scheda online è spenta, in stampa non esce.
+              </p>
+            )}
+            <label className="field">
+              {selItem.fieldId === ELEMENTO_QR ? "Didascalia sotto al codice" : "Testo"}
+              <textarea rows={2} value={selItem.testo ?? ""} onChange={(e) => updateSelected({ testo: e.target.value })}
+                placeholder={selItem.fieldId === ELEMENTO_QR ? "es. Inquadra per la scheda completa" : "es. il nostro prezzo:"} />
+            </label>
+          </Sezione>
+          </div>
+        )}
+        {/* prefisso del valore: l'euro davanti al prezzo dell'Arredo, che arriva senza simbolo */}
+        {selItem && isPrezzoField(selItem.fieldId) && canEdit && (
+          <div className="panel-campo">
+          <Sezione titolo="Simbolo davanti al prezzo" aperta={false}>
+            <div style={{ display: "flex", gap: 4 }}>
+              {["", "€"].map((p) => (
+                <button key={p || "nessuno"} type="button" className={`btn btn-sm ${(selItem.prefisso ?? "") === p ? "" : "btn-outline"}`} style={{ flex: 1 }}
+                  onClick={() => updateSelected({ prefisso: p || undefined })}>
+                  {p || "nessuno"}
+                </button>
+              ))}
+            </div>
+          </Sezione>
+          </div>
+        )}
+        {/* cornice: titolo con icona, bordo e spazio interno — la grafica che prima stava nello sfondo */}
+        {selItem && !selItem.sticker && selItem.fieldId !== ELEMENTO_QR && selItem.fieldId !== ELEMENTO_IMMAGINE && canEdit && (
+          <div className="panel-campo">
+          <Sezione titolo="Cornice e titolo" aperta={!!selItem.cornice}>
+            <label className="field">
+              Titolo sopra al valore
+              <input type="text" value={selItem.cornice?.titolo ?? ""} onChange={(e) => updateSelected({ cornice: { titolo: e.target.value } })}
+                placeholder="es. misure imballo:" />
+            </label>
+            {selItem.cornice?.titolo && (
+              <>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                  <label className="field">
+                    Stile
+                    <select value={selItem.cornice?.stile ?? "linee"} onChange={(e) => updateSelected({ cornice: { stile: e.target.value as Cornice["stile"] } })}>
+                      <option value="linee">Riga sopra e sotto</option>
+                      <option value="fascia">Fascia colorata</option>
+                      <option value="semplice">Solo testo</option>
+                    </select>
+                  </label>
+                  <label className="field">
+                    Corpo: {selItem.cornice?.size ?? 12}
+                    <input type="range" min={5} max={40} value={selItem.cornice?.size ?? 12}
+                      onChange={(e) => updateSelected({ cornice: { size: Number(e.target.value) } })} style={{ width: "100%" }} />
+                  </label>
+                </div>
+                <label className="field">
+                  Icona nel quadratino
+                  <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center", marginTop: 4 }}>
+                    {ICONE_TITOLO.map((ic) => (
+                      <button key={ic} type="button" className={`btn btn-sm ${selItem.cornice?.icona === ic ? "" : "btn-outline"}`} style={{ padding: "0 8px", minWidth: 30 }}
+                        onClick={() => updateSelected({ cornice: { icona: ic } })}>{ic}</button>
+                    ))}
+                    <input type="text" value={selItem.cornice?.icona ?? ""} maxLength={2} style={{ width: 44, marginTop: 0 }}
+                      onChange={(e) => updateSelected({ cornice: { icona: e.target.value } })} placeholder="…" />
+                    <button type="button" className="btn btn-outline btn-sm" style={{ padding: "0 8px" }} onClick={() => updateSelected({ cornice: { icona: undefined } })}>nessuna</button>
+                  </div>
+                </label>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                  <label className="field">
+                    Colore titolo
+                    <input type="color" value={selItem.cornice?.colore ?? (selItem.cornice?.stile === "fascia" ? "#ffffff" : "#111111")}
+                      onChange={(e) => updateSelected({ cornice: { colore: e.target.value } })} style={{ width: "100%", height: 34, padding: 2 }} />
+                  </label>
+                  <label className="field">
+                    {selItem.cornice?.stile === "fascia" ? "Colore fascia e icona" : "Colore icona"}
+                    <input type="color" value={selItem.cornice?.sfondo ?? (selItem.cornice?.stile === "fascia" ? "#a6c788" : "#9bc77d")}
+                      onChange={(e) => updateSelected({ cornice: { sfondo: e.target.value } })} style={{ width: "100%", height: 34, padding: 2 }} />
+                  </label>
+                </div>
+              </>
+            )}
+            <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12.5, marginBottom: 8 }}>
+              <input type="checkbox" checked={!!selItem.cornice?.bordoColore}
+                onChange={(e) => updateSelected({ cornice: { bordoColore: e.target.checked ? "#111111" : undefined } })} />
+              Bordo del riquadro
+            </label>
+            {selItem.cornice?.bordoColore && (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+                <label className="field">
+                  Colore
+                  <input type="color" value={selItem.cornice.bordoColore} onChange={(e) => updateSelected({ cornice: { bordoColore: e.target.value } })} style={{ width: "100%", height: 34, padding: 2 }} />
+                </label>
+                <label className="field">
+                  Spessore (mm)
+                  <input type="number" min={0.1} max={10} step={0.1} value={selItem.cornice.bordoSpessore ?? 0.3}
+                    onChange={(e) => updateSelected({ cornice: { bordoSpessore: Number(e.target.value) || 0.3 } })} />
+                </label>
+                <label className="field">
+                  Lati
+                  <select value={selItem.cornice.bordoLati ?? "tutti"} onChange={(e) => updateSelected({ cornice: { bordoLati: e.target.value as Cornice["bordoLati"] } })}>
+                    <option value="tutti">Tutti</option>
+                    <option value="sopra">Solo sopra</option>
+                    <option value="sotto">Solo sotto</option>
+                    <option value="sopra-sotto">Sopra e sotto</option>
+                  </select>
+                </label>
+              </div>
+            )}
+            <label className="field" style={{ marginBottom: 4 }}>
+              Spazio interno: {(selItem.cornice?.padding ?? 0).toFixed(1)} mm
+              <input type="range" min={0} max={15} step={0.5} value={selItem.cornice?.padding ?? 0}
+                onChange={(e) => updateSelected({ cornice: { padding: Number(e.target.value) } })} style={{ width: "100%" }} />
+            </label>
+            {selItem.cornice && (
+              <button type="button" className="btn btn-outline btn-sm" style={{ width: "100%" }} onClick={() => updateSelected({ cornice: undefined })}>
+                Togli cornice e titolo
+              </button>
+            )}
           </Sezione>
           </div>
         )}

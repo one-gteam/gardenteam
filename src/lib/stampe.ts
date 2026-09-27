@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import { DB, SiteId, User, gestisce, gestisceConsorzio, livelloDi, userSites } from "./types";
 import { readDomain, writeDomain } from "./supabase";
+import { ELEMENTO_QR, isImageField } from "./cartello-campi";
 
 /* ================== Tipi del sito Stampe ================== */
 
@@ -17,6 +18,8 @@ export interface PrintField {
   scopeId?: string;
   /** Spiegazione breve: si legge nell'editor, sul pulsante e nel riquadro "Campo scelto". */
   nota?: string;
+  /** Gruppo di appartenenza (Descrizione, Prezzo, Misure e imballo…): vedi cartello-campi. */
+  gruppo?: string;
 }
 
 /** Valore con ambito: usato per marchi, tipologie e colori aggiunti da insegne/PV. */
@@ -48,11 +51,29 @@ export interface FieldOverride {
   value: string;
 }
 
+/**
+ * Dove si vede un campo, per ambito: `hidden` = non sul cartello stampato,
+ * `online` = sulla scheda che si apre dal QR code (assente = sì). Un campo
+ * "solo online" è hidden con online; uno "solo cartello" ha online: false.
+ */
 export interface FieldPref {
   scopeType: ScopeType;
   scopeId: string;
   fieldId: string;
   hidden: boolean;
+  online?: boolean;
+}
+
+/** La scheda online di un ambito: se c'è e cosa mostra. */
+export interface SchedaOnlinePref {
+  scopeType: ScopeType;
+  scopeId: string;
+  /** Spenta = niente QR sui cartelli e pagina pubblica non raggiungibile. */
+  attiva?: boolean;
+  /** "tutto" = tutti i campi ammessi online; "extra" = solo quelli che non stanno sul cartello. */
+  modo?: "tutto" | "extra";
+  /** Frase in testa alla scheda (es. "Grazie per averci scelto"). */
+  benvenuto?: string;
 }
 
 export interface PrintFormat {
@@ -71,8 +92,26 @@ export interface StickerStyle {
   font?: "cn";
 }
 
+/**
+ * La grafica del riquadro di un campo: titolo con icona, righe o fascia,
+ * bordo e spazio interno. È quello che prima stava disegnato nell'immagine di
+ * sfondo: portandolo sul campo, se il campo è vuoto sparisce anche la cornice.
+ */
+export interface Cornice {
+  titolo?: string; // scritta sopra al valore, es. "misure imballo:"
+  icona?: string; // uno o due caratteri nel quadratino accanto al titolo
+  stile?: "linee" | "fascia" | "semplice"; // riga sopra e sotto il titolo / fascia colorata / solo testo
+  colore?: string; // colore del titolo
+  sfondo?: string; // fascia e quadratino dell'icona
+  size?: number; // corpo del titolo (stessa scala dei campi)
+  bordoColore?: string;
+  bordoSpessore?: number; // mm
+  bordoLati?: "tutti" | "sopra" | "sotto" | "sopra-sotto";
+  padding?: number; // mm di spazio fra bordo e contenuto
+}
+
 export interface LayoutItem {
-  fieldId: string; // "__img" per immagini/loghi liberi
+  fieldId: string; // "__img" immagini/loghi liberi, "__box" riquadro o scritta fissa, "__qr" QR della scheda online
   x: number; // % del cartello
   y: number;
   w: number;
@@ -88,6 +127,9 @@ export interface LayoutItem {
   font?: string; // chiave di LAYOUT_FONTS (vedi lib/layout-fonts): sovrascrive il carattere del campo
   bg?: string; // colore di sfondo del riquadro (assente = trasparente)
   radius?: number; // raggio degli angoli arrotondati, in mm (0/assente = angoli vivi)
+  cornice?: Cornice; // titolo, bordo e spazio interno del riquadro
+  testo?: string; // "__box": scritta fissa; "__qr": didascalia sotto al codice
+  prefisso?: string; // davanti al valore, es. "€" davanti al prezzo
 }
 
 /** Margini del foglio, in mm, uno per lato. */
@@ -182,6 +224,7 @@ export interface StampeDB {
   products: PrintProduct[];
   overrides: FieldOverride[];
   fieldPrefs: FieldPref[];
+  schedaOnline: SchedaOnlinePref[];
   formats: PrintFormat[];
   layouts: CardLayout[];
   reports: ErrorReport[];
@@ -203,6 +246,7 @@ export async function getStampeDb(): Promise<StampeDB> {
   if (!db.fields) db.fields = [];
   if (!db.overrides) db.overrides = [];
   if (!db.fieldPrefs) db.fieldPrefs = [];
+  if (!db.schedaOnline) db.schedaOnline = [];
   if (!db.formats) db.formats = [];
   if (!db.layouts) db.layouts = [];
   if (!db.reports) db.reports = [];
@@ -301,7 +345,7 @@ export function resolveScope(user: User, param: string | undefined, academyDb: D
 
 /* ================== Valori effettivi (comune + personalizzazioni) ================== */
 
-function parentScopes(scope: Scope, academyDb: DB): { type: ScopeType; id: string }[] {
+export function parentScopes(scope: Scope, academyDb: DB): { type: ScopeType; id: string }[] {
   // catena: store -> tenant -> system
   const chain: { type: ScopeType; id: string }[] = [];
   if (scope.type === "store") {
@@ -327,13 +371,80 @@ export function effectiveValue(db: StampeDB, scope: Scope, product: PrintProduct
   return { value: product.fields[fieldId] ?? "", custom: false, scopeType: "system" as ScopeType };
 }
 
-/** Campo nascosto per questo ambito? */
-export function isFieldHidden(db: StampeDB, scope: Scope, fieldId: string, academyDb: DB): boolean {
+/** Dove si vede un campo in questo ambito: la scelta più vicina nella catena PV → insegna → Consorzio. */
+export function visibilitaCampo(db: StampeDB, scope: Scope, fieldId: string, academyDb: DB): { cartello: boolean; online: boolean } {
   for (const s of parentScopes(scope, academyDb)) {
     const pref = db.fieldPrefs.find((p) => p.scopeType === s.type && p.scopeId === s.id && p.fieldId === fieldId);
-    if (pref) return pref.hidden;
+    if (pref) return { cartello: !pref.hidden, online: pref.online !== false };
   }
-  return false;
+  return { cartello: true, online: true };
+}
+
+/** Campo nascosto sul cartello stampato, per questo ambito? */
+export function isFieldHidden(db: StampeDB, scope: Scope, fieldId: string, academyDb: DB): boolean {
+  return !visibilitaCampo(db, scope, fieldId, academyDb).cartello;
+}
+
+/** Impostazioni della scheda online per l'ambito (la più vicina nella catena; di default accesa, con tutto). */
+export function schedaOnlinePer(db: StampeDB, scope: Scope, academyDb: DB): { attiva: boolean; modo: "tutto" | "extra"; benvenuto: string } {
+  for (const s of parentScopes(scope, academyDb)) {
+    const pref = db.schedaOnline.find((p) => p.scopeType === s.type && p.scopeId === s.id);
+    if (pref) return { attiva: pref.attiva !== false, modo: pref.modo ?? "tutto", benvenuto: pref.benvenuto ?? "" };
+  }
+  return { attiva: true, modo: "tutto", benvenuto: "" };
+}
+
+/* ================== Scheda online (dal QR code) ================== */
+
+function siteUrl(): string {
+  return (process.env.SITE_URL || "https://gardenteam.vercel.app").replace(/\/$/, "");
+}
+
+/** L'ambito nell'indirizzo pubblico: "gt" per il Consorzio, altrimenti l'id dell'insegna o del PV. */
+export function slugAmbito(scope: { type: ScopeType; id: string }): string {
+  return scope.type === "system" ? "gt" : scope.id;
+}
+
+export function scopeDaSlug(slug: string, academyDb: DB): Scope | undefined {
+  if (slug === "gt") return { type: "system", id: "", label: "Garden Team" };
+  const tenant = academyDb.tenants.find((t) => t.id === slug);
+  if (tenant) return { type: "tenant", id: tenant.id, label: tenant.name };
+  const store = academyDb.stores.find((s) => s.id === slug);
+  if (store) return { type: "store", id: store.id, label: store.name };
+  return undefined;
+}
+
+/** Indirizzo della scheda online di un prodotto, per l'ambito che stampa (relativo o assoluto). */
+export function schedaUrl(scope: { type: ScopeType; id: string }, product: PrintProduct, assoluto = true): string {
+  const percorso = `/scheda/${slugAmbito(scope)}/${encodeURIComponent(product.codice)}`;
+  return assoluto ? `${siteUrl()}${percorso}` : percorso;
+}
+
+/** L'insegna a cui la scheda si intitola (logo, colore, nome). */
+export function insegnaDiScope(scope: Scope, academyDb: DB) {
+  const tenantId = scope.type === "tenant" ? scope.id : scope.type === "store" ? academyDb.stores.find((s) => s.id === scope.id)?.tenantId : undefined;
+  return academyDb.tenants.find((t) => t.id === tenantId);
+}
+
+/**
+ * I campi che la scheda online mostra per questo prodotto: quelli ammessi
+ * online per l'ambito (in modalità "extra" solo quelli che non stanno sul
+ * cartello), con il valore effettivo e non vuoto. Le immagini stanno a parte.
+ */
+export function campiScheda(db: StampeDB, scope: Scope, product: PrintProduct, academyDb: DB): { field: PrintField; value: string }[] {
+  const pref = schedaOnlinePer(db, scope, academyDb);
+  const out: { field: PrintField; value: string }[] = [];
+  for (const f of fieldsForScope(db, scope, academyDb)) {
+    if (isImageField(f, f.id)) continue;
+    const vis = visibilitaCampo(db, scope, f.id, academyDb);
+    if (!vis.online) continue;
+    if (pref.modo === "extra" && vis.cartello) continue;
+    const value = f.id === "codice" ? product.codice
+      : f.id === "codiceInterno" ? effectiveValue(db, scope, product, f.id, academyDb).value
+      : effectiveValue(db, scope, product, f.id, academyDb).value;
+    if (value.trim()) out.push({ field: f, value });
+  }
+  return out;
 }
 
 /** Layout effettivo per formato+ambito(+tipologia): personalizzato se esiste, altrimenti quello del Consorzio. */
@@ -410,6 +521,8 @@ export function cartelloValues(db: StampeDB, scope: Scope, product: PrintProduct
     }
     else values[f.id] = effectiveValue(db, scope, product, f.id, academyDb).value;
   }
+  // il QR code porta alla scheda online: c'è solo se per questo ambito la scheda è accesa
+  if (schedaOnlinePer(db, scope, academyDb).attiva) values[ELEMENTO_QR] = schedaUrl(scope, product);
   return values;
 }
 

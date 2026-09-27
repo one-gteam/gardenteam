@@ -16,7 +16,10 @@ import {
   removeListValue,
   toggleStoreBlock,
   importInternalCodes,
+  salvaGruppoCampo,
 } from "@/lib/stampe-actions";
+import { elencoGruppi, gruppoDi } from "@/lib/cartello-campi";
+import ModuloAutoSalva from "@/components/ModuloAutoSalva";
 
 export default async function ImpostazioniPage({
   searchParams,
@@ -45,6 +48,7 @@ export default async function ImpostazioniPage({
       scope.type === "system" ? !v.scopeType : v.scopeType === scope.type && v.scopeId === scope.id
     );
   const myStores = user.role === "group_admin" ? academy.stores.filter((s) => s.tenantId === user.tenantId) : [];
+  const gruppi = elencoGruppi(db.fields);
 
   return (
     <div>
@@ -294,15 +298,23 @@ export default async function ImpostazioniPage({
         <div className="section">
           <div className="section-head">
             <h2>Campi disponibili ({db.fields.length})</h2>
-            <span className="hint">i nuovi campi compaiono nella pagina Dati e nell&apos;editor Layout</span>
+            <span className="hint">i nuovi campi compaiono nella pagina Dati e nell&apos;editor Layout · il gruppo serve a decidere in blocco cosa va solo online (pagina Scheda online)</span>
           </div>
           <div className="card table-wrap">
             <table className="data">
-              <thead><tr><th>Campo</th><th>Origine</th><th></th></tr></thead>
+              <thead><tr><th>Campo</th><th>Gruppo</th><th>Origine</th><th></th></tr></thead>
               <tbody>
                 {db.fields.map((f) => (
                   <tr key={f.id}>
-                    <td><strong>{f.label}</strong></td>
+                    <td><strong>{f.label}</strong>{f.scopeType && <div className="hint">campo di un&apos;insegna/PV</div>}</td>
+                    <td>
+                      <ModuloAutoSalva azione={salvaGruppoCampo.bind(null, f.id)} style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                        <select name="gruppo" defaultValue={gruppoDi(f)} style={{ marginTop: 0, width: 170 }}>
+                          {gruppi.map((g) => <option key={g} value={g}>{g}</option>)}
+                        </select>
+                        <input type="text" name="gruppoNuovo" placeholder="o un gruppo nuovo…" style={{ marginTop: 0, width: 150, fontSize: 12.5 }} />
+                      </ModuloAutoSalva>
+                    </td>
                     <td>{f.custom ? <span className="pill pill-amber">Aggiunto</span> : <span className="pill pill-blue">Excel Garden Team</span>}</td>
                     <td>
                       {f.custom && (
@@ -315,8 +327,12 @@ export default async function ImpostazioniPage({
                 ))}
               </tbody>
             </table>
-            <form action={addField} style={{ display: "flex", gap: 10, marginTop: 12, maxWidth: 420 }}>
-              <input type="text" name="label" required placeholder="Nome del nuovo campo (es. Garanzia)" style={{ flex: 1, marginTop: 0 }} />
+            <form action={addField} style={{ display: "flex", gap: 10, marginTop: 12, maxWidth: 620, flexWrap: "wrap" }}>
+              <input type="text" name="label" required placeholder="Nome del nuovo campo (es. Garanzia)" style={{ flex: 1, minWidth: 200, marginTop: 0 }} />
+              <select name="gruppo" defaultValue="" style={{ marginTop: 0, width: 170 }}>
+                <option value="">Gruppo: Altro</option>
+                {gruppi.map((g) => <option key={g} value={g}>{g}</option>)}
+              </select>
               <button className="btn btn-sm" type="submit">Aggiungi campo</button>
             </form>
           </div>
