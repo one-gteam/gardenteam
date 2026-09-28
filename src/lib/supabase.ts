@@ -28,23 +28,53 @@ export const STORAGE_BUCKET = "academy-gt";
 /** Nome fisso della tabella dove viene salvato l'intero oggetto JSON di ogni dominio. */
 export const APP_DATA_TABLE = "app_data";
 
+/*
+ * Copia in memoria dei blob, per istanza del server. Ogni lettura chiede
+ * comunque al database se il blob è cambiato (updated_at diverso da quello in
+ * memoria): se sì arriva il blob nuovo, se no non arriva niente e si usa la
+ * copia. Una modifica fatta da qualunque istanza si vede quindi subito, ma il
+ * blob dello Zoo (~1,4 MB) non viaggia a ogni pagina. Chi legge riceve una copia
+ * sua, perché il codice modifica gli oggetti letti prima di salvarli.
+ */
+const memoria = new Map<string, { updatedAt: string; data: unknown }>();
+
 /** Legge il blob JSON di un dominio ('academy' | 'stampe' | 'zoo'). */
 export async function readDomain<T>(domain: string, empty: T): Promise<T> {
+  const noto = memoria.get(domain);
+  if (noto) {
+    const { data, error } = await supabase()
+      .from(APP_DATA_TABLE)
+      .select("data, updated_at")
+      .eq("domain", domain)
+      .neq("updated_at", noto.updatedAt)
+      .maybeSingle();
+    if (error) throw new Error(`Lettura Supabase (${domain}) fallita: ${error.message}`);
+    if (!data) return structuredClone(noto.data) as T;
+    memoria.set(domain, { updatedAt: data.updated_at as string, data: data.data });
+    return structuredClone(data.data) as T;
+  }
   const { data, error } = await supabase()
     .from(APP_DATA_TABLE)
-    .select("data")
+    .select("data, updated_at")
     .eq("domain", domain)
     .maybeSingle();
   if (error) throw new Error(`Lettura Supabase (${domain}) fallita: ${error.message}`);
-  return (data?.data as T) ?? empty;
+  if (!data) return empty;
+  if (data.updated_at) memoria.set(domain, { updatedAt: data.updated_at as string, data: data.data });
+  return structuredClone(data.data) as T;
 }
 
 /** Scrive (sovrascrivendo) il blob JSON di un dominio. */
 export async function writeDomain<T>(domain: string, value: T): Promise<void> {
+  const updatedAt = new Date().toISOString();
   const { error } = await supabase()
     .from(APP_DATA_TABLE)
-    .upsert({ domain, data: value, updated_at: new Date().toISOString() }, { onConflict: "domain" });
-  if (error) throw new Error(`Scrittura Supabase (${domain}) fallita: ${error.message}`);
+    .upsert({ domain, data: value, updated_at: updatedAt }, { onConflict: "domain" });
+  if (error) {
+    memoria.delete(domain);
+    throw new Error(`Scrittura Supabase (${domain}) fallita: ${error.message}`);
+  }
+  memoria.set(domain, { updatedAt, data: structuredClone(value) });
 }
 
 /** Carica un file nel bucket condiviso e ritorna l'URL pubblico. */

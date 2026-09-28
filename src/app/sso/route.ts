@@ -24,6 +24,6 @@ export async function GET(req: NextRequest) {
   const user = db.users.find((u) => u.id === result.userId)!;
 
   const store = await cookies();
-  store.set(AUTH_COOKIE, valoreSessione(user.id), OPZIONI_SESSIONE);
+  store.set(AUTH_COOKIE, valoreSessione(user.id, user.passwordHash), OPZIONI_SESSIONE);
   return NextResponse.redirect(new URL(postLoginPath(user), req.url));
 }

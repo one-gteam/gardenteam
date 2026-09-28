@@ -86,7 +86,7 @@ export default function PhotoMatcher({
                 <tr key={f.file}>
                   <td>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={f.url} alt="" style={{ width: 44, height: 44, objectFit: "contain", background: "#fff", borderRadius: 6, border: "1px solid #eee" }} />
+                    <img loading="lazy" decoding="async" src={f.url} alt="" style={{ width: 44, height: 44, objectFit: "contain", background: "#fff", borderRadius: 6, border: "1px solid #eee" }} />
                   </td>
                   <td style={{ fontSize: 12 }}>{f.file}</td>
                   <td>

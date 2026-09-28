@@ -11,7 +11,7 @@ import { postLoginPath } from "./types";
 import { LAYOUT_FONTS } from "./layout-fonts";
 import {
   getZooDb, saveZooDb, ZooDB, ZooParent, ZooProduct, campagnaInLavorazione, campagnaInCorso, campaignStato, NO_VOLANTINO,
-  ZOO_FORMATS, PV_PROMO_CODES_DEFAULT, ownScopeVisible, apiKeyFor, contenutoDaTesto, zooCartelloValues, layoutScegliibili, scontoDaTesto, promoDaTesto, applicaPromoTesto,
+  ZOO_FORMATS, PV_PROMO_CODES_DEFAULT, ownScopeVisible, apiKeyFor, contenutoDaTesto, zooCartelloValues, layoutScegliibili, scontoDaTesto, promoDaTesto, applicaPromoTesto, chiaveGruppoOfferta,
   type ZooOffer,
 } from "./zoo";
 import type { LayoutItem } from "./stampe";
@@ -38,7 +38,8 @@ function backUrl(page: string, scopeParam: string, extra: Record<string, string>
    * si controlla, qualcuno può farsi rimandare fuori dal sito. Vale solo un
    * percorso interno.
    */
-  const percorso = grezzo.startsWith("/") && !grezzo.startsWith("//") ? grezzo : "/stampe/zoo/stampa";
+  // anche "/\sito.it": il browser tratta la barra rovesciata come "//", cioè un altro sito
+  const percorso = grezzo.startsWith("/") && !grezzo.startsWith("//") && !grezzo.includes("\\") ? grezzo : "/stampe/zoo/stampa";
   const qs = new URLSearchParams(suoi ?? "");
   for (const [k, v] of Object.entries({ scope: scopeParam, ...extra })) qs.set(k, v);
   return `${percorso}?${qs.toString()}`;
@@ -106,11 +107,17 @@ function cell(row: Record<string, unknown>, ...cols: string[]): string {
   return "";
 }
 
+/*
+ * Prezzo scritto in qualsiasi modo ("12,90", "€ 12,90", "12,90 €", "1.299,00",
+ * 12.9 come numero di Excel) → "12,90". Prima "€ 12,90" e "1.299,00" non si
+ * capivano e il prezzo andava perso.
+ */
 function priceStr(v: string): string {
   if (!v) return "";
-  const n = v.replace(",", ".");
-  const num = Number(n);
-  if (Number.isNaN(num)) return v;
+  let t = v.replace(/[€\s]/g, "");
+  if (t.includes(",")) t = t.replace(/\./g, "").replace(",", ".");
+  const num = Number(t);
+  if (t === "" || Number.isNaN(num)) return v;
   return num.toFixed(2).replace(".", ",");
 }
 
@@ -137,6 +144,8 @@ interface ListinoRow {
  */
 function parseListinoBlocchi(XLSX: typeof import("xlsx"), wb: import("xlsx").WorkBook): ListinoRow[] {
   const grid = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: "" });
+  // lo stesso foglio come si vede in Excel: una cella "20%" è il numero 0.2, e senza questo diventava un prezzo di 0,20 €
+  const vista = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: "", raw: false });
   const norm = (v: unknown) => String(v ?? "").trim().toLowerCase();
   const want: Record<string, string> = {
     fornitore: "fornitore", ean: "ean", codice: "nr. articolo fornitore",
@@ -153,21 +162,23 @@ function parseListinoBlocchi(XLSX: typeof import("xlsx"), wb: import("xlsx").Wor
   }
   if (!cols || cols.fornitore < 0 || cols.ean < 0) return [];
   const rows: ListinoRow[] = [];
-  for (const row of grid) {
+  for (const [r, row] of grid.entries()) {
     const fornitoreCell = norm(row[cols.fornitore]);
     if (!fornitoreCell || fornitoreCell === want.fornitore) continue; // riga di intestazione ripetuta o vuota
     const ean = String(row[cols.ean] ?? "").trim().replace(/\.0$/, "");
     if (!ean) continue;
-    const promoRaw = String(row[cols.prezzoPromo] ?? "").trim();
-    const promoNum = Number(promoRaw.replace(",", "."));
-    const isNumeric = promoRaw !== "" && !Number.isNaN(promoNum);
+    const promoVisto = String(vista[r]?.[cols.prezzoPromo] ?? "").trim();
+    const promoRaw = promoVisto.endsWith("%") ? promoVisto : String(row[cols.prezzoPromo] ?? "").trim();
+    const promoNum = Number(priceStr(promoRaw).replace(",", "."));
+    const isNumeric = promoRaw !== "" && !promoRaw.endsWith("%") && !Number.isNaN(promoNum);
     rows.push({
       ean,
       codice: cols.codice >= 0 ? String(row[cols.codice] ?? "").trim().replace(/\.0$/, "") : "",
       descrizione: cols.descrizione >= 0 ? String(row[cols.descrizione] ?? "").trim() : "",
       fornitore: String(row[cols.fornitore] ?? "").trim(),
       prezzoListino: cols.prezzoListino >= 0 ? priceOrEmpty(String(row[cols.prezzoListino] ?? "").trim()) : "",
-      prezzoPromo: isNumeric ? priceStr(promoRaw) : "",
+      // "0" nei listini vuol dire "non disponibile", non "gratis"
+      prezzoPromo: isNumeric ? priceOrEmpty(promoRaw) : "",
       condizioni: isNumeric ? "" : promoRaw,
     });
   }
@@ -229,7 +240,9 @@ export async function importZooProducts(scopeParam: string, formData: FormData) 
  * è la pagina da cui si è partiti (Database prodotti o Offerte in corso).
  */
 export async function finalizeZooPhotoUpload(back: string, scopeParam: string, fileNames: string[]) {
-  await requireZooUser();
+  // le foto del catalogo comune le cambia solo chi cura lo Zoo per il Consorzio
+  const utente = await requireZooUser();
+  if (!isZooEditor(utente)) redirect(backUrl(back, scopeParam, { permessi: "no" }));
   const db = await getZooDb();
   let matched = 0;
   for (const clean of fileNames) {
@@ -248,7 +261,8 @@ export async function finalizeZooPhotoUpload(back: string, scopeParam: string, f
 
 /** Associa manualmente una foto già caricata (nel bucket zoo-foto) a un prodotto. */
 export async function associateZooPhoto(back: string, scopeParam: string, productId: string, formData: FormData) {
-  await requireZooUser();
+  const utente = await requireZooUser();
+  if (!isZooEditor(utente)) redirect(backUrl(back, scopeParam, { permessi: "no" }));
   const fileName = String(formData.get("fileName") ?? "");
   const db = await getZooDb();
   const p = db.products.find((x) => x.id === productId);
@@ -270,11 +284,19 @@ export async function staccaZooFoto(target: string, scopeParam: string, back: st
   const academyDb = await getDb();
   const scope = resolveScope(user, scopeParam, academyDb);
   if (!gestisceArea(user, "zoo", scope, academyDb)) redirect(backUrl(back, scopeParam, { permessi: "no" }));
+  /*
+   * La foto di un padre o di un articolo del catalogo comune vale per tutte le
+   * insegne: la toglie solo chi cura lo Zoo per il Consorzio. Un'insegna o un
+   * PV tolgono solo le foto dei propri articoli.
+   */
   if (target.startsWith("p:")) {
+    if (!isZooEditor(user)) redirect(backUrl(back, scopeParam, { permessi: "no" }));
     const parent = db.parents.find((p) => p.id === target.slice(2));
     if (parent) parent.image = undefined;
   } else {
     const p = db.products.find((x) => x.id === target);
+    const suo = p?.scopeType === scope.type && (p?.scopeId ?? "") === scope.id;
+    if (p && !suo && !isZooEditor(user)) redirect(backUrl(back, scopeParam, { permessi: "no" }));
     if (p) p.image = undefined;
   }
   await saveZooDb(db);
@@ -315,7 +337,8 @@ export async function confirmZooPhotoTargets(
  * (vuoto = nessun abbinamento per quella foto).
  */
 export async function confirmZooPhotoMatches(back: string, scopeParam: string, formData: FormData) {
-  await requireZooUser();
+  const utente = await requireZooUser();
+  if (!isZooEditor(utente)) redirect(backUrl(back, scopeParam, { permessi: "no" }));
   const db = await getZooDb();
   let n = 0;
   for (const [key, value] of formData.entries()) {
@@ -341,12 +364,13 @@ function applicaContenuti(children: ZooProduct[], contenuti?: { ean: string; qua
   }
 }
 
-function applyGroups(db: ZooDB, groups: AiGroup[], usedAi: boolean): number {
+function applyGroups(db: ZooDB, groups: AiGroup[], usedAi: boolean, ammessi?: Set<string>): number {
   let created = 0;
   for (const g of groups) {
-    const children = db.products.filter((p) => g.eans.includes(p.ean));
+    // solo gli articoli su cui si stava lavorando (non altri con lo stesso EAN), ancora senza padre
+    const children = db.products.filter((p) => g.eans.includes(p.ean) && !p.parentId && (!ammessi || ammessi.has(p.id)));
     if (children.length === 0) continue;
-    const id = `zp_${Date.now()}_${created}`;
+    const id = `zp_${Date.now()}_${created}_${Math.random().toString(36).slice(2, 5)}`;
     const parent: ZooParent = {
       id,
       nome: g.nome,
@@ -403,9 +427,14 @@ export async function associaConAI(back: string, scopeParam: string, formData: F
   const db = await getZooDb();
   const selected = db.products.filter((p) => ids.includes(p.id));
   if (selected.length === 0) redirect(backUrl(back, scopeParam));
-  const { groups, usedAi, error, restanti } = await groupAndDescribeBatched(apiKeyFor(db, scopeAi), selected, db.settings);
-  const created = applyGroups(db, groups, usedAi);
-  await saveZooDb(db);
+  const chiave = apiKeyFor(db, scopeAi) || process.env.ANTHROPIC_API_KEY;
+  const { groups, usedAi, error, restanti } = await groupAndDescribeBatched(chiave, selected, db.settings);
+  // con la chiave ma l'AI in errore non si creano padri di bozza: si dice il motivo
+  if (chiave && !usedAi) redirect(backUrl(back, scopeParam, { ai: "0", padri: "0", aierr: (error ?? "L'AI non ha risposto").slice(0, 120) }));
+  // si applica su una lettura fresca: la chiamata all'AI dura minuti, nel frattempo altri scrivono
+  const fresco = await getZooDb();
+  const created = applyGroups(fresco, groups, usedAi, new Set(selected.map((p) => p.id)));
+  await saveZooDb(fresco);
   redirect(backUrl(back, scopeParam, {
     ai: usedAi ? "1" : "0", padri: String(created),
     ...(restanti ? { restanti: String(restanti) } : {}),
@@ -421,8 +450,16 @@ export async function rigeneraTestiAI(back: string, parentId: string, scopeParam
   const parent = db.parents.find((p) => p.id === parentId);
   const children = db.products.filter((p) => p.parentId === parentId);
   if (!parent || children.length === 0) redirect(backUrl(back, scopeParam, { padre: parentId }));
-  const { groups, usedAi, error } = await groupAndDescribe(db.settings.apiKey, children, db.settings, true);
-  if (groups[0]) {
+  const chiave = db.settings.apiKey || process.env.ANTHROPIC_API_KEY;
+  const { groups, usedAi, error } = await groupAndDescribe(chiave, children, db.settings, true);
+  // senza una risposta vera dell'AI i testi curati restano: prima venivano sostituiti da una bozza automatica
+  if (!usedAi) redirect(backUrl(back, scopeParam, { padre: parentId, ai: "0", aierr: (error ?? "Manca la chiave API Claude").slice(0, 120) }));
+  const fresco = await getZooDb();
+  const padreFresco = fresco.parents.find((p) => p.id === parentId);
+  const figliFreschi = fresco.products.filter((p) => p.parentId === parentId);
+  if (groups[0] && padreFresco) {
+    const parent = padreFresco;
+    const children = figliFreschi;
     parent.nome = groups[0].nome;
     parent.descVolantino = groups[0].descVolantino;
     parent.descCartello = groups[0].descCartello;
@@ -431,9 +468,12 @@ export async function rigeneraTestiAI(back: string, parentId: string, scopeParam
     }
     parent.aiGenerated = usedAi;
     applicaContenuti(children, groups[0].contenuti);
+    if (parent.caratteristiche.length === 0) {
+      parent.caratteristiche = groups[0].caratteristiche.filter((c) => fresco.settings.caratteristiche.includes(c));
+    }
   }
-  await saveZooDb(db);
-  redirect(backUrl(back, scopeParam, { padre: parentId, ai: usedAi ? "1" : "0", ...(error ? { aierr: error.slice(0, 120) } : {}) }));
+  await saveZooDb(fresco);
+  redirect(backUrl(back, scopeParam, { padre: parentId, ai: "1" }));
 }
 
 /** Salva nome/testi del padre: il Consorzio scrive la versione comune, insegna/PV una personalizzazione. */
@@ -610,13 +650,31 @@ export async function setOfferTextScoped(
 }
 
 /** Segna come stampati i cartelli di queste offerte per l'ambito corrente. */
+/*
+ * Un cartello di gruppo (stesso padre, stesso prezzo) è stampato per tutti i
+ * suoi articoli, non solo per il primo: altrimenti col filtro "non stampati"
+ * ricompariva col secondo articolo e si stampava due volte.
+ */
+function conIlSuoGruppo(db: ZooDB, offerIds: string[]): string[] {
+  const out = new Set<string>();
+  for (const id of offerIds) {
+    const o = db.offers.find((x) => x.id === id);
+    if (!o) continue;
+    out.add(o.id);
+    const chiave = chiaveGruppoOfferta(db, o);
+    if (!chiave.startsWith("p:")) continue;
+    for (const x of db.offers) if (x.campaignId === o.campaignId && chiaveGruppoOfferta(db, x) === chiave) out.add(x.id);
+  }
+  return [...out];
+}
+
 export async function markZooPrinted(scopeParam: string, offerIds: string[]): Promise<{ ok: boolean }> {
   const user = await requireZooUser();
   const db = await getZooDb();
   const academyDb = await getDb();
   const scope = resolveScope(user, scopeParam, academyDb);
   const at = new Date().toISOString();
-  for (const offerId of offerIds) {
+  for (const offerId of conIlSuoGruppo(db, offerIds)) {
     if (!db.offers.some((o) => o.id === offerId)) continue;
     const esistente = db.printed.find(
       (p) => p.scopeType === scope.type && p.scopeId === scope.id && p.offerId === offerId
@@ -636,7 +694,7 @@ export async function resetZooPrinted(back: string, scopeParam: string, campaign
   const scope = resolveScope(user, scopeParam, academyDb);
   const ids = (formData.getAll("sel") as string[]).filter(Boolean);
   const dellaCampagna = new Set(db.offers.filter((o) => o.campaignId === campaignId).map((o) => o.id));
-  const daAzzerare = ids.length > 0 ? new Set(ids.filter((id) => dellaCampagna.has(id))) : dellaCampagna;
+  const daAzzerare = ids.length > 0 ? new Set(conIlSuoGruppo(db, ids).filter((id) => dellaCampagna.has(id))) : dellaCampagna;
   const prima = db.printed.length;
   db.printed = db.printed.filter(
     (p) => !(p.scopeType === scope.type && p.scopeId === scope.id && daAzzerare.has(p.offerId))
@@ -966,7 +1024,11 @@ export async function importZooOffers(scopeParam: string, formData: FormData) {
       fornitore: cell(row, "FORNITORE", "DITTA"),
       prezzoListino: priceOrEmpty(cell(row, "PREZZO LISTINO", "LISTINO")),
       prezzoPromo: priceOrEmpty(cell(row, "PREZZO PROMO", "PREZZO OFFERTA", "PREZZO")),
-      condizioni: cell(row, "CONDIZIONI", "VALIDITA'", "NOTE"),
+      // "3x2", "sconto 20%" scritti al posto del prezzo: vanno nelle condizioni, da dove si traducono
+      condizioni: [
+        (() => { const t = cell(row, "PREZZO PROMO", "PREZZO OFFERTA", "PREZZO"); return t && !priceOrEmpty(t) && !/^0+([.,]0+)?$/.test(t) ? t : ""; })(),
+        cell(row, "CONDIZIONI", "VALIDITA'", "NOTE"),
+      ].filter(Boolean).join(" · "),
       marca: cell(row, "MARCA", "MARCHIO", "BRAND"),
       categoria: cell(row, "CATEGORIA", "REPARTO"),
     }))
@@ -1009,7 +1071,14 @@ export async function importZooOffers(scopeParam: string, formData: FormData) {
   for (const row of rows) {
     const { ean, descrizione } = row;
     if (!ean) continue;
-    let product = db.products.find((p) => p.ean === ean);
+    /*
+     * L'articolo del catalogo comune, non quello proprio di un'insegna con lo
+     * stesso EAN. E gli EAN si confrontano senza zeri iniziali: Excel li perde
+     * quando la cella è un numero ("0012…" → "12…").
+     */
+    const senzaZeri = ean.replace(/^0+/, "");
+    let product = db.products.find((p) => !p.scopeType && p.ean === ean)
+      ?? db.products.find((p) => !p.scopeType && p.ean.replace(/^0+/, "") === senzaZeri);
     let nuovo = false;
     if (!product) {
       // il prodotto non è nel DB base: viene creato e vi resterà anche per il futuro
@@ -1375,9 +1444,12 @@ export async function associaNuoviConAI(scopeParam: string) {
   );
   const orphans = db.products.filter((p) => !p.parentId && inVolantino.has(p.id));
   if (orphans.length === 0) redirect(backUrl("/stampe/zoo/offerte", scopeParam, { padri: "0" }));
-  const { groups, usedAi, error, restanti } = await groupAndDescribeBatched(db.settings.apiKey, orphans, db.settings);
-  const created = applyGroups(db, groups, usedAi);
-  await saveZooDb(db);
+  const chiaveNuovi = db.settings.apiKey || process.env.ANTHROPIC_API_KEY;
+  const { groups, usedAi, error, restanti } = await groupAndDescribeBatched(chiaveNuovi, orphans, db.settings);
+  if (chiaveNuovi && !usedAi) redirect(backUrl("/stampe/zoo/offerte", scopeParam, { padri: "0", ai: "0", aierr: (error ?? "L'AI non ha risposto").slice(0, 120) }));
+  const freschi = await getZooDb();
+  const created = applyGroups(freschi, groups, usedAi, new Set(orphans.map((p) => p.id)));
+  await saveZooDb(freschi);
   redirect(backUrl("/stampe/zoo/offerte", scopeParam, {
     padri: String(created), ai: usedAi ? "1" : "0",
     ...(restanti ? { restanti: String(restanti) } : {}),
@@ -2669,10 +2741,20 @@ export async function avvisaColleghi(
   const academyDb = await getDb();
   const scope = resolveScope(user, scopeParam, academyDb);
 
-  const scelti = (formData.getAll("destinatari") as string[]).filter(Boolean);
+  /*
+   * L'avviso parte dall'indirizzo aziendale: lo manda solo chi prepara il
+   * volantino, e solo a colleghi registrati (più al massimo 10 indirizzi a mano,
+   * per chi non ha ancora un account). Prima chiunque entrasse nello Zoo poteva
+   * mandare testo libero a indirizzi qualsiasi.
+   */
+  if (!(isZooEditor(user) || (db.settings.volantinoEditors ?? []).includes(user.id))) {
+    return { ok: false, error: "L'avviso lo manda chi prepara il volantino." };
+  }
+  const emailRegistrate = new Set(academyDb.users.filter((u) => u.active !== false && u.email).map((u) => u.email.toLowerCase()));
+  const scelti = (formData.getAll("destinatari") as string[]).filter((x) => emailRegistrate.has(x.toLowerCase()));
   const manuali = String(formData.get("altri") ?? "")
-    .split(/[\s,;]+/).map((x) => x.trim()).filter((x) => x.includes("@"));
-  const destinatari = [...new Set([...scelti, ...manuali])];
+    .split(/[\s,;]+/).map((x) => x.trim()).filter((x) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(x)).slice(0, 10);
+  const destinatari = [...new Set([...scelti, ...manuali])].slice(0, 200);
   if (destinatari.length === 0) return { ok: false, error: "Scegli almeno un destinatario" };
 
   const entro = String(formData.get("entro") ?? "").trim();

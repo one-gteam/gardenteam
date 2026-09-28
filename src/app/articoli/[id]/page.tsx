@@ -4,6 +4,7 @@ import { getDb } from "@/lib/db";
 import ArticoliHeader from "@/components/articoli/ArticoliHeader";
 import { SegnaLetto } from "@/components/articoli/StrumentiArticolo";
 import {
+  ripulisciHtml,
   getArticoliDb, vedeArticoli, pubblicaArticoli, gestisceArticoli, modificaArticolo, dataItaliana, testoDestinatari,
   destinatarioDi, uscito, scaduto, programmato, dataOraItaliana,
 } from "@/lib/articoli";
@@ -59,7 +60,7 @@ export default async function ArticoloPage({ params }: { params: Promise<{ id: s
             // eslint-disable-next-line @next/next/no-img-element
             <img src={a.copertina} alt="" className="articolo-copertina" />
           )}
-          <div className="articolo-testo" dangerouslySetInnerHTML={{ __html: a.testo || "<p><i>Senza descrizione.</i></p>" }} />
+          <div className="articolo-testo" dangerouslySetInnerHTML={{ __html: ripulisciHtml(a.testo) || "<p><i>Senza descrizione.</i></p>" }} />
 
           {a.allegati.length > 0 && (
             <div className="card" style={{ marginTop: 18 }}>
@@ -94,7 +95,7 @@ export default async function ArticoloPage({ params }: { params: Promise<{ id: s
                     {v.titolo !== a.titolo && <span className="hint"> · «{v.titolo}»</span>}
                     {v.allegati.length > 0 && <span className="hint"> · 📎 {v.allegati.map((x) => x.nome).join(", ")}</span>}
                   </summary>
-                  <div className="articolo-testo versione-testo" dangerouslySetInnerHTML={{ __html: v.testo || "<p><i>Senza descrizione.</i></p>" }} />
+                  <div className="articolo-testo versione-testo" dangerouslySetInnerHTML={{ __html: ripulisciHtml(v.testo) || "<p><i>Senza descrizione.</i></p>" }} />
                   {v.allegati.length > 0 && (
                     <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
                       {v.allegati.map((x) => (

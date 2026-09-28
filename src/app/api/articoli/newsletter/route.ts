@@ -7,7 +7,7 @@ import { controllaCasella } from "@/lib/articoli-email";
  * e manda la newsletter se è dovuta. Vercel mette il segreto CRON_SECRET
  * nell'intestazione Authorization; senza, non risponde.
  */
-export const maxDuration = 60;
+export const maxDuration = 300; // lettura casella + un invio ogni ~0,5 s per iscritto
 
 export async function GET(req: NextRequest) {
   const segreto = process.env.CRON_SECRET;

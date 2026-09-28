@@ -12,9 +12,9 @@ const ERRORS: Record<string, string> = {
 export default async function ActivatePage({
   searchParams,
 }: {
-  searchParams: Promise<{ errore?: string; minuti?: string }>;
+  searchParams: Promise<{ errore?: string; minuti?: string; inviata?: string }>;
 }) {
-  const { errore, minuti } = await searchParams;
+  const { errore, minuti, inviata } = await searchParams;
   const { settings } = await getDb();
 
   return (
@@ -36,34 +36,29 @@ export default async function ActivatePage({
           </div>
         )}
 
+        {inviata && (
+          <div className="alert alert-green">
+            Se l&apos;email è registrata in GT One, ti abbiamo mandato un link per scegliere la password: aprilo entro due ore.
+            Controlla anche la posta indesiderata.
+          </div>
+        )}
         <div className="card">
           <h2>Attiva utente</h2>
           <p style={{ fontSize: 14, color: "var(--muted)" }}>
-            Il tuo punto vendita ti ha già inserito in GT One: inserisci la tua email di lavoro e
-            scegli una password per attivare l&apos;account.
+            Il tuo punto vendita ti ha già inserito in GT One: inserisci la tua email di lavoro,
+            ti mandiamo un link per scegliere la password.
           </p>
           <form action={activateAccount}>
             <label className="field">
               Email (quella comunicata al punto vendita)
               <input type="email" name="email" required placeholder="nome@insegna.it" />
             </label>
-            <label className="field">
-              Nuova password (minimo 8 caratteri)
-              <input type="password" name="password" required minLength={8} />
-            </label>
-            <label className="field">
-              Ripeti la password
-              <input type="password" name="password2" required minLength={8} />
-            </label>
-            <button className="btn" type="submit" style={{ width: "100%" }}>Attiva e vai al login</button>
+            <button className="btn" type="submit" style={{ width: "100%" }}>Mandami il link</button>
           </form>
           <p style={{ textAlign: "center", marginTop: 14, fontSize: 14 }}>
             <a href="/login">← Torna al login</a> · <a href="/registrati">Non sei stato inserito? Registrati</a>
           </p>
         </div>
-        <p style={{ fontSize: 12.5, color: "var(--muted)", textAlign: "center", marginTop: 14 }}>
-          In produzione: verifica dell&apos;email con link di conferma prima dell&apos;attivazione.
-        </p>
       </div>
     </div>
   );

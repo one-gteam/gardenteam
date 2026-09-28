@@ -321,7 +321,7 @@ export default async function ZooDatiPage({
                   {daControllare.map(({ product, file }) => (
                     <div key={product.id} style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={product.image} alt="" style={{ width: 46, height: 46, objectFit: "contain", background: "#fff", border: "1px solid #eee", borderRadius: 6 }} />
+                      <img loading="lazy" decoding="async" src={product.image} alt="" style={{ width: 46, height: 46, objectFit: "contain", background: "#fff", border: "1px solid #eee", borderRadius: 6 }} />
                       <div style={{ flex: 1, minWidth: 220, fontSize: 12.5 }}>
                         <strong>{product.descrizione}</strong>
                         <div style={{ color: "var(--muted)", fontSize: 11.5 }}>{product.ean} · foto: {file}</div>
@@ -516,7 +516,7 @@ export default async function ZooDatiPage({
                       )}
                       <td>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={zooImageUrl(first, parent)} alt="" style={{ width: 44, height: 44, objectFit: "contain", background: "#fff", borderRadius: 6, border: "1px solid #eee" }} />
+                        <img loading="lazy" decoding="async" src={zooImageUrl(first, parent)} alt="" style={{ width: 44, height: 44, objectFit: "contain", background: "#fff", borderRadius: 6, border: "1px solid #eee" }} />
                       </td>
                       <td>
                         {consortium ? (
@@ -607,7 +607,7 @@ export default async function ZooDatiPage({
                       {(consortium || scope.type !== "system") && <td><input type="checkbox" name="sel" value={p.id} /></td>}
                       <td>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={zooImageUrl(p, parent)} alt="" style={{ width: 44, height: 44, objectFit: "contain", background: "#fff", borderRadius: 6, border: "1px solid #eee" }} />
+                        <img loading="lazy" decoding="async" src={zooImageUrl(p, parent)} alt="" style={{ width: 44, height: 44, objectFit: "contain", background: "#fff", borderRadius: 6, border: "1px solid #eee" }} />
                       </td>
                       <td>
                         <strong style={{ fontSize: 13 }}>{p.descrizione}</strong>

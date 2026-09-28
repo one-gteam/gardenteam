@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
-import { canAccessArea } from "@/lib/stampe";
+import { canAccessArea, isZooEditor } from "@/lib/stampe";
 import { createSignedUploadUrl } from "@/lib/supabase";
 
 /**
@@ -12,7 +12,8 @@ import { createSignedUploadUrl } from "@/lib/supabase";
  */
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
-  if (!user || !canAccessArea(user, "zoo")) return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
+  // caricare (e sovrascrivere) le foto del catalogo comune: solo chi cura lo Zoo per il Consorzio
+  if (!user || !canAccessArea(user, "zoo") || !isZooEditor(user)) return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
 
   const body = (await req.json().catch(() => null)) as { fileNames?: unknown } | null;
   const fileNames = Array.isArray(body?.fileNames)

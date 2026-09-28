@@ -57,7 +57,7 @@ export default function ParentQuickEdit({
             </select>
             {fotoScelta && (
               /* eslint-disable-next-line @next/next/no-img-element */
-              <img src={`${fotoBaseUrl}${encodeURIComponent(fotoScelta)}`} alt="" style={{ width: 34, height: 34, objectFit: "contain", border: "1px solid #eee", borderRadius: 4, background: "#fff" }} />
+              <img loading="lazy" decoding="async" src={`${fotoBaseUrl}${encodeURIComponent(fotoScelta)}`} alt="" style={{ width: 34, height: 34, objectFit: "contain", border: "1px solid #eee", borderRadius: 4, background: "#fff" }} />
             )}
             <button type="button" className="btn btn-outline btn-sm" disabled={!fotoScelta || pending} onClick={usaFoto}>
               Usa questa

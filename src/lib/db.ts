@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { areeStoriche, DB, DEFAULT_SETTINGS, DEFAULT_TEMPLATES, RUOLI_STORICI } from "./types";
 import { buildSeed } from "./seed";
 import { readDomain, writeDomain } from "./supabase";
@@ -6,7 +7,14 @@ function isEmpty(db: DB | null | undefined): boolean {
   return !db || !db.users || db.users.length === 0;
 }
 
-export async function getDb(): Promise<DB> {
+/*
+ * Il database Academy si legge in più punti della stessa pagina (layout,
+ * utente, testata, pagina): con cache() di React la lettura si fa una volta
+ * sola per richiesta. Ogni richiesta (e ogni azione) ne fa comunque una sua.
+ */
+export const getDb = cache(caricaDb);
+
+async function caricaDb(): Promise<DB> {
   let db = await readDomain<DB>("academy", null as unknown as DB);
   if (isEmpty(db)) {
     db = buildSeed();

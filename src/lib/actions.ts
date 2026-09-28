@@ -478,10 +478,23 @@ export async function importUsersCsv(formData: FormData) {
 
 export async function createCourse(formData: FormData) {
   const admin = await requireAcademyUser();
+  /*
+   * Crea corsi solo chi li può anche modificare (Consorzio, insegna, PV): prima
+   * bastava avere l'area formazione, e uno studente poteva assegnare un corso
+   * obbligatorio a tutta la sua insegna.
+   */
+  const gestoreFormazione = admin.role === "manager" && gestisce(admin, "academy");
+  const perInsegna = admin.role === "group_admin" || (gestoreFormazione && livelloDi(admin) === "insegna");
+  const perPv = admin.role === "store_admin" || (gestoreFormazione && livelloDi(admin) === "pv");
+  if (!gestisceConsorzio(admin, "academy") && !perInsegna && !perPv) redirect("/admin/corsi");
   const db = await getDb();
   const title = String(formData.get("title") ?? "").trim();
   if (!title) redirect("/admin/corsi");
-  const level = String(formData.get("level") ?? "sistema") as CourseLevel;
+  const livelloChiesto = String(formData.get("level") ?? "sistema");
+  const livelliValidi: CourseLevel[] = ["sistema", "insegna", "punto_vendita"];
+  let level = (livelliValidi.includes(livelloChiesto as CourseLevel) ? livelloChiesto : "insegna") as CourseLevel;
+  // chi lavora per un punto vendita crea solo corsi del suo punto vendita
+  if (!gestisceConsorzio(admin, "academy") && perPv && !perInsegna) level = "punto_vendita";
   const dept = String(formData.get("department") ?? "");
   const canSystem = gestisceConsorzio(admin, "academy");
   const course: Course = {
@@ -634,7 +647,15 @@ export async function addLesson(courseId: string, type: LessonType) {
 /* ---------- Contenuti SCORM ---------- */
 
 export async function uploadScormPackage(courseId: string, lessonId: string, formData: FormData) {
-  const { db, course } = await requireEditableCourse(courseId);
+  const { admin, db, course } = await requireEditableCourse(courseId);
+  /*
+   * Un pacchetto SCORM è HTML e JavaScript che gira sul dominio del sito, con la
+   * sessione di chi lo apre: lo carica solo chi gestisce la formazione del
+   * Consorzio, non ogni gestore di punto vendita.
+   */
+  if (!gestisceConsorzio(admin, "academy")) {
+    return { ok: false as const, error: "I pacchetti SCORM li carica solo chi gestisce la formazione del Consorzio." };
+  }
   const lesson = course.lessons.find((l) => l.id === lessonId);
   if (!lesson) return { ok: false as const, error: "Lezione non trovata" };
   const file = formData.get("scorm") as File | null;
@@ -1288,6 +1309,18 @@ function sitesAssegnabili(admin: User, target: User, scelte: SiteId[]): SiteId[]
   return [...new Set([...scelte.filter((s) => mie.includes(s)), ...restano])];
 }
 
+/*
+ * Aree che si possono far GESTIRE a qualcuno: solo quelle che l'admin gestisce
+ * lui stesso, non quelle a cui ha solo accesso. Altrimenti chi entra nello Zoo
+ * poteva nominare gestore dello Zoo un collega (o se stesso).
+ */
+function gestioniAssegnabili(admin: User, target: User, scelte: SiteId[]): SiteId[] {
+  if (admin.role === "system_admin") return scelte;
+  const mie = userSites(admin).filter((s) => gestisce(admin, s));
+  const restano = (target.manages ?? []).filter((s) => !mie.includes(s));
+  return [...new Set([...scelte.filter((s) => mie.includes(s)), ...restano])];
+}
+
 /** Il bersaglio è nel perimetro dell'admin e l'admin ha la gestione utenti attiva? */
 function canTouchUser(db: DB, admin: User, target: User): boolean {
   const livello = livelloGestioneUtenti(db, admin);
@@ -1352,8 +1385,10 @@ export async function quickSetManages(userId: string, manages: SiteId[]) {
   if (!target) return { ok: false as const, error: "Utente non trovato" };
   if (!canTouchUser(db, admin, target)) return { ok: false as const, error: "Fuori dal tuo ambito" };
   if (target.role !== "manager") return { ok: false as const, error: "Le aree gestite valgono solo per il gestore" };
-  // si può far gestire solo un'area che si ha, e a cui il gestore ha accesso
-  const ammesse = sitesAssegnabili(admin, { ...target, sites: target.manages ?? [] }, manages)
+  // nessuno (salvo l'amministratore di sistema) si dà da solo la gestione di un'area
+  if (target.id === admin.id && admin.role !== "system_admin") return { ok: false as const, error: "Le tue aree gestite le cambia chi ti gestisce" };
+  // si può far gestire solo un'area che si gestisce, e a cui il gestore ha accesso
+  const ammesse = gestioniAssegnabili(admin, target, manages)
     .filter((s) => userSites(target).includes(s));
   target.manages = ammesse;
   await saveDb(db);
@@ -1505,9 +1540,9 @@ export async function updateUser(userId: string, formData: FormData): Promise<{ 
   const role = String(formData.get("role") ?? "") as Role;
   if (role && !suSeStesso && assignableRolesFor(admin).includes(role)) target!.role = role;
   // aree gestite (solo per il gestore): come le aree di accesso, si danno solo quelle che si hanno
-  if (formData.get("managesForm") === "1") {
+  if (formData.get("managesForm") === "1" && !(admin.id === target!.id && admin.role !== "system_admin")) {
     const scelte = (formData.getAll("manages") as string[]).filter(Boolean) as SiteId[];
-    target!.manages = target!.role === "manager" ? sitesAssegnabili(admin, { ...target!, sites: target!.manages ?? [] }, scelte) : undefined;
+    target!.manages = target!.role === "manager" ? gestioniAssegnabili(admin, target!, scelte) : undefined;
   }
 
   const storeId = String(formData.get("storeId") ?? "");
@@ -1565,21 +1600,41 @@ Inviata il ${new Date().toLocaleString("it-IT")}.`
 
 /* ================== Modelli email ================== */
 
+/*
+ * Chi può toccare i modelli email e di quale ambito: il Consorzio quelli comuni,
+ * l'insegna i suoi, il punto vendita i suoi. Chi non è né l'uno né l'altro (es.
+ * un gestore di un'altra area senza insegna) non tocca niente: prima finiva
+ * sui modelli COMUNI a tutto il portale.
+ */
+function ambitoModelli(admin: User): { globale: true } | { globale: false; tenantId: string; storeId?: string } | null {
+  if (gestisceConsorzio(admin, "academy")) return { globale: true };
+  const gestoreFormazione = admin.role === "manager" && gestisce(admin, "academy");
+  if ((admin.role === "store_admin" || (gestoreFormazione && livelloDi(admin) === "pv")) && admin.tenantId && admin.storeId) {
+    return { globale: false, tenantId: admin.tenantId, storeId: admin.storeId };
+  }
+  if ((admin.role === "group_admin" || (gestoreFormazione && livelloDi(admin) === "insegna")) && admin.tenantId) {
+    return { globale: false, tenantId: admin.tenantId };
+  }
+  return null;
+}
+
 export async function saveTemplate(type: EmailType, formData: FormData) {
   const admin = await requireAcademyUser();
-  if (admin.role === "student" || admin.role === "dept_head") redirect("/admin");
+  const ambito = ambitoModelli(admin);
+  if (!ambito) redirect("/admin");
   const db = await getDb();
-  const isGlobal = gestisceConsorzio(admin, "academy");
-  const isStore = admin.role === "store_admin";
-  const tenantId = isGlobal ? undefined : admin.tenantId;
-  const storeId = isStore ? admin.storeId : undefined;
+  const isGlobal = ambito!.globale;
+  const isStore = !ambito!.globale && !!ambito!.storeId;
+  const tenantId = ambito!.globale ? undefined : ambito!.tenantId;
+  const storeId = !ambito!.globale ? ambito!.storeId : undefined;
   let tpl = db.templates.find((t) =>
     t.type === type &&
     (isGlobal ? !t.tenantId && !t.storeId : isStore ? t.storeId === storeId : t.tenantId === tenantId && !t.storeId)
   );
   if (!tpl) {
-    const base = db.templates.find((t) => t.type === type && !t.tenantId && !t.storeId)!;
-    tpl = { ...base, tenantId, storeId };
+    const base = db.templates.find((t) => t.type === type && !t.tenantId && !t.storeId);
+    if (!base) redirect("/admin/email");
+    tpl = { ...base!, tenantId, storeId };
     db.templates.push(tpl);
   }
   const subject = String(formData.get("subject") ?? "").trim();
@@ -1594,19 +1649,24 @@ export async function saveTemplate(type: EmailType, formData: FormData) {
 
 export async function resetTemplate(type: EmailType) {
   const admin = await requireAcademyUser();
-  if (admin.role === "student" || admin.role === "dept_head") redirect("/admin");
+  const ambito = ambitoModelli(admin);
+  if (!ambito) redirect("/admin");
   const db = await getDb();
-  if (gestisceConsorzio(admin, "academy")) {
+  if (ambito!.globale) {
     const { DEFAULT_TEMPLATES } = await import("./types");
-    const def = DEFAULT_TEMPLATES.find((t) => t.type === type)!;
-    const tpl = db.templates.find((t) => t.type === type && !t.tenantId && !t.storeId)!;
-    tpl.subject = def.subject;
-    tpl.body = def.body;
-    tpl.enabled = true;
-  } else if (admin.role === "store_admin") {
-    db.templates = db.templates.filter((t) => !(t.type === type && t.storeId === admin.storeId));
+    const def = DEFAULT_TEMPLATES.find((t) => t.type === type);
+    const tpl = db.templates.find((t) => t.type === type && !t.tenantId && !t.storeId);
+    if (def && tpl) {
+      tpl.subject = def.subject;
+      tpl.body = def.body;
+      tpl.enabled = true;
+    }
+  } else if (ambito!.storeId) {
+    const sid = ambito!.storeId;
+    db.templates = db.templates.filter((t) => !(t.type === type && t.storeId === sid));
   } else {
-    db.templates = db.templates.filter((t) => !(t.type === type && t.tenantId === admin.tenantId && !t.storeId));
+    const tid = ambito!.tenantId;
+    db.templates = db.templates.filter((t) => !(t.type === type && t.tenantId === tid && !t.storeId));
   }
   await saveDb(db);
   redirect("/admin/email?template=1");
@@ -1929,7 +1989,7 @@ export async function loginWithPassword(formData: FormData) {
   await azzera([regole[0].chiave]);
   if (user!.active === false) redirect("/login?disattivato=1");
   const store = await cookies();
-  store.set(AUTH_COOKIE, valoreSessione(user!.id), OPZIONI_SESSIONE);
+  store.set(AUTH_COOKIE, valoreSessione(user!.id, user!.passwordHash), OPZIONI_SESSIONE);
   redirect(postLoginPath(user!));
 }
 
@@ -1986,27 +2046,40 @@ export async function reimpostaPassword(formData: FormData) {
   redirect("/login?reimpostata=1");
 }
 
+/*
+ * Primo accesso: si chiede l'email e si manda a quell'indirizzo un link per
+ * scegliere la password (lo stesso del "password dimenticata"). Prima la
+ * password si sceglieva direttamente qui, sapendo solo l'email: chiunque
+ * conoscesse l'indirizzo di un collega non ancora attivo poteva entrare al suo
+ * posto. La risposta è la stessa che l'email esista o no.
+ */
 export async function activateAccount(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
-  const password = String(formData.get("password") ?? "");
-  const password2 = String(formData.get("password2") ?? "");
-  if (password.length < 8) redirect("/attiva?errore=corta");
-  if (password !== password2) redirect("/attiva?errore=diverse");
-  // chi cerca a tentoni quali email sono registrate: 10 errori l'ora per indirizzo
-  const regole: Regola[] = [{ chiave: `attiva-ip:${await ipChiamante()}`, massimo: 10, minuti: 60 }];
+  const regole: Regola[] = [
+    { chiave: `attiva-email:${email}`, massimo: 3, minuti: 60 },
+    { chiave: `attiva-ip:${await ipChiamante()}`, massimo: 10, minuti: 60 },
+  ];
   const attesa = await attesaMinuti(regole);
   if (attesa > 0) redirect(`/attiva?errore=troppi&minuti=${attesa}`);
+  await segnaErrore(regole);
   const db = await getDb();
   const user = db.users.find((u) => u.email.toLowerCase() === email);
-  if (!user) {
-    await segnaErrore(regole);
-    redirect("/attiva?errore=nontrovato");
+  if (user && user.active !== false) {
+    const token = tokenReimposta(user.id, user.passwordHash);
+    if (token) {
+      const link = `${siteUrl()}/reimposta?token=${token}`;
+      const subject = user.passwordHash ? "🔑 Reimposta la password di GT One" : "👋 Attiva il tuo account GT One";
+      const body = `Ciao ${user.firstName},
+
+${user.passwordHash ? "il tuo account è già attivo: se non ricordi la password, sceglila di nuovo" : "per attivare il tuo account GT One scegli la tua password"} qui, entro due ore:
+${link}
+
+Se non hai chiesto tu niente, ignora questa email.`;
+      await pushEmail(db, user, "reimposta", subject, body);
+      await saveDb(db);
+    }
   }
-  if (user!.active === false) redirect("/login?disattivato=1");
-  if (user!.passwordHash) redirect("/attiva?errore=giaattivo");
-  user!.passwordHash = hashPassword(password);
-  await saveDb(db);
-  redirect("/login?attivato=1");
+  redirect("/attiva?inviata=1");
 }
 
 export async function registerRequest(formData: FormData) {

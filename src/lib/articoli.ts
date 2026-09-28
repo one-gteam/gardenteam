@@ -1,3 +1,4 @@
+import sanitizeHtml from "sanitize-html";
 import { readDomain, writeDomain } from "./supabase";
 import type { DB, Role, User } from "./types";
 
@@ -248,7 +249,10 @@ export function uscito(a: Articolo, oggi = new Date()): boolean {
 
 /** Scaduto: passa in archivio, fuori dall'elenco. */
 export function scaduto(a: Articolo, oggi = new Date()): boolean {
-  return !!a.scadenza && new Date(`${a.scadenza}T23:59:59`) < oggi;
+  if (!a.scadenza) return false;
+  // la fine della giornata di scadenza in ora italiana: letta in UTC (i server) durava fino alle 2 di notte
+  const fine = oraRomaInIso(`${a.scadenza}T23:59`);
+  return !!fine && new Date(fine).getTime() + 59_000 < oggi.getTime();
 }
 
 /** La persona rientra fra chi lo vede (a prescindere da uscita e scadenza). */
@@ -327,33 +331,30 @@ export function destinatariDaModulo(fd: FormData, prefisso = "dest"): Destinatar
  */
 const TAG_AMMESSI = new Set(["p", "br", "b", "strong", "i", "em", "u", "s", "ul", "ol", "li", "h2", "h3", "h4", "a", "blockquote", "hr", "div", "span"]);
 
+/*
+ * Pulizia dell'HTML degli articoli con un vero parser (sanitize-html), non con
+ * espressioni regolari: quelle si lasciavano aggirare ("<<x>img onerror=…>"
+ * diventava un'immagine con script) e il testo arriva anche da email esterne.
+ * Restano solo i tag della formattazione; i link solo http/https/mailto, che si
+ * aprono in una scheda nuova.
+ */
 export function ripulisciHtml(html: string): string {
   if (!html) return "";
-  // via blocchi interi che non hanno niente da dire sul sito
-  let s = html.replace(/<(script|style|head|title|iframe|object|embed|svg|math)[\s\S]*?<\/\1>/gi, "");
-  s = s.replace(/<!--[\s\S]*?-->/g, "");
-  s = s.replace(/<\/?([a-zA-Z][a-zA-Z0-9]*)\b([^>]*)>/g, (tutto, nomeGrezzo: string, attrs: string) => {
-    const nome = nomeGrezzo.toLowerCase();
-    const chiusura = tutto.startsWith("</");
-    if (!TAG_AMMESSI.has(nome)) return "";
-    if (chiusura) return `</${nome}>`;
-    if (nome === "a") {
-      const m = /href\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(attrs);
-      const href = (m?.[2] ?? m?.[3] ?? m?.[4] ?? "").trim();
-      if (/^(https?:|mailto:)/i.test(href)) {
-        return `<a href="${href.replace(/"/g, "&quot;")}" target="_blank" rel="noopener noreferrer">`;
-      }
-      return "<span>";
-    }
-    return `<${nome}>`;
-  });
-  // un "<a" trasformato in span deve chiudersi come span
-  s = s.replace(/<\/a>/gi, (m, offset: number) => {
-    const prima = s.lastIndexOf("<a ", offset);
-    const primaSpan = s.lastIndexOf("<span>", offset);
-    return primaSpan > prima ? "</span>" : m;
-  });
-  return s.trim();
+  return sanitizeHtml(html, {
+    allowedTags: [...TAG_AMMESSI],
+    allowedAttributes: { a: ["href", "target", "rel"] },
+    allowedSchemes: ["http", "https", "mailto"],
+    allowProtocolRelative: false,
+    disallowedTagsMode: "discard",
+    nonTextTags: ["script", "style", "textarea", "option", "noscript", "head", "title", "iframe", "object", "embed", "svg", "math"],
+    transformTags: {
+      a: (_tagName, attribs): sanitizeHtml.Tag => {
+        const href = (attribs.href ?? "").trim();
+        if (!/^(https?:|mailto:)/i.test(href)) return { tagName: "span", attribs: {} as sanitizeHtml.Attributes };
+        return { tagName: "a", attribs: { href, target: "_blank", rel: "noopener noreferrer" } };
+      },
+    },
+  }).trim();
 }
 
 /** Solo il testo, per anteprime e newsletter. */

@@ -639,6 +639,11 @@ export async function removeListValue(key: "marche" | "tipologie" | "colori", va
 export async function toggleStoreBlock(storeId: string, scopeParam: string) {
   const user = await requireStampeUser();
   if (user.role !== "group_admin" && user.role !== "system_admin") redirect("/stampe/impostazioni");
+  // un'insegna blocca o sblocca solo i propri punti vendita
+  if (user.role === "group_admin") {
+    const academyDb = await getDb();
+    if (academyDb.stores.find((s) => s.id === storeId)?.tenantId !== user.tenantId) redirect("/stampe/impostazioni");
+  }
   const db = await getStampeDb();
   const blocked = db.settings.blockedStores ?? [];
   db.settings.blockedStores = blocked.includes(storeId)

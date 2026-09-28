@@ -48,11 +48,11 @@ export function lavoroAttivo(l?: LavoroAi): boolean {
   return Date.now() - new Date(l.battito ?? l.inizio).getTime() < LAVORO_SCADUTO_MS;
 }
 
-function applicaGruppi(db: ZooDB, groups: AiGroup[]): number {
+function applicaGruppi(db: ZooDB, groups: AiGroup[], ammessi: Set<string>): number {
   let creati = 0;
   for (const g of groups) {
     // solo articoli ancora senza padre: nel frattempo qualcuno può averli raggruppati a mano
-    const figli = db.products.filter((p) => g.eans.includes(p.ean) && !p.parentId);
+    const figli = db.products.filter((p) => g.eans.includes(p.ean) && !p.parentId && ammessi.has(p.id));
     if (figli.length === 0) continue;
     const id = `zp_${Date.now()}_${creati}_${Math.random().toString(36).slice(2, 5)}`;
     const padre: ZooParent = {
@@ -136,7 +136,7 @@ export async function eseguiAssociazione(apiKey: string, productIds: string[]): 
         }
         await salvaInOrdine(async () => {
           const db = await getZooDb();
-          padri += applicaGruppi(db, res.groups);
+          padri += applicaGruppi(db, res.groups, new Set(ids));
           fatti += ids.length;
           db.settings.aiLavoro = { ...(db.settings.aiLavoro as LavoroAi), fatti, padri, battito: new Date().toISOString() };
           await saveZooDb(db);

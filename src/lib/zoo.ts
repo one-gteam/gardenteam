@@ -1265,24 +1265,23 @@ export async function giacenzePer(db: ZooDB, scope: Scope, academyDb: DB, eans: 
   const out: Record<string, Giacenza> = {};
   const unici = [...new Set(eans.filter(Boolean))];
   if (!url || unici.length === 0) return out;
-  for (let i = 0; i < unici.length; i += 200) {
-    const lotto = unici.slice(i, i + 200);
+  // i lotti partono tutti insieme: in fila, con mille codici, erano cinque attese una dopo l'altra
+  const lotti: string[][] = [];
+  for (let i = 0; i < unici.length; i += 200) lotti.push(unici.slice(i, i + 200));
+  await Promise.all(lotti.map(async (lotto) => {
     try {
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 6000);
       const r = await fetch(`${url}${url.includes("?") ? "&" : "?"}ean=${encodeURIComponent(lotto.join(","))}`, {
-        signal: ctrl.signal, cache: "no-store", headers: { accept: "application/json" },
+        signal: AbortSignal.timeout(6000), cache: "no-store", headers: { accept: "application/json" },
       });
-      clearTimeout(timer);
-      if (!r.ok) break;
+      if (!r.ok) return;
       const j = (await r.json()) as { giacenze?: Record<string, { giacenza: number; al?: string; prezzo?: number; codice?: string }> };
       for (const [ean, g] of Object.entries(j.giacenze ?? {})) {
         out[ean] = { giacenza: g.giacenza, al: g.al ?? "", prezzo: g.prezzo, codice: g.codice };
       }
     } catch {
-      break; // gestionale spento o irraggiungibile: niente giacenze, niente errore in pagina
+      // gestionale spento o irraggiungibile: niente giacenze, niente errore in pagina
     }
-  }
+  }));
   return out;
 }
 

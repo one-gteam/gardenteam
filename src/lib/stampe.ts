@@ -583,7 +583,9 @@ export function filterProducts(
     if (f.anno && (p.annoCollezione ?? "") !== f.anno) return false;
     if (q && !`${p.fields.titolo} ${p.fields.sottotitolo} ${p.codice}`.toLowerCase().includes(q)) return false;
     if (max > 0) {
-      const prezzo = parseFloat((p.fields.prezzo ?? "").replace(",", "."));
+      // "1.299,00": il punto delle migliaia va tolto, altrimenti diventava 1,299 €
+      const testo = (p.fields.prezzo ?? "").replace(/[€\s]/g, "");
+      const prezzo = parseFloat(testo.includes(",") ? testo.replace(/\./g, "").replace(",", ".") : testo);
       if (prezzo && prezzo > max) return false;
     }
     return true;

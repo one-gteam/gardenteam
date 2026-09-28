@@ -45,7 +45,7 @@ export default async function ZooFotoPage({
             return (
               <div key={o.id} className="card" style={{ padding: 10, textAlign: "center" }}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={src} alt={o.descrizione} style={{ width: "100%", height: 150, objectFit: "contain", background: "#fff" }} />
+                <img loading="lazy" decoding="async" src={src} alt={o.descrizione} style={{ width: "100%", height: 150, objectFit: "contain", background: "#fff" }} />
                 <div style={{ fontSize: 11.5, marginTop: 6, fontWeight: 700 }}>{o.descrizione}</div>
                 <div style={{ fontSize: 10.5, color: "var(--muted)" }}>EAN {o.ean} · {src.split("/").pop()}</div>
                 {src === "/immagini/mancante.jpg" && <span className="pill pill-orange" style={{ marginTop: 4 }}>foto mancante</span>}

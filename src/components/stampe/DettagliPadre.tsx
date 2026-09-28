@@ -114,7 +114,7 @@ export function PannelloPadre({ parentId, scopeParam, back }: { parentId: string
       <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: 16 }}>
         <div>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={parent.image} alt="" style={{ width: "100%", borderRadius: 8, background: "#fff", border: "1px solid #e4e4e4" }} />
+          <img loading="lazy" decoding="async" src={parent.image} alt="" style={{ width: "100%", borderRadius: 8, background: "#fff", border: "1px solid #e4e4e4" }} />
           {consortium && (
             <>
               <form action={setParentImage.bind(null, back, parent.id, scopeParam)} style={{ marginTop: 8, display: "grid", gap: 6 }}>
@@ -225,7 +225,7 @@ export function PannelloPadre({ parentId, scopeParam, back }: { parentId: string
                       <td>
                         {a.image
                           // eslint-disable-next-line @next/next/no-img-element
-                          ? <img src={a.image} alt="" style={{ width: 30, height: 30, objectFit: "contain", background: "#fff", border: "1px solid #eee", borderRadius: 4 }} />
+                          ? <img loading="lazy" decoding="async" src={a.image} alt="" style={{ width: 30, height: 30, objectFit: "contain", background: "#fff", border: "1px solid #eee", borderRadius: 4 }} />
                           : <span className="pill pill-gray" style={{ fontSize: 9.5 }}>no foto</span>}
                       </td>
                       <td>{a.descrizione}</td>

@@ -447,7 +447,7 @@ export default async function ZooOffertePage({
               return (
                 <div className={`alert ${l.stato === "errore" || morto ? "alert-amber" : attivo ? "" : "alert-green"}`}
                   style={{ marginBottom: 14, ...(attivo ? { background: "#f3ecfb", border: "1px solid #d9c6f2" } : {}) }}>
-                  {attivo && <AggiornaOgni secondi={6} />}
+                  {attivo && <AggiornaOgni secondi={15} />}
                   <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
                     <strong style={{ flex: 1 }}>
                       {attivo && `⏳ Associazione con l'AI in corso: ${l.fatti} di ${l.totale} articoli, ${l.padri} padri creati.`}
@@ -644,7 +644,7 @@ export default async function ZooOffertePage({
                           )}
                           <td>
                             {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={zooImageUrl(product, parent)} alt="" style={{ width: 44, height: 44, objectFit: "contain", background: "#fff", borderRadius: 6, border: "1px solid #eee" }} />
+                            <img loading="lazy" decoding="async" src={zooImageUrl(product, parent)} alt="" style={{ width: 44, height: 44, objectFit: "contain", background: "#fff", borderRadius: 6, border: "1px solid #eee" }} />
                           </td>
                           <td>
                             {consortium ? (
@@ -782,7 +782,7 @@ export default async function ZooOffertePage({
                           )}
                           <td>
                             {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={zooImageUrl(product, parent)} alt="" style={{ width: 44, height: 44, objectFit: "contain", background: "#fff", borderRadius: 6, border: "1px solid #eee" }} />
+                            <img loading="lazy" decoding="async" src={zooImageUrl(product, parent)} alt="" style={{ width: 44, height: 44, objectFit: "contain", background: "#fff", borderRadius: 6, border: "1px solid #eee" }} />
                           </td>
                           <td>
                             {consortium ? (

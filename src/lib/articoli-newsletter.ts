@@ -95,6 +95,20 @@ export async function inviaNewsletterArticoli(forzata = false): Promise<{ inviat
   const nuovi = db.articoli.filter((a) => uscito(a, oggi) && (a.pubblicato ?? a.creato) > da && !a.inNewsletter);
   if (nuovi.length < n.minimo) return { inviate: 0, nota: `${nuovi.length} articoli nuovi, minimo ${n.minimo}` };
 
+  /*
+   * Prima si segna l'invio, su una lettura fresca, poi si spedisce: se la
+   * funzione venisse interrotta a metà (tempo scaduto) il giorno dopo non
+   * rimanderebbe gli stessi articoli a tutti. E alla fine non si risalva la
+   * copia letta all'inizio, che cancellerebbe quanto scritto nel frattempo
+   * (articoli nuovi, letture, iscrizioni).
+   */
+  const adesso = new Date().toISOString();
+  const idNuovi = new Set(nuovi.map((a) => a.id));
+  const fresco = await getArticoliDb();
+  fresco.newsletter.ultimoInvio = adesso;
+  for (const a of fresco.articoli) if (idNuovi.has(a.id)) a.inNewsletter = adesso;
+  await saveArticoliDb(fresco);
+
   const base = siteUrl();
   const logo = assoluto(academy.settings.logoUrl, base);
   let inviate = 0;
@@ -113,9 +127,5 @@ export async function inviaNewsletterArticoli(forzata = false): Promise<{ inviat
     });
     if (r.sent !== false) inviate++;
   }
-  const adesso = new Date().toISOString();
-  n.ultimoInvio = adesso;
-  for (const a of nuovi) a.inNewsletter = adesso;
-  await saveArticoliDb(db);
   return { inviate };
 }

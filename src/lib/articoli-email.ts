@@ -153,28 +153,39 @@ export async function controllaCasella(forzato = false): Promise<{ importati: nu
     const lock = await client.getMailboxLock(e.imap.cartella || "INBOX");
     try {
       const nonLetti = ((await client.search({ seen: false }, { uid: true })) || []).slice(0, 10);
+      /*
+       * Un messaggio alla volta, e ognuno si salva subito su una lettura fresca
+       * del database: prima si salvava tutto alla fine la copia letta all'inizio,
+       * cancellando quello che gli altri avevano scritto nel frattempo (letture,
+       * articoli). E il messaggio si segna come letto solo DOPO il salvataggio:
+       * se la funzione si interrompe, al giro dopo lo si ritrova.
+       */
       for (const uid of nonLetti) {
         const m = await client.fetchOne(String(uid), { source: true, envelope: true }, { uid: true });
         if (!m || !m.source) continue;
         const idMessaggio = m.envelope?.messageId ?? `uid:${uid}`;
-        if (e.visti?.includes(idMessaggio)) {
+        const fresco = await getArticoliDb();
+        if (fresco.email.visti?.includes(idMessaggio)) {
           await client.messageFlagsAdd(String(uid), ["\\Seen"], { uid: true });
           continue;
         }
+        let voce: VoceRegistroEmail;
         try {
           const p = await simpleParser(m.source);
-          const voce = await articoloDaMessaggio(db, academy, {
+          voce = await articoloDaMessaggio(fresco, academy, {
             from: p.from?.text ?? "",
             subject: p.subject ?? "",
             text: p.text ?? undefined,
             html: typeof p.html === "string" ? p.html : undefined,
             allegati: (p.attachments ?? []).map((a) => ({ nome: a.filename ?? "allegato", tipo: a.contentType, bytes: a.content })),
           });
-          voci.push(voce);
         } catch (err) {
-          voci.push({ data: new Date().toISOString(), da: m.envelope?.from?.[0]?.address ?? "?", oggetto: m.envelope?.subject ?? "?", esito: "errore", nota: spiega(err) });
+          voce = { data: new Date().toISOString(), da: m.envelope?.from?.[0]?.address ?? "?", oggetto: m.envelope?.subject ?? "?", esito: "errore", nota: spiega(err) };
         }
-        e.visti = [idMessaggio, ...(e.visti ?? [])].slice(0, 500);
+        voci.push(voce);
+        fresco.email.visti = [idMessaggio, ...(fresco.email.visti ?? [])].slice(0, 500);
+        registra(fresco, [voce]);
+        await saveArticoliDb(fresco);
         await client.messageFlagsAdd(String(uid), ["\\Seen"], { uid: true });
       }
     } finally {
@@ -185,11 +196,11 @@ export async function controllaCasella(forzato = false): Promise<{ importati: nu
   } finally {
     await client?.logout().catch(() => undefined);
   }
-  e.inCorso = undefined;
-  e.ultimoControllo = new Date().toISOString();
-  e.ultimoErrore = errore;
-  registra(db, voci);
-  await saveArticoliDb(db);
+  const fine = await getArticoliDb();
+  fine.email.inCorso = undefined;
+  fine.email.ultimoControllo = new Date().toISOString();
+  fine.email.ultimoErrore = errore;
+  await saveArticoliDb(fine);
   if (voci.some((v) => v.articoloId)) revalidatePath("/articoli", "layout");
   return { importati: voci.filter((v) => v.articoloId).length, nota: errore };
 }

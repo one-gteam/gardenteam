@@ -17,22 +17,35 @@ function segretoSessione(): string {
   return process.env.AUTH_COOKIE_SECRET || process.env.SSO_SHARED_SECRET || "";
 }
 
-/** Il valore da scrivere nel biscotto: id più firma. */
-export function valoreSessione(userId: string): string {
-  const segreto = segretoSessione();
-  if (!segreto) return userId; // ambiente senza segreto configurato: come prima
-  return `${userId}.${createHmac("sha256", segreto).update(userId).digest("base64url")}`;
+/*
+ * La firma comprende anche un'impronta della password attuale: quando la
+ * password cambia (reimpostazione, attivazione), tutte le sessioni aperte
+ * prima smettono di valere. Prima un biscotto restava buono per sempre.
+ */
+function impronta(passwordHash?: string): string {
+  return createHash("sha256").update(passwordHash ?? "").digest("base64url").slice(0, 16);
 }
 
-/** L'id dentro al biscotto, solo se la firma torna. */
-function idDaBiscotto(valore: string): string | null {
+function firmaSessione(segreto: string, userId: string, passwordHash?: string): string {
+  return createHmac("sha256", segreto).update(`${userId}|${impronta(passwordHash)}`).digest("base64url");
+}
+
+/** Il valore da scrivere nel biscotto: id più firma (legata alla password di adesso). */
+export function valoreSessione(userId: string, passwordHash?: string): string {
   const segreto = segretoSessione();
-  if (!segreto) return valore;
+  if (!segreto) throw new Error("Manca il segreto delle sessioni (AUTH_COOKIE_SECRET/SSO_SHARED_SECRET)");
+  return `${userId}.${firmaSessione(segreto, userId, passwordHash)}`;
+}
+
+/** L'id dentro al biscotto, se la firma torna con la password attuale dell'utente. */
+function idDaBiscotto(valore: string, passwordHashDi: (id: string) => string | undefined): string | null {
+  const segreto = segretoSessione();
+  if (!segreto) return null; // senza segreto nessuna sessione vale: meglio fuori che aperti a tutti
   const punto = valore.lastIndexOf(".");
   if (punto <= 0) return null; // biscotto senza firma: non vale più
   const id = valore.slice(0, punto);
   const firma = Buffer.from(valore.slice(punto + 1));
-  const attesa = Buffer.from(createHmac("sha256", segreto).update(id).digest("base64url"));
+  const attesa = Buffer.from(firmaSessione(segreto, id, passwordHashDi(id)));
   if (firma.length !== attesa.length || !timingSafeEqual(firma, attesa)) return null;
   return id;
 }
@@ -124,9 +137,10 @@ export const OPZIONI_SESSIONE = {
 export async function getCurrentUser(): Promise<User | null> {
   const store = await cookies();
   const valore = store.get(COOKIE)?.value;
-  const id = valore ? idDaBiscotto(valore) : null;
-  if (!id) return null;
+  if (!valore) return null;
   const db = await getDb();
+  const id = idDaBiscotto(valore, (x) => db.users.find((u) => u.id === x)?.passwordHash);
+  if (!id) return null;
   const user = db.users.find((u) => u.id === id) ?? null;
   if (user && user.active === false) return null; // cessato: sessione non più valida
   return user;
