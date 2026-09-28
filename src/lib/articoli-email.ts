@@ -116,12 +116,15 @@ export async function provaCasella(): Promise<{ ok: boolean; messaggio: string }
  * "invalid" scambiava un server inesistente per una password sbagliata.
  */
 function spiega(e: unknown): string {
-  const err = e as { code?: string; authenticationFailed?: boolean; responseText?: string; message?: string };
+  const err = e as { code?: string; authenticationFailed?: boolean; responseText?: string; message?: string; serverResponseCode?: string };
   const t = `${err?.message ?? String(e)} ${err?.responseText ?? ""}`;
+  // la risposta esatta del server, accanto alla spiegazione: senza, "accesso rifiutato" copriva motivi diversi
+  const server = err?.responseText ? ` Risposta del server: «${err.responseText.slice(0, 160)}»${err.serverResponseCode ? ` [${err.serverResponseCode}]` : ""}.` : "";
+  if (/unable to authenticate data|Formato cifrato/i.test(t)) return "La password salvata non si decifra con la chiave di questo server: reinseriscila.";
   if (err?.code === "ENOTFOUND" || /getaddrinfo|ENOTFOUND/i.test(t)) return "Server non trovato: controlla l'indirizzo IMAP.";
   if (err?.code === "ETIMEDOUT" || err?.code === "ECONNREFUSED" || /timeout|ETIMEDOUT|ECONNREFUSED/i.test(t)) return "Il server non risponde: controlla indirizzo e porta.";
   if (err?.authenticationFailed || /AUTHENTICATIONFAILED|authentication failed|invalid credentials|LOGIN failed/i.test(t)) {
-    return "Accesso rifiutato: controlla utente e password (con la verifica in due passaggi serve una password per le app di Zoho).";
+    return `Accesso rifiutato da Zoho.${server}`;
   }
   return `Errore: ${t.trim().slice(0, 200)}`;
 }
