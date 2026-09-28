@@ -70,7 +70,9 @@ export default async function EmailPage({
     isGlobalEditor ||
     (user.role === "group_admin" && ct.tenantId === user.tenantId) ||
     (isStoreEditor && ct.storeId === user.storeId);
-  const templateTypes = Object.keys(EMAIL_TYPE_LABELS) as EmailType[];
+  // solo i tipi che hanno un modello: "reimposta password" ha un testo fisso e senza questo filtro la pagina andava in errore
+  const templateTypes = (Object.keys(EMAIL_TYPE_LABELS) as EmailType[])
+    .filter((t) => db.templates.some((x) => x.type === t && !x.tenantId && !x.storeId));
   const effectiveTemplate = (type: EmailType) => {
     const global = db.templates.find((t) => t.type === type && !t.tenantId && !t.storeId)!;
     if (isGlobalEditor) return { tpl: global, isOverride: false, global };
