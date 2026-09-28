@@ -18,12 +18,25 @@ export interface Bersaglio { id: string; label: string }
  * proposte. Il catalogo arriva una volta sola (non per riga) e si filtra qui.
  */
 export default function PhotoMatcher({
-  foto, catalogo, onConfirm,
+  foto: fotoIniziali, catalogo, onConfirm, onIgnora,
 }: {
   foto: FotoDaAbbinare[];
   catalogo: Bersaglio[];
   onConfirm: (coppie: { file: string; target: string }[]) => Promise<{ ok: boolean; n: number }>;
+  /** Non proporre più una foto: sparisce dall'elenco senza ricaricare la pagina. */
+  onIgnora?: (files: string[]) => Promise<{ ok: boolean; error?: string }>;
 }) {
+  const [nascoste, setNascoste] = useState<Set<string>>(new Set());
+  const foto = fotoIniziali.filter((f) => !nascoste.has(f.file));
+  const ignora = async (file: string) => {
+    if (!onIgnora) return;
+    setNascoste((prev) => new Set([...prev, file]));
+    const r = await onIgnora([file]).catch(() => ({ ok: false }));
+    if (!r.ok) {
+      setNascoste((prev) => { const n = new Set(prev); n.delete(file); return n; });
+      setEsito("non sono riuscito a ignorare la foto");
+    }
+  };
   const [scelte, setScelte] = useState<Record<string, string>>(
     () => Object.fromEntries(foto.map((f) => [f.file, f.candidati[0]?.id ?? ""]))
   );
@@ -45,7 +58,7 @@ export default function PhotoMatcher({
 
   const conferma = async () => {
     const coppie = Object.entries(scelte)
-      .filter(([, target]) => target)
+      .filter(([file, target]) => target && !nascoste.has(file))
       .map(([file, target]) => ({ file, target }));
     if (coppie.length === 0) { setEsito("Nessun abbinamento da confermare."); return; }
     setEsito("salvataggio…");
@@ -63,7 +76,7 @@ export default function PhotoMatcher({
       <div className="table-wrap">
         <table className="data">
           <thead>
-            <tr><th style={{ width: 56 }}>Foto</th><th>File</th><th>Abbina a</th></tr>
+            <tr><th style={{ width: 56 }}>Foto</th><th>File</th><th>Abbina a</th>{onIgnora && <th></th>}</tr>
           </thead>
           <tbody>
             {foto.map((f) => {
@@ -124,6 +137,13 @@ export default function PhotoMatcher({
                       )}
                     </div>
                   </td>
+                  {onIgnora && (
+                    <td>
+                      <button type="button" className="btn btn-outline btn-sm" title="Non proporre più questa foto" onClick={() => ignora(f.file)}>
+                        Ignora
+                      </button>
+                    </td>
+                  )}
                 </tr>
               );
             })}

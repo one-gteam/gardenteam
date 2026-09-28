@@ -13,10 +13,12 @@ import InlineSelect from "@/components/stampe/InlineSelect";
 import ColumnTools from "@/components/stampe/ColumnTools";
 import ParentQuickEdit from "@/components/stampe/ParentQuickEdit";
 import PhotoMatcher from "@/components/stampe/PhotoMatcher";
+import { PulsanteAzione } from "@/components/AzioneSenzaRicarica";
+import { ignoraZooFoto, ripristinaZooFotoIgnorate } from "@/lib/zoo-focus-actions";
 import { DettagliPadre, PannelloPadre } from "@/components/stampe/DettagliPadre";
 import {
   getZooDb, zooImageUrl, effectiveParentText, isZooHidden, hiddenEntriesFor, fornitoriList, marcheList, marcaEffettiva,
-  suggestPhotoMatch, buildAbbinamentoIndex, fotoDaControllare, contenutoDa, testoContenuto, animaliDi, caratteristicheProdottoDi, storicoOfferteByEan,
+  suggestPhotoMatch, buildAbbinamentoIndex, fotoDaControllare, fotoDaAbbinare, contenutoDa, testoContenuto, animaliDi, caratteristicheProdottoDi, storicoOfferteByEan,
   periodoBreve, visibleProducts, type ZooProduct, type ZooParent, type ZooStoricoVoce,
 } from "@/lib/zoo";
 import {
@@ -103,10 +105,8 @@ export default async function ZooDatiPage({
 
 
   // foto disponibili non ancora abbinate (per l'associazione manuale)
-  const usedPhotos = new Set(db.products.map((p) => (p.image ?? "").split("/").pop()));
-  const availablePhotos = tutteLeFoto.filter(
-    (f) => /\.(jpg|jpeg|png|webp)$/i.test(f) && !usedPhotos.has(f)
-  );
+  // anche le foto dei padri contano come usate; quelle ignorate non si propongono più
+  const { daAbbinare: availablePhotos, ignorate: fotoIgnorate } = fotoDaAbbinare(db, tutteLeFoto);
   /*
    * Proposte di abbinamento per nome (nessuna AI), su tutto il catalogo senza foto.
    * Calcolate solo a sezione aperta (?abbina=1): tokenizzare l'intero catalogo e
@@ -296,7 +296,12 @@ export default async function ZooDatiPage({
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <strong>Abbina le foto agli articoli</strong>
               <span className="pill pill-orange">{availablePhotos.length} da abbinare</span>
-              <a className="btn btn-outline btn-sm" style={{ marginLeft: "auto" }}
+              <PulsanteAzione azione={ignoraZooFoto.bind(null, null)} style={{ marginLeft: "auto" }}
+                conferma={`Ignorare tutte le ${availablePhotos.length} foto da abbinare? Non compariranno più qui (si possono ripristinare).`}
+                title="Le foto restano caricate, ma non vengono più proposte da abbinare">
+                Ignora tutte
+              </PulsanteAzione>
+              <a className="btn btn-outline btn-sm"
                 href={`${BACK}?${datiQs(sp, scopeParam, abbinaAperto ? undefined : "1")}`}>
                 {abbinaAperto ? "▴ Comprimi" : "▾ Apri"}
               </a>
@@ -345,10 +350,18 @@ export default async function ZooDatiPage({
               }))}
               catalogo={catalogoAbbinabile}
               onConfirm={confirmZooPhotoTargets}
+              onIgnora={ignoraZooFoto}
             />
             </>
             )}
           </div>
+        )}
+
+        {consortium && scope.type === "system" && fotoIgnorate.length > 0 && (
+          <p className="hint" style={{ margin: "-6px 0 12px", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            {fotoIgnorate.length} foto ignorate: non vengono proposte da abbinare.
+            <PulsanteAzione azione={ripristinaZooFotoIgnorate}>Ripristinale</PulsanteAzione>
+          </p>
         )}
 
         {/* vista + filtri */}

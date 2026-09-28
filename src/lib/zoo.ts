@@ -110,6 +110,22 @@ export interface ZooCampaign {
   archiviataIl?: string; // ISO
   /** Offerte e voti eliminati definitivamente: resta solo lo schema delle pagine. */
   svuotataIl?: string;
+  /** Nota libera nello Storico focus (com'è andato, cosa ripetere o evitare). */
+  focusNote?: string;
+}
+
+/**
+ * Un volantino uscito prima del sito (o fuori dal sito), riportato a mano
+ * nello Storico focus: per ogni animale i temi e le offerte, una per riga.
+ */
+export interface ZooFocusVolantino {
+  id: string;
+  nome: string;
+  dal: string; // yyyy-mm-dd
+  al?: string;
+  note?: string;
+  gruppi: { id: string; animale: string; focus: string; righe: string }[];
+  creatoIl: string;
 }
 
 export interface ZooOffer {
@@ -145,6 +161,8 @@ export interface ZooOffer {
    */
   paginaId?: string;
   focus?: string; // tema/angolo di comunicazione (campo libero)
+  /** Animale del focus scelto a mano nello Storico focus (assente = quello del prodotto padre). */
+  focusAnimale?: string;
   gruppoGrafico?: string; // offerte da impaginare vicine (stesso valore = stesso riquadro)
   /**
    * Offerta propria di un'insegna/PV invece che del Consorzio: non entra nel
@@ -423,6 +441,8 @@ export interface ZooSettings {
   condizioniStandard: string[]; // condizioni pronte del Consorzio, riusabili sui cartelli
   /** Aggiunge la validità del volantino ("dal… al…") in coda alle condizioni del cartello. */
   condizioniConValidita?: boolean;
+  /** Foto caricate che si è scelto di non abbinare: non compaiono più fra quelle "da abbinare". */
+  fotoIgnorate?: string[];
 }
 
 /**
@@ -614,6 +634,7 @@ export interface ZooDB {
   nonConformi: ZooNonConforme[];
   condizioniScopo: ZooCondizioniScopo[];
   testate: ZooTestataScopo[];
+  focusManuali: ZooFocusVolantino[];
 }
 
 /* ================== Persistenza ================== */
@@ -641,11 +662,11 @@ export async function getZooDb(): Promise<ZooDB> {
     products: [], parents: [], textOverrides: [], tagOverrides: [], offerOverrides: [], printed: [],
     campaigns: [], offers: [],
     votes: [], hidden: [], pvPrices: [], suggestions: [], volantinoLayouts: [], zooLayouts: [],
-    noPrint: [], layoutImages: [], pvPromoCodes: [], pvPromos: [], scopeApiKeys: [], noteBozza: [], coda: [], giacenze: [], nonConformi: [], condizioniScopo: [], testate: [],
+    noPrint: [], layoutImages: [], pvPromoCodes: [], pvPromos: [], scopeApiKeys: [], noteBozza: [], coda: [], giacenze: [], nonConformi: [], condizioniScopo: [], testate: [], focusManuali: [],
   };
   const db = await readDomain<ZooDB>("zoo", empty);
   db.settings = { ...DEFAULT_SETTINGS, ...(db.settings ?? {}) };
-  for (const k of ["products", "parents", "textOverrides", "tagOverrides", "offerOverrides", "printed", "campaigns", "offers", "votes", "hidden", "pvPrices", "suggestions", "volantinoLayouts", "zooLayouts", "noPrint", "layoutImages", "pvPromoCodes", "pvPromos", "scopeApiKeys", "noteBozza", "coda", "giacenze", "nonConformi", "condizioniScopo", "testate"] as const) {
+  for (const k of ["products", "parents", "textOverrides", "tagOverrides", "offerOverrides", "printed", "campaigns", "offers", "votes", "hidden", "pvPrices", "suggestions", "volantinoLayouts", "zooLayouts", "noPrint", "layoutImages", "pvPromoCodes", "pvPromos", "scopeApiKeys", "noteBozza", "coda", "giacenze", "nonConformi", "condizioniScopo", "testate", "focusManuali"] as const) {
     if (!db[k]) (db as unknown as Record<string, unknown>)[k] = [];
   }
   // i layout salvati prima delle tipologie non hanno il campo: senza questo la
@@ -1853,3 +1874,19 @@ export const DEFAULT_ZOO_ITEMS: LayoutItem[] = [
    */
   { fieldId: "condizioni", x: 5, y: 92, w: 90, h: 6 },
 ];
+
+/** L'animale sotto cui un'offerta compare nello Storico focus: scelto a mano, o quello del suo prodotto padre. */
+export function animaleFocus(db: ZooDB, o: ZooOffer): string {
+  if (o.focusAnimale?.trim()) return o.focusAnimale.trim();
+  const product = db.products.find((p) => p.id === o.productId);
+  const parent = product?.parentId ? db.parents.find((x) => x.id === product.parentId) : undefined;
+  return parent ? (animaliDi(db, parent.caratteristiche)[0] ?? "Altro") : "Altro";
+}
+
+/** Le foto del bucket che nessun articolo né padre usa, tolte quelle che si è scelto di ignorare. */
+export function fotoDaAbbinare(db: ZooDB, tutteLeFoto: string[]): { daAbbinare: string[]; ignorate: string[] } {
+  const usate = new Set([...db.products, ...db.parents].map((p) => (p.image ?? "").split("/").pop()));
+  const ignorate = new Set(db.settings.fotoIgnorate ?? []);
+  const libere = tutteLeFoto.filter((f) => /\.(jpg|jpeg|png|webp)$/i.test(f) && !usate.has(f));
+  return { daAbbinare: libere.filter((f) => !ignorate.has(f)), ignorate: libere.filter((f) => ignorate.has(f)) };
+}

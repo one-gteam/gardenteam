@@ -14,16 +14,15 @@ import InlineSelect from "@/components/stampe/InlineSelect";
 import ColumnTools from "@/components/stampe/ColumnTools";
 import AvvisaColleghi from "@/components/stampe/AvvisaColleghi";
 import ParentQuickEdit from "@/components/stampe/ParentQuickEdit";
-import PhotoMatcher from "@/components/stampe/PhotoMatcher";
 import { DettagliPadre, PannelloPadre } from "@/components/stampe/DettagliPadre";
 import {
   getZooDb, zooImageUrl, effectiveParentText, campagnaInLavorazione, campagnaInCorso, campaignStato,
-  suggestPhotoMatch, buildAbbinamentoIndex, animaliDi, caratteristicheProdottoDi, migraVolantinoPages, prezzoUnitaDi,
+  fotoDaAbbinare, animaliDi, caratteristicheProdottoDi, migraVolantinoPages, prezzoUnitaDi,
   NO_VOLANTINO, marcaEffettiva, type ZooProduct, type ZooOffer,
 } from "@/lib/zoo";
 import {
   importZooOffers, updateCampaignDates, associaNuoviConAI, finalizeZooPhotoUpload,
-  confirmZooPhotoTargets, createZooParent, associaConAI, rigeneraTestiAI, saveParentTexts, setParentImage,
+  createZooParent, associaConAI, rigeneraTestiAI, saveParentTexts, setParentImage,
   toggleParentCaratteristica, scioglieParent, chiudiVolantino, riapriVolantino, nuovoVolantino,
   svuotaOfferteVolantino, rimuoviOfferteMarginiamo, updateParentFieldInline, updateOfferFieldInline,
   updateOfferGroupFieldInline, setParentTagInline, moveProductToParent, setParentImageFromFile,
@@ -117,40 +116,12 @@ export default async function ZooOffertePage({
   const senzaPadre = offerProducts.filter((p) => !p.parentId);
 
 
-  // foto già caricate ma non ancora abbinate ad alcun articolo
-  const usedPhotos = new Set(db.products.map((p) => (p.image ?? "").split("/").pop()));
-  const availablePhotos = tutteLeFoto.filter(
-    (f) => /\.(jpg|jpeg|png|webp)$/i.test(f) && !usedPhotos.has(f)
-  );
   /*
-   * Le proposte di abbinamento costano: tokenizzare tutti gli articoli senza foto
-   * e confrontarli con ogni file richiede centinaia di ms ad ogni caricamento
-   * della pagina. Si calcolano solo quando la sezione è aperta davvero
-   * (?abbina=1), che è anche il modo in cui la sezione si comprime.
+   * Le foto da abbinare non si propongono più qui: all'apertura di un volantino
+   * distraevano da quello che c'è da fare. Restano nel Database prodotti, dove
+   * si possono abbinare o ignorare; qui si dice solo quante sono.
    */
-  const abbinaAperto = sp.abbina === "1";
-  const senzaFoto = offerProducts.filter((p) => !p.image);
-  const senzaFotoById = new Map(senzaFoto.map((p) => [p.id, p]));
-  const photoSuggestions = abbinaAperto
-    ? (() => {
-        const index = buildAbbinamentoIndex(senzaFoto);
-        return availablePhotos.slice(0, 200).map((f) => ({
-          file: f,
-          candidates: suggestPhotoMatch(f.replace(/\.[a-z0-9]+$/i, ""), index, 5),
-        }));
-      })()
-    : [];
-  /*
-   * Catalogo su cui cerca l'abbinamento manuale: tutti gli articoli del volantino
-   * e tutti i prodotti padre (una foto può stare bene sul padre più che sul
-   * singolo gusto). Inviato una volta sola al componente, non per riga.
-   */
-  const catalogoAbbinabile = abbinaAperto
-    ? [
-        ...db.parents.map((p) => ({ id: `p:${p.id}`, label: `[padre] ${p.nome}` })),
-        ...offerProducts.map((p) => ({ id: p.id, label: `${p.descrizione} · ${p.ean}` })),
-      ]
-    : [];
+  const nDaAbbinare = consortium && campaign ? fotoDaAbbinare(db, tutteLeFoto).daAbbinare.length : 0;
 
   // offerte "marginiamo": nessuna promo dal fornitore, il PV decide il margine da sé — non sono offerte vere
   const marginiamo = offers.filter((o) => (o.condizioni ?? "").trim().toLowerCase() === "marginiamo");
@@ -258,7 +229,7 @@ export default async function ZooOffertePage({
           )}
           {consortium && campaign && (
             <details className="strumento" open={sp.foto !== undefined}>
-              <summary className="btn btn-outline btn-sm">Caricamento foto{availablePhotos.length > 0 ? ` (${availablePhotos.length} da abbinare)` : ""}</summary>
+              <summary className="btn btn-outline btn-sm">Caricamento foto</summary>
               <div className="card" style={{ marginTop: 10, padding: 14 }}>
                 <strong>Caricamento foto</strong>
                 <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "4px 0 8px" }}>
@@ -267,9 +238,10 @@ export default async function ZooOffertePage({
                   automatico. Ogni articolo ha la sua foto; nel padre si sceglie quella di riferimento.
                 </p>
                 <PhotoUploader back={BACK} scopeParam={scopeParam} finalize={finalizeZooPhotoUpload} />
-                {availablePhotos.length > 0 && (
+                {nDaAbbinare > 0 && (
                   <p className="hint" style={{ marginTop: 6 }}>
-                    {availablePhotos.length} foto caricate non ancora abbinate: le abbini dalla tabella qui sotto.
+                    Le foto senza EAN o codice nel nome ({nDaAbbinare}) si abbinano, o si ignorano, dal{" "}
+                    <a href={`/stampe/zoo/dati?scope=${scopeParam}&abbina=1`}>Database prodotti</a>.
                   </p>
                 )}
               </div>
@@ -429,41 +401,6 @@ export default async function ZooOffertePage({
           </div>
         )}
 
-        {/* ---------- proposte di abbinamento foto→articolo per nome (nessuna AI) ---------- */}
-        {consortium && campaign && availablePhotos.length > 0 && (
-          <div className="card" style={{ marginBottom: 14, padding: 14 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <strong>Abbina le foto agli articoli</strong>
-              <span className="pill pill-orange">{availablePhotos.length} da abbinare</span>
-              <a className="btn btn-outline btn-sm" style={{ marginLeft: "auto" }}
-                href={`${BACK}?${pageQs(sp, { scope: scopeParam, abbina: abbinaAperto ? undefined : "1" })}`}>
-                {abbinaAperto ? "▴ Comprimi" : "▾ Apri"}
-              </a>
-            </div>
-            {abbinaAperto && (
-            <>
-            <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "8px 0" }}>
-              Le foto senza EAN/codice nel nome non si abbinano da sole: qui sotto trovi un&apos;ipotesi per ciascuna,
-              basata sul confronto tra il nome del file e la descrizione. Se la proposta non va bene — o se non ce
-              n&apos;è nessuna — usa la ricerca sotto il menu: puoi scegliere qualsiasi articolo o prodotto padre.
-            </p>
-            <PhotoMatcher
-              foto={photoSuggestions.map(({ file, candidates }) => ({
-                file,
-                url: publicUrlFor(`zoo-foto/${file}`),
-                candidati: candidates
-                  .map((c) => ({ c, p: senzaFotoById.get(c.productId) }))
-                  .filter((x): x is { c: typeof candidates[number]; p: ZooProduct } => Boolean(x.p))
-                  .map(({ c, p }) => ({ id: c.productId, label: p.descrizione, score: c.score })),
-              }))}
-              catalogo={catalogoAbbinabile}
-              onConfirm={confirmZooPhotoTargets}
-            />
-            </>
-            )}
-          </div>
-        )}
-
         {campaign && consortium && (
           <form action={updateCampaignDates.bind(null, campaign.id, scopeParam)} style={{ display: "flex", gap: 8, alignItems: "end", marginBottom: 14 }}>
             <label className="field" style={{ marginBottom: 0 }}>Nome<input type="text" name="nome" defaultValue={campaign.nome} /></label>
@@ -516,7 +453,6 @@ export default async function ZooOffertePage({
               <form method="get" style={{ display: "grid", gridTemplateColumns: "repeat(6, minmax(0, 1fr)) auto", gap: 10, alignItems: "end" }}>
                 <input type="hidden" name="scope" value={scopeParam} />
                 <input type="hidden" name="vista" value={vistaArticoli ? "articoli" : "raggruppata"} />
-                {abbinaAperto && <input type="hidden" name="abbina" value="1" />}
                 <label className="field" style={{ marginBottom: 0 }}>
                   Cerca<input type="text" name="q" defaultValue={sp.q ?? ""} placeholder="descrizione o EAN" />
                 </label>
