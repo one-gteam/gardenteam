@@ -6,6 +6,7 @@ import { canAccessArea, isZooEditor, resolveScope, scopesForUser } from "@/lib/s
 import { getDb } from "@/lib/db";
 import {
   getZooDb, campagnaInLavorazione, zooImageUrl, migraVolantinoPages, effectiveParentText, datiPrezzoOfferta,
+  chiavePrezzo, padreDaChiave, prezzoMinimo, pvPriceFor,
 } from "@/lib/zoo";
 import { saveVolantinoEditors } from "@/lib/zoo-actions";
 import AvvisaColleghi from "@/components/stampe/AvvisaColleghi";
@@ -61,21 +62,29 @@ export default async function CreaVolantinoPage({
         const gruppi = new Map<string, typeof campOffers>();
         for (const o of campOffers) {
           const product = db.products.find((p) => p.id === o.productId);
-          const key = product?.parentId ? `p:${product.parentId}` : `o:${o.id}`;
+          /*
+           * Una voce per padre E prezzo (come i cartelli); le voci unite a mano
+           * per il volantino ("a partire da") diventano una sola.
+           */
+          const key = o.unioneVolantino
+            ? `u:${o.unioneVolantino}`
+            : product?.parentId ? `p:${product.parentId}~${chiavePrezzo(o)}` : `o:${o.id}`;
           gruppi.set(key, [...(gruppi.get(key) ?? []), o]);
         }
         return [...gruppi.entries()]
           .map(([key, gruppo]) => {
             const primo = gruppo[0];
             const product = db.products.find((p) => p.id === primo.productId);
-            const parent = key.startsWith("p:") ? db.parents.find((x) => x.id === key.slice(2)) : undefined;
+            const parentId = padreDaChiave(key) ?? (key.startsWith("u:") ? product?.parentId : undefined);
+            const parent = parentId ? db.parents.find((x) => x.id === parentId) : undefined;
             const votes = db.votes.filter((v) => gruppo.some((g) => g.id === v.offerId));
             // articoli racchiusi: i figli del padre, o il singolo articolo dell'offerta
-            const articoli = (parent
-              ? db.products.filter((p) => p.parentId === parent.id)
-              : product ? [product] : []
-            ).map((p) => ({ ean: p.ean, descrizione: p.descrizione, marca: p.marca }));
-            const prezzi = [...new Set(gruppo.map((g) => g.prezzoPromo).filter(Boolean))];
+            // gli articoli della voce: quelli delle sue offerte (stesso prezzo, o tutti quelli dell'unione)
+            const idsArticoli = new Set(gruppo.map((g) => g.productId));
+            const articoli = db.products.filter((p) => idsArticoli.has(p.id))
+              .map((p) => ({ ean: p.ean, descrizione: p.descrizione, marca: p.marca }));
+            const prezzi = [...new Set(gruppo.map((g) => pvPriceFor(db, scope, g.ean, academyDb) ?? g.prezzoPromo).filter(Boolean))];
+            const piuPrezzi = prezzi.length > 1;
             // prezzo di partenza, sconto e tipologia: servono anche a chi compone, non solo in stampa
             const dati = datiPrezzoOfferta(db, primo, scope, academyDb);
             return {
@@ -87,10 +96,12 @@ export default async function CreaVolantinoPage({
               descrizione: parent
                 ? effectiveParentText(db, scope, parent, "descVolantino", academyDb).value || parent.nome
                 : primo.descrizione,
-              // con più prezzi diversi nel gruppo si mostra il più basso, con "da"
-              prezzo: prezzi.length > 1 ? `da ${[...prezzi].sort()[0]}` : dati.prezzo,
-              prezzoListino: dati.listino || undefined,
-              sconto: dati.sconto || undefined,
+              // voci unite con prezzi diversi: il più basso, "a partire da" (confronto numerico)
+              prezzo: piuPrezzi ? prezzoMinimo(prezzi) : dati.prezzo,
+              aPartireDa: piuPrezzi || undefined,
+              prezzoListino: piuPrezzi ? undefined : dati.listino || undefined,
+              sconto: piuPrezzi ? undefined : dati.sconto || undefined,
+              unione: primo.unioneVolantino,
               tipi: dati.tipi,
               foto: zooImageUrl(product, parent),
               voti: votes.filter((v) => v.tipo === "preferita").length,

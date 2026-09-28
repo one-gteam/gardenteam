@@ -1297,6 +1297,36 @@ export async function eliminaVolantino(campaignId: string, scopeParam: string) {
 }
 
 /**
+ * Unisce più voci del volantino in una sola ("a partire da €…"): vale SOLO per
+ * il volantino. I padri non si toccano e in stampa i cartelli restano separati
+ * per prezzo. Se una delle voci è già un'unione, le altre entrano in quella.
+ */
+export async function unisciVociVolantino(offerIds: string[]): Promise<{ ok: boolean; error?: string }> {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  if (!(isZooEditor(user) || (db.settings.volantinoEditors ?? []).includes(user.id))) return { ok: false, error: "Non autorizzato." };
+  const offerte = db.offers.filter((o) => offerIds.includes(o.id));
+  if (offerte.length < 2) return { ok: false, error: "Spunta almeno due voci." };
+  const id = offerte.find((o) => o.unioneVolantino)?.unioneVolantino ?? `uv_${Date.now().toString(36)}`;
+  const vecchie = new Set(offerte.map((o) => o.unioneVolantino).filter(Boolean));
+  for (const o of db.offers) if (offerIds.includes(o.id) || (o.unioneVolantino && vecchie.has(o.unioneVolantino))) o.unioneVolantino = id;
+  await saveZooDb(db);
+  revalidatePath("/stampe/zoo/crea-volantino");
+  return { ok: true };
+}
+
+/** Separa di nuovo le voci di un'unione del volantino. */
+export async function separaUnioneVolantino(unioneId: string): Promise<{ ok: boolean; error?: string }> {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  if (!(isZooEditor(user) || (db.settings.volantinoEditors ?? []).includes(user.id))) return { ok: false, error: "Non autorizzato." };
+  for (const o of db.offers) if (o.unioneVolantino === unioneId) o.unioneVolantino = undefined;
+  await saveZooDb(db);
+  revalidatePath("/stampe/zoo/crea-volantino");
+  return { ok: true };
+}
+
+/**
  * Avvia "Associa tutti con l'AI" in background sugli articoli senza padre del
  * volantino in lavorazione: risponde subito ("partita, N articoli"), il lavoro
  * prosegue dopo la risposta e la pagina ne mostra l'avanzamento.

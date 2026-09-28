@@ -5,6 +5,7 @@ import StampeHeader from "@/components/stampe/StampeHeader";
 import RepartoCheck, { type VoceReparto } from "@/components/stampe/RepartoCheck";
 import { canAccessArea, resolveScope, scopesForUser } from "@/lib/stampe";
 import {
+  chiaveGruppoOfferta, padreDaChiave,
   getZooDb, campagnaPerStampa, offertePerStampa, effectiveParentText, effectiveParentTag, isZooHidden, marcaEffettiva,
   noPrintSets, printedAt, ZOO_FIELDS, ZOO_FORMATS, giacenzePer, nonConformiDi, pvPriceFor,
 } from "@/lib/zoo";
@@ -41,7 +42,8 @@ export default async function ZooRepartoPage({
   for (const o of allOffers) {
     const product = db.products.find((p) => p.id === o.productId);
     if (product && isZooHidden(db, scope, product, academyDb)) continue;
-    const key = product?.parentId ? `p:${product.parentId}` : `o:${o.id}`;
+    // come in Stampa cartelli: un cartello per padre e prezzo
+    const key = chiaveGruppoOfferta(db, o, product?.parentId);
     gruppi.set(key, [...(gruppi.get(key) ?? []), o]);
   }
   const giacenze = await giacenzePer(db, scope, academyDb, allOffers.map((o) => o.ean));
@@ -53,7 +55,7 @@ export default async function ZooRepartoPage({
   const voci: VoceReparto[] = [...gruppi.entries()].map(([key, gruppo]) => {
     const o = gruppo[0];
     const product = db.products.find((p) => p.id === o.productId);
-    const parent = key.startsWith("p:") ? db.parents.find((x) => x.id === key.slice(2)) : undefined;
+    const parent = padreDaChiave(key) ? db.parents.find((x) => x.id === padreDaChiave(key)) : undefined;
     const nome = parent ? effectiveParentText(db, scope, parent, "nome", academyDb).value || o.descrizione : o.descrizione;
     const animale = parent ? effectiveParentTag(db, scope, parent, "animale", academyDb).value : "";
     const caratteristica = parent ? effectiveParentTag(db, scope, parent, "prodotto", academyDb).value : "";

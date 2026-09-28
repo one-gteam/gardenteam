@@ -163,6 +163,14 @@ export interface ZooOffer {
   focus?: string; // tema/angolo di comunicazione (campo libero)
   /** La promozione come l'ha scritta il fornitore nell'Excel ("20 alle casse"), prima di tradurla. */
   promoTesto?: string;
+  /**
+   * Sconto in percentuale dal testo del fornitore ("10 alle casse" = 10): il prezzo
+   * promo è già calcolato dal prezzo di vendita. Non è una meccanica: il cartello
+   * è a prezzo barrato. Senza prezzo di vendita il cartello dice solo "SCONTO 10%".
+   */
+  scontoPerc?: number;
+  /** Offerte unite in una sola voce del volantino ("a partire da"): solo volantino, i cartelli restano separati. */
+  unioneVolantino?: string;
   /** Animale del focus scelto a mano nello Storico focus (assente = quello del prodotto padre). */
   focusAnimale?: string;
   gruppoGrafico?: string; // offerte da impaginare vicine (stesso valore = stesso riquadro)
@@ -231,7 +239,7 @@ export function scontoDaTesto(testo: string): string {
 export function scontoDiCartello(db: ZooDB, offer: ZooOffer, scope?: Scope, academyDb?: DB): string {
   const perScope = scope && academyDb && scope.type !== "system";
   const promoPv = perScope ? pvPromoFor(db, scope, offer.ean, academyDb) : undefined;
-  const tipo = promoPv?.etichetta || offer.meccanica || "";
+  const tipo = promoPv?.etichetta || offer.meccanica || (offer.scontoPerc ? `${String(offer.scontoPerc).replace(".", ",")}%` : "");
   const sconto = scontoDaTesto(tipo);
   if (!sconto) return "";
   // se la promozione porta anche un prezzo (il loro, o quello del Consorzio quando
@@ -304,8 +312,9 @@ export function applicaPromoTesto(o: ZooOffer, testo: string): PromoLetta["tipo"
     if ((o.condizioni ?? "").trim() === testo.trim()) o.condizioni = "";
     return "meccanica";
   }
-  const perc = String(letta.perc).replace(".", ",");
-  o.meccanica = `Sconto ${perc}%`;
+  // non è una meccanica: prezzo di partenza = prezzo di vendita, prezzo promo = calcolato
+  o.scontoPerc = letta.perc;
+  if (/^sconto \d+([.,]\d+)?%$/i.test(o.meccanica ?? "")) o.meccanica = undefined;
   // col prezzo di vendita si calcola il prezzo scontato; senza, il cartello dice solo "SCONTO 20%"
   o.prezzoPromo = o.prezzoListino ? prezzoScontato(o.prezzoListino, letta.perc) : "";
   if ((o.condizioni ?? "").trim() === testo.trim()) o.condizioni = "";
@@ -315,8 +324,8 @@ export function applicaPromoTesto(o: ZooOffer, testo: string): PromoLetta["tipo"
 /** Tipologie che descrivono questa offerta: guidano la scelta del layout in stampa. */
 export function tagsOfferta(offer: ZooOffer): string[] {
   const tags: string[] = [];
-  // lo sconto è una tipologia sua, con o senza il prezzo scontato calcolato: usa il layout "a sconto"
-  if (scontoDaTesto(offer.meccanica ?? "")) return [TIPO_SCONTO];
+  // lo sconto secco (senza prezzi) è una tipologia sua: vuole un layout senza prezzi
+  if (!offer.prezzoPromo && !offer.prezzoListino && (scontoDaTesto(offer.meccanica ?? "") || offer.scontoPerc)) return [TIPO_SCONTO];
   if (offer.meccanica) tags.push(TIPO_MECCANICA);
   if (offer.prezzoListino) tags.push(TIPO_BARRATO);
   else if (offer.prezzoPromo) tags.push(TIPO_A_SOLI);
@@ -1512,7 +1521,21 @@ export function zooCartelloValues(
   const product = db.products.find((p) => p.id === offer.productId);
   const parent = product?.parentId ? db.parents.find((x) => x.id === product.parentId) : undefined;
   // il cartello è per il codice padre: elenca gli EAN di tutte le sue varianti, non solo quella dell'offerta
-  const fratelli = parent ? db.products.filter((p) => p.parentId === parent.id) : product ? [product] : [];
+  /*
+   * ...ma solo quelle allo stesso prezzo: articoli dello stesso padre con prezzi
+   * diversi hanno cartelli separati, e ognuno elenca i suoi codici.
+   */
+  const fratelli = (() => {
+    if (!parent) return product ? [product] : [];
+    const figli = db.products.filter((p) => p.parentId === parent.id);
+    if (offer.scopeType) return figli;
+    const chiave = chiavePrezzo(offer);
+    const stessoPrezzo = new Set(db.offers
+      .filter((o) => o.campaignId === offer.campaignId && !o.scopeType && chiavePrezzo(o) === chiave)
+      .map((o) => o.productId));
+    const scelti = figli.filter((p) => stessoPrezzo.has(p.id));
+    return scelti.length > 0 ? scelti : product ? [product] : figli;
+  })();
   // con un ambito si applicano le personalizzazioni dell'insegna/PV, altrimenti resta la versione del Consorzio
   const perScope = scope && academyDb;
   const testoPadre = (field: "nome" | "descCartello") =>
@@ -1606,7 +1629,9 @@ export function zooCartelloValues(
     meccanica: scontoSecco ? "" : (offer.meccanica ?? ""),
     // sconto in percentuale fra i due prezzi: si posa sul layout come gli altri campi
     sconto: (() => {
-      const dichiarato = offer.prezzoPromo ? scontoDaTesto(offer.meccanica ?? "") : "";
+      const dichiarato = offer.prezzoPromo
+        ? (offer.scontoPerc ? `${String(offer.scontoPerc).replace(".", ",")}%` : scontoDaTesto(offer.meccanica ?? ""))
+        : "";
       if (dichiarato) return `Sconto ${dichiarato}`;
       const p = scontoFraPrezzi(offer.prezzoListino ?? "", offer.prezzoPromo ?? "");
       return p ? `Sconto ${p}` : "";
@@ -1965,4 +1990,29 @@ export function fotoDaAbbinare(db: ZooDB, tutteLeFoto: string[]): { daAbbinare: 
   const ignorate = new Set(db.settings.fotoIgnorate ?? []);
   const libere = tutteLeFoto.filter((f) => /\.(jpg|jpeg|png|webp)$/i.test(f) && !usate.has(f));
   return { daAbbinare: libere.filter((f) => !ignorate.has(f)), ignorate: libere.filter((f) => ignorate.has(f)) };
+}
+
+/*
+ * Offerte dello stesso prodotto padre con prezzi diversi non stanno sullo
+ * stesso cartello: la chiave dice "stesso prezzo, stessa promozione".
+ */
+export function chiavePrezzo(o: ZooOffer): string {
+  return [o.prezzoPromo ?? "", o.prezzoListino ?? "", o.meccanica ?? "", o.scontoPerc ?? ""].join("|");
+}
+
+/** Gruppo di un'offerta per cartelli ed elenchi: padre + prezzo; i cartelli propri stanno da soli. */
+export function chiaveGruppoOfferta(db: ZooDB, o: ZooOffer, parentId?: string): string {
+  const pid = parentId ?? db.products.find((p) => p.id === o.productId)?.parentId;
+  return pid && !o.scopeType ? `p:${pid}~${chiavePrezzo(o)}` : `o:${o.id}`;
+}
+
+/** Id del padre dentro una chiave di gruppo ("p:<id>~<prezzi>"), o undefined. */
+export function padreDaChiave(key: string): string | undefined {
+  return key.startsWith("p:") ? key.slice(2).split("~")[0] : undefined;
+}
+
+/** Il prezzo più basso fra più prezzi scritti all'italiana ("9,99" < "10,00": confronto numerico, non di testo). */
+export function prezzoMinimo(prezzi: string[]): string {
+  const validi = prezzi.filter((p) => numeroPrezzo(p) > 0);
+  return validi.sort((a, b) => numeroPrezzo(a) - numeroPrezzo(b))[0] ?? "";
 }

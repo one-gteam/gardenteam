@@ -22,7 +22,7 @@ import ParentQuickEdit from "@/components/stampe/ParentQuickEdit";
 import { DettagliPadre, PannelloPadre } from "@/components/stampe/DettagliPadre";
 import {
   getZooDb, zooImageUrl, effectiveParentText, campagnaInLavorazione, campagnaInCorso, campaignStato,
-  fotoDaAbbinare, promoDaTesto, animaliDi, caratteristicheProdottoDi, migraVolantinoPages, prezzoUnitaDi,
+  fotoDaAbbinare, promoDaTesto, chiavePrezzo, animaliDi, caratteristicheProdottoDi, migraVolantinoPages, prezzoUnitaDi,
   NO_VOLANTINO, marcaEffettiva, type ZooProduct, type ZooOffer,
 } from "@/lib/zoo";
 import {
@@ -185,7 +185,8 @@ export default async function ZooOffertePage({
     for (const o of visibili) {
       const product = prodById.get(o.productId ?? "");
       const parent = product?.parentId ? parentById.get(product.parentId) : undefined;
-      const key = parent?.id ?? `_o_${o.id}`;
+      // padre + prezzo: gli articoli di un padre a prezzi diversi sono righe separate (come i loro cartelli)
+      const key = parent ? `${parent.id}~${chiavePrezzo(o)}` : `_o_${o.id}`;
       const g = map.get(key) ?? { parent, offs: [] };
       g.offs.push(o);
       map.set(key, g);
@@ -625,7 +626,8 @@ export default async function ZooOffertePage({
                         : `€ ${Math.min(...prezzi.map(num)).toFixed(2).replace(".", ",")} – € ${Math.max(...prezzi.map(num)).toFixed(2).replace(".", ",")}`;
                       const animali = animaliDi(db, parent?.caratteristiche ?? []);
                       const prodottoCarat = caratteristicheProdottoDi(db, parent?.caratteristiche ?? []);
-                      const key = parent?.id ?? `_o_${first.id}`;
+                      // lo stesso padre può avere più righe (una per prezzo): la chiave lo distingue
+                      const key = parent ? `${parent.id}~${chiavePrezzo(first)}` : `_o_${first.id}`;
                       const offIds = offs.map((o) => o.id);
                       const nome = parent ? effectiveParentText(db, scope, parent, "nome", academyDb).value : first.descrizione;
                       const descr = parent ? effectiveParentText(db, scope, parent, "descVolantino", academyDb).value : (first.condizioni ?? "");
@@ -753,11 +755,11 @@ export default async function ZooOffertePage({
                             )}
                           </td>
                           <td style={{ fontSize: 12.5 }}>
-                            {first.prezzoListino ? `€ ${first.prezzoListino}${offs.length > 1 ? "…" : ""}` : "—"}
+                            {first.prezzoListino ? `€ ${first.prezzoListino}` : "—"}
                           </td>
                         </tr>,
                         parent ? (
-                          <tr key={`pan_${parent.id}`} className="riga-pannello">
+                          <tr key={`pan_${key}`} className="riga-pannello">
                             <td colSpan={nCols} style={{ padding: 0 }}>
                               <PannelloPadre parentId={parent.id} scopeParam={scopeParam} back={BACK} />
                             </td>

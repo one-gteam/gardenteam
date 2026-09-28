@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Save, FileDown, Sheet, Plus, ImageDown, ChevronDown, ChevronUp } from "lucide-react";
 import {
-  saveVolantinoLayout, updateZooOfferQuick, uploadVolantinoImage, mergeZooParents, updateParentFieldInline,
+  saveVolantinoLayout, updateZooOfferQuick, uploadVolantinoImage, updateParentFieldInline,
+  unisciVociVolantino, separaUnioneVolantino,
 } from "@/lib/zoo-actions";
 import type { VolPage, VolBlock, VolSection } from "@/lib/zoo";
 
@@ -20,7 +21,11 @@ export interface OffLite {
   voti: number; nonTrattati: number; scheda?: string;
   marca: string; fornitore: string; caratts: string[]; label?: string;
   padre?: string; // nome del prodotto padre, se la voce ne rappresenta uno
-  padreId?: string; // id del padre (serve per unire più padri in uno)
+  padreId?: string; // id del padre
+  /** Voci unite per il volantino con prezzi diversi: il prezzo è il più basso, "a partire da". */
+  aPartireDa?: boolean;
+  /** Id dell'unione "solo volantino" a cui appartiene la voce. */
+  unione?: string;
   offerIds?: string[]; // offerte racchiuse dalla voce (assente = solo `id`)
   articoli: ArtLite[]; // articoli (gusti/formati) racchiusi dalla voce
   paginaId?: string; // pagina decisa in Offerte in corso (NO_VOLANTINO = scartata)
@@ -102,7 +107,7 @@ export default function VolantinoBuilder({
   const [filtroChiuso, setFiltroChiuso] = useState(false);
   const [mostraScartate, setMostraScartate] = useState(false);
   const [soloQuestaPagina, setSoloQuestaPagina] = useState(true);
-  const [padriDaUnire, setPadriDaUnire] = useState<string[]>([]); // id padre, in ordine di spunta
+  const [vociDaUnire, setVociDaUnire] = useState<string[]>([]); // id delle voci spuntate
   const [pdfPending, setPdfPending] = useState(false);
   const primoRender = useRef(true);
 
@@ -117,7 +122,12 @@ export default function VolantinoBuilder({
   /* --- offerte già collocate: spariscono dall'elenco a sinistra --- */
   const inserite = useMemo(() => {
     const s = new Set<string>();
-    for (const p of pages) for (const b of p.blocks) for (const id of b.offerIds ?? []) s.add(id);
+    for (const p of pages) for (const b of p.blocks) for (const id of b.offerIds ?? []) {
+      s.add(id);
+      // se l'offerta è finita dentro una voce unita, è collocata anche la voce
+      const voce = offers.find((o) => o.offerIds?.includes(id));
+      if (voce) s.add(voce.id);
+    }
     return s;
   }, [pages]);
 
@@ -184,7 +194,7 @@ export default function VolantinoBuilder({
   }, [daDisporre, pages]);
 
   const upd = (fn: (p: VolPage[]) => VolPage[]) => setPages((prev) => fn(structuredClone(prev)).map(normalizza));
-  const offer = (id?: string) => offers.find((o) => o.id === id);
+  const offer = (id?: string) => offers.find((o) => o.id === id) ?? offers.find((o) => !!id && o.offerIds?.includes(id));
   const blockOf = (ps: VolPage[], pi: number, id: string) => ps[pi].blocks.find((b) => b.id === id);
 
   const salva = useCallback(async (silenzioso = false) => {
@@ -264,14 +274,24 @@ export default function VolantinoBuilder({
     }
   };
 
-  /** Unisce i padri spuntati nell'elenco: il PRIMO spuntato dà i testi al gruppo. */
-  const unisciPadri = async () => {
-    if (padriDaUnire.length < 2) return;
-    const nome = offers.find((o) => o.padreId === padriDaUnire[0])?.padre ?? "il primo spuntato";
-    if (!confirm(`Unire ${padriDaUnire.length} prodotti padre in "${nome}"? Gli altri verranno eliminati e i loro articoli passeranno sotto di lui.`)) return;
-    const res = await mergeZooParents(padriDaUnire[0], padriDaUnire.slice(1));
+  /*
+   * Unisce le voci spuntate in una sola voce del volantino, "a partire da" il
+   * prezzo più basso. Solo volantino: i padri restano quelli, e in stampa
+   * ogni prezzo ha il suo cartello.
+   */
+  const unisciVoci = async () => {
+    if (vociDaUnire.length < 2) return;
+    const scelte = offers.filter((o) => vociDaUnire.includes(o.id));
+    if (!confirm(`Unire ${scelte.length} voci in una sola voce del volantino («a partire da» il prezzo più basso)? Vale solo per il volantino: i cartelli restano separati per prezzo.`)) return;
+    const res = await unisciVociVolantino(scelte.flatMap((o) => o.offerIds ?? [o.id]));
     if (res.ok) window.location.reload();
-    else flash("Unione non riuscita.");
+    else flash(res.error ?? "Unione non riuscita.");
+  };
+  const separaVoce = async (unione: string) => {
+    if (!confirm("Separare di nuovo le voci unite?")) return;
+    const res = await separaUnioneVolantino(unione);
+    if (res.ok) window.location.reload();
+    else flash(res.error ?? "Non riuscito.");
   };
 
   /**
@@ -362,7 +382,7 @@ export default function VolantinoBuilder({
           offerIds: b.offerIds, descrizione: b.descrizione, prezzo: b.prezzo, label: b.label, commento: b.commento,
         }));
         const ordinati = contenuti
-          .map((c) => ({ c, o: offers.find((x) => x.id === (c.offerIds ?? [])[0]) }))
+          .map((c) => ({ c, o: offer((c.offerIds ?? [])[0]) }))
           .sort((a, b) => {
             const ka = a.o ? chiaveVicinanza(a.o) : "";
             const kb = b.o ? chiaveVicinanza(b.o) : "";
@@ -554,7 +574,7 @@ export default function VolantinoBuilder({
                 </div>
                 <div style={{ display: "flex", gap: 4, justifyContent: "center", alignItems: "baseline", flexWrap: "wrap" }}>
                   {((i === 0 ? b.prezzo : undefined) ?? o.prezzo)
-                    ? <span style={{ color: "#c2410c", fontWeight: 800, fontSize: 12 }}>€ {(i === 0 ? b.prezzo : undefined) ?? o.prezzo}</span>
+                    ? <span style={{ color: "#c2410c", fontWeight: 800, fontSize: 12 }}>{o.aPartireDa && !(i === 0 && b.prezzo) ? "a partire da " : ""}€ {(i === 0 ? b.prezzo : undefined) ?? o.prezzo}</span>
                     : <span className="no-print" style={{ color: "#b45309", fontSize: 9 }}>prezzo da definire</span>}
                   {o.prezzoListino && (
                     <span style={{ fontSize: 9, color: "#777", textDecoration: "line-through" }}>€ {o.prezzoListino}</span>
@@ -709,10 +729,10 @@ export default function VolantinoBuilder({
         <div className="vol-filtro-head">
           Da collocare ({daCollocare})
           {inserite.size > 0 && <span className="pill pill-green" style={{ marginLeft: 6 }}>{inserite.size} già nel volantino</span>}
-          {padriDaUnire.length >= 2 && (
-            <button type="button" className="btn btn-sm" style={{ marginLeft: "auto" }} onClick={unisciPadri}
-              title="Il primo spuntato dà nome e testi al gruppo unito">
-              Unisci {padriDaUnire.length} padri
+          {vociDaUnire.length >= 2 && (
+            <button type="button" className="btn btn-sm" style={{ marginLeft: "auto" }} onClick={unisciVoci}
+              title="Una voce sola nel volantino, «a partire da» il prezzo più basso. I cartelli restano separati.">
+              Unisci {vociDaUnire.length} voci (solo volantino)
             </button>
           )}
         </div>
@@ -728,12 +748,10 @@ export default function VolantinoBuilder({
             <div key={o.id} className="vol-off" draggable onDragStart={() => setDrag({ kind: "offer", id: o.id })}
               style={usata ? { opacity: 0.45 } : undefined}>
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                {o.padreId && (
-                  <input type="checkbox" title="Spunta due o più padri per unirli in uno (il primo dà i testi)"
-                    checked={padriDaUnire.includes(o.padreId)}
-                    onChange={(e) => setPadriDaUnire((prev) =>
-                      e.target.checked ? [...prev, o.padreId!] : prev.filter((id) => id !== o.padreId))} />
-                )}
+                <input type="checkbox" title="Spunta due o più voci per unirle nel volantino («a partire da»)"
+                  checked={vociDaUnire.includes(o.id)}
+                  onChange={(e) => setVociDaUnire((prev) =>
+                    e.target.checked ? [...prev, o.id] : prev.filter((id) => id !== o.id))} />
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={o.foto} alt="" style={{ width: 32, height: 32, objectFit: "contain" }} />
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -746,7 +764,12 @@ export default function VolantinoBuilder({
                     </div>
                   )}
                   <div style={{ fontSize: 10.5, color: "var(--muted)", display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
-                    {o.prezzo ? `€ ${o.prezzo}` : <span className="pill pill-amber">prezzo da definire</span>}
+                    {o.prezzo ? `${o.aPartireDa ? "a partire da " : ""}€ ${o.prezzo}` : <span className="pill pill-amber">prezzo da definire</span>}
+                    {o.unione && (
+                      <button type="button" className="mini-btn" title="Voci unite solo per il volantino" onClick={() => separaVoce(o.unione!)}>
+                        unite · separa
+                      </button>
+                    )}
                     {o.prezzoListino && <span style={{ textDecoration: "line-through" }}>€ {o.prezzoListino}</span>}
                     {o.sconto && <span className="pill pill-green">{o.sconto}</span>}
                     {(o.tipi ?? []).map((t) => <span key={t} className="pill pill-blue">{t}</span>)}

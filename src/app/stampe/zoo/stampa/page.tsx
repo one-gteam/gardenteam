@@ -19,6 +19,7 @@ import StampaWorkspace from "@/components/stampe/StampaWorkspace";
 import ImportExcel from "@/components/stampe/ImportExcel";
 import { canAccessArea, gestisceArea, scopesForUser, resolveScope } from "@/lib/stampe";
 import {
+  chiaveGruppoOfferta, chiavePrezzo, padreDaChiave, prezzoMinimo,
   getZooDb, nonConformiDi, layoutPerOfferta, layoutScegliibili, pvPriceFor, isZooHidden,
   campagneStampabili, campagnaInCorso, campagnaInLavorazione, campaignStato,
   effectiveParentText, effectiveParentTag, printedAt, NO_VOLANTINO,
@@ -228,12 +229,13 @@ export default async function ZooStampaPage({
   const voceGruppo = (parentId: string, gruppo: typeof visible) => {
           const primo = gruppo[0];
           const parent = parentById.get(parentId);
+          // nel gruppo il prezzo è uno solo (i prezzi diversi fanno voci separate); resta il prezzo del PV, che può variare
           const prezzi = [...new Set(gruppo.map((g) => pvPriceFor(db, scope, g.ean, academyDb) ?? g.prezzoPromo).filter(Boolean))];
           return {
             id: primo.id,
             titolo: (parent ? nomeDelPadre(parent) : "") || primo.descrizione,
             codice: gruppo.length > 1 ? `${gruppo.length} articoli` : primo.ean,
-            prezzo: prezzi.length > 1 ? `da ${[...prezzi].sort()[0]}` : (prezzi[0] ?? ""),
+            prezzo: prezzi.length > 1 ? `da ${prezzoMinimo(prezzi)}` : (prezzi[0] ?? ""),
             listino: primo.prezzoListino,
             tipologia: marcaDi(primo),
             giacenza: giacenzaDi(gruppo.map((g) => g.ean)),
@@ -248,13 +250,17 @@ export default async function ZooStampaPage({
     : (() => {
         const gruppi = new Map<string, typeof visible>();
         for (const o of visible) {
-          // i cartelli propri stanno da soli: un duplicato non si fonde col padre da cui è nato
+          /*
+           * Un cartello per padre E prezzo: articoli dello stesso padre con prezzi
+           * diversi escono su cartelli separati. I cartelli propri stanno da soli:
+           * un duplicato non si fonde col padre da cui è nato.
+           */
           const { product } = padreDi(o);
-          const key = product?.parentId && !o.scopeType ? `p:${product.parentId}` : `o:${o.id}`;
+          const key = chiaveGruppoOfferta(db, o, product?.parentId);
           gruppi.set(key, [...(gruppi.get(key) ?? []), o]);
         }
         return [...gruppi.entries()].map(([key, gruppo]) =>
-          key.startsWith("p:") && gruppo.length > 0 ? voceGruppo(key.slice(2), gruppo) : voceSingola(gruppo[0])
+          padreDaChiave(key) && gruppo.length > 0 ? voceGruppo(padreDaChiave(key)!, gruppo) : voceSingola(gruppo[0])
         );
       })();
 
@@ -271,7 +277,7 @@ export default async function ZooStampaPage({
       if (!o) return undefined;
       const { parent } = padreDi(o);
       if (vistaSingole || !parent || o.scopeType) return voceSingola(o);
-      const gruppo = allOffers.filter((g) => !g.scopeType && padreDi(g).product?.parentId === parent.id);
+      const gruppo = allOffers.filter((g) => !g.scopeType && padreDi(g).product?.parentId === parent.id && chiavePrezzo(g) === chiavePrezzo(o));
       return voceGruppo(parent.id, gruppo.length > 0 ? gruppo : [o]);
     })
     .filter(Boolean) as typeof voci;
