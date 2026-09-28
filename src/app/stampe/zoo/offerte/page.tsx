@@ -459,10 +459,10 @@ export default async function ZooOffertePage({
                   {attivo && <div className="barra-lettura" style={{ marginTop: 8 }}><span style={{ width: `${perc}%` }} /></div>}
                   {l.stato === "errore" && l.errore && <div style={{ marginTop: 6, fontSize: 13 }}>Motivo: {l.errore}</div>}
                   {(l.restanti ?? 0) > 0 && l.stato === "finito" && (
-                    <div style={{ marginTop: 6, fontSize: 13 }}>Ne restano {l.restanti} per il tempo a disposizione: premi di nuovo «Associa tutti con l&apos;AI» per continuare.</div>
+                    <div style={{ marginTop: 6, fontSize: 13 }}>Ne restano {l.restanti}: il lavoro non è riuscito a ripartire da solo, premi di nuovo «Associa tutti con l&apos;AI» per continuare.</div>
                   )}
                   {(morto || l.stato === "errore") && <div style={{ marginTop: 6, fontSize: 13 }}>Quello che è già stato fatto resta salvato: puoi ripremere il pulsante per continuare.</div>}
-                  {attivo && <div className="hint" style={{ marginTop: 6 }}>Puoi continuare a lavorare o chiudere la pagina: il lavoro va avanti da solo.</div>}
+                  {attivo && <div className="hint" style={{ marginTop: 6 }}>4 lotti alla volta; se serve più tempo riparte da solo{(l.giro ?? 1) > 1 ? ` (giro ${l.giro})` : ""}. Puoi continuare a lavorare o chiudere la pagina.</div>}
                 </div>
               );
             })()}

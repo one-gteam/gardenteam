@@ -1318,7 +1318,7 @@ export async function avviaAssociaConAI(): Promise<{ ok: boolean; error?: string
     await eseguiAssociazione(apiKey, ids);
     revalidatePath("/stampe/zoo/offerte");
   });
-  return { ok: true, error: `Associazione partita: ${ids.length} articoli, a lotti da 30. L'avanzamento compare qui sotto.` };
+  return { ok: true, error: `Associazione partita: ${ids.length} articoli, 4 lotti da 30 alla volta. L'avanzamento compare qui sopra.` };
 }
 
 /** Toglie dalla pagina l'avviso dell'ultima associazione finita. */

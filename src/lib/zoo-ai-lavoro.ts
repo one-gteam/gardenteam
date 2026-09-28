@@ -4,16 +4,25 @@ import { groupAndDescribe, type AiGroup } from "./zoo-ai";
 /*
  * "Associa tutti con l'AI" in background: il pulsante risponde subito, il
  * lavoro continua dopo la risposta (after() di Next) e lo stato sta nel
- * database, così la pagina mostra l'avanzamento. Si salva lotto per lotto:
- * la chiamata a Claude (lenta) avviene senza tenere il database in mano, poi
- * si rilegge, si applica e si salva subito — chi nel frattempo lavora sulle
- * offerte non perde le sue modifiche. Prima tutto girava in una sola richiesta
- * da 60 secondi: con quattro lotti Vercel la chiudeva a metà e non restava niente.
+ * database, così la pagina mostra l'avanzamento.
+ *
+ * Veloce per due motivi:
+ *  - 4 lotti alla volta verso Claude invece di uno dopo l'altro (un lotto da
+ *    30 articoli impiega ~30 s: in fila erano 10 minuti per 600 articoli);
+ *  - quando il tempo di una funzione (300 s) sta per finire, il lavoro riparte
+ *    da solo chiamando /api/zoo/associa-continua: prima si doveva ripremere
+ *    il pulsante, e fra un giro e l'altro passavano minuti.
+ *
+ * Le chiamate a Claude vanno in parallelo, ma i salvataggi uno alla volta: ogni
+ * lotto rilegge il database, applica i suoi padri e salva subito, così i lotti
+ * non si sovrascrivono fra loro e chi lavora sulle offerte non perde niente.
  */
 
 export interface LavoroAi {
   stato: "in corso" | "finito" | "errore";
   inizio: string;
+  /** Ultimo segno di vita (un lotto salvato, un giro ripartito). */
+  battito?: string;
   fine?: string;
   totale: number;
   fatti: number;
@@ -21,16 +30,22 @@ export interface LavoroAi {
   restanti?: number;
   errore?: string;
   campaignId?: string;
+  /** Articoli ancora da fare, per il giro successivo. */
+  daFare?: string[];
+  giro?: number;
 }
 
 const LOTTO = 30;
-/** Tempo di lavoro per giro: la funzione ha 300 s, si tiene margine per l'ultimo salvataggio. */
-const BUDGET_MS = 230_000;
-/** Un lavoro "in corso" più vecchio di così è morto con la funzione che lo eseguiva. */
+const IN_PARALLELO = 4;
+/** Dopo questo tempo non si avviano lotti nuovi: quelli partiti finiscono entro i 300 s della funzione. */
+const BUDGET_MS = 190_000;
+const GIRI_MASSIMI = 15;
+/** Un lavoro "in corso" senza segni di vita da così tanto è morto con la funzione che lo eseguiva. */
 export const LAVORO_SCADUTO_MS = 6 * 60_000;
 
 export function lavoroAttivo(l?: LavoroAi): boolean {
-  return !!l && l.stato === "in corso" && Date.now() - new Date(l.inizio).getTime() < LAVORO_SCADUTO_MS;
+  if (!l || l.stato !== "in corso") return false;
+  return Date.now() - new Date(l.battito ?? l.inizio).getTime() < LAVORO_SCADUTO_MS;
 }
 
 function applicaGruppi(db: ZooDB, groups: AiGroup[]): number {
@@ -64,39 +79,97 @@ function applicaGruppi(db: ZooDB, groups: AiGroup[]): number {
 
 async function scriviStato(patch: Partial<LavoroAi>) {
   const db = await getZooDb();
-  db.settings.aiLavoro = { ...(db.settings.aiLavoro as LavoroAi), ...patch };
+  db.settings.aiLavoro = { ...(db.settings.aiLavoro as LavoroAi), ...patch, battito: new Date().toISOString() };
   await saveZooDb(db);
 }
 
-/** Il lavoro vero: lotti da 30 articoli finché c'è tempo; si ferma al primo errore dell'AI. */
+function siteUrl(): string {
+  return (process.env.SITE_URL || "https://gardenteam.vercel.app").replace(/\/$/, "");
+}
+
+/** Fa ripartire il lavoro in una funzione nuova (e con 300 s nuovi). Ritorna false se non si può. */
+async function riparti(): Promise<boolean> {
+  const segreto = process.env.CRON_SECRET;
+  if (!segreto) return false;
+  try {
+    const r = await fetch(`${siteUrl()}/api/zoo/associa-continua`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${segreto}` },
+      signal: AbortSignal.timeout(20_000),
+    });
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Un giro di lavoro: fino a 4 lotti da 30 articoli alla volta, finché c'è
+ * tempo; si ferma al primo errore dell'AI. Se resta qualcosa riparte da solo.
+ */
 export async function eseguiAssociazione(apiKey: string, productIds: string[]): Promise<void> {
   const partenza = Date.now();
-  let fatti = 0;
-  let padri = 0;
-  try {
-    for (let i = 0; i < productIds.length; i += LOTTO) {
-      if (Date.now() - partenza > BUDGET_MS) break;
-      const idLotto = productIds.slice(i, i + LOTTO);
+  const iniziale = (await getZooDb()).settings.aiLavoro;
+  let fatti = iniziale?.fatti ?? 0;
+  let padri = iniziale?.padri ?? 0;
+  const lotti: string[][] = [];
+  for (let i = 0; i < productIds.length; i += LOTTO) lotti.push(productIds.slice(i, i + LOTTO));
+  const completati = new Set<number>();
+  let errore: string | undefined;
+  let prossimo = 0;
+  // i salvataggi passano da qui uno alla volta
+  let coda: Promise<unknown> = Promise.resolve();
+  const salvaInOrdine = (fn: () => Promise<void>) => { const p = coda.then(fn); coda = p.catch(() => undefined); return p; };
+
+  const lavoratore = async () => {
+    while (!errore && prossimo < lotti.length && Date.now() - partenza < BUDGET_MS) {
+      const n = prossimo++;
+      const ids = lotti[n];
       const snapshot = await getZooDb();
-      const lotto = snapshot.products.filter((p) => idLotto.includes(p.id) && !p.parentId);
+      const lotto = snapshot.products.filter((p) => ids.includes(p.id) && !p.parentId);
       if (lotto.length > 0) {
         const res = await groupAndDescribe(apiKey, lotto, snapshot.settings);
         if (!res.usedAi) {
           // chiave rifiutata, credito finito, modello non disponibile: meglio fermarsi che riempire il database di bozze
-          await scriviStato({ stato: "errore", fine: new Date().toISOString(), fatti, padri, errore: res.error ?? "L'AI non ha risposto" });
+          errore = res.error ?? "L'AI non ha risposto";
           return;
         }
-        const db = await getZooDb();
-        padri += applicaGruppi(db, res.groups);
-        fatti += idLotto.length;
-        db.settings.aiLavoro = { ...(db.settings.aiLavoro as LavoroAi), fatti, padri };
-        await saveZooDb(db);
+        await salvaInOrdine(async () => {
+          const db = await getZooDb();
+          padri += applicaGruppi(db, res.groups);
+          fatti += ids.length;
+          db.settings.aiLavoro = { ...(db.settings.aiLavoro as LavoroAi), fatti, padri, battito: new Date().toISOString() };
+          await saveZooDb(db);
+        });
       } else {
-        fatti += idLotto.length;
+        fatti += ids.length;
       }
+      completati.add(n);
     }
-    const restanti = Math.max(0, productIds.length - fatti);
-    await scriviStato({ stato: "finito", fine: new Date().toISOString(), fatti, padri, restanti });
+  };
+
+  try {
+    await Promise.all(Array.from({ length: IN_PARALLELO }, lavoratore));
+    await coda;
+    const daFare = lotti.filter((_, i) => !completati.has(i)).flat();
+    if (errore) {
+      await scriviStato({ stato: "errore", fine: new Date().toISOString(), fatti, padri, errore, daFare, restanti: daFare.length });
+      return;
+    }
+    if (daFare.length === 0) {
+      await scriviStato({ stato: "finito", fine: new Date().toISOString(), fatti, padri, restanti: 0, daFare: undefined });
+      return;
+    }
+    // resta del lavoro: si riparte da soli, con un giro nuovo
+    const giro = (iniziale?.giro ?? 1) + 1;
+    if (giro > GIRI_MASSIMI) {
+      await scriviStato({ stato: "finito", fine: new Date().toISOString(), fatti, padri, daFare, restanti: daFare.length });
+      return;
+    }
+    await scriviStato({ stato: "in corso", fatti, padri, daFare, restanti: daFare.length, giro });
+    if (!(await riparti())) {
+      await scriviStato({ stato: "finito", fine: new Date().toISOString(), restanti: daFare.length });
+    }
   } catch (e) {
     await scriviStato({ stato: "errore", fine: new Date().toISOString(), fatti, padri, errore: e instanceof Error ? e.message : String(e) });
   }
