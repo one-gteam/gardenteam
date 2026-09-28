@@ -228,22 +228,12 @@ export default async function ZooImpostazioniPage({
           </div>
         )}
 
-        {/* chiave API: SOLO amministratore di sistema */}
+        {/* la chiave comune ora si imposta da Utenti e ruoli → Organizzazione */}
         {user.role === "system_admin" && (
-          <div className="card" style={{ padding: 14, marginBottom: 14, border: "2px solid #6d3fa7" }}>
-            <h2 style={{ marginTop: 0 }}>Chiave API Claude (solo amministratore di sistema)</h2>
-            <p style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 0 }}>
-              Usata dal pulsante &quot;Associa con AI&quot; per raggruppare gli articoli e generare le descrizioni di volantino e cartelli
-              secondo le istruzioni qui sopra. Stato attuale:{" "}
-              {db.settings.apiKey
-                ? <span className="pill pill-green">configurata (…{db.settings.apiKey.slice(-6)})</span>
-                : <span className="pill pill-gray">non configurata — raggruppamento automatico con testi bozza</span>}
-            </p>
-            <form action={saveZooApiKey.bind(null, scopeParam)} style={{ display: "flex", gap: 8 }}>
-              <input type="password" name="apiKey" placeholder="sk-ant-…  (vuoto per rimuovere)" style={{ flex: 1, maxWidth: 420 }} />
-              <button className="btn btn-sm" type="submit">Salva chiave</button>
-            </form>
-          </div>
+          <p className="hint" style={{ marginBottom: 14 }}>
+            Chiave API Claude comune: {db.settings.apiKey ? `configurata (…${db.settings.apiKey.slice(-6)})` : "non configurata"} — si imposta in{" "}
+            <a href="/ruoli/organizzazione">Utenti e ruoli → Organizzazione</a>.
+          </p>
         )}
 
         {/* promozioni proprie dell'insegna/PV, caricate dal loro gestionale */}

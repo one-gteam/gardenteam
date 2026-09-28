@@ -33,7 +33,7 @@ export async function descrizioneConAi(dati: {
   // la chiave delle Impostazioni Zoo; in mancanza, quella dell'ambiente (ANTHROPIC_API_KEY su Vercel)
   const zoo = await getZooDb();
   const apiKey = zoo.settings.apiKey || process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return { ok: false, errore: "Manca la chiave API Claude: la imposta l'amministratore di sistema nelle Impostazioni Zoo." };
+  if (!apiKey) return { ok: false, errore: "Manca la chiave API Claude: la imposta l'amministratore di sistema in Utenti e ruoli → Organizzazione." };
 
   const blocchi: Blocco[] = [];
   for (const d of dati.documenti ?? []) {

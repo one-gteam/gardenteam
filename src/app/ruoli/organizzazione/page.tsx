@@ -12,6 +12,9 @@ import {
   removeGroupMember,
 } from "@/lib/actions";
 import ModuloAutoSalva from "@/components/ModuloAutoSalva";
+import EsitoAzione from "@/components/articoli/EsitoAzione";
+import { getZooDb } from "@/lib/zoo";
+import { salvaChiaveClaude, provaChiaveClaude, togliChiaveClaude } from "@/lib/chiave-ai-actions";
 import { ModuloInvio, PulsanteAzione } from "@/components/AzioneSenzaRicarica";
 
 export default async function OrgPage({
@@ -66,6 +69,10 @@ export default async function OrgPage({
         ? db.stores.filter((s) => s.tenantId === user.tenantId)
         : db.stores.filter((s) => s.id === user.storeId);
 
+  // la chiave Claude comune vive nel blob Zoo (la usano Zoo e Articoli): la si legge solo per l'amministratore
+  const chiaveClaude = user.role === "system_admin" ? (await getZooDb()).settings.apiKey : undefined;
+  const chiaveAmbiente = user.role === "system_admin" && !!process.env.ANTHROPIC_API_KEY;
+
   return (
     <div>
       <RuoliHeader user={user} active="organizzazione" />
@@ -90,6 +97,34 @@ export default async function OrgPage({
             </div>
             <span className="pill pill-green">Personalizza →</span>
           </a>
+        )}
+
+        {user.role === "system_admin" && (
+          <div className="card" style={{ marginBottom: 24, border: "2px solid #6d3fa7" }}>
+            <h3 style={{ marginTop: 0 }}>Chiave API Claude (solo amministratore di sistema)</h3>
+            <p className="hint" style={{ margin: "0 0 10px" }}>
+              La usano i pulsanti AI di tutto il portale: «Associa con AI» delle Offerte Zoo e la descrizione automatica degli Articoli.
+              Le insegne possono metterne una propria nelle Impostazioni Zoo. Si salva solo se Anthropic la accetta e non si rilegge da qui.
+              Stato:{" "}
+              {chiaveClaude
+                ? <span className="pill pill-green">configurata (…{chiaveClaude.slice(-6)})</span>
+                : chiaveAmbiente
+                  ? <span className="pill pill-blue">si usa quella dell&apos;ambiente Vercel</span>
+                  : <span className="pill pill-gray">non configurata</span>}
+            </p>
+            <ModuloAutoSalva azione={salvaChiaveClaude} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <input type="password" name="chiave" autoComplete="off" placeholder={chiaveClaude ? "sk-ant-…  (vuoto = tieni quella salvata)" : "sk-ant-…"}
+                style={{ flex: 1, minWidth: 260, maxWidth: 460, marginTop: 0 }} />
+            </ModuloAutoSalva>
+            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginTop: 10 }}>
+              <EsitoAzione azione={provaChiaveClaude} etichetta="Prova la chiave" />
+              {chiaveClaude && (
+                <PulsanteAzione azione={togliChiaveClaude} conferma="Togliere la chiave Claude? I pulsanti AI smettono di funzionare (salvo chiavi proprie delle insegne).">
+                  Togli la chiave
+                </PulsanteAzione>
+              )}
+            </div>
+          </div>
         )}
 
         {(user.role === "system_admin" || user.role === "group_admin") && (
