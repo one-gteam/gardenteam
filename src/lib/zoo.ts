@@ -161,6 +161,8 @@ export interface ZooOffer {
    */
   paginaId?: string;
   focus?: string; // tema/angolo di comunicazione (campo libero)
+  /** La promozione come l'ha scritta il fornitore nell'Excel ("20 alle casse"), prima di tradurla. */
+  promoTesto?: string;
   /** Animale del focus scelto a mano nello Storico focus (assente = quello del prodotto padre). */
   focusAnimale?: string;
   gruppoGrafico?: string; // offerte da impaginare vicine (stesso valore = stesso riquadro)
@@ -240,11 +242,81 @@ export function scontoDiCartello(db: ZooDB, offer: ZooOffer, scope?: Scope, acad
   return sconto;
 }
 
+/*
+ * La promozione scritta a parole nell'Excel dei fornitori (colonna «PREZZO/TIPO
+ * PROMO CONSIGLIATO» quando non c'è un prezzo), tradotta con regole fisse,
+ * senza AI: "20 alle casse", "sconto 20% allle casse", "20% sconto alle casse",
+ * "sconto 10%" → sconto del 20/10%; "3x2", "1+1" → meccanica; "marginiamo" (anche
+ * scritto male) → nessuna promo del fornitore. Tutto il resto resta com'era.
+ */
+export type PromoLetta =
+  | { tipo: "sconto"; perc: number }
+  | { tipo: "meccanica"; testo: string }
+  | { tipo: "marginiamo" }
+  | { tipo: "sconosciuta" };
+
+const PAROLE_SCONTO = new Set(["sconto", "scontato", "di", "del", "alle", "alla", "allle", "alel", "in", "casse", "cassa", "sul", "totale", "extra", "a"]);
+
+export function promoDaTesto(testo: string): PromoLetta {
+  const t = (testo ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+  if (!t) return { tipo: "sconosciuta" };
+  if (/^marg[a-z]*$/.test(t.replace(/\s/g, ""))) return { tipo: "marginiamo" };
+  const mecc = /^(\d{1,2})\s*[x×]\s*(\d{1,2})$/.exec(t);
+  if (mecc && Number(mecc[1]) > Number(mecc[2])) return { tipo: "meccanica", testo: `${mecc[1]}x${mecc[2]}` };
+  const piu = /^(\d)\s*\+\s*(\d)$/.exec(t);
+  if (piu) return { tipo: "meccanica", testo: `${piu[1]}+${piu[2]}` };
+  // sconto: tolte le parole di contorno deve restare un numero solo, fra 1 e 90
+  const pezzi = t.replace(/%/g, " ").replace(/[-–:]/g, " ").split(" ").filter(Boolean);
+  const numeri = pezzi.filter((p) => /^\d{1,2}([.,]\d+)?$/.test(p));
+  const altro = pezzi.filter((p) => !/^\d{1,2}([.,]\d+)?$/.test(p) && !PAROLE_SCONTO.has(p));
+  if (numeri.length === 1 && altro.length === 0) {
+    const perc = Number(numeri[0].replace(",", "."));
+    // senza "%" né "sconto" un numero da solo è ambiguo (potrebbe essere un prezzo): serve almeno una delle due
+    const detto = t.includes("%") || /scont|cass/.test(t);
+    if (detto && perc >= 1 && perc <= 90) return { tipo: "sconto", perc };
+  }
+  return { tipo: "sconosciuta" };
+}
+
+/** Prezzo scontato, al centesimo: "2,39" con 20% → "1,91". Vuoto se il prezzo di partenza non c'è. */
+export function prezzoScontato(listino: string, perc: number): string {
+  const n = Number((listino ?? "").replace(/[^\d,.]/g, "").replace(/\.(?=\d{3})/g, "").replace(",", "."));
+  if (!(n > 0) || !(perc > 0 && perc < 100)) return "";
+  return (Math.round(n * (100 - perc)) / 100).toFixed(2).replace(".", ",");
+}
+
+/**
+ * Applica a un'offerta la promozione letta dal testo: lo sconto diventa la
+ * tipologia "a sconto" con il prezzo scontato calcolato dal prezzo di vendita;
+ * 3x2 e simili vanno nella meccanica. Il testo originale resta in promoTesto.
+ * Ritorna cosa ha fatto (per i conteggi), o null se il testo non si capisce.
+ */
+export function applicaPromoTesto(o: ZooOffer, testo: string): PromoLetta["tipo"] | null {
+  const letta = promoDaTesto(testo);
+  if (letta.tipo === "sconosciuta") return null;
+  o.promoTesto = testo.trim();
+  if (letta.tipo === "marginiamo") {
+    o.condizioni = "marginiamo";
+    return "marginiamo";
+  }
+  if (letta.tipo === "meccanica") {
+    o.meccanica = letta.testo;
+    if ((o.condizioni ?? "").trim() === testo.trim()) o.condizioni = "";
+    return "meccanica";
+  }
+  const perc = String(letta.perc).replace(".", ",");
+  o.meccanica = `Sconto ${perc}%`;
+  // col prezzo di vendita si calcola il prezzo scontato; senza, il cartello dice solo "SCONTO 20%"
+  o.prezzoPromo = o.prezzoListino ? prezzoScontato(o.prezzoListino, letta.perc) : "";
+  if ((o.condizioni ?? "").trim() === testo.trim()) o.condizioni = "";
+  return "sconto";
+}
+
 /** Tipologie che descrivono questa offerta: guidano la scelta del layout in stampa. */
 export function tagsOfferta(offer: ZooOffer): string[] {
   const tags: string[] = [];
-  // lo sconto secco del Consorzio è una tipologia sua: vuole un layout senza prezzi
-  if (!offer.prezzoPromo && !offer.prezzoListino && scontoDaTesto(offer.meccanica ?? "")) return [TIPO_SCONTO];
+  // lo sconto è una tipologia sua, con o senza il prezzo scontato calcolato: usa il layout "a sconto"
+  if (scontoDaTesto(offer.meccanica ?? "")) return [TIPO_SCONTO];
   if (offer.meccanica) tags.push(TIPO_MECCANICA);
   if (offer.prezzoListino) tags.push(TIPO_BARRATO);
   else if (offer.prezzoPromo) tags.push(TIPO_A_SOLI);
@@ -1532,6 +1604,8 @@ export function zooCartelloValues(
     meccanica: scontoSecco ? "" : (offer.meccanica ?? ""),
     // sconto in percentuale fra i due prezzi: si posa sul layout come gli altri campi
     sconto: (() => {
+      const dichiarato = offer.prezzoPromo ? scontoDaTesto(offer.meccanica ?? "") : "";
+      if (dichiarato) return `Sconto ${dichiarato}`;
       const p = scontoFraPrezzi(offer.prezzoListino ?? "", offer.prezzoPromo ?? "");
       return p ? `Sconto ${p}` : "";
     })(),

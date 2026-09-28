@@ -8,6 +8,7 @@ import { getDb } from "@/lib/db";
 import { userSites } from "@/lib/types";
 import { listStorageFiles, publicUrlFor } from "@/lib/supabase";
 import PhotoUploader from "@/components/stampe/PhotoUploader";
+import EsitoAzione from "@/components/articoli/EsitoAzione";
 import BulkCheckbox from "@/components/stampe/BulkCheckbox";
 import InlineEdit from "@/components/stampe/InlineEdit";
 import InlineSelect from "@/components/stampe/InlineSelect";
@@ -17,10 +18,11 @@ import ParentQuickEdit from "@/components/stampe/ParentQuickEdit";
 import { DettagliPadre, PannelloPadre } from "@/components/stampe/DettagliPadre";
 import {
   getZooDb, zooImageUrl, effectiveParentText, campagnaInLavorazione, campagnaInCorso, campaignStato,
-  fotoDaAbbinare, animaliDi, caratteristicheProdottoDi, migraVolantinoPages, prezzoUnitaDi,
+  fotoDaAbbinare, promoDaTesto, animaliDi, caratteristicheProdottoDi, migraVolantinoPages, prezzoUnitaDi,
   NO_VOLANTINO, marcaEffettiva, type ZooProduct, type ZooOffer,
 } from "@/lib/zoo";
 import {
+  interpretaPromoScritte,
   importZooOffers, updateCampaignDates, associaNuoviConAI, finalizeZooPhotoUpload,
   createZooParent, associaConAI, rigeneraTestiAI, saveParentTexts, setParentImage,
   toggleParentCaratteristica, scioglieParent, chiudiVolantino, riapriVolantino, nuovoVolantino,
@@ -121,6 +123,10 @@ export default async function ZooOffertePage({
    * distraevano da quello che c'è da fare. Restano nel Database prodotti, dove
    * si possono abbinare o ignorare; qui si dice solo quante sono.
    */
+  // promo scritte a parole ancora da tradurre (volantini caricati prima del traduttore)
+  const promoDaTradurre = consortium && campaign
+    ? offers.filter((o) => !o.prezzoPromo && !o.promoTesto && promoDaTesto(o.condizioni ?? "").tipo !== "sconosciuta")
+    : [];
   const nDaAbbinare = consortium && campaign ? fotoDaAbbinare(db, tutteLeFoto).daAbbinare.length : 0;
 
   // offerte "marginiamo": nessuna promo dal fornitore, il PV decide il margine da sé — non sono offerte vere
@@ -401,6 +407,16 @@ export default async function ZooOffertePage({
           </div>
         )}
 
+        {promoDaTradurre.length > 0 && campaign && (
+          <div className="alert alert-amber" style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+            <span style={{ flex: 1, minWidth: 260 }}>
+              <strong>{promoDaTradurre.length} promo scritte a parole</strong> (es. «{promoDaTradurre[0].condizioni}»): traducile in
+              sconto con il prezzo scontato calcolato dal prezzo di vendita, in meccanica (3x2) o in «marginiamo».
+            </span>
+            <EsitoAzione azione={interpretaPromoScritte.bind(null, campaign.id)} etichetta="Traduci le promo scritte" />
+          </div>
+        )}
+
         {campaign && consortium && (
           <form action={updateCampaignDates.bind(null, campaign.id, scopeParam)} style={{ display: "flex", gap: 8, alignItems: "end", marginBottom: 14 }}>
             <label className="field" style={{ marginBottom: 0 }}>Nome<input type="text" name="nome" defaultValue={campaign.nome} /></label>
@@ -658,6 +674,7 @@ export default async function ZooOffertePage({
                             ) : (
                               <span style={{ fontSize: 11.5 }}>{first.meccanica || "—"}</span>
                             )}
+                            {first.promoTesto && <div className="hint" style={{ fontSize: 10.5 }}>da «{first.promoTesto}»</div>}
                           </td>
                           <td>
                             {consortium ? (
@@ -786,6 +803,7 @@ export default async function ZooOffertePage({
                             ) : (
                               <span style={{ fontSize: 11.5 }}>{o.meccanica || "—"}</span>
                             )}
+                            {o.promoTesto && <div className="hint" style={{ fontSize: 10.5 }}>da «{o.promoTesto}»</div>}
                           </td>
                           <td>
                             {consortium ? (

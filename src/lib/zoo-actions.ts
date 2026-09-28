@@ -9,7 +9,7 @@ import { postLoginPath } from "./types";
 import { LAYOUT_FONTS } from "./layout-fonts";
 import {
   getZooDb, saveZooDb, ZooDB, ZooParent, ZooProduct, campagnaInLavorazione, campagnaInCorso, campaignStato, NO_VOLANTINO,
-  ZOO_FORMATS, PV_PROMO_CODES_DEFAULT, ownScopeVisible, apiKeyFor, contenutoDaTesto, zooCartelloValues, layoutScegliibili, scontoDaTesto,
+  ZOO_FORMATS, PV_PROMO_CODES_DEFAULT, ownScopeVisible, apiKeyFor, contenutoDaTesto, zooCartelloValues, layoutScegliibili, scontoDaTesto, promoDaTesto, applicaPromoTesto,
   type ZooOffer,
 } from "./zoo";
 import type { LayoutItem } from "./stampe";
@@ -1024,12 +1024,11 @@ export async function importZooOffers(scopeParam: string, formData: FormData) {
       db.products.push(product);
     }
     // "marginiamo": il fornitore non ha dato una promo, decide il PV — non è un'offerta vera
-    if (escludiMarginiamo && row.condizioni.trim().toLowerCase() === "marginiamo") {
+    if (escludiMarginiamo && promoDaTesto(row.condizioni).tipo === "marginiamo") {
       nMarginiamo++;
       continue;
     }
-    if (!row.prezzoPromo) nSenzaPrezzo++;
-    db.offers.push({
+    const offerta: ZooOffer = {
       id: `zo_${Date.now()}_${nOffers}`,
       campaignId, ean, productId: product.id,
       descrizione: descrizione || product.descrizione,
@@ -1037,7 +1036,11 @@ export async function importZooOffers(scopeParam: string, formData: FormData) {
       prezzoListino: row.prezzoListino,
       condizioni: row.condizioni,
       nuovo,
-    });
+    };
+    // promo scritta a parole ("20 alle casse", "3x2"): tradotta in tipologia e prezzo, senza AI
+    if (!row.prezzoPromo && row.condizioni) applicaPromoTesto(offerta, row.condizioni);
+    if (!offerta.prezzoPromo && !scontoDaTesto(offerta.meccanica ?? "") && !offerta.meccanica) nSenzaPrezzo++;
+    db.offers.push(offerta);
     nOffers++;
   }
   await saveZooDb(db);
@@ -1045,6 +1048,35 @@ export async function importZooOffers(scopeParam: string, formData: FormData) {
     ...(nMarginiamo ? { esclusemarginiamo: String(nMarginiamo) } : {}),
     importate: String(nOffers), nuovi: String(nNew), ...(nSenzaPrezzo ? { senzaprezzo: String(nSenzaPrezzo) } : {}),
   }));
+}
+
+/**
+ * Rilegge le promo scritte a parole delle offerte di un volantino già caricato
+ * ("20 alle casse" → sconto 20% col prezzo scontato calcolato; "3x2" →
+ * meccanica; "margiiamo" → marginiamo). Tocca solo le offerte senza prezzo
+ * promo e non ancora tradotte: rilanciarla non cambia niente.
+ */
+export async function interpretaPromoScritte(campaignId: string): Promise<{ ok: boolean; error?: string }> {
+  const user = await requireZooUser();
+  if (!isZooEditor(user)) return { ok: false, error: "Solo chi cura lo Zoo per il Consorzio." };
+  const db = await getZooDb();
+  const conta: Record<string, number> = { sconto: 0, meccanica: 0, marginiamo: 0 };
+  let conPrezzo = 0;
+  for (const o of db.offers) {
+    if (o.campaignId !== campaignId || o.prezzoPromo || o.promoTesto || !(o.condizioni ?? "").trim()) continue;
+    const fatto = applicaPromoTesto(o, o.condizioni!);
+    if (!fatto) continue;
+    conta[fatto]++;
+    if (fatto === "sconto" && o.prezzoPromo) conPrezzo++;
+  }
+  const tot = conta.sconto + conta.meccanica + conta.marginiamo;
+  if (!tot) return { ok: true, error: "Niente da tradurre: le promo scritte sono già state lette." };
+  await saveZooDb(db);
+  revalidatePath("/stampe/zoo/offerte");
+  return {
+    ok: true,
+    error: `${conta.sconto} a sconto (${conPrezzo} col prezzo scontato calcolato, ${conta.sconto - conPrezzo} senza prezzo di vendita: il cartello dirà solo «SCONTO»), ${conta.meccanica} a meccanica (3x2…), ${conta.marginiamo} «marginiamo».`,
+  };
 }
 
 export async function updateCampaignDates(campaignId: string, scopeParam: string, formData: FormData) {
