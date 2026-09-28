@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { eseguiAssociazione, lavoroAttivo } from "./zoo-ai-lavoro";
+import { creaMiniature } from "./miniature";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "./auth";
 import { getDb } from "./db";
@@ -256,6 +257,8 @@ export async function finalizeZooPhotoUpload(back: string, scopeParam: string, f
     }
   }
   await saveZooDb(db);
+  // le miniature per le tabelle si fanno dopo la risposta: chi carica non aspetta
+  after(() => creaMiniature(fileNames).then(() => undefined));
   redirect(backUrl(back, scopeParam, { foto: String(fileNames.length), abbinate: String(matched) }));
 }
 

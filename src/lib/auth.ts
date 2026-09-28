@@ -13,8 +13,19 @@ const COOKIE = "agt_user";
  * biscotto per diventare quella persona. Con la firma un id da solo non apre
  * più niente.
  */
+/*
+ * Il segreto è SOLO di GT One (AUTH_COOKIE_SECRET). Prima, in sua mancanza, si
+ * usava quello condiviso con my.rosaflor per l'SSO: chi aveva quello poteva
+ * fabbricarsi un biscotto di accesso di GT One per qualsiasi utente. Quello
+ * vecchio resta solo per leggere ciò che era stato firmato o cifrato prima
+ * (link di disiscrizione già spediti, password della casella email).
+ */
 function segretoSessione(): string {
-  return process.env.AUTH_COOKIE_SECRET || process.env.SSO_SHARED_SECRET || "";
+  return process.env.AUTH_COOKIE_SECRET || "";
+}
+
+function segretoPrecedente(): string {
+  return process.env.SSO_SHARED_SECRET || "";
 }
 
 /*
@@ -62,10 +73,25 @@ export function firmaPer(scopo: string, valore: string): string {
 }
 
 export function firmaValida(scopo: string, valore: string, firma: string): boolean {
-  const attesa = firmaPer(scopo, valore);
-  if (!attesa || !firma) return false;
-  const a = Buffer.from(attesa), b = Buffer.from(firma);
-  return a.length === b.length && timingSafeEqual(a, b);
+  if (!firma) return false;
+  const b = Buffer.from(firma);
+  const uguale = (attesa: string) => {
+    if (!attesa) return false;
+    const a = Buffer.from(attesa);
+    return a.length === b.length && timingSafeEqual(a, b);
+  };
+  // anche i link firmati prima del cambio di segreto (es. disiscrizione nelle newsletter già spedite)
+  const vecchio = segretoPrecedente();
+  return uguale(firmaPer(scopo, valore))
+    || (!!vecchio && uguale(createHmac("sha256", `${scopo}:${vecchio}`).update(valore).digest("base64url")));
+}
+
+/** Confronto di un segreto ricevuto (intestazione di un cron, di un webhook) senza rivelarne la lunghezza o i caratteri giusti. */
+export function segretoUguale(ricevuto: string | null | undefined, atteso: string | undefined): boolean {
+  if (!ricevuto || !atteso) return false;
+  const a = createHash("sha256").update(ricevuto).digest();
+  const b = createHash("sha256").update(atteso).digest();
+  return timingSafeEqual(a, b);
 }
 
 /*
@@ -73,9 +99,8 @@ export function firmaValida(scopo: string, valore: string, firma: string): boole
  * degli articoli): AES-256-GCM con una chiave ricavata dal segreto del server.
  * Chi legge il database senza il segreto non legge la password.
  */
-function chiaveCifratura(): Buffer {
-  const segreto = segretoSessione();
-  if (!segreto) throw new Error("Manca AUTH_COOKIE_SECRET/SSO_SHARED_SECRET: impossibile cifrare");
+function chiaveCifratura(segreto = segretoSessione()): Buffer {
+  if (!segreto) throw new Error("Manca AUTH_COOKIE_SECRET: impossibile cifrare");
   return createHash("sha256").update(`cifratura:${segreto}`).digest();
 }
 
@@ -89,9 +114,19 @@ export function cifra(testo: string): string {
 export function decifra(cifrato: string): string {
   const [v, iv, tag, dati] = cifrato.split(".");
   if (v !== "v1" || !iv || !tag || !dati) throw new Error("Formato cifrato sconosciuto");
-  const d = createDecipheriv("aes-256-gcm", chiaveCifratura(), Buffer.from(iv, "base64url"));
-  d.setAuthTag(Buffer.from(tag, "base64url"));
-  return Buffer.concat([d.update(Buffer.from(dati, "base64url")), d.final()]).toString("utf8");
+  const prova = (chiave: Buffer) => {
+    const d = createDecipheriv("aes-256-gcm", chiave, Buffer.from(iv, "base64url"));
+    d.setAuthTag(Buffer.from(tag, "base64url"));
+    return Buffer.concat([d.update(Buffer.from(dati, "base64url")), d.final()]).toString("utf8");
+  };
+  try {
+    return prova(chiaveCifratura());
+  } catch (e) {
+    // cifrato prima del segreto dedicato: si legge con quello vecchio (e al prossimo salvataggio si ricifra)
+    const vecchio = segretoPrecedente();
+    if (!vecchio) throw e;
+    return prova(chiaveCifratura(vecchio));
+  }
 }
 
 /*

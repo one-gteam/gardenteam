@@ -328,9 +328,17 @@ export async function trackLessonView(
     view = { lessonId, maxPercent: 0, secondsWatched: 0, firstAt: now, lastAt: now };
     prog.views.push(view);
   }
-  view.maxPercent = Math.min(100, Math.max(view.maxPercent, Math.round(data.maxPercent)));
-  view.secondsWatched = Math.max(view.secondsWatched, Math.round(data.secondsWatched));
-  if (data.durationSec) view.durationSec = Math.round(data.durationSec);
+  /*
+   * I numeri arrivano dal browser: si accettano solo se plausibili. Il tempo
+   * visto non può crescere più del tempo passato davvero dall'ultimo invio, e
+   * la durata non si può abbassare (un "video da 5 secondi" completava tutto).
+   */
+  const trascorsi = Math.max(0, (Date.now() - new Date(view.lastAt).getTime()) / 1000);
+  view.maxPercent = Math.min(100, Math.max(view.maxPercent, Math.round(Number(data.maxPercent) || 0)));
+  const richiesti = Math.round(Number(data.secondsWatched) || 0);
+  view.secondsWatched = Math.max(view.secondsWatched, Math.min(richiesti, view.secondsWatched + Math.ceil(trascorsi * 2) + 5)); // ×2: chi guarda a velocità doppia
+  const durata = Math.round(Number(data.durationSec) || 0);
+  if (durata > 0) view.durationSec = Math.max(view.durationSec ?? 0, durata);
   view.lastAt = now;
 
   /*
@@ -362,11 +370,30 @@ export async function trackLessonView(
   };
 }
 
+/**
+ * Domanda in sovraimpressione su un video: la risposta giusta resta sul server
+ * (prima arrivava al browser insieme alla domanda).
+ */
+export async function rispondiDomandaVideo(courseId: string, lessonId: string, questionId: string, optionIndex: number) {
+  await requireAcademyUser();
+  const db = await getDb();
+  const q = db.courses.find((c) => c.id === courseId)?.lessons.find((l) => l.id === lessonId)?.questions?.find((x) => x.id === questionId);
+  return { giusta: !!q && q.correct === optionIndex };
+}
+
 export async function completeLesson(courseId: string, lessonId: string) {
   const user = await requireAcademyUser();
   const db = await getDb();
   const course = db.courses.find((c) => c.id === courseId);
   if (!course) return;
+  /*
+   * Solo una lezione vera di un corso che la persona vede, e non un quiz o uno
+   * SCORM (quelli si completano superandoli): prima si poteva "completare"
+   * qualsiasi id su qualsiasi corso e ottenere il certificato.
+   */
+  const lezione = course.lessons.find((l) => l.id === lessonId);
+  if (!lezione || lezione.type === "quiz" || lezione.type === "scorm") return;
+  if (!courseVisibleTo(course, user) && user.role === "student") return;
   let prog = db.progress.find((p) => p.userId === user.id && p.courseId === courseId);
   if (!prog) {
     prog = { userId: user.id, courseId, completedLessons: [] };
@@ -1778,7 +1805,12 @@ export async function savePath(pathId: string | null, formData: FormData) {
   const tenantId = admin.role === "group_admin" ? admin.tenantId : (String(formData.get("tenantId") ?? "").trim() || undefined);
   if (!canEditPath(admin, level, level === "sistema" ? undefined : tenantId)) return { ok: false as const, error: "Non autorizzato" };
 
-  const courseIds = (formData.getAll("courseIds") as string[]).filter(Boolean);
+  // solo corsi che il percorso può contenere: quelli comuni, o quelli della stessa insegna
+  const idsCorsi = new Set((formData.getAll("courseIds") as string[]).filter(Boolean));
+  const tenantPercorso = level === "sistema" ? undefined : tenantId;
+  const courseIds = db.courses
+    .filter((c) => idsCorsi.has(c.id) && (c.level === "sistema" || (!!tenantPercorso && c.tenantId === tenantPercorso)))
+    .map((c) => c.id);
   const departments = (formData.getAll("departments") as string[]).filter(Boolean);
   const data = {
     title,
@@ -1932,6 +1964,15 @@ export async function deleteGroup(groupId: string): Promise<{ ok: boolean; error
   return { ok: true };
 }
 
+/** La persona sta nel mio perimetro (Consorzio: tutti; insegna: la sua; PV: il suo)? */
+function personaNelMioAmbito(admin: User, u: User): boolean {
+  if (admin.role === "system_admin") return true;
+  const livello = livelloDi(admin);
+  if (livello === "consorzio") return true;
+  if (livello === "insegna") return !!admin.tenantId && u.tenantId === admin.tenantId;
+  return !!admin.storeId && u.storeId === admin.storeId;
+}
+
 export async function addGroupMember(groupId: string, formData: FormData): Promise<{ ok: boolean; error?: string }> {
   const admin = await requireUser();
   const db = await getDb();
@@ -1940,6 +1981,7 @@ export async function addGroupMember(groupId: string, formData: FormData): Promi
   const userId = String(formData.get("userId") ?? "");
   const u = db.users.find((x) => x.id === userId);
   if (!u) return { ok: false, error: "Scegli una persona" };
+  if (!personaNelMioAmbito(admin, u)) return { ok: false, error: "Questa persona non è nel tuo ambito" };
   u.groupIds = u.groupIds ?? [];
   if (!u.groupIds.includes(groupId)) u.groupIds.push(groupId);
   await saveDb(db);
@@ -1953,6 +1995,7 @@ export async function removeGroupMember(groupId: string, userId: string): Promis
   const g = db.groups.find((x) => x.id === groupId);
   if (!g || !deptScopeAllowed(admin, g)) return { ok: false, error: "Non puoi modificare questo gruppo" };
   const u = db.users.find((x) => x.id === userId);
+  if (u && !personaNelMioAmbito(admin, u)) return { ok: false, error: "Questa persona non è nel tuo ambito" };
   if (u?.groupIds) {
     u.groupIds = u.groupIds.filter((x) => x !== groupId);
     await saveDb(db);

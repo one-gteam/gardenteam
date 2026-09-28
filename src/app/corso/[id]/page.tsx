@@ -1,3 +1,5 @@
+import { randomUUID } from "crypto";
+import { gettoneScorm } from "@/lib/scorm-accesso";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { requireAreaUser } from "@/lib/auth";
@@ -191,7 +193,10 @@ export default async function CoursePage({
                   courseId={course.id}
                   lessonId={lesson.id}
                   pkg={lesson.scorm}
-                  learnerName={`${user.firstName} ${user.lastName}`}
+                  {...(() => {
+                    const canale = randomUUID();
+                    return { canale, gettone: gettoneScorm(lesson.scorm!.path, lesson.scorm!.version, `${user.firstName} ${user.lastName}`, canale) };
+                  })()}
                   initialStatus={myView?.scormStatus}
                 />
               ) : (
@@ -214,7 +219,7 @@ export default async function CoursePage({
                 threshold={threshold}
                 initialPercent={myView?.maxPercent ?? 0}
                 initialSeconds={myView?.secondsWatched ?? 0}
-                questions={lesson.questions}
+                questions={lesson.questions?.map(({ correct: _giusta, ...q }) => { void _giusta; return q; })}
               />
             )}
             {video.kind === "none" && lesson.type === "video" && (

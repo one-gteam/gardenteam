@@ -15,7 +15,39 @@ const nextConfig: NextConfig = {
    */
   async headers() {
     const cache = [{ key: "Cache-Control", value: "public, max-age=86400, stale-while-revalidate=604800" }];
-    return ["/immagini/:path*", "/loghi/:path*", "/fonts/:path*", "/uploads/:path*"].map((source) => ({ source, headers: cache }));
+    /*
+     * Intestazioni di sicurezza su tutte le pagine. La CSP tiene 'unsafe-inline'
+     * per gli script perché Next.js ne scrive di suoi in pagina; blocca comunque
+     * plugin, <base> alterati, moduli che inviano ad altri siti e l'incorporamento
+     * del sito in pagine altrui (resta permesso ai siti Rosàflor). Le lezioni
+     * SCORM hanno una politica loro, più stretta, impostata dalla loro route.
+     */
+    const csp = [
+      "default-src 'self'",
+      `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""} https://www.youtube.com https://s.ytimg.com`,
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data: blob: https:",
+      "font-src 'self' data:",
+      "media-src 'self' blob: https:",
+      "connect-src 'self' https:",
+      "frame-src 'self' https:",
+      "worker-src 'self' blob:",
+      "object-src 'none'",
+      "base-uri 'self'",
+      "form-action 'self'",
+      "frame-ancestors 'self' https://*.rosaflor.it https://*.rosaflorgarden.it",
+    ].join("; ");
+    const sicurezza = [
+      { key: "Content-Security-Policy", value: csp },
+      { key: "X-Content-Type-Options", value: "nosniff" },
+      { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+      { key: "Permissions-Policy", value: "camera=(self), microphone=(), geolocation=(), payment=()" },
+      { key: "Strict-Transport-Security", value: "max-age=31536000" },
+    ];
+    return [
+      { source: "/((?!api/scorm).*)", headers: sicurezza },
+      ...["/immagini/:path*", "/loghi/:path*", "/fonts/:path*", "/uploads/:path*"].map((source) => ({ source, headers: cache })),
+    ];
   },
 };
 

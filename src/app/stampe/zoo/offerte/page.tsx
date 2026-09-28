@@ -1,3 +1,4 @@
+import FotoMini from "@/components/stampe/FotoMini";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import ColonnaOrdinabile from "@/components/stampe/ColonnaOrdinabile";
@@ -644,7 +645,7 @@ export default async function ZooOffertePage({
                           )}
                           <td>
                             {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img loading="lazy" decoding="async" src={zooImageUrl(product, parent)} alt="" style={{ width: 44, height: 44, objectFit: "contain", background: "#fff", borderRadius: 6, border: "1px solid #eee" }} />
+                            <FotoMini src={zooImageUrl(product, parent)} style={{ width: 44, height: 44, objectFit: "contain", background: "#fff", borderRadius: 6, border: "1px solid #eee" }} />
                           </td>
                           <td>
                             {consortium ? (
@@ -782,7 +783,7 @@ export default async function ZooOffertePage({
                           )}
                           <td>
                             {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img loading="lazy" decoding="async" src={zooImageUrl(product, parent)} alt="" style={{ width: 44, height: 44, objectFit: "contain", background: "#fff", borderRadius: 6, border: "1px solid #eee" }} />
+                            <FotoMini src={zooImageUrl(product, parent)} style={{ width: 44, height: 44, objectFit: "contain", background: "#fff", borderRadius: 6, border: "1px solid #eee" }} />
                           </td>
                           <td>
                             {consortium ? (

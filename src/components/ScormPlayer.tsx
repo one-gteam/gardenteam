@@ -4,15 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import { trackScorm } from "@/lib/actions";
 import { ScormPackage } from "@/lib/types";
 
-/* Il player espone alla pagina SCORM l'API dell'LMS che il contenuto cerca su
-   window.parent: API (SCORM 1.2) e API_1484_11 (SCORM 2004). Tiene un modello
-   dati CMI in memoria e, a ogni Commit/Terminate, riporta stato e punteggio al
-   server. Funziona perché i file sono serviti sullo stesso origine (/api/scorm). */
+/* Il pacchetto SCORM gira isolato (vedi /api/scorm): l'API dell'LMS la
+   definisce uno script iniettato nel pacchetto stesso, che a ogni Commit/Terminate
+   manda qui con postMessage il modello dati CMI. Il player legge stato e
+   punteggio e li registra sul server. Accetta solo i messaggi del suo canale. */
 
-interface ScormApi {
-  data: Map<string, string>;
-  report: () => void;
-}
 
 function num(v: string | undefined): number | null {
   if (v === undefined || v === "") return null;
@@ -20,80 +16,54 @@ function num(v: string | undefined): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-declare global {
-  interface Window {
-    API?: unknown; // SCORM 1.2
-    API_1484_11?: unknown; // SCORM 2004
-  }
-}
-
 export default function ScormPlayer({
   courseId,
   lessonId,
   pkg,
-  learnerName,
+  gettone,
+  canale,
   initialStatus,
 }: {
   courseId: string;
   lessonId: string;
   pkg: ScormPackage;
-  learnerName: string;
+  /** Accesso firmato ai file del pacchetto (lib/scorm-accesso). */
+  gettone: string;
+  /** Identifica i messaggi di QUESTO pacchetto aperto. */
+  canale: string;
   initialStatus?: string;
 }) {
   const [done, setDone] = useState(
     initialStatus === "completed" || initialStatus === "passed"
   );
   const [statusLabel, setStatusLabel] = useState(initialStatus ?? "");
-  const apiRef = useRef<ScormApi | null>(null);
-  const [ready, setReady] = useState(false);
+  const lastSent = useRef("");
 
-  // Installa l'API PRIMA che l'iframe venga montato (initializer di useState).
-  useState(() => {
-    if (typeof window === "undefined") return null;
-
-    const data = new Map<string, string>();
-    // valori di default richiesti da molti contenuti
-    if (pkg.version === "1.2") {
-      data.set("cmi.core.student_name", learnerName);
-      data.set("cmi.core.lesson_status", "not attempted");
-      data.set("cmi.core.lesson_mode", "normal");
-      data.set("cmi.core.credit", "credit");
-      data.set("cmi.core.entry", "ab-initio");
-      data.set("cmi.core.score.min", "0");
-      data.set("cmi.core.score.max", "100");
-    } else {
-      data.set("cmi.learner_name", learnerName);
-      data.set("cmi.completion_status", "unknown");
-      data.set("cmi.success_status", "unknown");
-      data.set("cmi.mode", "normal");
-      data.set("cmi.credit", "credit");
-      data.set("cmi.entry", "ab-initio");
-    }
-
-    let lastSent = "";
-    const report = () => {
+  // stato e punteggio dal modello dati CMI che il pacchetto ci manda
+  useEffect(() => {
+    const report = (data: Record<string, string>) => {
       let status = "";
       let scorePercent: number | undefined;
       if (pkg.version === "1.2") {
-        status = data.get("cmi.core.lesson_status") ?? "";
-        const raw = num(data.get("cmi.core.score.raw"));
-        const max = num(data.get("cmi.core.score.max")) ?? 100;
+        status = data["cmi.core.lesson_status"] ?? "";
+        const raw = num(data["cmi.core.score.raw"]);
+        const max = num(data["cmi.core.score.max"]) ?? 100;
         if (raw !== null && max) scorePercent = (raw / max) * 100;
       } else {
-        const success = data.get("cmi.success_status") ?? "";
-        const completion = data.get("cmi.completion_status") ?? "";
+        const success = data["cmi.success_status"] ?? "";
+        const completion = data["cmi.completion_status"] ?? "";
         status = success === "passed" || success === "failed" ? success : completion;
-        const scaled = num(data.get("cmi.score.scaled"));
+        const scaled = num(data["cmi.score.scaled"]);
         if (scaled !== null) scorePercent = scaled * 100;
         else {
-          const raw = num(data.get("cmi.score.raw"));
-          const max = num(data.get("cmi.score.max")) ?? 100;
+          const raw = num(data["cmi.score.raw"]);
+          const max = num(data["cmi.score.max"]) ?? 100;
           if (raw !== null && max) scorePercent = (raw / max) * 100;
         }
       }
       const sig = `${status}|${scorePercent ?? ""}`;
-      if (sig === lastSent) return; // niente di nuovo
-      lastSent = sig;
+      if (sig === lastSent.current) return; // niente di nuovo
+      lastSent.current = sig;
       trackScorm(courseId, lessonId, {
         status,
         scorePercent: scorePercent === undefined ? undefined : Math.round(scorePercent),
@@ -105,51 +75,19 @@ export default function ScormPlayer({
         }
       });
     };
-    apiRef.current = { data, report };
-
-    const get = (k: string) => data.get(k) ?? "";
-    const set = (k: string, v: string) => { data.set(k, String(v)); return "true"; };
-
-    // SCORM 1.2
-    window.API = {
-      LMSInitialize: () => "true",
-      LMSFinish: () => { report(); return "true"; },
-      LMSGetValue: (k: string) => get(k),
-      LMSSetValue: (k: string, v: string) => set(k, v),
-      LMSCommit: () => { report(); return "true"; },
-      LMSGetLastError: () => "0",
-      LMSGetErrorString: () => "No error",
-      LMSGetDiagnostic: () => "",
+    const onMessage = (e: MessageEvent) => {
+      const m = e.data as { scormGtOne?: string; dati?: Record<string, unknown> } | null;
+      if (!m || m.scormGtOne !== canale || !m.dati || typeof m.dati !== "object") return;
+      const dati: Record<string, string> = {};
+      for (const [k, v] of Object.entries(m.dati)) if (typeof k === "string") dati[k] = String(v ?? "");
+      report(dati);
     };
-    // SCORM 2004
-    window.API_1484_11 = {
-      Initialize: () => "true",
-      Terminate: () => { report(); return "true"; },
-      GetValue: (k: string) => get(k),
-      SetValue: (k: string, v: string) => set(k, v),
-      Commit: () => { report(); return "true"; },
-      GetLastError: () => "0",
-      GetErrorString: () => "No error",
-      GetDiagnostic: () => "",
-    };
-    return true;
-  });
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [canale, courseId, lessonId, pkg.version]);
 
-  useEffect(() => setReady(true), []);
-
-  // salva anche se lo studente chiude la scheda mentre il contenuto è aperto
-  useEffect(() => {
-    const onHide = () => apiRef.current?.report();
-    document.addEventListener("visibilitychange", onHide);
-    window.addEventListener("pagehide", onHide);
-    return () => {
-      apiRef.current?.report();
-      document.removeEventListener("visibilitychange", onHide);
-      window.removeEventListener("pagehide", onHide);
-    };
-  }, []);
-
-  const src = `/api/scorm/${pkg.path}/${pkg.entry.split("?")[0].split("/").map(encodeURIComponent).join("/")}${pkg.entry.includes("?") ? "?" + pkg.entry.split("?")[1] : ""}`;
+  const entry = pkg.entry.split("?")[0].split("/").map(encodeURIComponent).join("/");
+  const src = `/api/scorm/${encodeURIComponent(gettone)}/${entry}${pkg.entry.includes("?") ? "?" + pkg.entry.split("?")[1] : ""}`;
 
   const STATUS_LABEL: Record<string, string> = {
     completed: "✓ completato", passed: "✓ superato", failed: "✗ non superato",
@@ -158,12 +96,13 @@ export default function ScormPlayer({
 
   return (
     <div>
-      {ready && (
+      {(
         <iframe
           className="scorm-frame"
           src={src}
           title="Contenuto SCORM"
-          allow="autoplay; fullscreen; microphone; camera"
+          sandbox="allow-scripts allow-forms allow-popups allow-modals allow-downloads allow-pointer-lock"
+          allow="autoplay; fullscreen"
         />
       )}
       <div className="watch-bar" style={{ marginTop: 8 }}>

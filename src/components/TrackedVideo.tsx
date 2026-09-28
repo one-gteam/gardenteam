@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { trackLessonView } from "@/lib/actions";
+import { rispondiDomandaVideo, trackLessonView } from "@/lib/actions";
 import { QuizQuestion } from "@/lib/types";
 import { VideoSource } from "@/lib/video";
 
@@ -65,11 +65,12 @@ export default function TrackedVideo({
   threshold: number;
   initialPercent: number;
   initialSeconds: number;
-  questions?: QuizQuestion[];
+  /** Le domande arrivano senza la risposta giusta: la verifica il server. */
+  questions?: Omit<QuizQuestion, "correct">[];
 }) {
   const [percent, setPercent] = useState(initialPercent); // % effettivamente vista
   const [done, setDone] = useState(initialPercent >= threshold);
-  const [activeQuestion, setActiveQuestion] = useState<QuizQuestion | null>(null);
+  const [activeQuestion, setActiveQuestion] = useState<Omit<QuizQuestion, "correct"> | null>(null);
   const [wrongFlash, setWrongFlash] = useState(false);
 
   const watched = useRef(initialSeconds);
@@ -135,20 +136,20 @@ export default function TrackedVideo({
   }, []);
 
   /** Risposta dello studente alla domanda in sovraimpressione. */
-  const answerQuestion = useCallback((optionIndex: number) => {
-    setActiveQuestion((q) => {
-      if (!q) return q;
-      if (optionIndex !== q.correct) {
-        setWrongFlash(true);
-        return q; // resta in pausa: deve rispondere correttamente per proseguire
-      }
-      answeredIds.current.add(q.id);
-      activeQuestionId.current = null;
-      lastTime.current = null; // riparte pulito: la pausa non deve contare come salto
-      resumeFn.current();
-      return null;
-    });
-  }, []);
+  const answerQuestion = useCallback(async (optionIndex: number) => {
+    const q = activeQuestion;
+    if (!q) return;
+    const { giusta } = await rispondiDomandaVideo(courseId, lessonId, q.id, optionIndex).catch(() => ({ giusta: false }));
+    if (!giusta) {
+      setWrongFlash(true);
+      return; // resta in pausa: deve rispondere correttamente per proseguire
+    }
+    answeredIds.current.add(q.id);
+    activeQuestionId.current = null;
+    lastTime.current = null; // riparte pulito: la pausa non deve contare come salto
+    resumeFn.current();
+    setActiveQuestion(null);
+  }, [activeQuestion, courseId, lessonId]);
 
   // ---- YouTube ----
   useEffect(() => {

@@ -1,3 +1,4 @@
+import { segretoUguale } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { getArticoliDb } from "@/lib/articoli";
 import { importaMessaggio } from "@/lib/articoli-email";
@@ -18,7 +19,7 @@ interface MessaggioIn { from?: string; subject?: string; text?: string; html?: s
 
 export async function POST(req: NextRequest) {
   const segreto = process.env.ARTICOLI_INBOUND_SECRET;
-  if (!segreto || req.headers.get("x-articoli-secret") !== segreto) {
+  if (!segreto || !segretoUguale(req.headers.get("x-articoli-secret"), segreto)) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
   }
   const db = await getArticoliDb();

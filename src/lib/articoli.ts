@@ -1,5 +1,5 @@
 import sanitizeHtml from "sanitize-html";
-import { readDomain, writeDomain } from "./supabase";
+import { stessaLettura, readDomain, writeDomain } from "./supabase";
 import type { DB, Role, User } from "./types";
 
 /*
@@ -186,6 +186,7 @@ const VUOTO: ArticoliDB = {
 export async function getArticoliDb(): Promise<ArticoliDB> {
   const db = await readDomain<Partial<ArticoliDB> | null>("articoli", null);
   const out: ArticoliDB = { ...VUOTO, ...(db ?? {}) };
+  stessaLettura(db, out); // al salvataggio si riconosce la versione letta (salvataggi contemporanei)
   out.articoli ??= [];
   out.categorie ??= [];
   out.newsletter = { ...VUOTO.newsletter, ...(out.newsletter ?? {}) };

@@ -1,3 +1,4 @@
+import { segretoUguale } from "@/lib/auth";
 import { NextRequest, NextResponse, after } from "next/server";
 import { getZooDb } from "@/lib/zoo";
 import { eseguiAssociazione } from "@/lib/zoo-ai-lavoro";
@@ -11,7 +12,7 @@ export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
   const segreto = process.env.CRON_SECRET;
-  if (!segreto || req.headers.get("authorization") !== `Bearer ${segreto}`) {
+  if (!segreto || !segretoUguale(req.headers.get("authorization"), `Bearer ${segreto}`)) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
   }
   const db = await getZooDb();
