@@ -60,7 +60,7 @@ export async function descrizioneConAi(dati: {
   try {
     const client = new Anthropic({ apiKey });
     const risposta = await client.messages.create({
-      model: "claude-opus-5",
+      model: "claude-opus-5-5",
       max_tokens: 800,
       system: "Sei l'assistente del Consorzio Garden Team. Scrivi testi brevi e utili per il personale dei garden center.",
       messages: [{ role: "user", content: blocchi as never }],

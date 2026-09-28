@@ -9,6 +9,10 @@ import { userSites } from "@/lib/types";
 import { listStorageFiles, publicUrlFor } from "@/lib/supabase";
 import PhotoUploader from "@/components/stampe/PhotoUploader";
 import EsitoAzione from "@/components/articoli/EsitoAzione";
+import BottoneConferma from "@/components/BottoneConferma";
+import AggiornaOgni from "@/components/AggiornaOgni";
+import { PulsanteAzione } from "@/components/AzioneSenzaRicarica";
+import { lavoroAttivo } from "@/lib/zoo-ai-lavoro";
 import BulkCheckbox from "@/components/stampe/BulkCheckbox";
 import InlineEdit from "@/components/stampe/InlineEdit";
 import InlineSelect from "@/components/stampe/InlineSelect";
@@ -22,7 +26,7 @@ import {
   NO_VOLANTINO, marcaEffettiva, type ZooProduct, type ZooOffer,
 } from "@/lib/zoo";
 import {
-  interpretaPromoScritte,
+  interpretaPromoScritte, avviaAssociaConAI, chiudiAvvisoAssocia,
   importZooOffers, updateCampaignDates, associaNuoviConAI, finalizeZooPhotoUpload,
   createZooParent, associaConAI, rigeneraTestiAI, saveParentTexts, setParentImage,
   toggleParentCaratteristica, scioglieParent, chiudiVolantino, riapriVolantino, nuovoVolantino,
@@ -34,7 +38,7 @@ import {
 // "Associa con AI" può richiedere più dei 10s di default per un lotto di articoli:
 // alza il limite dove la piattaforma lo consente (vale anche per le server action
 // invocate da questa pagina, non solo per il render).
-export const maxDuration = 60;
+export const maxDuration = 300; // "Associa tutti con l'AI" continua in background dopo la risposta
 
 /** Le azioni su foto e padri tornano qui (le stesse servono a "Database prodotti"). */
 const BACK = "/stampe/zoo/offerte";
@@ -334,9 +338,10 @@ export default async function ZooOffertePage({
                   <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
                     {offers.length > 0 && (
                       <form action={svuotaOfferteVolantino.bind(null, campaign.id, scopeParam)}>
-                        <button className="btn btn-outline btn-sm" type="submit" title="Elimina tutte le offerte di questo volantino per ricaricare l'Excel da zero">
+                        <BottoneConferma title="Elimina tutte le offerte di questo volantino per ricaricare l'Excel da zero"
+                          messaggio={`Eliminare tutte le ${offers.length} offerte del volantino «${campaign.nome}», con i voti dei punti vendita? Non si può annullare.`}>
                           Elimina tutte le offerte
-                        </button>
+                        </BottoneConferma>
                       </form>
                     )}
                     <form action={chiudiVolantino.bind(null, campaign.id, scopeParam)}>
@@ -402,7 +407,7 @@ export default async function ZooOffertePage({
             <strong>{marginiamo.length} offerte &quot;marginiamo&quot;</strong> (nessuna promo dal fornitore, decide il
             PV): non sono offerte vere, non dovrebbero comparire nei cartelli.{" "}
             <form action={rimuoviOfferteMarginiamo.bind(null, campaign.id, scopeParam)} style={{ display: "inline" }}>
-              <button className="btn btn-sm" type="submit">Rimuovile</button>
+              <BottoneConferma className="btn btn-sm" messaggio={`Rimuovere le ${marginiamo.length} offerte «marginiamo» da questo volantino?`}>Rimuovile</BottoneConferma>
             </form>
           </div>
         )}
@@ -432,16 +437,44 @@ export default async function ZooOffertePage({
           </div>
         ) : (
           <>
+            {/* ---------- avanzamento di "Associa tutti con l'AI" (lavora in background) ---------- */}
+            {consortium && db.settings.aiLavoro && (() => {
+              const l = db.settings.aiLavoro;
+              const attivo = lavoroAttivo(l);
+              const morto = l.stato === "in corso" && !attivo;
+              const perc = l.totale ? Math.round((l.fatti / l.totale) * 100) : 0;
+              return (
+                <div className={`alert ${l.stato === "errore" || morto ? "alert-amber" : attivo ? "" : "alert-green"}`}
+                  style={{ marginBottom: 14, ...(attivo ? { background: "#f3ecfb", border: "1px solid #d9c6f2" } : {}) }}>
+                  {attivo && <AggiornaOgni secondi={6} />}
+                  <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                    <strong style={{ flex: 1 }}>
+                      {attivo && `⏳ Associazione con l'AI in corso: ${l.fatti} di ${l.totale} articoli, ${l.padri} padri creati.`}
+                      {l.stato === "finito" && `✓ Associazione finita: ${l.padri} padri creati su ${l.fatti} articoli.`}
+                      {l.stato === "errore" && `Associazione interrotta dopo ${l.fatti} di ${l.totale} articoli (${l.padri} padri creati).`}
+                      {morto && `L'associazione si è fermata a ${l.fatti} di ${l.totale} articoli senza finire.`}
+                    </strong>
+                    {!attivo && <PulsanteAzione azione={chiudiAvvisoAssocia}>Chiudi</PulsanteAzione>}
+                  </div>
+                  {attivo && <div className="barra-lettura" style={{ marginTop: 8 }}><span style={{ width: `${perc}%` }} /></div>}
+                  {l.stato === "errore" && l.errore && <div style={{ marginTop: 6, fontSize: 13 }}>Motivo: {l.errore}</div>}
+                  {(l.restanti ?? 0) > 0 && l.stato === "finito" && (
+                    <div style={{ marginTop: 6, fontSize: 13 }}>Ne restano {l.restanti} per il tempo a disposizione: premi di nuovo «Associa tutti con l&apos;AI» per continuare.</div>
+                  )}
+                  {(morto || l.stato === "errore") && <div style={{ marginTop: 6, fontSize: 13 }}>Quello che è già stato fatto resta salvato: puoi ripremere il pulsante per continuare.</div>}
+                  {attivo && <div className="hint" style={{ marginTop: 6 }}>Puoi continuare a lavorare o chiudere la pagina: il lavoro va avanti da solo.</div>}
+                </div>
+              );
+            })()}
+
             {/* ---------- raggruppamento: a mano o con l'AI ---------- */}
             {consortium && senzaPadre.length > 0 && (
               <div className="alert" style={{ background: "#f3ecfb", border: "1px solid #d9c6f2", marginBottom: 14 }}>
                 <strong>{senzaPadre.length} articoli di questo volantino non hanno un prodotto padre.</strong>{" "}
                 Raggruppali per avere una sola voce a volantino con un solo testo (es. le scatolette nei vari gusti).{" "}
-                <form action={associaNuoviConAI.bind(null, scopeParam)} style={{ display: "inline" }}>
-                  <button className="btn btn-sm" type="submit" style={{ background: "#6d3fa7" }}>
-                    Associa tutti con l&apos;AI e genera i testi
-                  </button>
-                </form>{" "}
+                {!lavoroAttivo(db.settings.aiLavoro) && (
+                  <EsitoAzione azione={avviaAssociaConAI} etichetta="Associa tutti con l'AI e genera i testi" />
+                )}{" "}
                 <span className="hint">
                   oppure spunta gli articoli nella tabella e usa i pulsanti qui sotto. Non tutti gli articoli hanno
                   bisogno di un padre: quelli unici si lasciano così come sono.

@@ -93,7 +93,7 @@ function buildPrompt(products: ZooProduct[], settings: ZooSettings, singleGroup:
 async function callClaude(apiKey: string, prompt: string): Promise<AiGroup[]> {
   const client = new Anthropic({ apiKey });
   const response = await client.messages.create({
-    model: "claude-opus-4-8",
+    model: "claude-opus-5-5",
     max_tokens: 16000,
     system:
       "Sei l'assistente del Consorzio Garden Team per il database prodotti zoo. Rispondi solo con JSON valido secondo lo schema richiesto, testi in italiano.",

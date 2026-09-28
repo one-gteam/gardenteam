@@ -515,6 +515,8 @@ export interface ZooSettings {
   condizioniConValidita?: boolean;
   /** Foto caricate che si è scelto di non abbinare: non compaiono più fra quelle "da abbinare". */
   fotoIgnorate?: string[];
+  /** Stato dell'ultimo "Associa tutti con l'AI" (vedi zoo-ai-lavoro). */
+  aiLavoro?: import("./zoo-ai-lavoro").LavoroAi;
 }
 
 /**

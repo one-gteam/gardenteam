@@ -1,6 +1,8 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { after } from "next/server";
+import { eseguiAssociazione, lavoroAttivo } from "./zoo-ai-lavoro";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "./auth";
 import { getDb } from "./db";
@@ -1292,6 +1294,41 @@ export async function eliminaVolantino(campaignId: string, scopeParam: string) {
   db.campaigns = db.campaigns.filter((x) => x.id !== campaignId);
   await saveZooDb(db);
   redirect(backUrl("/stampe/zoo/archivio", scopeParam, { eliminato: "1" }));
+}
+
+/**
+ * Avvia "Associa tutti con l'AI" in background sugli articoli senza padre del
+ * volantino in lavorazione: risponde subito ("partita, N articoli"), il lavoro
+ * prosegue dopo la risposta e la pagina ne mostra l'avanzamento.
+ */
+export async function avviaAssociaConAI(): Promise<{ ok: boolean; error?: string }> {
+  const user = await requireZooUser();
+  if (!isZooEditor(user)) return { ok: false, error: "Solo chi cura lo Zoo per il Consorzio." };
+  const db = await getZooDb();
+  if (lavoroAttivo(db.settings.aiLavoro)) return { ok: false, error: "Un'associazione è già in corso: attendi che finisca." };
+  const apiKey = db.settings.apiKey || process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return { ok: false, error: "Manca la chiave API Claude: la imposta l'amministratore di sistema in Utenti e ruoli → Organizzazione." };
+  const campaign = campagnaInLavorazione(db);
+  const inVolantino = new Set(db.offers.filter((o) => o.campaignId === campaign?.id).map((o) => o.productId));
+  const ids = db.products.filter((p) => !p.parentId && inVolantino.has(p.id)).map((p) => p.id);
+  if (ids.length === 0) return { ok: true, error: "Tutti gli articoli del volantino hanno già un padre." };
+  db.settings.aiLavoro = { stato: "in corso", inizio: new Date().toISOString(), totale: ids.length, fatti: 0, padri: 0, campaignId: campaign?.id };
+  await saveZooDb(db);
+  after(async () => {
+    await eseguiAssociazione(apiKey, ids);
+    revalidatePath("/stampe/zoo/offerte");
+  });
+  return { ok: true, error: `Associazione partita: ${ids.length} articoli, a lotti da 30. L'avanzamento compare qui sotto.` };
+}
+
+/** Toglie dalla pagina l'avviso dell'ultima associazione finita. */
+export async function chiudiAvvisoAssocia(): Promise<{ ok: boolean }> {
+  const user = await requireZooUser();
+  if (!isZooEditor(user)) return { ok: false };
+  const db = await getZooDb();
+  if (!lavoroAttivo(db.settings.aiLavoro)) db.settings.aiLavoro = undefined;
+  await saveZooDb(db);
+  return { ok: true };
 }
 
 /**
