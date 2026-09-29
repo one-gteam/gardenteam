@@ -162,6 +162,8 @@ export default async function ZooVolantinoPage({
   const selCount = allOffers.filter((o) => o.selezionata).length;
   const openSuggestions = db.suggestions.filter((s) => s.status === "aperta");
 
+  const dataIt = (d?: string) => (d ? new Date(`${d}T00:00:00`).toLocaleDateString("it-IT") : "—");
+
   return (
     <div>
       <StampeHeader user={user} active="volantino" area="zoo" />
@@ -170,7 +172,7 @@ export default async function ZooVolantinoPage({
           <h1 style={{ margin: 0, fontSize: 24, whiteSpace: "nowrap" }}>Scelta offerte Volantino</h1>
           <span className="hint" style={{ flex: 1, minWidth: 220 }}>
             {campaign
-              ? <><strong>{campaign.nome}</strong> · {campaign.dal || "—"} → {campaign.al || "—"} · {selCount} scelte</>
+              ? <><strong>{campaign.nome}</strong> · {dataIt(campaign.dal)} → {dataIt(campaign.al)} · {selCount} scelte</>
               : "Nessun volantino in lavorazione: aprine uno da Offerte in corso"}
             <span title={consortium ? "Vedi i voti di tutti i PV e fai la selezione finale." : "Segna le offerte che ti piacciono: il Consorzio vede i voti di tutti i responsabili."}> ⓘ</span>
           </span>
@@ -303,7 +305,7 @@ export default async function ZooVolantinoPage({
             {/* filtri in alto: una riga, il modulo si apre solo quando serve */}
             <details className="card filtri-compatti" style={{ marginBottom: 10, padding: "8px 12px" }} open={Boolean(animale || caratt || sp.marca || sp.fornitore || filtroPagina)}>
               <summary style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", cursor: "pointer", listStyle: "none" }}>
-                <span className="hint" style={{ flex: 1 }}>
+                <span className="hint" style={{ flex: 1, fontSize: 12 }}>
                   {offers.length} offerte in {gruppi.length} voci{gruppi.length > RIGHE_MAX ? ` (mostrate le prime ${RIGHE_MAX}: restringi con i filtri)` : ""}
                   {" "}· spunta più righe (anche Shift+clic) per proporle in blocco · clic sulle intestazioni per ordinare
                 </span>
