@@ -1182,3 +1182,6 @@ form[aria-busy="true"] { opacity: .6; }
 .prova-profilo-scelte { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 12px; }
 .prova-profilo-scelte select { min-width: 200px; }
 .prova-profilo-esito { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 10px; }
+/* nelle tabelle dei permessi la casella basta: niente "Le modifiche si salvano da sole" in ogni cella */
+.permessi-ruoli .autosalva-stato .hint { display: none; }
+.permessi-ruoli .autosalva-stato { font-size: 10.5px; min-height: 0; margin: 0; }
