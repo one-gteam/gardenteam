@@ -1170,3 +1170,15 @@ form[aria-busy="true"] { opacity: .6; }
 /* Utenti e ruoli: tabella dei permessi dei ruoli */
 .permessi-ruoli td, .permessi-ruoli th { vertical-align: middle; }
 .permessi-ruoli .autosalva, .permessi-ruoli form span { font-size: 10px; }
+
+/* Utenti e ruoli → Permessi: celle leggibili e simulatore */
+.permessi-ruoli .si { color: var(--green-700); font-weight: 700; }
+.permessi-ruoli .no, .legenda-permessi .no { color: #aaa; }
+.permessi-ruoli .forse, .legenda-permessi .forse { color: #8a5a00; font-size: 11.5px; font-weight: 600; }
+.legenda-permessi .si { color: var(--green-700); font-weight: 700; }
+.permessi-ruoli .diverso { background: #fff3d6; border-radius: 6px; padding: 2px 4px; }
+.permessi-ruoli .riga-permesso td { background: #f6faf2; }
+.legenda-permessi { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); margin: 0 0 12px; }
+.prova-profilo-scelte { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 12px; }
+.prova-profilo-scelte select { min-width: 200px; }
+.prova-profilo-esito { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 10px; }

@@ -13,7 +13,7 @@ import { attesaMinuti, azzera, ipChiamante, Regola, segnaErrore } from "./tentat
 import { assignableRolesFor, canManageUsers, delegatoUtenti, livelloGestioneUtenti, RUOLI_AMMINISTRATORE, coursesForUser, courseVisibleTo, dueDate, getProgress, hasStartedCourse, isCourseCompleted, pathsForUser } from "./logic";
 import {
   Course, CourseLevel, CourseSession, DB, DEFAULT_HOME_BLOCKS, DEFAULT_REMINDER_RULES, DEFAULT_WATCH_THRESHOLD,
-  EmailType, Lesson, LessonAttachment, LessonType, ReminderRule, ReminderStage, Role, SiteId, User, postLoginPath, userSites, gestisce, gestisceConsorzio, livelloDi, isAcademyAdmin, permessoRuolo, PermessoRuolo, PERMESSI_RUOLO, PERMESSI_PREDEFINITI, ROLE_LABELS } from "./types";
+  EmailType, Lesson, LessonAttachment, LessonType, ReminderRule, ReminderStage, Role, SiteId, User, postLoginPath, userSites, gestisce, gestisceConsorzio, livelloDi, isAcademyAdmin, permessoRuolo, PermessoRuolo, PERMESSI_RUOLO, PERMESSI_PREDEFINITI, ROLE_LABELS, PERMESSI_AREA, DEFAULT_TEMPLATES } from "./types";
 
 /** Sostituisce variabili {{...}} e declina il genere: [maschile|femminile]. */
 /** Solo formazione → "Academy GT"; qualsiasi altra area → "GT One". */
@@ -66,8 +66,9 @@ async function pushEmail(db: DB, user: User, type: EmailType, subject: string, b
    * prima portava a /attiva, dove bisognava chiedere un altro link. Chi entra da
    * my.rosaflor (SSO) non ha bisogno di password, ma il link non fa danni.
    */
-  const tokenBenvenuto = type === "benvenuto" && !user.passwordHash ? tokenReimposta(user.id, undefined, 24 * 7) : "";
-  const testo = type === "benvenuto" && !user.passwordHash
+  const eBenvenuto = type === "benvenuto" || type === "benvenuto_gtone";
+  const tokenBenvenuto = eBenvenuto && !user.passwordHash ? tokenReimposta(user.id, undefined, 24 * 7) : "";
+  const testo = eBenvenuto && !user.passwordHash
     ? `${body}
 
 Per entrare la prima volta scegli la tua password qui (il link vale 7 giorni):
@@ -101,8 +102,10 @@ async function queueEmail(db: DB, user: User, type: EmailType, vars: Record<stri
    * riguarda l'accesso al portale, quindi vale per tutti.
    */
   if (type !== "benvenuto" && !userSites(user).includes("academy")) return;
-  const r = renderTemplate(db, user, type, vars);
-  if (r) await pushEmail(db, user, type, r.subject, r.body);
+  // il benvenuto di chi ha anche altre aree è quello di GT One (Utenti e ruoli → Email)
+  const tipo: EmailType = type === "benvenuto" && marchioDi(user) === "gtone" ? "benvenuto_gtone" : type;
+  const r = renderTemplate(db, user, tipo, vars);
+  if (r) await pushEmail(db, user, tipo, r.subject, r.body);
   for (const ct of db.customTemplates) {
     if (ct.trigger !== type || !ct.enabled) continue;
     if (ct.storeId && ct.storeId !== user.storeId) continue;
@@ -2306,7 +2309,7 @@ export async function salvaPermessoRuolo(role: Role, chiave: PermessoRuolo, fd: 
   const admin = await requireUser();
   if (admin.role !== "system_admin") return { ok: false, error: "Solo l'amministratore di sistema cambia i permessi dei ruoli." };
   if (role === "system_admin") return { ok: false, error: "L'amministratore di sistema ha sempre tutti i permessi." };
-  if (!(role in ROLE_LABELS) || !PERMESSI_RUOLO.some((p) => p.chiave === chiave)) return { ok: false, error: "Permesso sconosciuto" };
+  if (!(role in ROLE_LABELS) || !(PERMESSI_RUOLO.some((p) => p.chiave === chiave) || PERMESSI_AREA.some((p) => p.chiave === chiave))) return { ok: false, error: "Permesso sconosciuto" };
   const db = await getDb();
   const acceso = fd.get("v") === "on";
   const tabella = { ...(db.settings.permessiRuoli ?? {}) };
@@ -2330,4 +2333,73 @@ export async function ripristinaPermessiRuoli(): Promise<{ ok: boolean; error?: 
   await saveDb(db);
   revalidatePath("/", "layout");
   return { ok: true };
+}
+
+/* ================== Utenti e ruoli → Email: il benvenuto di GT One ================== */
+
+/** Il Consorzio (amministratore di sistema) il testo comune; insegna e PV la loro versione. */
+function ambitoBenvenutoGtOne(admin: User): { tenantId?: string; storeId?: string } | null {
+  if (admin.role === "system_admin") return {};
+  if (!permessoRuolo(admin.role, "modelliEmail")) return null;
+  if (admin.role === "store_admin" && admin.tenantId && admin.storeId) return { tenantId: admin.tenantId, storeId: admin.storeId };
+  if (admin.role === "group_admin" && admin.tenantId) return { tenantId: admin.tenantId };
+  return null;
+}
+
+export async function salvaBenvenutoGtOne(fd: FormData): Promise<{ ok: boolean; error?: string }> {
+  const admin = await requireUser();
+  const ambito = ambitoBenvenutoGtOne(admin);
+  if (!ambito) return { ok: false, error: "Non puoi modificare questo modello." };
+  const db = await getDb();
+  const base = db.templates.find((t) => t.type === "benvenuto_gtone" && !t.tenantId && !t.storeId);
+  if (!base) return { ok: false, error: "Modello non trovato: ricarica la pagina." };
+  let tpl = db.templates.find((t) => t.type === "benvenuto_gtone" && t.tenantId === ambito.tenantId && t.storeId === ambito.storeId);
+  if (!tpl) {
+    tpl = { ...base, tenantId: ambito.tenantId, storeId: ambito.storeId };
+    db.templates.push(tpl);
+  }
+  const subject = String(fd.get("subject") ?? "").trim();
+  const body = String(fd.get("body") ?? "").trim();
+  if (!subject || !body) return { ok: false, error: "Servono oggetto e testo." };
+  tpl.subject = subject.slice(0, 200);
+  tpl.body = body.slice(0, 5000);
+  if (admin.role === "system_admin") tpl.enabled = fd.get("enabled") === "on";
+  await saveDb(db);
+  revalidatePath("/ruoli/email");
+  return { ok: true };
+}
+
+/** Torna al testo comune (insegna/PV) o al testo predefinito (Consorzio). */
+export async function ripristinaBenvenutoGtOne(): Promise<{ ok: boolean; error?: string }> {
+  const admin = await requireUser();
+  const ambito = ambitoBenvenutoGtOne(admin);
+  if (!ambito) return { ok: false, error: "Non consentito" };
+  const db = await getDb();
+  if (admin.role === "system_admin") {
+    const def = DEFAULT_TEMPLATES.find((t) => t.type === "benvenuto_gtone")!;
+    const tpl = db.templates.find((t) => t.type === "benvenuto_gtone" && !t.tenantId && !t.storeId);
+    if (tpl) { tpl.subject = def.subject; tpl.body = def.body; tpl.enabled = true; }
+  } else {
+    db.templates = db.templates.filter((t) => !(t.type === "benvenuto_gtone" && t.tenantId === ambito.tenantId && t.storeId === ambito.storeId));
+  }
+  await saveDb(db);
+  revalidatePath("/ruoli/email");
+  return { ok: true };
+}
+
+/** Manda a chi è collegato il benvenuto GT One come lo riceverebbe un nuovo collega (senza registrarlo). */
+export async function provaBenvenutoGtOne(): Promise<{ ok: boolean; error?: string }> {
+  const admin = await requireUser();
+  if (!ambitoBenvenutoGtOne(admin)) return { ok: false, error: "Non consentito" };
+  const db = await getDb();
+  const r = renderTemplate(db, admin, "benvenuto_gtone", {});
+  if (!r) return { ok: false, error: "Il benvenuto GT One è disattivato." };
+  const esito = await sendMail(admin.email, `[PROVA] ${r.subject}`, `${r.body}
+
+Per entrare la prima volta scegli la tua password qui (il link vale 7 giorni):
+${siteUrl()}/reimposta?token=…
+
+(Prova: il link vero arriva solo ai nuovi colleghi.)`, { marchio: "gtone" });
+  return esito.sent === false ? { ok: false, error: `Invio non riuscito: ${esito.error ?? "errore"}` }
+    : { ok: true, error: esito.sent ? `Mandata a ${admin.email}` : "Invio reale non configurato" };
 }

@@ -37,11 +37,19 @@ export const RUOLI_STORICI: Record<string, { role: Role; manages: SiteId[] }> = 
  * dove è collocata). L'amministratore di sistema li ha sempre tutti.
  */
 export type PermessoRuolo =
-  | "gestisceAree" | "pannelloFormazione" | "gestioneUtenti" | "organizzazione"
+  | "gestisce_academy" | "gestisce_arredo" | "gestisce_zoo" | "gestisce_piante"
+  | "pannelloFormazione" | "gestioneUtenti" | "organizzazione"
   | "corsi" | "percorsi" | "modelliEmail";
 
+/** Gestione di ciascuna area, per ruolo: cosa sblocca lo spiega il catalogo (lib/permessi-catalogo). */
+export const PERMESSI_AREA: { chiave: PermessoRuolo; area: SiteId; etichetta: string }[] = [
+  { chiave: "gestisce_academy", area: "academy", etichetta: "Gestisce la Formazione" },
+  { chiave: "gestisce_arredo", area: "arredo", etichetta: "Gestisce i Cartelli Arredo" },
+  { chiave: "gestisce_zoo", area: "zoo", etichetta: "Gestisce le Offerte Zoo" },
+  { chiave: "gestisce_piante", area: "piante", etichetta: "Gestisce le Piante" },
+];
+
 export const PERMESSI_RUOLO: { chiave: PermessoRuolo; etichetta: string; spiegazione: string }[] = [
-  { chiave: "gestisceAree", etichetta: "Gestisce le sue aree", spiegazione: "Gestisce (non solo usa) tutte le aree a cui ha accesso: layout, impostazioni, contenuti. Senza, il gestore gestisce solo le aree spuntate per lui." },
   { chiave: "pannelloFormazione", etichetta: "Pannello Formazione", spiegazione: "Entra nel pannello di amministrazione dell'Academy (utenti, avanzamenti, report della sua squadra)." },
   { chiave: "gestioneUtenti", etichetta: "Gestisce utenti e ruoli", spiegazione: "Crea, modifica e disattiva le persone del suo ambito. Senza, lo può fare solo chi ha l'incarico personale." },
   { chiave: "organizzazione", etichetta: "Organizzazione", spiegazione: "Dati dell'insegna o del punto vendita, reparti e gruppi del suo ambito." },
@@ -51,13 +59,13 @@ export const PERMESSI_RUOLO: { chiave: PermessoRuolo; etichetta: string; spiegaz
 ];
 
 const TUTTI_NO: Record<PermessoRuolo, boolean> = {
-  gestisceAree: false, pannelloFormazione: false, gestioneUtenti: false, organizzazione: false,
+  gestisce_academy: false, gestisce_arredo: false, gestisce_zoo: false, gestisce_piante: false, pannelloFormazione: false, gestioneUtenti: false, organizzazione: false,
   corsi: false, percorsi: false, modelliEmail: false,
 };
 export const PERMESSI_PREDEFINITI: Record<Role, Record<PermessoRuolo, boolean>> = {
-  system_admin: { gestisceAree: true, pannelloFormazione: true, gestioneUtenti: true, organizzazione: true, corsi: true, percorsi: true, modelliEmail: true },
-  group_admin: { gestisceAree: true, pannelloFormazione: true, gestioneUtenti: true, organizzazione: true, corsi: true, percorsi: true, modelliEmail: true },
-  store_admin: { gestisceAree: true, pannelloFormazione: true, gestioneUtenti: true, organizzazione: true, corsi: true, percorsi: false, modelliEmail: true },
+  system_admin: { gestisce_academy: true, gestisce_arredo: true, gestisce_zoo: true, gestisce_piante: true, pannelloFormazione: true, gestioneUtenti: true, organizzazione: true, corsi: true, percorsi: true, modelliEmail: true },
+  group_admin: { gestisce_academy: true, gestisce_arredo: true, gestisce_zoo: true, gestisce_piante: true, pannelloFormazione: true, gestioneUtenti: true, organizzazione: true, corsi: true, percorsi: true, modelliEmail: true },
+  store_admin: { gestisce_academy: true, gestisce_arredo: true, gestisce_zoo: true, gestisce_piante: true, pannelloFormazione: true, gestioneUtenti: true, organizzazione: true, corsi: true, percorsi: false, modelliEmail: true },
   manager: { ...TUTTI_NO, corsi: true, modelliEmail: true },
   dept_head: { ...TUTTI_NO, pannelloFormazione: true },
   student: { ...TUTTI_NO },
@@ -238,7 +246,8 @@ export function livelloDi(user: User): "consorzio" | "insegna" | "pv" {
 export function gestisce(user: User, area: SiteId): boolean {
   if (user.role === "system_admin") return true;
   if (!userSites(user).includes(area)) return false;
-  if (permessoRuolo(user.role, "gestisceAree")) return true;
+  // la gestione dell'area data a tutto il ruolo; per il gestore, anche quella spuntata per la persona
+  if (permessoRuolo(user.role, `gestisce_${area}` as PermessoRuolo)) return true;
   return user.role === "manager" && (user.manages ?? []).includes(area);
 }
 
@@ -440,10 +449,11 @@ export interface Feedback {
 
 export type EmailType =
   | "benvenuto" | "assegnazione" | "mai_iniziato" | "promemoria" | "scadenza" | "completamento" | "certificato"
-  | "convocazione" | "promemoria_sessione" | "reimposta";
+  | "convocazione" | "promemoria_sessione" | "reimposta" | "benvenuto_gtone";
 
 export const EMAIL_TYPE_LABELS: Record<EmailType, { label: string; emoji: string }> = {
   reimposta: { label: "Reimposta la password", emoji: "🔑" },
+  benvenuto_gtone: { label: "Benvenuto in GT One (chi ha altre aree oltre alla formazione)", emoji: "🌱" },
   benvenuto: { label: "Benvenuto", emoji: "👋" },
   assegnazione: { label: "Nuovo corso assegnato", emoji: "📬" },
   mai_iniziato: { label: "Corso assegnato mai iniziato", emoji: "👀" },
@@ -494,7 +504,8 @@ export interface CustomTemplate {
  * Declinazione di genere: [maschile|femminile] — es. "[Benvenuto|Benvenuta]".
  */
 export const DEFAULT_TEMPLATES: EmailTemplate[] = [
-  { type: "benvenuto", enabled: true, subject: "[Benvenuto|Benvenuta] in GT One, {{nome}}!", body: "Ciao {{nome}}, il tuo account GT One è attivo: da qui accedi a tutti i servizi del Consorzio a cui sei [abilitato|abilitata]." },
+  { type: "benvenuto", enabled: true, subject: "[Benvenuto|Benvenuta] in Academy GT, {{nome}}!", body: "Ciao {{nome}}, il tuo account Academy GT è attivo: qui trovi i corsi del Consorzio Garden Team che ti sono assegnati." },
+  { type: "benvenuto_gtone", enabled: true, subject: "[Benvenuto|Benvenuta] in GT One, {{nome}}!", body: "Ciao {{nome}}, il tuo account GT One è attivo: da qui accedi a tutti i servizi del Consorzio a cui sei [abilitato|abilitata]." },
   { type: "assegnazione", enabled: true, subject: "📬 Nuova formazione assegnata", body: "Ciao {{nome}}, in base al tuo profilo ti è stata assegnata questa formazione:\n\n{{elenco}}\n\nLa trovi nella tua area personale di Academy GT." },
   { type: "mai_iniziato", enabled: true, subject: "👀 Non hai ancora iniziato: {{elenco}}", body: "Ciao {{nome}}, risultano assegnati ma non ancora avviati questi corsi obbligatori: {{elenco}}. Bastano pochi minuti per iniziare, li trovi nella tua area personale." },
   { type: "promemoria", enabled: true, subject: "⏰ Promemoria: hai corsi da completare", body: "Ciao {{nome}}, ti ricordiamo i corsi obbligatori da completare: {{elenco}}." },

@@ -44,6 +44,17 @@ async function caricaDb(): Promise<DB> {
     oldAssegnazione.subject = fresh.subject;
     oldAssegnazione.body = fresh.body;
   }
+  /*
+   * Il benvenuto si è sdoppiato: "benvenuto" per chi ha solo la formazione
+   * (Academy GT), "benvenuto_gtone" per tutti gli altri (Utenti e ruoli → Email).
+   * Se il vecchio testo comune non era mai stato cambiato, diventa quello dell'Academy.
+   */
+  const vecchioBenvenuto = db.templates.find((t) => t.type === "benvenuto" && !t.tenantId && !t.storeId);
+  if (vecchioBenvenuto?.body === "Ciao {{nome}}, il tuo account GT One è attivo: da qui accedi a tutti i servizi del Consorzio a cui sei [abilitato|abilitata].") {
+    const fresh = DEFAULT_TEMPLATES.find((t) => t.type === "benvenuto")!;
+    vecchioBenvenuto.subject = fresh.subject;
+    vecchioBenvenuto.body = fresh.body;
+  }
   for (const u of db.users) if (u.active === undefined) u.active = true;
   // i vecchi "gestore corsi / Zoo / Piante" diventano "gestore" con le aree in manages
   for (const u of db.users) {

@@ -73,7 +73,9 @@ export default async function EmailPage({
     (isStoreEditor && ct.storeId === user.storeId);
   // solo i tipi che hanno un modello: "reimposta password" ha un testo fisso e senza questo filtro la pagina andava in errore
   const templateTypes = (Object.keys(EMAIL_TYPE_LABELS) as EmailType[])
-    .filter((t) => db.templates.some((x) => x.type === t && !x.tenantId && !x.storeId));
+    .filter((t) => db.templates.some((x) => x.type === t && !x.tenantId && !x.storeId))
+    // il benvenuto di GT One (chi ha anche altre aree) si scrive in Utenti e ruoli → Email
+    .filter((t) => t !== "benvenuto_gtone");
   const effectiveTemplate = (type: EmailType) => {
     const global = db.templates.find((t) => t.type === type && !t.tenantId && !t.storeId)!;
     if (isGlobalEditor) return { tpl: global, isOverride: false, global };
@@ -164,7 +166,14 @@ export default async function EmailPage({
                 return (
                   <div className="card" key={type}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
-                      <strong style={{ flex: 1 }}>{meta.emoji} {meta.label}</strong>
+                      <strong style={{ flex: 1 }}>
+                        {meta.emoji} {meta.label}
+                        {type === "benvenuto" && (
+                          <span className="hint" style={{ display: "block", fontWeight: 400, fontSize: 11.5 }}>
+                            Per chi ha solo la formazione. Chi ha anche altre aree riceve quello di GT One: <a href="/ruoli/email">Utenti e ruoli → Email</a>.
+                          </span>
+                        )}
+                      </strong>
                       {global.enabled ? <span className="pill pill-green">Attiva</span> : <span className="pill pill-red">Disattivata</span>}
                       {isOverride && (
                         <span className="pill pill-blue">

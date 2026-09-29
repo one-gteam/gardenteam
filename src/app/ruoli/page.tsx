@@ -5,10 +5,7 @@ import RolesPanel from "@/components/RolesPanel";
 import RuoliHeader from "@/components/RuoliHeader";
 import NuovoUtente from "@/components/NuovoUtente";
 import { assignableRolesFor, canManageUsers, livelloGestioneUtenti, RUOLI_AMMINISTRATORE, scopeUsers } from "@/lib/logic";
-import { userSites, PERMESSI_RUOLO, ROLE_LABELS, permessoRuolo, PERMESSI_PREDEFINITI, type Role } from "@/lib/types";
-import ModuloAutoSalva from "@/components/ModuloAutoSalva";
-import { PulsanteAzione } from "@/components/AzioneSenzaRicarica";
-import { salvaPermessoRuolo, ripristinaPermessiRuoli } from "@/lib/actions";
+import { userSites } from "@/lib/types";
 
 /**
  * Gestione Ruoli: area a sé, raggiunta dalla scelta area. A cascata:
@@ -108,59 +105,9 @@ export default async function RuoliPage({
           />
         )}
 
-        {/* permessi dei ruoli: solo l'amministratore di sistema, che li ha sempre tutti */}
-        {user.role === "system_admin" && (() => {
-          const ruoli: Role[] = ["group_admin", "store_admin", "manager", "dept_head", "student"];
-          const cambiati = PERMESSI_RUOLO.some((p) => ruoli.some((r) => permessoRuolo(r, p.chiave) !== PERMESSI_PREDEFINITI[r][p.chiave]));
-          return (
-            <details className="card" style={{ marginBottom: 18, padding: 14 }} open={cambiati}>
-              <summary style={{ cursor: "pointer", fontWeight: 700 }}>
-                🔐 Permessi dei ruoli {cambiati && <span className="pill pill-amber" style={{ marginLeft: 6 }}>personalizzati</span>}
-              </summary>
-              <p className="hint" style={{ margin: "8px 0 10px" }}>
-                Cosa può fare ogni ruolo, sempre dentro il suo ambito (Consorzio, insegna o punto vendita, secondo dove è collocata la persona).
-                Le aree a cui accede e l&apos;incarico personale «gestisce utenti» restano per persona, nella tabella qui sotto.
-                Le spunte si salvano da sole; l&apos;amministratore di sistema ha sempre tutto.
-              </p>
-              <div className="table-wrap">
-                <table className="data permessi-ruoli">
-                  <thead>
-                    <tr>
-                      <th>Permesso</th>
-                      {ruoli.map((r) => <th key={r} style={{ textAlign: "center" }}>{ROLE_LABELS[r]}</th>)}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {PERMESSI_RUOLO.map((p) => (
-                      <tr key={p.chiave}>
-                        <td><strong>{p.etichetta}</strong><div className="hint" style={{ fontSize: 11.5, maxWidth: 420 }}>{p.spiegazione}</div></td>
-                        {ruoli.map((r) => {
-                          const acceso = permessoRuolo(r, p.chiave);
-                          const diverso = acceso !== PERMESSI_PREDEFINITI[r][p.chiave];
-                          return (
-                            <td key={r} style={{ textAlign: "center", background: diverso ? "#fff7e6" : undefined }}
-                              title={diverso ? "Diverso dal predefinito" : undefined}>
-                              <ModuloAutoSalva azione={salvaPermessoRuolo.bind(null, r, p.chiave)} style={{ display: "inline-block" }}>
-                                <input type="checkbox" name="v" defaultChecked={acceso} aria-label={`${p.etichetta} — ${ROLE_LABELS[r]}`} />
-                              </ModuloAutoSalva>
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              {cambiati && (
-                <div style={{ marginTop: 10 }}>
-                  <PulsanteAzione azione={ripristinaPermessiRuoli} conferma="Tornare ai permessi predefiniti per tutti i ruoli?">
-                    Ripristina i permessi predefiniti
-                  </PulsanteAzione>
-                </div>
-              )}
-            </details>
-          );
-        })()}
+        <p className="hint" style={{ margin: "0 0 12px" }}>
+          Cosa può fare ogni ruolo, area per area: <a href="/ruoli/permessi">Permessi</a>.
+        </p>
 
         <RolesPanel
           users={users}
