@@ -13,7 +13,7 @@ import {
 } from "@/lib/actions";
 import { mailerConfig } from "@/lib/mailer";
 import { scopeUsers } from "@/lib/logic";
-import { DEFAULT_REMINDER_RULES, EMAIL_TYPE_LABELS, EmailType, REMINDER_STAGE_LABELS, isAcademyAdmin, gestisceConsorzio } from "@/lib/types";
+import { permessoRuolo, DEFAULT_REMINDER_RULES, EMAIL_TYPE_LABELS, EmailType, REMINDER_STAGE_LABELS, isAcademyAdmin, gestisceConsorzio } from "@/lib/types";
 
 const AUTOMATIONS = [
   { emoji: "", title: "Email di benvenuto", desc: "Inviata automaticamente quando un collaboratore viene creato o importato da CSV/gestionale.", trigger: "Alla creazione dell'utente" },
@@ -60,7 +60,8 @@ export default async function EmailPage({
 
   const isGlobalEditor = gestisceConsorzio(user, "academy");
   const isStoreEditor = user.role === "store_admin";
-  const canEditTemplates = isGlobalEditor || user.role === "group_admin" || isStoreEditor;
+  // il permesso "Modelli delle email" del ruolo (Utenti e ruoli → Permessi dei ruoli)
+  const canEditTemplates = isGlobalEditor || ((user.role === "group_admin" || isStoreEditor) && permessoRuolo(user.role, "modelliEmail"));
   const myCustomTemplates = db.customTemplates.filter((ct) =>
     isGlobalEditor ||
     (user.role === "group_admin" && (!ct.tenantId || ct.tenantId === user.tenantId)) ||

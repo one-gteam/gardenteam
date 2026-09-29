@@ -1,4 +1,4 @@
-import { Course, DB, LearningPath, Progress, Role, User, gestisce, gestisceConsorzio, livelloDi } from "./types";
+import { permessoRuolo, Course, DB, LearningPath, Progress, Role, User, gestisce, gestisceConsorzio, livelloDi } from "./types";
 
 export const NEW_HIRE_DAYS = 90;
 
@@ -131,7 +131,9 @@ export const RUOLI_AMMINISTRATORE: Role[] = ["system_admin", "group_admin", "sto
 
 /** Ha l'incarico "gestisce utenti e ruoli" senza essere amministratore. */
 export function delegatoUtenti(user: User): boolean {
-  return !!user.gestioneUtenti && !RUOLI_AMMINISTRATORE.includes(user.role) && user.active !== false;
+  // l'incarico personale, oppure il permesso dato a tutto il suo ruolo (Utenti e ruoli → Permessi dei ruoli)
+  return (!!user.gestioneUtenti || permessoRuolo(user.role, "gestioneUtenti"))
+    && !RUOLI_AMMINISTRATORE.includes(user.role) && user.active !== false;
 }
 
 /**
@@ -142,8 +144,8 @@ export function delegatoUtenti(user: User): boolean {
 export function livelloGestioneUtenti(db: DB, user: User): "consorzio" | "insegna" | "pv" | null {
   const pvConsentito = () => db.tenants.find((t) => t.id === user.tenantId)?.pvGestioneUtenti !== false;
   if (user.role === "system_admin") return "consorzio";
-  if (user.role === "group_admin") return user.tenantId ? "insegna" : null;
-  if (user.role === "store_admin") return user.storeId && pvConsentito() ? "pv" : null;
+  if (user.role === "group_admin") return user.tenantId && permessoRuolo("group_admin", "gestioneUtenti") ? "insegna" : null;
+  if (user.role === "store_admin") return user.storeId && pvConsentito() && permessoRuolo("store_admin", "gestioneUtenti") ? "pv" : null;
   if (delegatoUtenti(user)) {
     const livello = livelloDi(user);
     return livello === "pv" && !pvConsentito() ? null : livello;

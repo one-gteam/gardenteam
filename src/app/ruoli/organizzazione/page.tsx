@@ -1,3 +1,4 @@
+import { permessoRuolo } from "@/lib/types";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
@@ -25,6 +26,8 @@ export default async function OrgPage({
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (!["system_admin", "group_admin", "store_admin"].includes(user.role)) redirect("/admin");
+  // il permesso "Organizzazione" del ruolo (Utenti e ruoli → Permessi dei ruoli)
+  if (!permessoRuolo(user.role, "organizzazione")) redirect("/ruoli");
   const { salvato } = await searchParams;
 
   const db = await getDb();

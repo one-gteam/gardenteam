@@ -137,10 +137,10 @@ export function decifra(cifrato: string): string {
  */
 const ORE_REIMPOSTA = 2;
 
-export function tokenReimposta(userId: string, passwordHash?: string): string {
+export function tokenReimposta(userId: string, passwordHash?: string, ore = ORE_REIMPOSTA): string {
   const segreto = segretoSessione();
   if (!segreto) return "";
-  const corpo = Buffer.from(`${userId}.${Date.now() + ORE_REIMPOSTA * 3600_000}`).toString("base64url");
+  const corpo = Buffer.from(`${userId}.${Date.now() + ore * 3600_000}`).toString("base64url");
   return `${corpo}.${createHmac("sha256", segreto + (passwordHash ?? "senza")).update(corpo).digest("base64url")}`;
 }
 

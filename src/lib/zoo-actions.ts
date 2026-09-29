@@ -2781,7 +2781,7 @@ export async function avvisaColleghi(
 
   let inviate = 0;
   for (const to of destinatari) {
-    const r = await sendMail(to, oggetto, corpo);
+    const r = await sendMail(to, oggetto, corpo, { marchio: "gtone" });
     if (r.sent !== false) inviate++;
   }
   return { ok: true, inviate };

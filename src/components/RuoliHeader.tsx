@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft, Users } from "lucide-react";
 import { getDb } from "@/lib/db";
-import { ROLE_LABELS, User } from "@/lib/types";
+import { permessoRuolo, ROLE_LABELS, User } from "@/lib/types";
 import { logout } from "@/lib/actions";
 import HeaderMenu from "@/components/HeaderMenu";
 
@@ -16,7 +16,7 @@ export default async function RuoliHeader({ user, active }: { user: User; active
   // chi ha solo l'incarico "gestisce utenti" non tocca insegne, reparti e parole segrete
   const voci = [
     { href: "/ruoli", label: "Utenti e ruoli", key: "ruoli" as const },
-    ...(["system_admin", "group_admin", "store_admin"].includes(user.role)
+    ...(["system_admin", "group_admin", "store_admin"].includes(user.role) && permessoRuolo(user.role, "organizzazione")
       ? [{ href: "/ruoli/organizzazione", label: "Organizzazione", key: "organizzazione" as const }]
       : []),
   ];

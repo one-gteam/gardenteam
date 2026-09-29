@@ -29,6 +29,57 @@ export const RUOLI_STORICI: Record<string, { role: Role; manages: SiteId[] }> = 
   piante_manager: { role: "manager", manages: ["piante"] },
 };
 
+/*
+ * Permessi dei ruoli, scelti dall'amministratore di sistema in Utenti e ruoli.
+ * I valori predefiniti sono le regole che valevano prima, scritte nel codice:
+ * finché nessuno li cambia, nessuno guadagna o perde un accesso. Ogni permesso
+ * vale nell'ambito della persona (Consorzio, insegna o punto vendita, secondo
+ * dove è collocata). L'amministratore di sistema li ha sempre tutti.
+ */
+export type PermessoRuolo =
+  | "gestisceAree" | "pannelloFormazione" | "gestioneUtenti" | "organizzazione"
+  | "corsi" | "percorsi" | "modelliEmail";
+
+export const PERMESSI_RUOLO: { chiave: PermessoRuolo; etichetta: string; spiegazione: string }[] = [
+  { chiave: "gestisceAree", etichetta: "Gestisce le sue aree", spiegazione: "Gestisce (non solo usa) tutte le aree a cui ha accesso: layout, impostazioni, contenuti. Senza, il gestore gestisce solo le aree spuntate per lui." },
+  { chiave: "pannelloFormazione", etichetta: "Pannello Formazione", spiegazione: "Entra nel pannello di amministrazione dell'Academy (utenti, avanzamenti, report della sua squadra)." },
+  { chiave: "gestioneUtenti", etichetta: "Gestisce utenti e ruoli", spiegazione: "Crea, modifica e disattiva le persone del suo ambito. Senza, lo può fare solo chi ha l'incarico personale." },
+  { chiave: "organizzazione", etichetta: "Organizzazione", spiegazione: "Dati dell'insegna o del punto vendita, reparti e gruppi del suo ambito." },
+  { chiave: "corsi", etichetta: "Crea e modifica corsi", spiegazione: "Corsi del suo ambito (insegna o punto vendita). Il gestore deve anche gestire l'area Formazione." },
+  { chiave: "percorsi", etichetta: "Percorsi formativi", spiegazione: "Crea e modifica i percorsi della sua insegna." },
+  { chiave: "modelliEmail", etichetta: "Modelli delle email", spiegazione: "Personalizza i testi delle email automatiche per la sua insegna o il suo punto vendita." },
+];
+
+const TUTTI_NO: Record<PermessoRuolo, boolean> = {
+  gestisceAree: false, pannelloFormazione: false, gestioneUtenti: false, organizzazione: false,
+  corsi: false, percorsi: false, modelliEmail: false,
+};
+export const PERMESSI_PREDEFINITI: Record<Role, Record<PermessoRuolo, boolean>> = {
+  system_admin: { gestisceAree: true, pannelloFormazione: true, gestioneUtenti: true, organizzazione: true, corsi: true, percorsi: true, modelliEmail: true },
+  group_admin: { gestisceAree: true, pannelloFormazione: true, gestioneUtenti: true, organizzazione: true, corsi: true, percorsi: true, modelliEmail: true },
+  store_admin: { gestisceAree: true, pannelloFormazione: true, gestioneUtenti: true, organizzazione: true, corsi: true, percorsi: false, modelliEmail: true },
+  manager: { ...TUTTI_NO, corsi: true, modelliEmail: true },
+  dept_head: { ...TUTTI_NO, pannelloFormazione: true },
+  student: { ...TUTTI_NO },
+};
+
+export type PermessiRuoli = Partial<Record<Role, Partial<Record<PermessoRuolo, boolean>>>>;
+
+/*
+ * La tabella scelta dall'amministratore arriva dal database Academy, che si
+ * legge a ogni richiesta: chi la carica la imposta qui, così i controlli (che
+ * sono funzioni semplici, senza accesso al database) la trovano pronta.
+ */
+let permessiScelti: PermessiRuoli = {};
+export function impostaPermessiRuoli(m: PermessiRuoli | undefined): void {
+  permessiScelti = m ?? {};
+}
+
+export function permessoRuolo(role: Role, p: PermessoRuolo): boolean {
+  if (role === "system_admin") return true;
+  return permessiScelti[role]?.[p] ?? PERMESSI_PREDEFINITI[role]?.[p] ?? false;
+}
+
 export const ROLE_LABELS: Record<Role, string> = {
   system_admin: "Amministratore di sistema",
   group_admin: "Amministratore di insegna",
@@ -187,7 +238,7 @@ export function livelloDi(user: User): "consorzio" | "insegna" | "pv" {
 export function gestisce(user: User, area: SiteId): boolean {
   if (user.role === "system_admin") return true;
   if (!userSites(user).includes(area)) return false;
-  if (user.role === "group_admin" || user.role === "store_admin") return true;
+  if (permessoRuolo(user.role, "gestisceAree")) return true;
   return user.role === "manager" && (user.manages ?? []).includes(area);
 }
 
@@ -202,7 +253,7 @@ export function gestisceConsorzio(user: User, area: SiteId): boolean {
  * gestite. Un gestore delle sole Offerte Zoo qui è un corsista come gli altri.
  */
 export function isAcademyAdmin(user: User): boolean {
-  if (["system_admin", "group_admin", "store_admin", "dept_head"].includes(user.role)) return true;
+  if (permessoRuolo(user.role, "pannelloFormazione")) return true;
   return user.role === "manager" && gestisce(user, "academy");
 }
 
@@ -507,6 +558,8 @@ export interface Registration {
 
 /** Impostazioni globali del portale, gestite dall'amministratore di sistema. */
 export interface PortalSettings {
+  /** Permessi dei ruoli scelti dall'amministratore di sistema (assente = quelli predefiniti). */
+  permessiRuoli?: PermessiRuoli;
   portalName: string;
   logoUrl: string;
   colorPrimary: string; // verde scuro GT

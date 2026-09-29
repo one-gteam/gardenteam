@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { requireAreaUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
-import { isAcademyAdmin, gestisceConsorzio } from "@/lib/types";
+import { permessoRuolo, isAcademyAdmin, gestisceConsorzio } from "@/lib/types";
 import Header from "@/components/Header";
 import PathsPanel from "@/components/PathsPanel";
 import { scopeCourses } from "@/lib/logic";
@@ -9,7 +9,7 @@ import { scopeCourses } from "@/lib/logic";
 export default async function AdminPathsPage() {
   const user = await requireAreaUser("academy");
   if (!isAcademyAdmin(user)) redirect("/studente");
-  if (user.role === "dept_head") redirect("/studente");
+  if (user.role === "dept_head" && !permessoRuolo("dept_head", "percorsi")) redirect("/studente");
 
   const db = await getDb();
   const canSystem = gestisceConsorzio(user, "academy");

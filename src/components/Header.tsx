@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { getDb } from "@/lib/db";
-import { User, userSites, isAcademyAdmin, ruoloEsteso } from "@/lib/types";
+import { permessoRuolo, User, userSites, isAcademyAdmin, ruoloEsteso } from "@/lib/types";
 import { logout } from "@/lib/actions";
 import HeaderMenu from "@/components/HeaderMenu";
 
@@ -21,7 +21,7 @@ export default async function Header({ user, active }: { user: User; active: str
         { href: "/admin", label: "Dashboard", key: "admin" },
         { href: "/admin/utenti", label: "Collaboratori", key: "utenti" },
         { href: "/admin/corsi", label: "Corsi", key: "corsi" },
-        ...(user.role === "dept_head" ? [] : [{ href: "/admin/percorsi", label: "Percorsi", key: "percorsi" }]),
+        ...(user.role === "dept_head" && !permessoRuolo("dept_head", "percorsi") ? [] : [{ href: "/admin/percorsi", label: "Percorsi", key: "percorsi" }]),
         { href: "/admin/email", label: "Email", key: "email" },
         { href: "/admin/report", label: "Report", key: "report" },
         { href: "/studente", label: "Vista studente", key: "studente" },

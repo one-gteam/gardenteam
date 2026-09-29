@@ -6,18 +6,25 @@ import { revalidatePath } from "next/cache";
 import { randomBytes, scryptSync, timingSafeEqual } from "crypto";
 import { getDb, saveDb } from "./db";
 import { uploadPublicFile } from "./supabase";
-import { mailerConfig, sendMail } from "./mailer";
+import { mailerConfig, sendMail, nomeMarchio, type Marchio } from "./mailer";
 import { verifySsoToken } from "./sso";
 import { AUTH_COOKIE, OPZIONI_SESSIONE, requireUser, valoreSessione, tokenReimposta, idDaTokenReimposta } from "./auth";
 import { attesaMinuti, azzera, ipChiamante, Regola, segnaErrore } from "./tentativi";
 import { assignableRolesFor, canManageUsers, delegatoUtenti, livelloGestioneUtenti, RUOLI_AMMINISTRATORE, coursesForUser, courseVisibleTo, dueDate, getProgress, hasStartedCourse, isCourseCompleted, pathsForUser } from "./logic";
 import {
   Course, CourseLevel, CourseSession, DB, DEFAULT_HOME_BLOCKS, DEFAULT_REMINDER_RULES, DEFAULT_WATCH_THRESHOLD,
-  EmailType, Lesson, LessonAttachment, LessonType, ReminderRule, ReminderStage, Role, SiteId, User, postLoginPath, userSites, gestisce, gestisceConsorzio, livelloDi, isAcademyAdmin } from "./types";
+  EmailType, Lesson, LessonAttachment, LessonType, ReminderRule, ReminderStage, Role, SiteId, User, postLoginPath, userSites, gestisce, gestisceConsorzio, livelloDi, isAcademyAdmin, permessoRuolo, PermessoRuolo, PERMESSI_RUOLO, PERMESSI_PREDEFINITI, ROLE_LABELS } from "./types";
 
 /** Sostituisce variabili {{...}} e declina il genere: [maschile|femminile]. */
+/** Solo formazione → "Academy GT"; qualsiasi altra area → "GT One". */
+function marchioDi(user: User): Marchio {
+  const aree = userSites(user);
+  return aree.length === 0 || aree.every((a) => a === "academy") ? "academy" : "gtone";
+}
+
 function renderText(s: string, user: User, vars: Record<string, string>): string {
-  const all: Record<string, string> = { nome: user.firstName, cognome: user.lastName, ...vars };
+  // {{piattaforma}} nei modelli: "Academy GT" o "GT One" a seconda delle aree della persona
+  const all: Record<string, string> = { nome: user.firstName, cognome: user.lastName, piattaforma: nomeMarchio(marchioDi(user)), ...vars };
   return s
     .replace(/\{\{(\w+)\}\}/g, (_, k: string) => all[k] ?? "")
     .replace(/\[([^\[\]|]+)\|([^\[\]|]+)\]/g, (_, m: string, f: string) => (user.gender === "f" ? f : m));
@@ -54,13 +61,21 @@ async function pushEmail(db: DB, user: User, type: EmailType, subject: string, b
    * accedere. Si aggiunge qui e non nel modello, così vale per tutti i testi,
    * comprese le personalizzazioni di insegna e punto vendita.
    */
+  /*
+   * Il link porta dritto alla scelta della password, firmato e valido 7 giorni:
+   * prima portava a /attiva, dove bisognava chiedere un altro link. Chi entra da
+   * my.rosaflor (SSO) non ha bisogno di password, ma il link non fa danni.
+   */
+  const tokenBenvenuto = type === "benvenuto" && !user.passwordHash ? tokenReimposta(user.id, undefined, 24 * 7) : "";
   const testo = type === "benvenuto" && !user.passwordHash
     ? `${body}
 
-Per entrare la prima volta scegli la tua password qui:
-${siteUrl()}/attiva`
+Per entrare la prima volta scegli la tua password qui (il link vale 7 giorni):
+${tokenBenvenuto ? `${siteUrl()}/reimposta?token=${tokenBenvenuto}` : `${siteUrl()}/attiva`}
+
+Se il link è scaduto, chiedine uno nuovo da ${siteUrl()}/attiva`
     : body;
-  const r = await sendMail(user.email, subject, testo);
+  const r = await sendMail(user.email, subject, testo, { marchio: marchioDi(user) });
   db.emails.push({
     id: `e_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
     userId: user.id,
@@ -187,8 +202,9 @@ async function requireAcademyUser(): Promise<User> {
 function canEditCourse(admin: User, course: Course): boolean {
   if (gestisceConsorzio(admin, "academy")) return true;
   // il gestore della formazione di un'insegna o di un PV ha gli stessi poteri dell'amministratore, sui corsi del suo ambito
-  const insegna = admin.role === "group_admin" || (admin.role === "manager" && gestisce(admin, "academy") && livelloDi(admin) === "insegna");
-  const pv = admin.role === "store_admin" || (admin.role === "manager" && gestisce(admin, "academy") && livelloDi(admin) === "pv");
+  if (!permessoRuolo(admin.role, "corsi")) return false;
+  const insegna = admin.role === "group_admin" || (admin.role !== "store_admin" && gestisce(admin, "academy") && livelloDi(admin) === "insegna");
+  const pv = admin.role === "store_admin" || (admin.role !== "group_admin" && gestisce(admin, "academy") && livelloDi(admin) === "pv");
   if (insegna) return course.level !== "sistema" && course.tenantId === admin.tenantId;
   if (pv) return course.level === "punto_vendita" && course.storeId === admin.storeId;
   return false;
@@ -510,9 +526,10 @@ export async function createCourse(formData: FormData) {
    * bastava avere l'area formazione, e uno studente poteva assegnare un corso
    * obbligatorio a tutta la sua insegna.
    */
-  const gestoreFormazione = admin.role === "manager" && gestisce(admin, "academy");
-  const perInsegna = admin.role === "group_admin" || (gestoreFormazione && livelloDi(admin) === "insegna");
-  const perPv = admin.role === "store_admin" || (gestoreFormazione && livelloDi(admin) === "pv");
+  const gestoreFormazione = admin.role !== "group_admin" && admin.role !== "store_admin" && gestisce(admin, "academy");
+  const puoCorsi = permessoRuolo(admin.role, "corsi");
+  const perInsegna = puoCorsi && (admin.role === "group_admin" || (gestoreFormazione && livelloDi(admin) === "insegna"));
+  const perPv = puoCorsi && (admin.role === "store_admin" || (gestoreFormazione && livelloDi(admin) === "pv"));
   if (!gestisceConsorzio(admin, "academy") && !perInsegna && !perPv) redirect("/admin/corsi");
   const db = await getDb();
   const title = String(formData.get("title") ?? "").trim();
@@ -1138,8 +1155,13 @@ export async function submitLessonQuiz(courseId: string, lessonId: string, lesso
 
 /* ================== Organizzazione: insegne e punti vendita ================== */
 
+/** Organizzazione (insegna/PV, reparti, gruppi): il permesso del ruolo, oltre al proprio ambito. */
+function puoOrganizzazione(u: User): boolean {
+  return u.role === "system_admin" || permessoRuolo(u.role, "organizzazione");
+}
+
 function canManageTenant(admin: User, tenantId: string): boolean {
-  return admin.role === "system_admin" || (admin.role === "group_admin" && admin.tenantId === tenantId);
+  return admin.role === "system_admin" || (admin.role === "group_admin" && admin.tenantId === tenantId && puoOrganizzazione(admin));
 }
 
 /*
@@ -1202,8 +1224,9 @@ export async function updateStore(storeId: string, formData: FormData): Promise<
   if (!s) return { ok: false, error: "Punto vendita non trovato" };
   const allowed =
     admin.role === "system_admin" ||
-    (admin.role === "group_admin" && admin.tenantId === s.tenantId) ||
-    (admin.role === "store_admin" && admin.storeId === storeId);
+    (puoOrganizzazione(admin) && (
+      (admin.role === "group_admin" && admin.tenantId === s.tenantId) ||
+      (admin.role === "store_admin" && admin.storeId === storeId)));
   if (!allowed) return { ok: false, error: "Non puoi modificare questo punto vendita" };
   const name = String(formData.get("name") ?? "").trim();
   if (name) s.name = name;
@@ -1616,11 +1639,12 @@ export async function sendTestEmail(formData: FormData) {
   }
   const r = await sendMail(
     to,
-    "Prova di invio da Academy GT",
-    `Se leggi questo messaggio, l'invio email di Academy GT funziona.
+    "Prova di invio da GT One",
+    `Se leggi questo messaggio, l'invio email di GT One funziona.
 
 Mittente configurato: ${cfg.from}
-Inviata il ${new Date().toLocaleString("it-IT")}.`
+Inviata il ${new Date().toLocaleString("it-IT")}.`,
+    { marchio: "gtone" },
   );
   redirect("/admin/email?prova=" + encodeURIComponent(r.sent ? "ok" : `Errore dal provider: ${r.error ?? "sconosciuto"}`));
 }
@@ -1635,6 +1659,7 @@ Inviata il ${new Date().toLocaleString("it-IT")}.`
  */
 function ambitoModelli(admin: User): { globale: true } | { globale: false; tenantId: string; storeId?: string } | null {
   if (gestisceConsorzio(admin, "academy")) return { globale: true };
+  if (!permessoRuolo(admin.role, "modelliEmail")) return null;
   const gestoreFormazione = admin.role === "manager" && gestisce(admin, "academy");
   if ((admin.role === "store_admin" || (gestoreFormazione && livelloDi(admin) === "pv")) && admin.tenantId && admin.storeId) {
     return { globale: false, tenantId: admin.tenantId, storeId: admin.storeId };
@@ -1790,7 +1815,8 @@ export async function saveAutomationSettings(formData: FormData) {
 
 function canEditPath(admin: User, level: CourseLevel, tenantId?: string): boolean {
   if (gestisceConsorzio(admin, "academy")) return true;
-  if (admin.role === "group_admin") return level !== "sistema" && tenantId === admin.tenantId;
+  // il permesso "Percorsi formativi" del ruolo, sui percorsi della propria insegna
+  if (permessoRuolo(admin.role, "percorsi") && admin.tenantId) return level !== "sistema" && tenantId === admin.tenantId;
   return false;
 }
 
@@ -1880,6 +1906,7 @@ export async function movePathCourse(pathId: string, courseId: string, dir: numb
 
 function deptScopeAllowed(admin: User, d: { tenantId?: string; storeId?: string }): boolean {
   if (admin.role === "system_admin") return true;
+  if (!puoOrganizzazione(admin)) return false;
   if (admin.role === "group_admin") return !!d.tenantId && d.tenantId === admin.tenantId;
   if (admin.role === "store_admin") return !!d.storeId && d.storeId === admin.storeId;
   return false;
@@ -1887,7 +1914,7 @@ function deptScopeAllowed(admin: User, d: { tenantId?: string; storeId?: string 
 
 export async function saveDepartment(deptId: string | null, formData: FormData): Promise<{ ok: boolean; error?: string }> {
   const admin = await requireUser();
-  if (!["system_admin", "group_admin", "store_admin"].includes(admin.role)) return { ok: false, error: "Non consentito" };
+  if (!["system_admin", "group_admin", "store_admin"].includes(admin.role) || !puoOrganizzazione(admin)) return { ok: false, error: "Non consentito" };
   const db = await getDb();
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return { ok: false, error: "Serve il nome del reparto" };
@@ -1927,7 +1954,7 @@ export async function deleteDepartment(deptId: string): Promise<{ ok: boolean; e
 
 export async function saveGroup(groupId: string | null, formData: FormData): Promise<{ ok: boolean; error?: string }> {
   const admin = await requireUser();
-  if (!["system_admin", "group_admin", "store_admin"].includes(admin.role)) return { ok: false, error: "Non consentito" };
+  if (!["system_admin", "group_admin", "store_admin"].includes(admin.role) || !puoOrganizzazione(admin)) return { ok: false, error: "Non consentito" };
   const db = await getDb();
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return { ok: false, error: "Serve il nome del gruppo" };
@@ -2175,7 +2202,7 @@ export async function registerRequest(formData: FormData) {
   if (approvalTo) {
     const subject = `🔔 Nuova richiesta di registrazione: ${firstName} ${lastName}`;
     const body = `${firstName} ${lastName} (${email}) chiede di registrarsi a GT One per ${store!.name}. Approva o rifiuta la richiesta dalla pagina Utenti.`;
-    const r = await sendMail(approvalTo, subject, body);
+    const r = await sendMail(approvalTo, subject, body, { marchio: "gtone" });
     db.emails.push({
       id: `e_${Date.now()}_reg`,
       userId: "",
@@ -2270,4 +2297,37 @@ export async function eliminaFileOrfani(paths: string[]) {
   if (error) return { ok: false as const, eliminati: 0, error: error.message };
   revalidatePath("/file");
   return { ok: true as const, eliminati: daEliminare.length };
+}
+
+/* ================== Permessi dei ruoli (solo amministratore di sistema) ================== */
+
+/** Una casella della tabella "Permessi dei ruoli": acceso/spento per quel ruolo. */
+export async function salvaPermessoRuolo(role: Role, chiave: PermessoRuolo, fd: FormData): Promise<{ ok: boolean; error?: string }> {
+  const admin = await requireUser();
+  if (admin.role !== "system_admin") return { ok: false, error: "Solo l'amministratore di sistema cambia i permessi dei ruoli." };
+  if (role === "system_admin") return { ok: false, error: "L'amministratore di sistema ha sempre tutti i permessi." };
+  if (!(role in ROLE_LABELS) || !PERMESSI_RUOLO.some((p) => p.chiave === chiave)) return { ok: false, error: "Permesso sconosciuto" };
+  const db = await getDb();
+  const acceso = fd.get("v") === "on";
+  const tabella = { ...(db.settings.permessiRuoli ?? {}) };
+  const riga = { ...(tabella[role] ?? {}) };
+  // uguale al predefinito: non serve scriverlo (se un giorno i predefiniti cambiano, vale il nuovo)
+  if (acceso === PERMESSI_PREDEFINITI[role][chiave]) delete riga[chiave];
+  else riga[chiave] = acceso;
+  if (Object.keys(riga).length) tabella[role] = riga; else delete tabella[role];
+  db.settings.permessiRuoli = tabella;
+  await saveDb(db);
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+/** Torna ai permessi predefiniti per tutti i ruoli. */
+export async function ripristinaPermessiRuoli(): Promise<{ ok: boolean; error?: string }> {
+  const admin = await requireUser();
+  if (admin.role !== "system_admin") return { ok: false, error: "Non consentito" };
+  const db = await getDb();
+  db.settings.permessiRuoli = undefined;
+  await saveDb(db);
+  revalidatePath("/", "layout");
+  return { ok: true };
 }

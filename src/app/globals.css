@@ -1166,3 +1166,7 @@ form[aria-busy="true"] { opacity: .6; }
   padding: 4px 10px; border: 1px solid rgba(255,255,255,.35); border-radius: 999px; white-space: nowrap;
 }
 .cambia-area:hover { opacity: 1; background: rgba(255,255,255,.12); text-decoration: none; }
+
+/* Utenti e ruoli: tabella dei permessi dei ruoli */
+.permessi-ruoli td, .permessi-ruoli th { vertical-align: middle; }
+.permessi-ruoli .autosalva, .permessi-ruoli form span { font-size: 10px; }

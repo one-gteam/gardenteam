@@ -1,5 +1,5 @@
 import { cache } from "react";
-import { areeStoriche, DB, DEFAULT_SETTINGS, DEFAULT_TEMPLATES, RUOLI_STORICI } from "./types";
+import { areeStoriche, DB, DEFAULT_SETTINGS, DEFAULT_TEMPLATES, RUOLI_STORICI, impostaPermessiRuoli } from "./types";
 import { buildSeed } from "./seed";
 import { readDomain, writeDomain } from "./supabase";
 
@@ -24,6 +24,7 @@ async function caricaDb(): Promise<DB> {
   // retro-compatibilità con database creati da versioni precedenti
   if (!db.emails) db.emails = [];
   if (!db.settings) db.settings = { ...DEFAULT_SETTINGS };
+  impostaPermessiRuoli(db.settings.permessiRuoli);
   if (!db.groups) db.groups = [];
   if (!db.customTemplates) db.customTemplates = [];
   if (!db.registrations) db.registrations = [];

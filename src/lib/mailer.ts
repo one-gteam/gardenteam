@@ -46,16 +46,30 @@ function textToHtml(body: string): string {
     .replace(/\n/g, "<br>");
 }
 
-function wrap(subject: string, body: string): string {
+/*
+ * Il marchio della mail: "Academy GT" per chi usa solo la formazione, "GT One"
+ * (il portale del Consorzio) per tutti gli altri. Prima tutte le mail uscivano
+ * come "Academy GT", anche per chi lavora solo con i cartelli o gli articoli.
+ */
+export type Marchio = "academy" | "gtone";
+const MARCHI: Record<Marchio, { nome: string; piede: string }> = {
+  academy: { nome: "Academy GT", piede: "Messaggio automatico della piattaforma di formazione Academy GT. Non rispondere a questo indirizzo." },
+  gtone: { nome: "GT One", piede: "Messaggio automatico di GT One, il portale del Consorzio Garden Team. Non rispondere a questo indirizzo." },
+};
+export function nomeMarchio(m: Marchio): string {
+  return MARCHI[m].nome;
+}
+
+function wrap(subject: string, body: string, marchio: Marchio = "academy"): string {
   return `<!doctype html><html lang="it"><body style="margin:0;padding:24px;background:#f4faeb;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1a1a1a">
   <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e6f4d5">
-    <tr><td style="background:linear-gradient(120deg,#003d1c,#00652e);padding:18px 24px;color:#fff;font-weight:700;font-size:17px">Academy GT</td></tr>
+    <tr><td style="background:linear-gradient(120deg,#003d1c,#00652e);padding:18px 24px;color:#fff;font-weight:700;font-size:17px">${MARCHI[marchio].nome}</td></tr>
     <tr><td style="padding:24px">
       <h1 style="margin:0 0 14px;font-size:18px;line-height:1.35;color:#003d1c">${escapeHtml(subject)}</h1>
       <div style="font-size:15px;line-height:1.6">${textToHtml(body)}</div>
     </td></tr>
     <tr><td style="padding:14px 24px;background:#f4faeb;font-size:12px;color:#6b7280">
-      Messaggio automatico della piattaforma di formazione Academy GT. Non rispondere a questo indirizzo.
+      ${MARCHI[marchio].piede}
     </td></tr>
   </table>
 </body></html>`;
@@ -85,6 +99,8 @@ export interface OpzioniMail {
   html?: string;
   /** Il nome che si legge come mittente ("GT One"); l'indirizzo resta quello di EMAIL_FROM. */
   nomeMittente?: string;
+  /** Intestazione e piede della mail (e mittente, se nomeMittente non c'è). */
+  marchio?: Marchio;
   headers?: Record<string, string>;
 }
 
@@ -113,13 +129,13 @@ export async function sendMail(to: string, subject: string, body: string, opzion
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: mittenteCon(cfg.from!, opzioni.nomeMittente),
+        from: mittenteCon(cfg.from!, opzioni.nomeMittente ?? (opzioni.marchio ? MARCHI[opzioni.marchio].nome : undefined)),
         to: [realTo],
         subject,
         text,
         html: opzioni.html
           ? (cfg.testTo ? opzioni.html.replace("<body", `<body data-prova="${escapeHtml(to)}"`) : opzioni.html)
-          : wrap(subject, text),
+          : wrap(subject, text, opzioni.marchio),
         ...(opzioni.headers ? { headers: opzioni.headers } : {}),
         ...(cfg.replyTo ? { reply_to: cfg.replyTo } : {}),
       }),
