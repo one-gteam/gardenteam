@@ -11,7 +11,7 @@ import {
 import {
   updateOfferVolantino,
   renameScheda, addScheda, resolveZooSuggestion, sendZooSuggestion,
-  updateOfferGroupFieldInline, setParentTagInline,
+  updateOfferGroupFieldInline, setParentTagInline, updateParentFieldInline, updateOfferFieldInline,
 } from "@/lib/zoo-actions";
 import InlineSelect from "@/components/stampe/InlineSelect";
 import InlineEdit from "@/components/stampe/InlineEdit";
@@ -166,27 +166,26 @@ export default async function ZooVolantinoPage({
     <div>
       <StampeHeader user={user} active="volantino" area="zoo" />
       <div className="container">
-        <div style={{ display: "flex", gap: 14, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 12 }}>
-          <div style={{ flex: 1 }}>
-            <h1 style={{ margin: 0 }}>Scelta offerte Volantino</h1>
-            <p className="subtitle" style={{ margin: "4px 0 0" }}>
-              {campaign
-                ? `${campaign.nome} (${campaign.dal || "—"} → ${campaign.al || "—"}) · ${selCount} offerte scelte per il volantino`
-                : "Nessun volantino in lavorazione: aprine uno da Offerte in corso"}
-              {consortium
-                ? " · Tu vedi i voti di tutti i PV e fai la selezione finale."
-                : " · Segna le offerte che ti piacciono: il Consorzio vede i voti di tutti i responsabili."}
-            </p>
-          </div>
+        <div className="testata-compatta">
+          <h1 style={{ margin: 0, fontSize: 24, whiteSpace: "nowrap" }}>Scelta offerte Volantino</h1>
+          <span className="hint" style={{ flex: 1, minWidth: 220 }}>
+            {campaign
+              ? <><strong>{campaign.nome}</strong> · {campaign.dal || "—"} → {campaign.al || "—"} · {selCount} scelte</>
+              : "Nessun volantino in lavorazione: aprine uno da Offerte in corso"}
+            <span title={consortium ? "Vedi i voti di tutti i PV e fai la selezione finale." : "Segna le offerte che ti piacciono: il Consorzio vede i voti di tutti i responsabili."}> ⓘ</span>
+          </span>
+          {consortium && campaign && (
+            <>
+              <a className="btn btn-outline btn-sm" href={`/stampe/zoo/excel?volantino=1&campagna=${campaign.id}&scope=${scopeParam}`}>Excel per il grafico</a>
+              <a className="btn btn-outline btn-sm" href={`/stampe/zoo/foto?campagna=${campaign.id}&scope=${scopeParam}`}>Raccolta foto</a>
+            </>
+          )}
           <form method="get" style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <label style={{ fontSize: 12.5, fontWeight: 700 }}>
-              Insegna / PV{" "}
-              <select name="scope" defaultValue={scopeParam} style={{ marginTop: 2 }}>
-                {scopes.map((s) => (
-                  <option key={`${s.type}:${s.id}`} value={`${s.type}:${s.id}`}>{s.label}</option>
-                ))}
-              </select>
-            </label>
+            <select name="scope" defaultValue={scopeParam} style={{ marginTop: 0 }} aria-label="Insegna / PV">
+              {scopes.map((s) => (
+                <option key={`${s.type}:${s.id}`} value={`${s.type}:${s.id}`}>{s.label}</option>
+              ))}
+            </select>
             <button className="btn btn-sm" type="submit">OK</button>
           </form>
         </div>
@@ -200,7 +199,7 @@ export default async function ZooVolantinoPage({
         {campaign && (
           <>
             {/* schede (pagine del volantino) */}
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }}>
               <a className={`pill ${!schedaFilter ? "pill-blue" : "pill-gray"}`} href={`/stampe/zoo/volantino?scope=${scopeParam}`} style={{ textDecoration: "none" }}>
                 Tutte le offerte ({allOffers.length})
               </a>
@@ -217,17 +216,6 @@ export default async function ZooVolantinoPage({
                 <form action={addScheda.bind(null, campaign.id, scopeParam)}>
                   <button className="btn btn-outline btn-sm" type="submit">+ scheda</button>
                 </form>
-              )}
-              <span style={{ flex: 1 }} />
-              {consortium && (
-                <>
-                  <a className="btn btn-outline btn-sm" href={`/stampe/zoo/excel?volantino=1&campagna=${campaign.id}&scope=${scopeParam}`}>
-                    Excel per il grafico
-                  </a>
-                  <a className="btn btn-outline btn-sm" href={`/stampe/zoo/foto?campagna=${campaign.id}&scope=${scopeParam}`}>
-                    Raccolta foto
-                  </a>
-                </>
               )}
             </div>
 
@@ -312,8 +300,16 @@ export default async function ZooVolantinoPage({
               </div>
             )}
 
-            {/* filtri in alto, come nelle altre pagine */}
-            <div className="card" style={{ marginBottom: 12, padding: 14 }}>
+            {/* filtri in alto: una riga, il modulo si apre solo quando serve */}
+            <details className="card filtri-compatti" style={{ marginBottom: 10, padding: "8px 12px" }} open={Boolean(animale || caratt || sp.marca || sp.fornitore || filtroPagina)}>
+              <summary style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", cursor: "pointer", listStyle: "none" }}>
+                <span className="hint" style={{ flex: 1 }}>
+                  {offers.length} offerte in {gruppi.length} voci{gruppi.length > RIGHE_MAX ? ` (mostrate le prime ${RIGHE_MAX}: restringi con i filtri)` : ""}
+                  {" "}· spunta più righe (anche Shift+clic) per proporle in blocco · clic sulle intestazioni per ordinare
+                </span>
+                <span className="btn btn-outline btn-sm">⚲ Filtri{Boolean(animale || caratt || sp.marca || sp.fornitore || filtroPagina) ? " (attivi)" : ""}</span>
+              </summary>
+              <div style={{ marginTop: 10 }}>
               <FiltriMobile id="filtri-volantino" scelte={[animale, caratt, sp.marca, sp.fornitore,
                 filtroPagina && (filtroPagina === "_nessuna" ? "da assegnare" : filtroPagina === NO_VOLANTINO ? "no volantino" : nomePagina.get(filtroPagina))]}>
               <form method="get" style={{ display: "grid", gridTemplateColumns: `repeat(${consortium ? 5 : 4}, minmax(0, 1fr)) auto`, gap: 10, alignItems: "end" }}>
@@ -356,11 +352,8 @@ export default async function ZooVolantinoPage({
                 <button className="btn btn-sm" type="submit">Filtra</button>
               </form>
               </FiltriMobile>
-              <p className="hint" style={{ margin: "8px 0 0", fontSize: 11.5 }}>
-                {offers.length} offerte in {gruppi.length} voci{gruppi.length > RIGHE_MAX ? ` (mostrate le prime ${RIGHE_MAX}: restringi con i filtri)` : ""}.
-                Spunta più offerte (anche con Shift+clic) per proporle o segnarle non trattate in blocco; clic sulle intestazioni per ordinare.
-              </p>
-            </div>
+              </div>
+            </details>
 
             <div>
             <ShiftChecks />
@@ -425,13 +418,32 @@ export default async function ZooVolantinoPage({
                           <FotoMini src={zooImageUrl(product, parent)} style={{ width: 44, height: 44, objectFit: "contain", background: "#fff", borderRadius: 6, border: "1px solid #eee" }} />
                         </td>
                         <td>
-                          <strong style={{ fontSize: 13 }}>
-                            {parent ? effectiveParentText(db, scope, parent, "nome", academyDb).value : first.descrizione}
-                          </strong>
-                          <div style={{ fontSize: 11.5, color: "var(--muted)" }}>
+                          {/* titolo e descrizione del volantino: si correggono qui (nel padre valgono ovunque) */}
+                          {consortium ? (
+                            <div className="titolo-modificabile">
+                              <InlineEdit value={parent ? effectiveParentText(db, scope, parent, "nome", academyDb).value : first.descrizione}
+                                placeholder="titolo…"
+                                onSave={parent
+                                  ? updateParentFieldInline.bind(null, parent.id, "nome", scopeParam)
+                                  : updateOfferFieldInline.bind(null, first.id, "descrizione")} />
+                            </div>
+                          ) : (
+                            <strong style={{ fontSize: 13 }}>
+                              {parent ? effectiveParentText(db, scope, parent, "nome", academyDb).value : first.descrizione}
+                            </strong>
+                          )}
+                          {parent && (consortium ? (
+                            <div style={{ fontSize: 11.5 }}>
+                              <InlineEdit value={effectiveParentText(db, scope, parent, "descVolantino", academyDb).value}
+                                multiline placeholder="descrizione per il volantino…"
+                                onSave={updateParentFieldInline.bind(null, parent.id, "descVolantino", scopeParam)} />
+                            </div>
+                          ) : (
+                            <div style={{ fontSize: 11.5, color: "var(--muted)" }}>{effectiveParentText(db, scope, parent, "descVolantino", academyDb).value}</div>
+                          ))}
+                          <div style={{ fontSize: 11, color: "var(--muted)" }}>
                             {product?.marca}
                             {isGroup ? ` · ${offs.length} varianti` : ` · EAN ${first.ean}`}
-                            {parent && <> · <span title="descrizione volantino del padre">{effectiveParentText(db, scope, parent, "descVolantino", academyDb).value.slice(0, 60)}</span></>}
                           </div>
                           {giaVisti.length > 0 && (
                             <div style={{ marginTop: 3 }}>

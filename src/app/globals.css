@@ -1185,3 +1185,4 @@ form[aria-busy="true"] { opacity: .6; }
 /* nelle tabelle dei permessi la casella basta: niente "Le modifiche si salvano da sole" in ogni cella */
 .permessi-ruoli .autosalva-stato .hint { display: none; }
 .permessi-ruoli .autosalva-stato { font-size: 10.5px; min-height: 0; margin: 0; }
+.titolo-modificabile { font-size: 13px; font-weight: 700; }
