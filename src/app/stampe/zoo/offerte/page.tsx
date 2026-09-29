@@ -205,7 +205,7 @@ export default async function ZooOffertePage({
       <StampeHeader user={user} active="offerte" area="zoo" />
       <div className="container">
         <div className="testata-compatta">
-          <h1 style={{ margin: 0, flex: 1, fontSize: 24 }}>Offerte in corso</h1>
+          <h1 style={{ margin: 0, flex: 1, fontSize: 24, whiteSpace: "nowrap" }}>Offerte in corso</h1>
           {consortium && campaign && (
             <details className="strumento" open={sp.importate !== undefined}>
               <summary className="btn btn-outline btn-sm">Carica l&apos;Excel delle offerte</summary>
