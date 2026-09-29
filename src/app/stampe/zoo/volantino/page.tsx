@@ -4,11 +4,18 @@ import { getCurrentUser } from "@/lib/auth";
 import StampeHeader from "@/components/stampe/StampeHeader";
 import { canAccessArea, isZooEditor, scopesForUser, resolveScope } from "@/lib/stampe";
 import { getDb } from "@/lib/db";
-import { getZooDb, campagnaInLavorazione, zooImageUrl, effectiveParentText, animaliDi } from "@/lib/zoo";
+import {
+  getZooDb, campagnaInLavorazione, zooImageUrl, effectiveParentText, animaliDi, caratteristicheProdottoDi,
+  chiavePrezzo, datiPrezzoOfferta, migraVolantinoPages, storicoOfferteByEan, periodoBreve, NO_VOLANTINO,
+} from "@/lib/zoo";
 import {
   updateOfferVolantino,
   renameScheda, addScheda, resolveZooSuggestion, sendZooSuggestion,
+  updateOfferGroupFieldInline, setParentTagInline,
 } from "@/lib/zoo-actions";
+import InlineSelect from "@/components/stampe/InlineSelect";
+import InlineEdit from "@/components/stampe/InlineEdit";
+import FiltriMobile from "@/components/FiltriMobile";
 import ShiftChecks from "@/components/stampe/ShiftChecks";
 import { SceltaVolantino, VotoOfferta, VotoSpuntate } from "@/components/stampe/VotoOfferta";
 
@@ -64,7 +71,21 @@ export default async function ZooVolantinoPage({
   const schedaNome = campaign?.schede.find((s) => s.id === schedaFilter)?.nome ?? "";
   const animale = sp.animale ?? (ANIMALI.includes(schedaNome) ? schedaNome : "");
   const caratt = sp.caratt ?? "";
+  /*
+   * Pagine del volantino (le stesse di Crea Volantino): la colonna "Pagina" le
+   * assegna, il filtro le isola, il contatore in alto dice quante voci ha
+   * ciascuna mentre si sceglie.
+   */
+  const layoutVol = campaign ? db.volantinoLayouts.find((l) => l.campaignId === campaign.id) : undefined;
+  const pagineVolantino = layoutVol
+    ? migraVolantinoPages(layoutVol.pages).map((p, i) => ({ id: p.id, nome: `${i + 1}. ${p.titolo || `Pagina ${i + 1}`}` }))
+    : [];
+  const nomePagina = new Map(pagineVolantino.map((p) => [p.id, p.nome]));
+  const filtroPagina = sp.pagina ?? "";
+  const storico = storicoOfferteByEan(db);
   const offers = baseOffers.filter((o) => {
+    if (filtroPagina === "_nessuna" && o.paginaId) return false;
+    if (filtroPagina && filtroPagina !== "_nessuna" && o.paginaId !== filtroPagina) return false;
     if (animale && !caratteristicheOf(o).includes(animale)) return false;
     if (caratt && !caratteristicheOf(o).includes(caratt)) return false;
     if (sp.marca && prodOf(o)?.marca !== sp.marca) return false;
@@ -100,7 +121,8 @@ export default async function ZooVolantinoPage({
     const map = new Map<string, { parent?: (typeof db.parents)[number]; offs: typeof offersOrdinate }>();
     for (const o of offersOrdinate) {
       const parent = parentOf(o);
-      const key = parent?.id ?? `_o_${o.id}`;
+      // padre + prezzo, come in Offerte in corso e nei cartelli: prezzi diversi, righe diverse
+      const key = parent ? `${parent.id}~${chiavePrezzo(o)}` : `_o_${o.id}`;
       const g = map.get(key) ?? { parent, offs: [] };
       g.offs.push(o);
       map.set(key, g);
@@ -108,6 +130,23 @@ export default async function ZooVolantinoPage({
     return [...map.values()];
   })();
   const gruppiVisibili = gruppi.slice(0, RIGHE_MAX);
+  const vociPerPagina = (() => {
+    const voci = new Map<string, Set<string>>();
+    for (const o of allOffers) {
+      const pid = o.paginaId || "_nessuna";
+      const parent = parentOf(o);
+      const chiave = parent ? `${parent.id}~${chiavePrezzo(o)}` : o.id;
+      voci.set(pid, (voci.get(pid) ?? new Set()).add(chiave));
+    }
+    return (pid: string) => voci.get(pid)?.size ?? 0;
+  })();
+  const hrefPagina = (pid: string) => {
+    const params = new URLSearchParams();
+    for (const [k, v] of Object.entries(sp)) if (v && k !== "pagina" && k !== "scope") params.set(k, v);
+    params.set("scope", scopeParam);
+    if (pid) params.set("pagina", pid);
+    return `?${params.toString()}`;
+  };
 
   const sortHref = (field: string) => {
     const params = new URLSearchParams();
@@ -253,43 +292,73 @@ export default async function ZooVolantinoPage({
               </div>
             )}
 
-            <div style={{ display: "grid", gridTemplateColumns: "230px 1fr", gap: 14, alignItems: "start" }}>
-            {/* filtro offerte */}
-            <div className="card" style={{ padding: 14 }}>
-              <strong style={{ fontSize: 13.5 }}>Filtro offerte</strong>
-              <form method="get" style={{ marginTop: 8 }}>
+            {/* contatore per pagina: resta visibile mentre si scorre la tabella */}
+            {consortium && (
+              <div className="contatore-pagine">
+                <strong style={{ fontSize: 12.5 }}>Voci per pagina:</strong>
+                <a className={`pill ${!filtroPagina ? "pill-blue" : "pill-gray"}`} href={hrefPagina("")}>tutte</a>
+                {pagineVolantino.map((p) => (
+                  <a key={p.id} className={`pill ${filtroPagina === p.id ? "pill-blue" : "pill-green"}`} href={hrefPagina(p.id)}>
+                    {p.nome} <strong>{vociPerPagina(p.id)}</strong>
+                  </a>
+                ))}
+                <a className={`pill ${filtroPagina === "_nessuna" ? "pill-blue" : "pill-amber"}`} href={hrefPagina("_nessuna")}>
+                  da assegnare <strong>{vociPerPagina("_nessuna")}</strong>
+                </a>
+                <a className={`pill ${filtroPagina === NO_VOLANTINO ? "pill-blue" : "pill-gray"}`} href={hrefPagina(NO_VOLANTINO)}>
+                  no volantino <strong>{vociPerPagina(NO_VOLANTINO)}</strong>
+                </a>
+                {pagineVolantino.length === 0 && <span className="hint">Le pagine si creano in Crea Volantino.</span>}
+              </div>
+            )}
+
+            {/* filtri in alto, come nelle altre pagine */}
+            <div className="card" style={{ marginBottom: 12, padding: 14 }}>
+              <FiltriMobile id="filtri-volantino" scelte={[animale, caratt, sp.marca, sp.fornitore,
+                filtroPagina && (filtroPagina === "_nessuna" ? "da assegnare" : filtroPagina === NO_VOLANTINO ? "no volantino" : nomePagina.get(filtroPagina))]}>
+              <form method="get" style={{ display: "grid", gridTemplateColumns: `repeat(${consortium ? 5 : 4}, minmax(0, 1fr)) auto`, gap: 10, alignItems: "end" }}>
                 <input type="hidden" name="scope" value={scopeParam} />
                 {schedaFilter && <input type="hidden" name="scheda" value={schedaFilter} />}
-                <label className="field">Tipologia di animale
+                <label className="field" style={{ marginBottom: 0 }}>Animale
                   <select name="animale" defaultValue={animale}>
-                    <option value="">Tutte</option>
+                    <option value="">Tutti</option>
                     {ANIMALI.map((a) => <option key={a} value={a}>{a}</option>)}
                   </select>
                 </label>
-                <label className="field">Caratteristica prodotto
+                <label className="field" style={{ marginBottom: 0 }}>Caratteristica
                   <select name="caratt" defaultValue={caratt}>
                     <option value="">Tutte</option>
                     {carattsProdotto.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </label>
-                <label className="field">Marca
+                <label className="field" style={{ marginBottom: 0 }}>Marca
                   <select name="marca" defaultValue={sp.marca ?? ""}>
                     <option value="">Tutte</option>
                     {marche.map((m) => <option key={m} value={m}>{m}</option>)}
                   </select>
                 </label>
-                <label className="field">Fornitore
+                <label className="field" style={{ marginBottom: 0 }}>Fornitore
                   <select name="fornitore" defaultValue={sp.fornitore ?? ""}>
                     <option value="">Tutti</option>
                     {fornitori.map((f) => <option key={f} value={f}>{f}</option>)}
                   </select>
                 </label>
-                <button className="btn btn-sm" type="submit" style={{ width: "100%" }}>Filtra</button>
+                {consortium && (
+                  <label className="field" style={{ marginBottom: 0 }}>Pagina
+                    <select name="pagina" defaultValue={filtroPagina}>
+                      <option value="">Tutte</option>
+                      {pagineVolantino.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+                      <option value="_nessuna">da assegnare</option>
+                      <option value={NO_VOLANTINO}>no volantino</option>
+                    </select>
+                  </label>
+                )}
+                <button className="btn btn-sm" type="submit">Filtra</button>
               </form>
-              <p className="hint" style={{ marginTop: 10, fontSize: 11.5 }}>
-                {offers.length} offerte in {gruppi.length} prodotti{gruppi.length > RIGHE_MAX ? ` (mostrati i primi ${RIGHE_MAX}: restringi con i filtri)` : ""}.
-                Spunta più offerte (anche con Shift+clic) e usa i pulsanti sopra la tabella per proporle o segnarle
-                non trattate in blocco. Clic sulle intestazioni della tabella per ordinare.
+              </FiltriMobile>
+              <p className="hint" style={{ margin: "8px 0 0", fontSize: 11.5 }}>
+                {offers.length} offerte in {gruppi.length} voci{gruppi.length > RIGHE_MAX ? ` (mostrate le prime ${RIGHE_MAX}: restringi con i filtri)` : ""}.
+                Spunta più offerte (anche con Shift+clic) per proporle o segnarle non trattate in blocco; clic sulle intestazioni per ordinare.
               </p>
             </div>
 
@@ -309,25 +378,29 @@ export default async function ZooVolantinoPage({
                     <th><a href={sortHref("fornitore")} style={{ textDecoration: "none", color: "inherit" }}>Fornitore{sortArrow("fornitore")}</a></th>
                     <th><a href={sortHref("marca")} style={{ textDecoration: "none", color: "inherit" }}>Marca{sortArrow("marca")}</a></th>
                     <th><a href={sortHref("animale")} style={{ textDecoration: "none", color: "inherit" }}>Animale{sortArrow("animale")}</a></th>
+                    {consortium && <th>Caratteristica</th>}
                     <th><a href={sortHref("prezzo")} style={{ textDecoration: "none", color: "inherit" }}>Prezzo{sortArrow("prezzo")}</a></th>
+                    {consortium && <th>Pagina volantino</th>}
+                    {consortium && <th>Focus</th>}
                     <th>Voti dei PV</th>
                     <th className="no-print">Il tuo voto</th>
                     {consortium && <th>Volantino (selezione finale)</th>}
                   </tr>
                 </thead>
                 <tbody>
-                  {gruppi.length === 0 && <tr><td colSpan={10} className="empty">Nessuna offerta {schedaFilter ? "assegnata a questa scheda" : "in campagna"}.</td></tr>}
+                  {gruppi.length === 0 && <tr><td colSpan={consortium ? 13 : 9} className="empty">Nessuna offerta {schedaFilter ? "assegnata a questa scheda" : "in campagna"}.</td></tr>}
                   {gruppiVisibili.map((g) => {
                     const { parent, offs } = g;
                     const first = offs[0];
                     const isGroup = offs.length > 1;
                     const product = prodOf(first);
                     const animaliOfferta = animaliDi(db, parent?.caratteristiche ?? []);
-                    const num = (s: string) => Number.parseFloat((s || "0").replace(",", "."));
-                    const prezzi = [...new Set(offs.map((o) => o.prezzoPromo).filter(Boolean))];
-                    const prezzoLabel = prezzi.length <= 1
-                      ? `€ ${prezzi[0] ?? first.prezzoPromo}`
-                      : `€ ${Math.min(...prezzi.map(num)).toFixed(2).replace(".", ",")} – € ${Math.max(...prezzi.map(num)).toFixed(2).replace(".", ",")}`;
+                    // una riga = un prezzo (padre + prezzo): partenza, sconto e tipologia vengono dalla prima offerta
+                    const dati = datiPrezzoOfferta(db, first, scope, academyDb);
+                    const carattProdotto = caratteristicheProdottoDi(db, parent?.caratteristiche ?? []);
+                    // già in altri volantini (escluso questo): per non riproporre sempre gli stessi prodotti
+                    const giaVisti = [...new Map(offs.flatMap((o) => storico.get(o.ean)?.volantino ?? [])
+                      .filter((v) => v.campaign.id !== campaign.id).map((v) => [v.campaign.id, v])).values()];
                     // voti aggregati: PV distinti che hanno votato almeno una variante del gruppo
                     const groupVotes = offs.flatMap((o) => votesByOffer.get(o.id) ?? []);
                     const pref = [...new Map(groupVotes.filter((v) => v.tipo === "preferita").map((v) => [v.userId, v])).values()];
@@ -338,7 +411,7 @@ export default async function ZooVolantinoPage({
                     const ids = offs.map((o) => o.id);
                     const selCountGroup = offs.filter((o) => o.selezionata).length;
                     return (
-                      <tr key={parent?.id ?? first.id} style={selCountGroup === offs.length ? { background: "#f4faf4" } : undefined}>
+                      <tr key={parent ? `${parent.id}~${chiavePrezzo(first)}` : first.id} style={selCountGroup === offs.length ? { background: "#f4faf4" } : undefined}>
                         <td>
                           {/* la spunta porta l'id della prima offerta: l'azione in blocco estende
                               il voto a tutte le varianti dello stesso padre */}
@@ -360,6 +433,14 @@ export default async function ZooVolantinoPage({
                             {isGroup ? ` · ${offs.length} varianti` : ` · EAN ${first.ean}`}
                             {parent && <> · <span title="descrizione volantino del padre">{effectiveParentText(db, scope, parent, "descVolantino", academyDb).value.slice(0, 60)}</span></>}
                           </div>
+                          {giaVisti.length > 0 && (
+                            <div style={{ marginTop: 3 }}>
+                              <span className="pill pill-purple" style={{ fontSize: 10.5 }}
+                                title={giaVisti.map((v) => `${v.campaign.nome} (${periodoBreve(v.campaign)})${v.pagina ? ` — ${v.pagina}` : ""}`).join("\n")}>
+                                ↺ già in volantino: {giaVisti.slice(0, 2).map((v) => periodoBreve(v.campaign)).join(", ")}{giaVisti.length > 2 ? ` +${giaVisti.length - 2}` : ""}
+                              </span>
+                            </div>
+                          )}
                           {!isGroup && (
                             <div style={{ display: "flex", gap: 4, marginTop: 3, flexWrap: "wrap" }}>
                               {first.label && <span className="pill pill-orange">{first.label}</span>}
@@ -384,11 +465,43 @@ export default async function ZooVolantinoPage({
                         </td>
                         <td style={{ fontSize: 12.5 }}>{product?.fornitore || "—"}</td>
                         <td style={{ fontSize: 12.5 }}>{product?.marca || "—"}</td>
-                        <td style={{ fontSize: 11.5, color: "var(--muted)" }}>{animaliOfferta.join(", ") || "—"}</td>
                         <td>
-                          <strong>{prezzoLabel}</strong>
-                          {!isGroup && first.prezzoListino && <div style={{ fontSize: 11.5, color: "var(--muted)", textDecoration: "line-through" }}>€ {first.prezzoListino}</div>}
+                          {consortium && parent ? (
+                            <InlineSelect value={animaliOfferta[0] ?? ""} options={db.settings.categorieAnimali}
+                              onSave={setParentTagInline.bind(null, parent.id, "animale")} />
+                          ) : (
+                            <span style={{ fontSize: 11.5, color: "var(--muted)" }}>{animaliOfferta.join(", ") || "—"}</span>
+                          )}
                         </td>
+                        {consortium && (
+                          <td>
+                            {parent ? (
+                              <InlineSelect value={carattProdotto[0] ?? ""} options={db.settings.caratteristicheProdotto}
+                                onSave={setParentTagInline.bind(null, parent.id, "prodotto")} />
+                            ) : <span className="hint">senza padre</span>}
+                          </td>
+                        )}
+                        <td style={{ whiteSpace: "nowrap" }}>
+                          <strong>{dati.prezzo ? `€ ${dati.prezzo}` : "—"}</strong>
+                          {dati.listino && <div style={{ fontSize: 11.5, color: "var(--muted)", textDecoration: "line-through" }}>€ {dati.listino}</div>}
+                          {dati.sconto && <span className="pill pill-green" style={{ fontSize: 10 }}>{dati.sconto}</span>}
+                          {dati.tipi.length > 0 && <div style={{ fontSize: 10.5, color: "#274b7a", fontWeight: 700 }}>{dati.tipi.join(" · ")}</div>}
+                        </td>
+                        {consortium && (
+                          <td>
+                            <InlineSelect value={first.paginaId ?? ""} aggiornaPagina
+                              options={[...pagineVolantino.map((p) => p.id), NO_VOLANTINO]}
+                              etichette={{ ...Object.fromEntries(pagineVolantino.map((p) => [p.id, p.nome])), [NO_VOLANTINO]: "✕ no volantino" }}
+                              vuoto="— da assegnare —"
+                              onSave={updateOfferGroupFieldInline.bind(null, ids, "paginaId")} />
+                          </td>
+                        )}
+                        {consortium && (
+                          <td style={{ minWidth: 140 }}>
+                            <InlineEdit value={first.focus ?? ""} placeholder="focus…"
+                              onSave={updateOfferGroupFieldInline.bind(null, ids, "focus")} />
+                          </td>
+                        )}
                         <td style={{ fontSize: 12 }}>
                           {pref.length > 0 && (
                             <div title={pref.map((v) => `${v.userName} (${v.scopeLabel})`).join(", ")}>
@@ -432,7 +545,6 @@ export default async function ZooVolantinoPage({
                   })}
                 </tbody>
               </table>
-            </div>
             </div>
             </div>
 

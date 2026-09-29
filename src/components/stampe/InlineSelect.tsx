@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 /**
  * Menu a tendina modificabile direttamente in una cella di tabella, con
@@ -8,7 +9,7 @@ import { useState } from "react";
  * `InlineEdit`, `onSave` è una server action già "legata" ai suoi parametri.
  */
 export default function InlineSelect({
-  value, options, onSave, vuoto = "—", etichette, onSaved,
+  value, options, onSave, vuoto = "—", etichette, onSaved, aggiornaPagina,
 }: {
   value: string;
   options: string[];
@@ -18,7 +19,10 @@ export default function InlineSelect({
   etichette?: Record<string, string>;
   /** Chiamato dopo un salvataggio riuscito. */
   onSaved?: () => void;
+  /** Ridisegna la pagina dopo il salvataggio (es. per aggiornare un contatore). */
+  aggiornaPagina?: boolean;
 }) {
+  const router = useRouter();
   const [v, setV] = useState(value);
   const [stato, setStato] = useState<"" | "salvo" | "errore">("");
 
@@ -29,6 +33,7 @@ export default function InlineSelect({
       const res = await onSave(next);
       setStato(res.ok ? "" : "errore");
       if (res.ok) onSaved?.();
+      if (res.ok && aggiornaPagina) router.refresh();
     } catch {
       setStato("errore");
     }

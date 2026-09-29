@@ -204,21 +204,16 @@ export default async function ZooOffertePage({
     <div>
       <StampeHeader user={user} active="offerte" area="zoo" />
       <div className="container">
-        <div style={{ display: "flex", gap: 14, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 12 }}>
-          <div style={{ flex: 1 }}>
-            <h1 style={{ margin: 0 }}>Offerte in corso — volantino in lavorazione</h1>
-            <p className="subtitle" style={{ margin: "4px 0 0" }}>
-              L&apos;Excel delle promo viene confrontato con il database per EAN: dati e foto già presenti vengono
-              riutilizzati, i prodotti nuovi entrano nel database.
-            </p>
-          </div>
+        <div className="testata-compatta">
+          <h1 style={{ margin: 0, flex: 1, fontSize: 24 }}>Offerte in corso</h1>
           {consortium && campaign && (
             <details className="strumento" open={sp.importate !== undefined}>
               <summary className="btn btn-outline btn-sm">Carica l&apos;Excel delle offerte</summary>
               <div className="card" style={{ marginTop: 10, padding: 14 }}>
                 <strong>Carica l&apos;Excel delle offerte</strong>
                 <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "4px 0 8px" }}>
-                  Colonne: EAN, DESCRIZIONE PROMO, PREZZO PROMO, PREZZO LISTINO, CONDIZIONI (+ MARCA/FORNITORE per i
+                  L&apos;Excel si confronta con il database per EAN: dati e foto già presenti si riusano, i prodotti
+                  nuovi entrano nel database. Colonne: EAN, DESCRIZIONE PROMO, PREZZO PROMO, PREZZO LISTINO, CONDIZIONI (+ MARCA/FORNITORE per i
                   prodotti nuovi). Riconosce anche i listini multi-fornitore con l&apos;intestazione (FORNITORE, EAN,
                   NR. ARTICOLO FORNITORE, TESTO BREVE, PREZZO DI VENDITA…) ripetuta prima di ogni fornitore. Puoi
                   caricare più file sullo stesso volantino.{" "}
@@ -259,6 +254,7 @@ export default async function ZooOffertePage({
               </div>
             </details>
           )}
+          {consortium && campaign && <AvvisaColleghi tipo="offerte" scopeParam={scopeParam} colleghi={colleghiZoo} />}
           <form method="get" style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <label style={{ fontSize: 12.5, fontWeight: 700 }}>
               Insegna / PV{" "}
@@ -303,11 +299,6 @@ export default async function ZooOffertePage({
             pronto apri il volantino successivo qui sotto.
           </div>
         )}
-        {consortium && (
-          <div style={{ marginBottom: 12 }}>
-            <AvvisaColleghi tipo="offerte" scopeParam={scopeParam} colleghi={colleghiZoo} />
-          </div>
-        )}
 
         {sp.archiviate !== undefined && (
           <div className="alert alert-green">✓ {sp.archiviate} offerte archiviate: escono dal volantino, articoli e padri restano.</div>
@@ -328,7 +319,7 @@ export default async function ZooOffertePage({
 
         {/* ---------- stato del volantino: chiudi / apri il successivo ---------- */}
         {consortium && (
-          <div className="card" style={{ marginBottom: 14, padding: 14 }}>
+          <div className="card" style={{ marginBottom: 10, padding: "8px 12px" }}>
             <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
               {campaign ? (
                 <>
@@ -337,6 +328,17 @@ export default async function ZooOffertePage({
                   <span style={{ fontSize: 12.5, color: "var(--muted)" }}>
                     {fmt(campaign.dal)} → {fmt(campaign.al)} · {offers.length} offerte
                   </span>
+                  <details className="strumento">
+                    <summary className="mini-btn" title="Cambia nome e date del volantino">✎ nome e date</summary>
+                    <div className="card" style={{ marginTop: 8, padding: 12 }}>
+                      <form action={updateCampaignDates.bind(null, campaign.id, scopeParam)} style={{ display: "flex", gap: 8, alignItems: "end", flexWrap: "wrap" }}>
+                        <label className="field" style={{ marginBottom: 0 }}>Nome<input type="text" name="nome" defaultValue={campaign.nome} /></label>
+                        <label className="field" style={{ marginBottom: 0 }}>Dal<input type="date" name="dal" defaultValue={campaign.dal} /></label>
+                        <label className="field" style={{ marginBottom: 0 }}>Al<input type="date" name="al" defaultValue={campaign.al} /></label>
+                        <button className="btn btn-sm" type="submit">Salva</button>
+                      </form>
+                    </div>
+                  </details>
                   <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
                     {offers.length > 0 && (
                       <form action={svuotaOfferteVolantino.bind(null, campaign.id, scopeParam)}>
@@ -424,14 +426,7 @@ export default async function ZooOffertePage({
           </div>
         )}
 
-        {campaign && consortium && (
-          <form action={updateCampaignDates.bind(null, campaign.id, scopeParam)} style={{ display: "flex", gap: 8, alignItems: "end", marginBottom: 14 }}>
-            <label className="field" style={{ marginBottom: 0 }}>Nome<input type="text" name="nome" defaultValue={campaign.nome} /></label>
-            <label className="field" style={{ marginBottom: 0 }}>Dal<input type="date" name="dal" defaultValue={campaign.dal} /></label>
-            <label className="field" style={{ marginBottom: 0 }}>Al<input type="date" name="al" defaultValue={campaign.al} /></label>
-            <button className="btn btn-outline btn-sm" type="submit">Aggiorna date</button>
-          </form>
-        )}
+
 
         {!campaign ? (
           <div className="card" style={{ padding: 24, textAlign: "center", color: "var(--muted)" }}>
@@ -484,9 +479,9 @@ export default async function ZooOffertePage({
               </div>
             )}
 
-            {/* filtri + vista */}
-            <div className="card" style={{ marginBottom: 14, padding: 14 }}>
-              <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+            {/* filtri + vista: una riga; il modulo dei filtri si apre solo quando serve */}
+            <details className="card filtri-compatti" style={{ marginBottom: 10, padding: "8px 12px" }} open={Boolean((sp.q || sp.animale || sp.caratt || sp.marca || sp.fornitore || sp.tipopromo || sp.senzapadre === "1"))}>
+              <summary style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", cursor: "pointer", listStyle: "none" }}>
                 <a className={`pill ${!vistaArticoli ? "pill-blue" : "pill-gray"}`} style={{ textDecoration: "none" }}
                   href={`${BACK}?${vistaQs(sp, scopeParam, "raggruppata")}`}>
                   Vista raggruppata ({gruppi.length})
@@ -495,7 +490,11 @@ export default async function ZooOffertePage({
                   href={`${BACK}?${vistaQs(sp, scopeParam, "articoli")}`}>
                   Vista articoli singoli ({visibili.length})
                 </a>
-              </div>
+                <span className="btn btn-outline btn-sm" style={{ marginLeft: "auto" }}>
+                  ⚲ Filtri{(sp.q || sp.animale || sp.caratt || sp.marca || sp.fornitore || sp.tipopromo || sp.senzapadre === "1") ? " (attivi)" : ""}
+                </span>
+              </summary>
+              <div style={{ marginTop: 10 }}>
               <FiltriMobile id="filtri-offerte" scelte={[
                 vistaArticoli ? "articoli singoli" : "raggruppata",
                 sp.q && `«${sp.q}»`, sp.animale, sp.caratt, sp.marca, sp.fornitore, sp.tipopromo,
@@ -556,7 +555,8 @@ export default async function ZooOffertePage({
                 </label>
               </form>
               </FiltriMobile>
-            </div>
+              </div>
+            </details>
 
             {/* ---------- tabella offerte del volantino ---------- */}
             <form>

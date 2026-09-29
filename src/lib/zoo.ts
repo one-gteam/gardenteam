@@ -1771,8 +1771,9 @@ export function datiPrezzoOfferta(
   const promoPv = scope && academyDb ? pvPromoFor(db, scope, offer.ean, academyDb)?.etichetta : undefined;
   const tipi = [
     ...(offer.meccanica ? [offer.meccanica] : []),
+    ...(offer.scontoPerc ? [`Sconto ${String(offer.scontoPerc).replace(".", ",")}%`] : []),
     ...(promoPv ? [promoPv] : []),
-    ...(listino ? ["sconto"] : prezzo ? ["A SOLI"] : []),
+    ...(offer.scontoPerc ? [] : listino ? ["prezzo barrato"] : prezzo ? ["A SOLI"] : []),
   ];
   return { prezzo, listino, sconto, tipi };
 }

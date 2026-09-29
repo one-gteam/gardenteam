@@ -42,7 +42,6 @@ export default async function StampeHeader({
         ...(gestZoo ? [{ href: "/stampe/zoo/focus", label: "Storico focus", key: "focus" }] : []),
         ...(gestZoo ? [{ href: "/stampe/zoo/impostazioni", label: "Impostazioni", key: "impostazioni" }] : []),
         // una voce sola per uscire: la scelta dell'area si fa in /scegli, non dal menu
-        ...(sites.length > 1 ? [{ href: "/scegli", label: "⇄ Cambia area", key: "academy" }] : []),
       ]
     : [
         { href: "/stampe/arredo/dati", label: "Dati prodotti", key: "dati" },
@@ -51,7 +50,6 @@ export default async function StampeHeader({
         ...(gestArredo ? [{ href: "/stampe/arredo/scheda", label: "Scheda online", key: "scheda" }] : []),
         { href: "/stampe/arredo/linee-guida", label: "Linee guida", key: "linee-guida" },
         ...(gestArredo ? [{ href: "/stampe/impostazioni", label: "Impostazioni", key: "impostazioni" }] : []),
-        ...(sites.length > 1 ? [{ href: "/scegli", label: "⇄ Cambia area", key: "academy" }] : []),
       ];
 
   return (
@@ -74,6 +72,8 @@ export default async function StampeHeader({
             )}
             {tenant ? ` ${tenant.name}` : " Consorzio Garden Team"}
           </span>
+          {/* il cambio di area sta qui in alto, non fra le voci del menu: lascia spazio alle pagine */}
+          {sites.length > 1 && <Link href="/scegli" className="cambia-area">⇄ Cambia area</Link>}
           <div className="user-chip">
             <div className="avatar">
               {user.firstName[0]}

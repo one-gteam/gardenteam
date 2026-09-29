@@ -1145,3 +1145,24 @@ form[aria-busy="true"] { opacity: .6; }
   .scheda-logo { height: 36px; max-width: 110px; }
   .scheda-btn span { display: none; }
 }
+
+/* Scelta offerte volantino: voci per pagina, sempre in vista mentre si scorre la tabella */
+.contatore-pagine {
+  position: sticky; top: 0; z-index: 30; display: flex; gap: 6px; align-items: center; flex-wrap: wrap;
+  background: var(--bg, #fdfbf7); padding: 8px 10px; margin: 0 0 10px; border: 1px solid var(--line);
+  border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,.06);
+}
+.contatore-pagine .pill { text-decoration: none; font-size: 11.5px; }
+.contatore-pagine .pill strong { margin-left: 3px; }
+.pill-purple { background: #f1eafb; color: #5b2e91; }
+
+/* testata compatta delle pagine di lavoro (Offerte in corso): titolo, strumenti e ambito in una riga */
+.testata-compatta { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+.testata-compatta .strumento > summary { margin: 0; }
+.filtri-compatti > summary::-webkit-details-marker { display: none; }
+/* "Cambia area" in alto accanto all'insegna, come link discreto */
+.cambia-area {
+  color: #fff; opacity: .85; font-size: 12.5px; font-weight: 700; text-decoration: none;
+  padding: 4px 10px; border: 1px solid rgba(255,255,255,.35); border-radius: 999px; white-space: nowrap;
+}
+.cambia-area:hover { opacity: 1; background: rgba(255,255,255,.12); text-decoration: none; }
