@@ -143,7 +143,14 @@ export default async function ZooDatiPage({
         return availablePhotos.slice(0, 200).map((f) => {
           const nome = f.replace(/\.[a-z0-9]+$/i, "");
           const vol = indexVol ? suggestPhotoMatch(nome, indexVol, 5) : [];
-          return { file: f, candidates: vol.length ? vol : suggestPhotoMatch(nome, index, 5) };
+          // proposta buona fra gli articoli del volantino: vale quella; altrimenti si confronta con tutto il catalogo
+          if (vol.length && vol[0].score >= 0.4) return { file: f, candidates: vol };
+          const visti = new Set<string>();
+          const uniti = [...vol, ...suggestPhotoMatch(nome, index, 5)]
+            .sort((x, y) => y.score - x.score)
+            .filter((c) => !visti.has(c.productId) && (visti.add(c.productId), true))
+            .slice(0, 5);
+          return { file: f, candidates: uniti };
         });
       })()
     : [];
