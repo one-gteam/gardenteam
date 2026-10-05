@@ -41,9 +41,16 @@ export async function articoloDaMessaggio(
   db: ArticoliDB, academy: DB, msg: MessaggioIngresso
 ): Promise<VoceRegistroEmail> {
   const mittente = indirizzo(msg.from);
-  const titolo = (msg.subject ?? "").trim();
-  const voce: VoceRegistroEmail = { data: new Date().toISOString(), da: mittente, oggetto: titolo || "(senza oggetto)", esito: "rifiutato" };
-  if (!mittente || !titolo) return { ...voce, nota: "Manca il mittente o l'oggetto" };
+  /*
+   * Senza oggetto (succede condividendo un PDF dal telefono: arriva solo
+   * l'allegato) il titolo è il nome del primo allegato, senza estensione e
+   * senza il "_261002_223235" che il telefono aggiunge in coda.
+   */
+  const primoAllegato = msg.allegati.find((a) => TIPI.test(a.tipo.split(";")[0].trim().toLowerCase()))?.nome ?? "";
+  const daAllegato = primoAllegato.replace(/\.[a-z0-9]{2,5}$/i, "").replace(/[_ ]\d{6}_\d{6}$/, "").replace(/[_]+/g, " ").trim();
+  const titolo = ((msg.subject ?? "").trim() || daAllegato).slice(0, 200);
+  const voce: VoceRegistroEmail = { data: new Date().toISOString(), da: mittente, oggetto: (msg.subject ?? "").trim() || "(senza oggetto)", esito: "rifiutato" };
+  if (!mittente || !titolo) return { ...voce, nota: "Manca il mittente, o l'oggetto e un allegato da cui prendere il titolo" };
 
   const autore = academy.users.find((u) => u.email.toLowerCase() === mittente && u.active !== false);
   const puo = autore ? pubblicaArticoli(autore, db) : false;

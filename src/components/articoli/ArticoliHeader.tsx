@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, Newspaper } from "lucide-react";
+import { Newspaper } from "lucide-react";
 import { getDb } from "@/lib/db";
 import { ROLE_LABELS, User } from "@/lib/types";
 import { logout } from "@/lib/actions";
@@ -34,9 +34,7 @@ export default async function ArticoliHeader({
               <Newspaper size={16} /> Articoli
             </span>
           </Link>
-          <Link href="/scegli" style={{ color: "#e8f3ea", fontSize: 13, display: "inline-flex", alignItems: "center", gap: 5 }}>
-            <ArrowLeft size={14} /> Cambia area
-          </Link>
+          <Link href="/scegli" className="cambia-area">⇄ Cambia area</Link>
           <div className="user-chip">
             <div className="avatar">{user.firstName[0]}{user.lastName[0]}</div>
             <div>

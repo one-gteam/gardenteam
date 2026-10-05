@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeft, HardDrive } from "lucide-react";
+import { HardDrive } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import ArchivioPanel from "@/components/ArchivioPanel";
@@ -36,9 +36,7 @@ export default async function ArchivioPage() {
                 <HardDrive size={16} /> Archivio file
               </span>
             </Link>
-            <Link href="/scegli" style={{ color: "#e8f3ea", fontSize: 13, display: "inline-flex", alignItems: "center", gap: 5 }}>
-              <ArrowLeft size={14} /> Cambia area
-            </Link>
+            <Link href="/scegli" className="cambia-area">⇄ Cambia area</Link>
             <div className="user-chip">
               <div className="avatar">{user.firstName[0]}{user.lastName[0]}</div>
               <div>

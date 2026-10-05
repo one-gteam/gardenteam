@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, Users } from "lucide-react";
+import { Users } from "lucide-react";
 import { getDb } from "@/lib/db";
 import { permessoRuolo, ROLE_LABELS, User } from "@/lib/types";
 import { logout } from "@/lib/actions";
@@ -39,9 +39,7 @@ export default async function RuoliHeader({ user, active }: { user: User; active
               <Users size={16} /> Utenti e ruoli
             </span>
           </Link>
-          <Link href="/scegli" style={{ color: "#e8f3ea", fontSize: 13, display: "inline-flex", alignItems: "center", gap: 5 }}>
-            <ArrowLeft size={14} /> Cambia area
-          </Link>
+          <Link href="/scegli" className="cambia-area">⇄ Cambia area</Link>
           <div className="user-chip">
             <div className="avatar">{user.firstName[0]}{user.lastName[0]}</div>
             <div>

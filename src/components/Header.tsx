@@ -25,11 +25,9 @@ export default async function Header({ user, active }: { user: User; active: str
         { href: "/admin/email", label: "Email", key: "email" },
         { href: "/admin/report", label: "Report", key: "report" },
         { href: "/studente", label: "Vista studente", key: "studente" },
-        ...(userSites(user).length > 1 ? [{ href: "/scegli", label: "⇄ Cambia area", key: "cambia" }] : []),
       ]
     : [
         { href: "/studente", label: "I miei corsi", key: "studente" },
-        ...(userSites(user).length > 1 ? [{ href: "/scegli", label: "⇄ Cambia area", key: "cambia" }] : []),
       ];
 
   return (
@@ -53,6 +51,8 @@ export default async function Header({ user, active }: { user: User; active: str
             {tenant ? ` ${tenant.name}` : " Consorzio Garden Team"}
             {store?.city ? ` · ${store.city}` : ""}
           </span>
+          {/* il cambio di area sta qui in alto, come nelle altre aree: lascia spazio alle voci del menu */}
+          {userSites(user).length > 1 && <Link href="/scegli" className="cambia-area">⇄ Cambia area</Link>}
           <div className="user-chip">
             <div className="avatar">
               {user.firstName[0]}

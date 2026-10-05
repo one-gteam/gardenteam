@@ -56,6 +56,25 @@ export default function PhotoMatcher({
     }).slice(0, 30);
   };
 
+  /** «✓ Abbina» sulla riga: conferma solo quella foto, e la riga sparisce senza ricaricare. */
+  const [inCorso, setInCorso] = useState<string | null>(null);
+  const abbinaUna = async (file: string) => {
+    const target = scelte[file];
+    if (!target) return;
+    setInCorso(file);
+    try {
+      const res = await onConfirm([{ file, target }]);
+      if (res.ok && res.n > 0) {
+        setNascoste((prev) => new Set([...prev, file]));
+        setEsito(`✓ ${file} abbinata a ${etichetta.get(target) ?? target}`);
+      } else setEsito("abbinamento non riuscito");
+    } catch {
+      setEsito("abbinamento non riuscito");
+    } finally {
+      setInCorso(null);
+    }
+  };
+
   const conferma = async () => {
     const coppie = Object.entries(scelte)
       .filter(([file, target]) => target && !nascoste.has(file))
@@ -76,7 +95,7 @@ export default function PhotoMatcher({
       <div className="table-wrap">
         <table className="data">
           <thead>
-            <tr><th style={{ width: 56 }}>Foto</th><th>File</th><th>Abbina a</th>{onIgnora && <th></th>}</tr>
+            <tr><th style={{ width: 56 }}>Foto</th><th>File</th><th>Abbina a</th><th></th></tr>
           </thead>
           <tbody>
             {foto.map((f) => {
@@ -137,13 +156,18 @@ export default function PhotoMatcher({
                       )}
                     </div>
                   </td>
-                  {onIgnora && (
-                    <td>
-                      <button type="button" className="btn btn-outline btn-sm" title="Non proporre più questa foto" onClick={() => ignora(f.file)}>
+                  <td style={{ whiteSpace: "nowrap" }}>
+                    <button type="button" className="btn btn-sm" disabled={!scelto || inCorso === f.file}
+                      title={scelto ? "Abbina solo questa foto, subito" : "Scegli prima l'articolo o il padre"}
+                      onClick={() => abbinaUna(f.file)}>
+                      {inCorso === f.file ? "…" : "✓ Abbina"}
+                    </button>
+                    {onIgnora && (
+                      <button type="button" className="btn btn-outline btn-sm" style={{ marginLeft: 6 }} title="Non proporre più questa foto" onClick={() => ignora(f.file)}>
                         Ignora
                       </button>
-                    </td>
-                  )}
+                    )}
+                  </td>
                 </tr>
               );
             })}
@@ -151,7 +175,7 @@ export default function PhotoMatcher({
         </table>
       </div>
       <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 10 }}>
-        <button className="btn btn-sm" type="button" onClick={conferma} disabled={pending}>Conferma abbinamenti</button>
+        <button className="btn btn-sm" type="button" onClick={conferma} disabled={pending}>Conferma tutti gli abbinamenti scelti</button>
         {esito && <span style={{ fontSize: 12, color: esito.startsWith("✓") ? "var(--green-700)" : "var(--muted)" }}>{esito}</span>}
       </div>
     </div>

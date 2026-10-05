@@ -44,7 +44,6 @@ export default async function AdminDashboard() {
           <a className="card stat card-link" href="/admin/corsi"><div className="num">{k.courses}</div><div className="lbl">Corsi attivi →</div></a>
           <a className="card stat card-link" href="/admin/report"><div className="num">{k.completionRate}%</div><div className="lbl">Tasso completamento →</div></a>
           <a className="card stat card-link" href="/admin/report"><div className="num">{k.certificates}</div><div className="lbl">Certificati emessi →</div></a>
-          <a className="card stat card-link" href="/admin/utenti"><div className="num">{k.activeLearners}</div><div className="lbl">Studenti attivi →</div></a>
         </div>
 
         <div className="section grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))" }}>
@@ -56,7 +55,11 @@ export default async function AdminDashboard() {
             {ranking.map((r) => (
               <a className="bar-row bar-row-link" key={r.store.id} href="/admin/report" title={`Vedi report di ${r.store.name}`}>
                 <span className="bar-label" style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <InsegnaLogo tenant={r.tenant} height={16} /> {r.store.name}
+                  {/* i loghi hanno larghezze diverse: una casella fissa tiene i nomi in colonna */}
+                  <span style={{ width: 58, flexShrink: 0, display: "inline-flex", justifyContent: "center" }}>
+                    <InsegnaLogo tenant={r.tenant} height={16} />
+                  </span>
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.store.name}</span>
                 </span>
                 <div className="bar-track">
                   <div className={`bar-fill ${r.compliance < 50 ? "amber" : ""}`} style={{ width: `${r.compliance}%` }} />
