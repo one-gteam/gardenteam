@@ -1985,6 +1985,19 @@ export function animaleFocus(db: ZooDB, o: ZooOffer): string {
 }
 
 /** Le foto del bucket che nessun articolo né padre usa, tolte quelle che si è scelto di ignorare. */
+/**
+ * Il volantino di una foto: quello aperto più di recente prima del caricamento
+ * (l'id dei volantini è "zc_<millisecondi della creazione>"; quelli senza data
+ * contano come i più vecchi). Le foto si caricano per il volantino in lavorazione,
+ * quindi così si possono sistemare solo quelle di Novembre e non quelle di Settembre.
+ */
+export function volantinoDiFoto(db: ZooDB, caricato: string): ZooCampaign | undefined {
+  const t = Date.parse(caricato);
+  if (!Number.isFinite(t)) return undefined;
+  const creato = (c: ZooCampaign) => Number(/^zc_(\d{12,})$/.exec(c.id)?.[1] ?? 0);
+  return [...db.campaigns].sort((a, b) => creato(a) - creato(b)).filter((c) => creato(c) <= t).pop();
+}
+
 export function fotoDaAbbinare(db: ZooDB, tutteLeFoto: string[]): { daAbbinare: string[]; ignorate: string[] } {
   const usate = new Set([...db.products, ...db.parents].map((p) => (p.image ?? "").split("/").pop()));
   const ignorate = new Set(db.settings.fotoIgnorate ?? []);

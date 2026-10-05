@@ -6,7 +6,7 @@ import FiltriMobile from "@/components/FiltriMobile";
 import StampeHeader from "@/components/stampe/StampeHeader";
 import { canAccessArea, gestisceArea, isZooEditor, scopesForUser, resolveScope } from "@/lib/stampe";
 import { getDb } from "@/lib/db";
-import { listStorageFiles, publicUrlFor } from "@/lib/supabase";
+import { listStorageFilesConData, publicUrlFor } from "@/lib/supabase";
 import PhotoUploader from "@/components/stampe/PhotoUploader";
 import BulkCheckbox from "@/components/stampe/BulkCheckbox";
 import InlineEdit from "@/components/stampe/InlineEdit";
@@ -19,7 +19,7 @@ import { ignoraZooFoto, ripristinaZooFotoIgnorate } from "@/lib/zoo-focus-action
 import { DettagliPadre, PannelloPadre } from "@/components/stampe/DettagliPadre";
 import {
   getZooDb, zooImageUrl, effectiveParentText, isZooHidden, hiddenEntriesFor, fornitoriList, marcheList, marcaEffettiva,
-  suggestPhotoMatch, buildAbbinamentoIndex, fotoDaControllare, fotoDaAbbinare, contenutoDa, testoContenuto, animaliDi, caratteristicheProdottoDi, storicoOfferteByEan,
+  suggestPhotoMatch, buildAbbinamentoIndex, volantinoDiFoto, fotoDaControllare, fotoDaAbbinare, contenutoDa, testoContenuto, animaliDi, caratteristicheProdottoDi, storicoOfferteByEan,
   periodoBreve, visibleProducts, type ZooProduct, type ZooParent, type ZooStoricoVoce,
 } from "@/lib/zoo";
 import {
@@ -59,11 +59,12 @@ export default async function ZooDatiPage({
   const sp = await searchParams;
 
   // letture indipendenti: in parallelo pesa solo la più lenta, non la somma
-  const [db, academyDb, tutteLeFoto] = await Promise.all([
+  const [db, academyDb, fotoConData] = await Promise.all([
     getZooDb(),
     getDb(),
-    listStorageFiles("zoo-foto"),
+    listStorageFilesConData("zoo-foto"),
   ]);
+  const tutteLeFoto = fotoConData.map((f) => f.nome);
   const scopes = scopesForUser(user, academyDb);
   const scope = resolveScope(user, sp.scope, academyDb);
   const scopeParam = `${scope.type}:${scope.id}`;
@@ -107,7 +108,22 @@ export default async function ZooDatiPage({
 
   // foto disponibili non ancora abbinate (per l'associazione manuale)
   // anche le foto dei padri contano come usate; quelle ignorate non si propongono più
-  const { daAbbinare: availablePhotos, ignorate: fotoIgnorate } = fotoDaAbbinare(db, tutteLeFoto);
+  const { daAbbinare: tutteDaAbbinare, ignorate: fotoIgnorate } = fotoDaAbbinare(db, tutteLeFoto);
+  /*
+   * Foto divise per volantino (quello in lavorazione quando sono state caricate):
+   * si sistemano solo quelle dell'ultimo, senza ritrovarsi davanti le vecchie.
+   */
+  const caricataIl = new Map(fotoConData.map((f) => [f.nome, f.caricato]));
+  const volDiFoto = new Map(tutteDaAbbinare.map((f) => [f, volantinoDiFoto(db, caricataIl.get(f) ?? "")?.id ?? ""]));
+  const volantiniFoto = db.campaigns
+    .map((c) => ({ c, n: tutteDaAbbinare.filter((f) => volDiFoto.get(f) === c.id).length }))
+    .filter((x) => x.n > 0)
+    .reverse();
+  const senzaVolantino = tutteDaAbbinare.filter((f) => !volDiFoto.get(f)).length;
+  const fotoVol = sp.fotovol && (sp.fotovol === "tutte" || volantiniFoto.some((x) => x.c.id === sp.fotovol))
+    ? sp.fotovol
+    : volantiniFoto[0]?.c.id ?? "tutte";
+  const availablePhotos = fotoVol === "tutte" ? tutteDaAbbinare : tutteDaAbbinare.filter((f) => volDiFoto.get(f) === fotoVol);
   /*
    * Proposte di abbinamento per nome (nessuna AI), su tutto il catalogo senza foto.
    * Calcolate solo a sezione aperta (?abbina=1): tokenizzare l'intero catalogo e
@@ -121,10 +137,14 @@ export default async function ZooDatiPage({
   const photoSuggestions = abbinaAperto
     ? (() => {
         const index = buildAbbinamentoIndex(senzaFotoCatalogo);
-        return availablePhotos.slice(0, 200).map((f) => ({
-          file: f,
-          candidates: suggestPhotoMatch(f.replace(/\.[a-z0-9]+$/i, ""), index, 5),
-        }));
+        // con un volantino scelto, le proposte vengono prima dai suoi articoli; se lì non c'è nulla, da tutto il catalogo
+        const delVolantino = fotoVol === "tutte" ? null : new Set(db.offers.filter((o) => o.campaignId === fotoVol).map((o) => o.productId));
+        const indexVol = delVolantino ? buildAbbinamentoIndex(senzaFotoCatalogo.filter((p) => delVolantino.has(p.id))) : null;
+        return availablePhotos.slice(0, 200).map((f) => {
+          const nome = f.replace(/\.[a-z0-9]+$/i, "");
+          const vol = indexVol ? suggestPhotoMatch(nome, indexVol, 5) : [];
+          return { file: f, candidates: vol.length ? vol : suggestPhotoMatch(nome, index, 5) };
+        });
       })()
     : [];
 
@@ -292,13 +312,13 @@ export default async function ZooDatiPage({
         )}
 
         {/* ---------- proposte di abbinamento foto→articolo per nome (nessuna AI) ---------- */}
-        {consortium && scope.type === "system" && availablePhotos.length > 0 && (
+        {consortium && scope.type === "system" && tutteDaAbbinare.length > 0 && (
           <div className="card" style={{ marginBottom: 14, padding: 14 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <strong>Abbina le foto agli articoli</strong>
               <span className="pill pill-orange">{availablePhotos.length} da abbinare</span>
-              <PulsanteAzione azione={ignoraZooFoto.bind(null, null)} style={{ marginLeft: "auto" }}
-                conferma={`Ignorare tutte le ${availablePhotos.length} foto da abbinare? Non compariranno più qui (si possono ripristinare).`}
+              <PulsanteAzione azione={ignoraZooFoto.bind(null, fotoVol === "tutte" ? null : availablePhotos)} style={{ marginLeft: "auto" }}
+                conferma={`Ignorare tutte le ${availablePhotos.length} foto da abbinare${fotoVol === "tutte" ? "" : " di questo volantino"}? Non compariranno più qui (si possono ripristinare).`}
                 title="Le foto restano caricate, ma non vengono più proposte da abbinare">
                 Ignora tutte
               </PulsanteAzione>
@@ -307,6 +327,22 @@ export default async function ZooDatiPage({
                 {abbinaAperto ? "▴ Comprimi" : "▾ Apri"}
               </a>
             </div>
+            {/* quale volantino: le foto caricate mentre era in lavorazione */}
+            {(volantiniFoto.length > 1 || senzaVolantino > 0) && (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
+                <span className="hint">Foto caricate per:</span>
+                {volantiniFoto.map(({ c, n }) => (
+                  <a key={c.id} className={`pill ${fotoVol === c.id ? "pill-blue" : "pill-gray"}`}
+                    href={`${BACK}?${pageQs(sp, { scope: scopeParam, abbina: "1", fotovol: c.id })}`}>
+                    {c.nome} · {n}
+                  </a>
+                ))}
+                <a className={`pill ${fotoVol === "tutte" ? "pill-blue" : "pill-gray"}`}
+                  href={`${BACK}?${pageQs(sp, { scope: scopeParam, abbina: "1", fotovol: "tutte" })}`}>
+                  Tutte · {tutteDaAbbinare.length}
+                </a>
+              </div>
+            )}
             {abbinaAperto && (
             <>
             {/* abbinamenti che non tornano: nel nome del file non c'è nessuna parola dell'articolo */}

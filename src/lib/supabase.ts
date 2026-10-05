@@ -181,7 +181,17 @@ export async function createSignedUploadUrl(path: string): Promise<string> {
 
 /** Elenca i nomi dei file presenti in una "cartella" del bucket (es. per l'associazione manuale delle foto). */
 export async function listStorageFiles(prefix: string): Promise<string[]> {
-  const { data, error } = await supabase().storage.from(STORAGE_BUCKET).list(prefix, { limit: 1000 });
-  if (error) throw new Error(`Lista Supabase Storage fallita (${prefix}): ${error.message}`);
-  return (data ?? []).filter((f) => f.id).map((f) => f.name);
+  return (await listStorageFilesConData(prefix)).map((f) => f.nome);
+}
+
+/** Come sopra, con la data di caricamento; a pagine da 1000, così non si perde nulla oltre il millesimo file. */
+export async function listStorageFilesConData(prefix: string): Promise<{ nome: string; caricato: string }[]> {
+  const tutti: { nome: string; caricato: string }[] = [];
+  for (let offset = 0; offset < 20_000; offset += 1000) {
+    const { data, error } = await supabase().storage.from(STORAGE_BUCKET).list(prefix, { limit: 1000, offset });
+    if (error) throw new Error(`Lista Supabase Storage fallita (${prefix}): ${error.message}`);
+    for (const f of data ?? []) if (f.id) tutti.push({ nome: f.name, caricato: f.created_at ?? "" });
+    if ((data ?? []).length < 1000) break;
+  }
+  return tutti;
 }
