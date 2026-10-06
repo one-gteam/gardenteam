@@ -1230,3 +1230,9 @@ form[aria-busy="true"] { opacity: .6; }
 .avanzamento-passi li.prossimo .numero { background: #f0b35b; color: #fff; }
 
 .alert-gray { background: #f1f3f1; border: 1px solid #d9ded9; color: #333; }
+
+/* filtro per pagina (Scelta offerte Volantino): grigio = cliccabile, blu con ✓ = filtro attivo */
+.pill-filtro { background: #fff; color: #444; border: 1px solid #c9cfc9; text-decoration: none; }
+.pill-filtro:hover { background: #f1f3f1; }
+.pill-filtro.scelta { background: #274b7a; color: #fff; border-color: #274b7a; }
+.pill-filtro strong { font-weight: 800; }

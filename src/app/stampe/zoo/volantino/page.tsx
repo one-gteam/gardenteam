@@ -98,7 +98,9 @@ export default async function ZooVolantinoPage({
   // più pagine insieme: "pagina=a,b,_nessuna"; un clic su una pillola la aggiunge o la toglie
   const filtriPagina = (sp.pagina ?? "").split(",").filter(Boolean);
   const filtroPagina = filtriPagina[0] ?? "";
-  const inPagine = (o: { paginaId?: string }) => filtriPagina.some((f) => (f === "_nessuna" ? !o.paginaId : o.paginaId === f));
+  const aVolantino = (o: { paginaId?: string }) => Boolean(o.paginaId) && o.paginaId !== NO_VOLANTINO;
+  const inPagine = (o: { paginaId?: string }) =>
+    filtriPagina.some((f) => (f === "_nessuna" ? !o.paginaId : f === "_volantino" ? aVolantino(o) : o.paginaId === f));
   const storico = storicoOfferteByEan(db);
   const offers = baseOffers.filter((o) => {
     if (filtriPagina.length > 0 && !inPagine(o)) return false;
@@ -153,6 +155,8 @@ export default async function ZooVolantinoPage({
       const parent = parentOf(o);
       const chiave = parent ? `${parent.id}~${chiavePrezzo(o)}` : o.id;
       voci.set(pid, (voci.get(pid) ?? new Set()).add(chiave));
+      // "_volantino" = tutte le voci con una pagina (quelle che vanno sul volantino)
+      if (aVolantino(o)) voci.set("_volantino", (voci.get("_volantino") ?? new Set()).add(chiave));
     }
     return (pid: string) => voci.get(pid)?.size ?? 0;
   })();
@@ -179,7 +183,14 @@ export default async function ZooVolantinoPage({
     if (prossime.length) params.set("pagina", prossime.join(","));
     return `?${params.toString()}`;
   };
-  const nomeFiltroPagina = (f: string) => (f === "_nessuna" ? "da assegnare" : f === NO_VOLANTINO ? "no volantino" : nomePagina.get(f) ?? f);
+  const nomeFiltroPagina = (f: string) => (f === "_nessuna" ? "da assegnare" : f === "_volantino" ? "a volantino" : f === NO_VOLANTINO ? "no volantino" : nomePagina.get(f) ?? f);
+  /** Pillola del filtro pagine: scelta = blu con ✓, non scelta = grigia (il colore non deve sembrare uno stato). */
+  const pillPagina = (f: string, testo: string, n: number | null, titolo?: string) => (
+    <a key={f || "tutte"} className={`pill pill-filtro${(f ? filtriPagina.includes(f) : filtriPagina.length === 0) ? " scelta" : ""}`}
+      href={hrefPagina(f)} title={titolo}>
+      {(f ? filtriPagina.includes(f) : filtriPagina.length === 0) ? "✓ " : ""}{testo}{n !== null && <> <strong>{n}</strong></>}
+    </a>
+  );
 
   const sortHref = (field: string) => {
     const params = new URLSearchParams();
@@ -322,19 +333,11 @@ export default async function ZooVolantinoPage({
             {consortium && (
               <div className="contatore-pagine">
                 <strong style={{ fontSize: 12.5 }}>Voci per pagina:</strong>
-                <a className={`pill ${filtriPagina.length === 0 ? "pill-blue" : "pill-gray"}`} href={hrefPagina("")} title="Tutte le pagine">tutte</a>
-                {pagineVolantino.map((p) => (
-                  <a key={p.id} className={`pill ${filtriPagina.includes(p.id) ? "pill-blue" : "pill-green"}`} href={hrefPagina(p.id)}
-                    title="Clic per vedere solo questa pagina; clic su più pagine per vederle insieme">
-                    {filtriPagina.includes(p.id) ? "✓ " : ""}{p.nome} <strong>{vociPerPagina(p.id)}</strong>
-                  </a>
-                ))}
-                <a className={`pill ${filtriPagina.includes("_nessuna") ? "pill-blue" : "pill-amber"}`} href={hrefPagina("_nessuna")}>
-                  {filtriPagina.includes("_nessuna") ? "✓ " : ""}da assegnare <strong>{vociPerPagina("_nessuna")}</strong>
-                </a>
-                <a className={`pill ${filtriPagina.includes(NO_VOLANTINO) ? "pill-blue" : "pill-gray"}`} href={hrefPagina(NO_VOLANTINO)}>
-                  {filtriPagina.includes(NO_VOLANTINO) ? "✓ " : ""}no volantino <strong>{vociPerPagina(NO_VOLANTINO)}</strong>
-                </a>
+                {pillPagina("", "tutte", null, "Tutte le offerte")}
+                {pillPagina("_volantino", "Volantino", vociPerPagina("_volantino"), "Solo le voci che vanno sul volantino (con una pagina)")}
+                {pagineVolantino.map((p) => pillPagina(p.id, p.nome, vociPerPagina(p.id), "Clic per vedere solo questa pagina; clic su più pagine per vederle insieme"))}
+                {pillPagina("_nessuna", "da assegnare", vociPerPagina("_nessuna"), "Voci senza pagina")}
+                {pillPagina(NO_VOLANTINO, "no volantino", vociPerPagina(NO_VOLANTINO), "Voci escluse dal volantino")}
                 {filtriPagina.length > 1 && <span className="hint">{filtriPagina.length} pagine insieme</span>}
                 {pagineVolantino.length === 0 && <span className="hint">Le pagine si creano in Crea Volantino.</span>}
               </div>
