@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 /**
  * Colonne ridimensionabili (trascinando il bordo destro dell'intestazione) e
@@ -24,6 +24,38 @@ import { useEffect } from "react";
  * non toccano le impostazioni condivise dagli altri.
  */
 export default function ColumnTools({ tableId }: { tableId: string }) {
+  /*
+   * Menu «Colonne»: ogni colonna si può nascondere; la scelta resta nel browser
+   * (localStorage, come larghezze e ordine). Le celle sono riconosciute da
+   * `data-col`, così la regola vale anche dopo un riordino.
+   */
+  const [intestazioni, setIntestazioni] = useState<{ chiave: string; testo: string }[]>([]);
+  const [nascoste, setNascoste] = useState<string[]>([]);
+  useEffect(() => {
+    const table = document.getElementById(tableId) as HTMLTableElement | null;
+    const headRow = table?.tHead?.rows[0];
+    if (!table || !headRow) return;
+    const voci = Array.from(headRow.cells).map((th, i) => ({ chiave: th.dataset.col ?? String(i), testo: (th.textContent ?? "").trim() || `Colonna ${i + 1}` }));
+    setIntestazioni(voci);
+    try { setNascoste(JSON.parse(localStorage.getItem(`colhide_${tableId}`) ?? "[]")); } catch { /* preferenza illeggibile: tutte visibili */ }
+    // le righe aggiunte dopo (ricarica dei dati) ricevono il loro data-col come le altre
+    const marca = () => {
+      const n = headRow.cells.length;
+      for (const tb of Array.from(table.tBodies)) for (const r of Array.from(tb.rows)) {
+        if (r.cells.length !== n) continue;
+        Array.from(r.cells).forEach((c, i) => { if (!c.dataset.col) c.dataset.col = String(i); });
+      }
+    };
+    const oss = new MutationObserver(marca);
+    oss.observe(table, { childList: true, subtree: true });
+    return () => oss.disconnect();
+  }, [tableId]);
+  const alterna = (chiave: string) => {
+    const prossime = nascoste.includes(chiave) ? nascoste.filter((c) => c !== chiave) : [...nascoste, chiave];
+    setNascoste(prossime);
+    try { localStorage.setItem(`colhide_${tableId}`, JSON.stringify(prossime)); } catch { /* si perde solo la preferenza */ }
+  };
+
   useEffect(() => {
     const table = document.getElementById(tableId) as HTMLTableElement | null;
     if (!table) return;
@@ -190,5 +222,29 @@ export default function ColumnTools({ tableId }: { tableId: string }) {
     };
   }, [tableId]);
 
-  return null;
+  if (intestazioni.length === 0) return null;
+  const css = nascoste.map((c) => `#${tableId} [data-col="${c}"]{display:none !important}`).join("");
+  return (
+    <>
+      {css && <style>{css}</style>}
+      <details className="colonne-menu">
+        <summary className="btn btn-outline btn-sm" title="Scegli quali colonne vedere (la scelta resta su questo computer)">
+          ⚙ Colonne{nascoste.length > 0 ? ` (${nascoste.length} nascoste)` : ""}
+        </summary>
+        <div>
+          {intestazioni.map((h) => (
+            <label key={h.chiave}>
+              <input type="checkbox" checked={!nascoste.includes(h.chiave)} onChange={() => alterna(h.chiave)} /> {h.testo}
+            </label>
+          ))}
+          {nascoste.length > 0 && (
+            <button type="button" className="btn btn-outline btn-sm" style={{ marginTop: 6 }}
+              onClick={() => { setNascoste([]); try { localStorage.removeItem(`colhide_${tableId}`); } catch { /* niente */ } }}>
+              Mostra tutte
+            </button>
+          )}
+        </div>
+      </details>
+    </>
+  );
 }

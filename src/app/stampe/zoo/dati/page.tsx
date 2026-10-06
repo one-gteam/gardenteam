@@ -77,6 +77,7 @@ export default async function ZooDatiPage({
   // filtri
   const q = (sp.q ?? "").toLowerCase();
   const soloSenzaPadre = sp.senzapadre === "1";
+  const soloSenzaAnimale = sp.senzaanimale === "1";
   /*
    * Di norma si vede il catalogo comune più i propri articoli. Con "mostra anche
    * quelli di altri" si guardano quelli caricati dalle altre insegne/PV: il
@@ -93,6 +94,10 @@ export default async function ZooDatiPage({
     if (sp.fornitore && p.fornitore !== sp.fornitore) return false;
     if (sp.marca && marcaEffettiva(p) !== sp.marca) return false;
     if (soloSenzaPadre && p.parentId) return false;
+    if (soloSenzaAnimale) {
+      const par = p.parentId ? parentById.get(p.parentId) : undefined;
+      if (par && animaliDi(db, par.caratteristiche).length > 0) return false;
+    }
     if (sp.animale || sp.caratt) {
       const caratts = (p.parentId ? parentById.get(p.parentId) : undefined)?.caratteristiche ?? [];
       if (sp.animale && !caratts.includes(sp.animale)) return false;
@@ -423,7 +428,7 @@ export default async function ZooDatiPage({
           <FiltriMobile id="filtri-dati" scelte={[
             vistaArticoli ? "articoli singoli" : "raggruppata",
             sp.q && `«${sp.q}»`, sp.animale, sp.caratt, sp.fornitore, sp.marca,
-            soloSenzaPadre && "solo senza padre", showHidden && "anche i nascosti",
+            soloSenzaPadre && "solo senza padre", soloSenzaAnimale && "solo senza animale", showHidden && "anche i nascosti",
           ]}>
           <form method="get" style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr)) auto", gap: 10, alignItems: "end" }}>
             <input type="hidden" name="scope" value={scopeParam} />
@@ -461,6 +466,7 @@ export default async function ZooDatiPage({
             <button className="btn btn-sm" type="submit">Filtra</button>
             <label style={{ fontSize: 12.5, gridColumn: "1 / -1" }}>
               <input type="checkbox" name="senzapadre" value="1" defaultChecked={soloSenzaPadre} /> solo senza padre
+              {" "}<input type="checkbox" name="senzaanimale" value="1" defaultChecked={soloSenzaAnimale} /> solo senza animale
               {" "}<input type="checkbox" name="altrui" value="1" defaultChecked={mostraAltrui} /> mostra anche gli articoli di altre insegne/PV
               {scope.type !== "system" && (
                 <>

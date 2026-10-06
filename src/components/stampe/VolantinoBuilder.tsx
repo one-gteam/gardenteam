@@ -26,6 +26,8 @@ export interface OffLite {
   aPartireDa?: boolean;
   /** Id dell'unione "solo volantino" a cui appartiene la voce. */
   unione?: string;
+  /** Prezzo scritto a parole per la voce unita ("Sconto 20%"): sta al posto del prezzo. */
+  prezzoTesto?: string;
   offerIds?: string[]; // offerte racchiuse dalla voce (assente = solo `id`)
   articoli: ArtLite[]; // articoli (gusti/formati) racchiusi dalla voce
   paginaId?: string; // pagina decisa in Offerte in corso (NO_VOLANTINO = scartata)
@@ -573,7 +575,9 @@ export default function VolantinoBuilder({
                   {(i === 0 ? b.descrizione : undefined) ?? o.descrizione}
                 </div>
                 <div style={{ display: "flex", gap: 4, justifyContent: "center", alignItems: "baseline", flexWrap: "wrap" }}>
-                  {((i === 0 ? b.prezzo : undefined) ?? o.prezzo)
+                  {o.prezzoTesto && !(i === 0 && b.prezzo)
+                    ? <span style={{ color: "#c2410c", fontWeight: 800, fontSize: 11 }}>{o.prezzoTesto}</span>
+                    : ((i === 0 ? b.prezzo : undefined) ?? o.prezzo)
                     ? <span style={{ color: "#c2410c", fontWeight: 800, fontSize: 12 }}>{o.aPartireDa && !(i === 0 && b.prezzo) ? "a partire da " : ""}€ {(i === 0 ? b.prezzo : undefined) ?? o.prezzo}</span>
                     : <span className="no-print" style={{ color: "#b45309", fontSize: 9 }}>prezzo da definire</span>}
                   {o.prezzoListino && (
@@ -764,7 +768,7 @@ export default function VolantinoBuilder({
                     </div>
                   )}
                   <div style={{ fontSize: 10.5, color: "var(--muted)", display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
-                    {o.prezzo ? `${o.aPartireDa ? "a partire da " : ""}€ ${o.prezzo}` : <span className="pill pill-amber">prezzo da definire</span>}
+                    {o.prezzoTesto ? <strong>{o.prezzoTesto}</strong> : o.prezzo ? `${o.aPartireDa ? "a partire da " : ""}€ ${o.prezzo}` : <span className="pill pill-amber">prezzo da definire</span>}
                     {o.unione && (
                       <button type="button" className="mini-btn" title="Voci unite solo per il volantino" onClick={() => separaVoce(o.unione!)}>
                         unite · separa

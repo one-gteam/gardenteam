@@ -41,6 +41,8 @@ interface ProdLite {
   cerca?: string;
   /** Cartello proprio: l'etichetta da mostrare ("vostro", "condiviso da …"). */
   propria?: string;
+  /** Nel volantino la voce è unita ad altre (il cartello resta separato): la nota da mostrare. */
+  unione?: string;
 }
 
 export interface StampaPickerProps {
@@ -344,6 +346,7 @@ export default function StampaPicker({
               <div style={{ flex: 1, minWidth: 0 }}>
                 {p.titolo}
                 {p.propria && <span className="pill pill-blue" style={{ marginLeft: 6, fontSize: 9.5 }} title="Cartello fatto da un'insegna o da un punto vendita">{p.propria}</span>}
+                {p.unione && <span className="pill pill-purple" style={{ marginLeft: 6, fontSize: 9.5 }} title="Solo nel volantino: il cartello resta separato per prezzo">⛓ {p.unione}</span>}
                 {p.nonConforme !== undefined && (
                   <span className="pill pill-orange" style={{ marginLeft: 6, fontSize: 9.5 }}
                     title={p.nonConforme || "Segnato non conforme dal reparto: da sistemare prima di stampare"}>

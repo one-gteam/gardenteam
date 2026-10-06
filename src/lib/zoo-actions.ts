@@ -12,6 +12,7 @@ import { postLoginPath } from "./types";
 import { LAYOUT_FONTS } from "./layout-fonts";
 import {
   getZooDb, saveZooDb, ZooDB, ZooParent, ZooProduct, campagnaInLavorazione, campagnaInCorso, campaignStato, NO_VOLANTINO,
+  formatiDi, descrizioneConFormati, prezziDelPadre, contenutoDa, chiavePrezzo, type PassoVolantinoId,
   ZOO_FORMATS, PV_PROMO_CODES_DEFAULT, ownScopeVisible, apiKeyFor, contenutoDaTesto, zooCartelloValues, layoutScegliibili, scontoDaTesto, promoDaTesto, applicaPromoTesto, chiaveGruppoOfferta,
   type ZooOffer,
 } from "./zoo";
@@ -806,6 +807,142 @@ export async function mergeZooParents(targetId: string, sourceIds: string[]): Pr
 }
 
 /**
+ * Divide un prodotto padre per prezzo: gli articoli in offerta a prezzi diversi
+ * (nel volantino in lavorazione) vanno in padri separati, uno per prezzo, con
+ * nome e descrizione che dicono il loro formato. Il gruppo più numeroso resta
+ * nel padre di partenza; gli articoli senza offerta restano con lui. Le scelte
+ * del volantino non si toccano: stanno sulle offerte, non sul padre.
+ */
+export async function dividiPadrePerPrezzo(parentId: string): Promise<{ ok: boolean; n: number; error?: string }> {
+  const user = await requireZooUser();
+  if (!isZooEditor(user)) return { ok: false, n: 0, error: "Non autorizzato." };
+  const db = await getZooDb();
+  const campaign = campagnaInLavorazione(db);
+  const parent = db.parents.find((p) => p.id === parentId);
+  if (!parent || !campaign) return { ok: false, n: 0, error: "Padre o volantino non trovato." };
+  const figli = db.products.filter((p) => p.parentId === parentId);
+  const gruppi = new Map<string, ZooProduct[]>();
+  for (const o of db.offers) {
+    if (o.campaignId !== campaign.id || o.scopeType) continue;
+    const f = figli.find((p) => p.id === o.productId);
+    if (!f) continue;
+    const k = chiavePrezzo(o);
+    if (!gruppi.get(k)?.includes(f)) gruppi.set(k, [...(gruppi.get(k) ?? []), f]);
+  }
+  if (gruppi.size < 2) return { ok: false, n: 0, error: "Questo padre ha un prezzo solo: non c'è nulla da dividere." };
+  const ordinati = [...gruppi.values()].sort((a, b) => b.length - a.length);
+  const [resta, ...altri] = ordinati;
+  let n = 0;
+  for (const gruppo of altri) {
+    const formati = formatiDi(gruppo);
+    const nuovo: ZooParent = {
+      id: `zp_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+      nome: formati ? `${parent.nome} ${formati}`.slice(0, 60) : `${parent.nome} (${n + 2})`,
+      descVolantino: descrizioneConFormati(parent.descVolantino, formati),
+      descCartello: parent.descCartello,
+      image: gruppo.find((p) => p.image)?.image ?? parent.image,
+      caratteristiche: [...parent.caratteristiche],
+      aiGenerated: parent.aiGenerated,
+    };
+    db.parents.push(nuovo);
+    for (const p of gruppo) p.parentId = nuovo.id;
+    n++;
+  }
+  // anche il padre che resta dice il suo formato, se lo si conosce
+  const formatiResta = formatiDi(resta);
+  if (formatiResta) parent.descVolantino = descrizioneConFormati(parent.descVolantino, formatiResta);
+  await saveZooDb(db);
+  rigeneraZoo();
+  return { ok: true, n: n + 1 };
+}
+
+/** Tutti i padri del volantino in lavorazione con più di un prezzo, divisi in un colpo. */
+export async function dividiTuttiIPadriPerPrezzo(): Promise<{ ok: boolean; n: number; error?: string }> {
+  const user = await requireZooUser();
+  if (!isZooEditor(user)) return { ok: false, n: 0, error: "Non autorizzato." };
+  const db = await getZooDb();
+  const campaign = campagnaInLavorazione(db);
+  if (!campaign) return { ok: false, n: 0, error: "Nessun volantino in lavorazione." };
+  const daDividere = db.parents.filter((p) => prezziDelPadre(db, p.id, campaign.id).length > 1).map((p) => p.id);
+  let n = 0;
+  for (const id of daDividere) {
+    const r = await dividiPadrePerPrezzo(id);
+    if (r.ok) n++;
+  }
+  return { ok: true, n };
+}
+
+/**
+ * Offerta aggiunta a mano in Offerte in corso (Consorzio): entra nel volantino
+ * in lavorazione come quelle dell'Excel. Se l'EAN non è nel database l'articolo
+ * si crea, senza padre: lo si raggruppa poi da Database prodotti.
+ */
+export async function aggiungiOffertaAMano(scopeParam: string, formData: FormData) {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  const BACK = "/stampe/zoo/offerte";
+  if (scope.type !== "system") redirect(backUrl(BACK, scopeParam, { aggiunta: "ambito" }));
+  if (!isZooEditor(user)) redirect(backUrl(BACK, scopeParam, { aggiunta: "permessi" }));
+  const campaign = campagnaInLavorazione(db);
+  if (!campaign) redirect(backUrl(BACK, scopeParam, { aggiunta: "volantino" }));
+
+  const ean = String(formData.get("ean") ?? "").trim().replace(/\s/g, "");
+  const descrizione = String(formData.get("descrizione") ?? "").trim();
+  const prezzoPromo = priceOrEmpty(String(formData.get("prezzoPromo") ?? ""));
+  const meccanica = String(formData.get("meccanica") ?? "").trim();
+  if (!ean || (!prezzoPromo && !meccanica)) redirect(backUrl(BACK, scopeParam, { aggiunta: "dati" }));
+
+  let prodotto = db.products.find((p) => p.ean === ean && !p.scopeType);
+  if (!prodotto) {
+    if (!descrizione) redirect(backUrl(BACK, scopeParam, { aggiunta: "descrizione" }));
+    prodotto = {
+      id: `zp_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      ean, codice: String(formData.get("codice") ?? "").trim(), descrizione,
+      marca: String(formData.get("marca") ?? "").trim(), fornitore: String(formData.get("fornitore") ?? "").trim(),
+      contenuto: contenutoDa(descrizione),
+    };
+    db.products.push(prodotto);
+  }
+  if (db.offers.some((o) => o.campaignId === campaign!.id && !o.scopeType && o.productId === prodotto!.id)) {
+    redirect(backUrl(BACK, scopeParam, { aggiunta: "doppia" }));
+  }
+  db.offers.push({
+    id: `zo_mano_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    campaignId: campaign.id,
+    ean, productId: prodotto.id,
+    descrizione: descrizione || prodotto.descrizione,
+    prezzoPromo,
+    prezzoListino: priceOrEmpty(String(formData.get("prezzoListino") ?? "")) || undefined,
+    condizioni: String(formData.get("condizioni") ?? "").trim() || undefined,
+    meccanica: meccanica || undefined,
+    nuovo: !db.products.some((p) => p.ean === ean && p.id !== prodotto!.id) || undefined,
+  });
+  await saveZooDb(db);
+  rigeneraZoo();
+  redirect(backUrl(BACK, scopeParam, { aggiunta: "ok", padre: prodotto.parentId ?? "" }));
+}
+
+/** Da Scelta offerte Volantino: le spunte portano offerte, qui si risale ai padri e si uniscono nel primo. */
+export async function unisciPadriDaOfferte(offerIds: string[]): Promise<{ ok: boolean; n: number; error?: string }> {
+  const user = await requireZooUser();
+  if (!isZooEditor(user)) return { ok: false, n: 0, error: "Non autorizzato." };
+  const db = await getZooDb();
+  const prodById = new Map(db.products.map((p) => [p.id, p]));
+  const padri: string[] = [];
+  for (const id of offerIds) {
+    const o = db.offers.find((x) => x.id === id);
+    const pid = o ? prodById.get(o.productId ?? "")?.parentId : undefined;
+    if (pid && !padri.includes(pid)) padri.push(pid);
+  }
+  if (padri.length < 2) return { ok: false, n: 0, error: "Le righe spuntate devono essere di almeno due padri diversi." };
+  const r = await mergeZooParents(padri[0], padri.slice(1));
+  rigeneraZoo();
+  return { ok: r.ok, n: padri.length };
+}
+
+/**
  * Variante per il form di Offerte in corso: unisce i padri spuntati (checkbox
  * "selpadre") nel PRIMO spuntato, che dà i testi al gruppo risultante.
  */
@@ -1373,17 +1510,58 @@ export async function eliminaVolantino(campaignId: string, scopeParam: string) {
  * il volantino. I padri non si toccano e in stampa i cartelli restano separati
  * per prezzo. Se una delle voci è già un'unione, le altre entrano in quella.
  */
-export async function unisciVociVolantino(offerIds: string[]): Promise<{ ok: boolean; error?: string }> {
+export async function unisciVociVolantino(
+  offerIds: string[],
+  dettagli?: { titolo?: string; descrizione?: string; prezzo?: "minimo" | "sconto" | "testo"; prezzoTesto?: string },
+  /** Da Scelta offerte Volantino la spunta porta una sola offerta per riga: si estende a tutta la riga (padre + prezzo). */
+  estendi = false,
+): Promise<{ ok: boolean; error?: string }> {
   const user = await requireZooUser();
   const db = await getZooDb();
   if (!(isZooEditor(user) || (db.settings.volantinoEditors ?? []).includes(user.id))) return { ok: false, error: "Non autorizzato." };
-  const offerte = db.offers.filter((o) => offerIds.includes(o.id));
+  let ids = new Set(offerIds);
+  if (estendi) {
+    const prodById = new Map(db.products.map((p) => [p.id, p]));
+    for (const id of offerIds) {
+      const o = db.offers.find((x) => x.id === id);
+      const pid = o ? prodById.get(o.productId ?? "")?.parentId : undefined;
+      if (!o || !pid) continue;
+      for (const x of db.offers) {
+        if (x.campaignId === o.campaignId && !x.scopeType && prodById.get(x.productId ?? "")?.parentId === pid && chiavePrezzo(x) === chiavePrezzo(o)) ids.add(x.id);
+      }
+    }
+  }
+  const offerte = db.offers.filter((o) => ids.has(o.id));
   if (offerte.length < 2) return { ok: false, error: "Spunta almeno due voci." };
   const id = offerte.find((o) => o.unioneVolantino)?.unioneVolantino ?? `uv_${Date.now().toString(36)}`;
   const vecchie = new Set(offerte.map((o) => o.unioneVolantino).filter(Boolean));
-  for (const o of db.offers) if (offerIds.includes(o.id) || (o.unioneVolantino && vecchie.has(o.unioneVolantino))) o.unioneVolantino = id;
+  for (const o of db.offers) if (ids.has(o.id) || (o.unioneVolantino && vecchie.has(o.unioneVolantino))) o.unioneVolantino = id;
+  ids = new Set(db.offers.filter((o) => o.unioneVolantino === id).map((o) => o.id));
+  // titolo, descrizione e prezzo della voce unita (si possono anche cambiare dopo)
+  let meta = db.unioniVolantino.find((u) => u.id === id);
+  if (!meta) { meta = { id, campaignId: offerte[0].campaignId }; db.unioniVolantino.push(meta); }
+  if (dettagli) {
+    if (dettagli.titolo !== undefined) meta.titolo = dettagli.titolo.slice(0, 80) || undefined;
+    if (dettagli.descrizione !== undefined) meta.descrizione = dettagli.descrizione.slice(0, 200) || undefined;
+    meta.prezzo = dettagli.prezzo ?? "minimo";
+    meta.prezzoTesto = meta.prezzo === "minimo" ? undefined : (dettagli.prezzoTesto ?? "").slice(0, 60) || undefined;
+  }
+  db.unioniVolantino = db.unioniVolantino.filter((u) => db.offers.some((o) => o.unioneVolantino === u.id));
   await saveZooDb(db);
-  revalidatePath("/stampe/zoo/crea-volantino");
+  rigeneraZoo();
+  return { ok: true };
+}
+
+/** I passi del volantino segnati a mano da Offerte in corso ("fatto" / "riapri"). */
+export async function segnaPassoVolantino(campaignId: string, passo: PassoVolantinoId, fatto: boolean): Promise<{ ok: boolean; error?: string }> {
+  const user = await requireZooUser();
+  if (!isZooEditor(user)) return { ok: false, error: "Non autorizzato." };
+  const db = await getZooDb();
+  const c = db.campaigns.find((x) => x.id === campaignId);
+  if (!c) return { ok: false, error: "Volantino non trovato." };
+  c.passi = { ...(c.passi ?? {}), [passo]: { fatto, da: `${user.firstName} ${user.lastName}`, il: new Date().toISOString() } };
+  await saveZooDb(db);
+  revalidatePath("/stampe/zoo/offerte");
   return { ok: true };
 }
 
@@ -1393,8 +1571,9 @@ export async function separaUnioneVolantino(unioneId: string): Promise<{ ok: boo
   const db = await getZooDb();
   if (!(isZooEditor(user) || (db.settings.volantinoEditors ?? []).includes(user.id))) return { ok: false, error: "Non autorizzato." };
   for (const o of db.offers) if (o.unioneVolantino === unioneId) o.unioneVolantino = undefined;
+  db.unioniVolantino = db.unioniVolantino.filter((u) => u.id !== unioneId);
   await saveZooDb(db);
-  revalidatePath("/stampe/zoo/crea-volantino");
+  rigeneraZoo();
   return { ok: true };
 }
 

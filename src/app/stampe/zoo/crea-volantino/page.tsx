@@ -7,6 +7,7 @@ import { getDb } from "@/lib/db";
 import {
   getZooDb, campagnaInLavorazione, zooImageUrl, migraVolantinoPages, effectiveParentText, datiPrezzoOfferta,
   chiavePrezzo, padreDaChiave, prezzoMinimo, pvPriceFor,
+  unioneDi,
 } from "@/lib/zoo";
 import { saveVolantinoEditors } from "@/lib/zoo-actions";
 import AvvisaColleghi from "@/components/stampe/AvvisaColleghi";
@@ -77,6 +78,9 @@ export default async function CreaVolantinoPage({
             const product = db.products.find((p) => p.id === primo.productId);
             const parentId = padreDaChiave(key) ?? (key.startsWith("u:") ? product?.parentId : undefined);
             const parent = parentId ? db.parents.find((x) => x.id === parentId) : undefined;
+            // voce unita a mano: titolo, descrizione e prezzo decisi in Scelta offerte Volantino
+            const unione = unioneDi(db, primo);
+            const prezzoTestoUnione = unione?.prezzo && unione.prezzo !== "minimo" ? unione.prezzoTesto : undefined;
             const votes = db.votes.filter((v) => gruppo.some((g) => g.id === v.offerId));
             // articoli racchiusi: i figli del padre, o il singolo articolo dell'offerta
             // gli articoli della voce: quelli delle sue offerte (stesso prezzo, o tutti quelli dell'unione)
@@ -93,12 +97,13 @@ export default async function CreaVolantinoPage({
               paginaId: primo.paginaId,
               focus: primo.focus,
               gruppoGrafico: primo.gruppoGrafico,
-              descrizione: parent
+              descrizione: unione?.descrizione || (parent
                 ? effectiveParentText(db, scope, parent, "descVolantino", academyDb).value || parent.nome
-                : primo.descrizione,
+                : primo.descrizione),
               // voci unite con prezzi diversi: il più basso, "a partire da" (confronto numerico)
-              prezzo: piuPrezzi ? prezzoMinimo(prezzi) : dati.prezzo,
-              aPartireDa: piuPrezzi || undefined,
+              prezzo: prezzoTestoUnione ? "" : piuPrezzi ? prezzoMinimo(prezzi) : dati.prezzo,
+              prezzoTesto: prezzoTestoUnione,
+              aPartireDa: (!prezzoTestoUnione && piuPrezzi) || undefined,
               prezzoListino: piuPrezzi ? undefined : dati.listino || undefined,
               sconto: piuPrezzi ? undefined : dati.sconto || undefined,
               unione: primo.unioneVolantino,
@@ -111,7 +116,7 @@ export default async function CreaVolantinoPage({
               fornitore: product?.fornitore ?? "",
               caratts: parent?.caratteristiche ?? [],
               label: primo.label,
-              padre: parent ? effectiveParentText(db, scope, parent, "nome", academyDb).value : undefined,
+              padre: unione?.titolo || (parent ? effectiveParentText(db, scope, parent, "nome", academyDb).value : undefined),
               padreId: parent?.id,
               articoli,
             };

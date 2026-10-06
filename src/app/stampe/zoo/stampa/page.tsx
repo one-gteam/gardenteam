@@ -212,7 +212,16 @@ export default async function ZooStampaPage({
     const trovato = ids.map((id) => nonConformi.get(id)).find(Boolean);
     return trovato ? (trovato.motivo ?? "") : undefined;
   };
+  /** Il cartello resta uno per prezzo, ma nel volantino la voce è unita ad altre: lo si dice in elenco. */
+  const unioneTesto = (gruppo: (typeof allOffers)[number][]): string | undefined => {
+    const id = gruppo.find((g) => g.unioneVolantino)?.unioneVolantino;
+    if (!id) return undefined;
+    const meta = db.unioniVolantino.find((u) => u.id === id);
+    const cartelli = new Set(allOffers.filter((x) => x.unioneVolantino === id).map((x) => chiaveGruppoOfferta(db, x, padreDi(x).product?.parentId))).size;
+    return `nel volantino è unito${meta?.titolo ? ` in «${meta.titolo}»` : ""}${cartelli > 1 ? ` con altri ${cartelli - 1} cartelli` : ""}`;
+  };
   const voceSingola = (o: (typeof allOffers)[number]) => ({
+    unione: unioneTesto([o]),
     id: o.id,
     titolo: o.titolo || o.descrizione,
     codice: o.ean,
@@ -233,6 +242,7 @@ export default async function ZooStampaPage({
           const prezzi = [...new Set(gruppo.map((g) => pvPriceFor(db, scope, g.ean, academyDb) ?? g.prezzoPromo).filter(Boolean))];
           return {
             id: primo.id,
+            unione: unioneTesto(gruppo),
             titolo: (parent ? nomeDelPadre(parent) : "") || primo.descrizione,
             codice: gruppo.length > 1 ? `${gruppo.length} articoli` : primo.ean,
             prezzo: prezzi.length > 1 ? `da ${prezzoMinimo(prezzi)}` : (prezzi[0] ?? ""),

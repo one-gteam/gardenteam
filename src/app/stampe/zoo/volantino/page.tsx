@@ -18,6 +18,11 @@ import InlineEdit from "@/components/stampe/InlineEdit";
 import FiltriMobile from "@/components/FiltriMobile";
 import ShiftChecks from "@/components/stampe/ShiftChecks";
 import { SceltaVolantino, VotoOfferta, VotoSpuntate } from "@/components/stampe/VotoOfferta";
+import PaginaRapida from "@/components/stampe/PaginaRapida";
+import UnisciNelVolantino from "@/components/stampe/UnisciNelVolantino";
+import { PulsanteAzione } from "@/components/AzioneSenzaRicarica";
+import { separaUnioneVolantino } from "@/lib/zoo-actions";
+import ColumnTools from "@/components/stampe/ColumnTools";
 
 const RIGHE_MAX = 300;
 
@@ -37,6 +42,12 @@ export default async function ZooVolantinoPage({
   const scope = resolveScope(user, sp.scope, academyDb);
   const scopeParam = `${scope.type}:${scope.id}`;
   const consortium = isZooEditor(user);
+  /*
+   * Chi vota è il capo reparto: «Proponi», «Non tratto» e la segnalazione sono
+   * suoi. Il gestore e gli amministratori leggono i voti; il Consorzio decide.
+   */
+  const vota = user.role === "dept_head";
+  const spunte = vota || consortium;
 
   // solo il volantino IN LAVORAZIONE: su quelli chiusi o archiviati non si sceglie più
   const campaign = campagnaInLavorazione(db);
@@ -176,7 +187,7 @@ export default async function ZooVolantinoPage({
             {campaign
               ? <><strong>{campaign.nome}</strong> · {dataIt(campaign.dal)} → {dataIt(campaign.al)} · {selCount} scelte</>
               : "Nessun volantino in lavorazione: aprine uno da Offerte in corso"}
-            <span title={consortium ? "Vedi i voti di tutti i PV e fai la selezione finale." : "Segna le offerte che ti piacciono: il Consorzio vede i voti di tutti i responsabili."}> ⓘ</span>
+            <span title={consortium ? "Vedi i voti di tutti i PV e fai la selezione finale." : vota ? "Segna le offerte che ti piacciono: il Consorzio vede i voti di tutti i capi reparto." : "Qui leggi i voti dei capi reparto e la selezione del Consorzio."}> ⓘ</span>
           </span>
           {consortium && campaign && (
             <>
@@ -309,7 +320,7 @@ export default async function ZooVolantinoPage({
               <summary style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", cursor: "pointer", listStyle: "none" }}>
                 <span className="hint" style={{ flex: 1, fontSize: 12 }}>
                   {offers.length} offerte in {gruppi.length} voci{gruppi.length > RIGHE_MAX ? ` (mostrate le prime ${RIGHE_MAX}: restringi con i filtri)` : ""}
-                  {" "}· spunta più righe (anche Shift+clic) per proporle in blocco · clic sulle intestazioni per ordinare
+                  {spunte ? " · spunta più righe (anche Shift+clic) per agire in blocco" : ""} · clic sulle intestazioni per ordinare
                 </span>
                 <span className="btn btn-outline btn-sm">⚲ Filtri{Boolean(animale || caratt || sp.marca || sp.fornitore || filtroPagina) ? " (attivi)" : ""}</span>
               </summary>
@@ -364,28 +375,36 @@ export default async function ZooVolantinoPage({
             {sp.votate && <div className="alert alert-green">✓ Voto registrato su {sp.votate} offerte.</div>}
             {/* le spunte in tabella appartengono a questo form via attributo form="bulkform" */}
             <form id="bulkform" />
-            <VotoSpuntate scopeParam={scopeParam} formId="bulkform" focus={consortium ? focusEsistenti : undefined} />
+            {spunte && (
+              <div className="barra-fissa">
+                <VotoSpuntate scopeParam={scopeParam} formId="bulkform" vota={vota} consortium={consortium}
+                  focus={consortium ? focusEsistenti : undefined} />
+                {consortium && <div style={{ marginTop: -4, marginBottom: 6 }}><UnisciNelVolantino formId="bulkform" /></div>}
+              </div>
+            )}
             <div className="card table-wrap">
-              <table className="data">
+              <ColumnTools tableId="tab-volantino" />
+              <table className="data tabella-stretta" id="tab-volantino">
                 <thead>
                   <tr>
-                    <th style={{ width: 30 }}></th>
+                    {spunte && <th style={{ width: 30 }}></th>}
                     <th style={{ width: 56 }}>Foto</th>
                     <th><a href={sortHref("descrizione")} style={{ textDecoration: "none", color: "inherit" }}>Offerta{sortArrow("descrizione")}</a></th>
-                    <th><a href={sortHref("fornitore")} style={{ textDecoration: "none", color: "inherit" }}>Fornitore{sortArrow("fornitore")}</a></th>
-                    <th><a href={sortHref("marca")} style={{ textDecoration: "none", color: "inherit" }}>Marca{sortArrow("marca")}</a></th>
+                    <th className="col-opz"><a href={sortHref("fornitore")} style={{ textDecoration: "none", color: "inherit" }}>Fornitore{sortArrow("fornitore")}</a></th>
+                    <th className="col-opz"><a href={sortHref("marca")} style={{ textDecoration: "none", color: "inherit" }}>Marca{sortArrow("marca")}</a></th>
                     <th><a href={sortHref("animale")} style={{ textDecoration: "none", color: "inherit" }}>Animale{sortArrow("animale")}</a></th>
                     {consortium && <th>Caratteristica</th>}
                     <th><a href={sortHref("prezzo")} style={{ textDecoration: "none", color: "inherit" }}>Prezzo{sortArrow("prezzo")}</a></th>
                     {consortium && <th>Pagina volantino</th>}
                     {consortium && <th>Focus</th>}
+                    {consortium && <th>Etichetta</th>}
                     <th>Voti dei PV</th>
-                    <th className="no-print">Il tuo voto</th>
+                    {vota && <th className="no-print">Il tuo voto</th>}
                     {consortium && <th>Volantino (selezione finale)</th>}
                   </tr>
                 </thead>
                 <tbody>
-                  {gruppi.length === 0 && <tr><td colSpan={consortium ? 13 : 9} className="empty">Nessuna offerta {schedaFilter ? "assegnata a questa scheda" : "in campagna"}.</td></tr>}
+                  {gruppi.length === 0 && <tr><td colSpan={7 + (spunte ? 1 : 0) + (vota ? 1 : 0) + (consortium ? 5 : 0)} className="empty">Nessuna offerta {schedaFilter ? "assegnata a questa scheda" : "in campagna"}.</td></tr>}
                   {gruppiVisibili.map((g) => {
                     const { parent, offs } = g;
                     const first = offs[0];
@@ -409,14 +428,16 @@ export default async function ZooVolantinoPage({
                     const selCountGroup = offs.filter((o) => o.selezionata).length;
                     return (
                       <tr key={parent ? `${parent.id}~${chiavePrezzo(first)}` : first.id} style={selCountGroup === offs.length ? { background: "#f4faf4" } : undefined}>
-                        <td>
-                          {/* la spunta porta l'id della prima offerta: l'azione in blocco estende
-                              il voto a tutte le varianti dello stesso padre */}
-                          <input type="checkbox" name="zsel" value={first.id} form="bulkform"
-                            title={isGroup
-                              ? `Spunta per proporre/segnalare tutte le ${offs.length} varianti (Shift+clic per intervalli)`
-                              : "Spunta per proporre/segnalare in blocco (Shift+clic per intervalli)"} />
-                        </td>
+                        {spunte && (
+                          <td>
+                            {/* la spunta porta l'id della prima offerta: l'azione in blocco estende
+                                il voto a tutte le varianti dello stesso padre */}
+                            <input type="checkbox" name="zsel" value={first.id} form="bulkform"
+                              title={isGroup
+                                ? `Spunta per agire in blocco su tutte le ${offs.length} varianti (Shift+clic per intervalli)`
+                                : "Spunta per agire in blocco (Shift+clic per intervalli)"} />
+                          </td>
+                        )}
                         <td>
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <FotoMini src={zooImageUrl(product, parent)} style={{ width: 44, height: 44, objectFit: "contain", background: "#fff", borderRadius: 6, border: "1px solid #eee" }} />
@@ -457,6 +478,22 @@ export default async function ZooVolantinoPage({
                               </span>
                             </div>
                           )}
+                          {first.unioneVolantino && (() => {
+                            const u = db.unioniVolantino.find((x) => x.id === first.unioneVolantino);
+                            const righe = new Set(allOffers.filter((x) => x.unioneVolantino === first.unioneVolantino)
+                              .map((x) => `${parentOf(x)?.id ?? x.id}~${chiavePrezzo(x)}`)).size;
+                            return (
+                              <div style={{ marginTop: 3, display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap" }}>
+                                <span className="pill pill-purple" style={{ fontSize: 10.5 }} title="Solo per il volantino: i cartelli restano separati per prezzo">
+                                  ⛓ nel volantino unita con altre {righe - 1}{u?.titolo ? `: «${u.titolo}»` : ""} · {u?.prezzoTesto ?? "a partire da"}
+                                </span>
+                                {consortium && (
+                                  <PulsanteAzione azione={separaUnioneVolantino.bind(null, first.unioneVolantino)} className="mini-btn"
+                                    conferma="Separare di nuovo le voci unite nel volantino?">separa</PulsanteAzione>
+                                )}
+                              </div>
+                            );
+                          })()}
                           {!isGroup && (
                             <div style={{ display: "flex", gap: 4, marginTop: 3, flexWrap: "wrap" }}>
                               {first.label && <span className="pill pill-orange">{first.label}</span>}
@@ -479,8 +516,8 @@ export default async function ZooVolantinoPage({
                             </ul>
                           </details>
                         </td>
-                        <td style={{ fontSize: 12.5 }}>{product?.fornitore || "—"}</td>
-                        <td style={{ fontSize: 12.5 }}>{product?.marca || "—"}</td>
+                        <td className="col-opz" style={{ fontSize: 12.5 }}>{product?.fornitore || "—"}</td>
+                        <td className="col-opz" style={{ fontSize: 12.5 }}>{product?.marca || "—"}</td>
                         <td>
                           {consortium && parent ? (
                             <InlineSelect value={animaliOfferta[0] ?? ""} options={db.settings.categorieAnimali}
@@ -499,16 +536,14 @@ export default async function ZooVolantinoPage({
                         )}
                         <td style={{ whiteSpace: "nowrap" }}>
                           <strong>{dati.prezzo ? `€ ${dati.prezzo}` : "—"}</strong>
-                          {dati.listino && <div style={{ fontSize: 11.5, color: "var(--muted)", textDecoration: "line-through" }}>€ {dati.listino}</div>}
+                          {dati.listino && <div style={{ fontSize: 11.5, color: "var(--muted)" }} title="prezzo di partenza">da € {dati.listino}</div>}
                           {dati.sconto && <span className="pill pill-green" style={{ fontSize: 10 }}>{dati.sconto}</span>}
                           {dati.tipi.length > 0 && <div style={{ fontSize: 10.5, color: "#274b7a", fontWeight: 700 }}>{dati.tipi.join(" · ")}</div>}
                         </td>
                         {consortium && (
                           <td>
-                            <InlineSelect value={first.paginaId ?? ""} aggiornaPagina
-                              options={[...pagineVolantino.map((p) => p.id), NO_VOLANTINO]}
-                              etichette={{ ...Object.fromEntries(pagineVolantino.map((p) => [p.id, p.nome])), [NO_VOLANTINO]: "✕ no volantino" }}
-                              vuoto="— da assegnare —"
+                            <PaginaRapida value={first.paginaId ?? ""} tutte={pagineVolantino} noVolantino={NO_VOLANTINO}
+                              suggerite={pagineVolantino.filter((p) => animaliOfferta.some((a) => p.nome.toLowerCase().includes(a.toLowerCase())))}
                               onSave={updateOfferGroupFieldInline.bind(null, ids, "paginaId")} />
                           </td>
                         )}
@@ -516,6 +551,12 @@ export default async function ZooVolantinoPage({
                           <td style={{ minWidth: 140 }}>
                             <InlineEdit value={first.focus ?? ""} placeholder="focus…" suggerimenti={focusEsistenti}
                               onSave={updateOfferGroupFieldInline.bind(null, ids, "focus")} />
+                          </td>
+                        )}
+                        {consortium && (
+                          <td>
+                            <InlineSelect value={first.label ?? ""} options={db.settings.labels}
+                              onSave={updateOfferGroupFieldInline.bind(null, ids, "label")} />
                           </td>
                         )}
                         <td style={{ fontSize: 12 }}>
@@ -531,6 +572,7 @@ export default async function ZooVolantinoPage({
                           )}
                           {pref.length === 0 && non.length === 0 && <span style={{ color: "var(--muted)" }}>—</span>}
                         </td>
+                        {vota && (
                         <td className="no-print" style={{ whiteSpace: "nowrap" }}>
                           <VotoOfferta ids={ids} scopeParam={scopeParam} proposta={myPref} nonTrattata={myNon} />{" "}
                           <details className="flag-details" style={{ display: "inline-block" }}>
@@ -543,6 +585,7 @@ export default async function ZooVolantinoPage({
                             </form>
                           </details>
                         </td>
+                        )}
                         {consortium && (
                           <td style={{ whiteSpace: "nowrap" }}>
                             {isGroup ? (

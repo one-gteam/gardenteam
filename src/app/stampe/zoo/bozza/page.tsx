@@ -7,6 +7,7 @@ import {
   prezzoMinimo,
   getZooDb, campagnaInLavorazione, campagnaInCorso, migraVolantinoPages, zooImageUrl, effectiveParentText,
   datiPrezzoOfferta,
+  unioneDi,
 } from "@/lib/zoo";
 import { aggiungiNotaBozza, risolviNotaBozza } from "@/lib/zoo-actions";
 
@@ -167,15 +168,21 @@ export default async function ZooBozzaPage({
                               const prezziUniti = [...new Set(unite.map((x) => datiPrezzoOfferta(db, x, scope, academyDb).prezzo).filter(Boolean))];
                               const aPartireDa = prezziUniti.length > 1;
                               if (aPartireDa) { dati.prezzo = prezzoMinimo(prezziUniti); dati.listino = ""; dati.sconto = ""; }
+                              // voce unita a mano: titolo e prezzo a parole decisi in Scelta offerte Volantino
+                              const unione = unioneDi(db, o!);
+                              const prezzoTestoUnione = !b.prezzo && unione?.prezzo && unione.prezzo !== "minimo" ? unione.prezzoTesto : undefined;
+                              const nomeVoce = unione?.titolo || nome;
                               return (
                                 <div key={o!.id} style={{ minWidth: 0 }}>
                                   {foto !== "/immagini/mancante.jpg" && (
                                     // eslint-disable-next-line @next/next/no-img-element
                                     <img src={foto} alt="" style={{ maxWidth: "100%", height: b.rs > 1 ? 56 : 30, objectFit: "contain" }} />
                                   )}
-                                  <div style={{ fontSize: 9.5, fontWeight: 700, lineHeight: 1.15 }}>{nome}</div>
+                                  <div style={{ fontSize: 9.5, fontWeight: 700, lineHeight: 1.15 }}>{nomeVoce}</div>
                                   <div style={{ display: "flex", gap: 3, justifyContent: "center", alignItems: "baseline", flexWrap: "wrap" }}>
-                                    {dati.prezzo ? (
+                                    {prezzoTestoUnione ? (
+                                      <span style={{ fontSize: 11, color: "#c8161d", fontWeight: 800 }}>{prezzoTestoUnione}</span>
+                                    ) : dati.prezzo ? (
                                       <span style={{ fontSize: 12, color: "#c8161d", fontWeight: 800 }}>{aPartireDa ? "a partire da " : ""}€ {dati.prezzo}</span>
                                     ) : (
                                       <span style={{ fontSize: 8.5, color: "#b45309", fontWeight: 700 }}>prezzo da definire</span>

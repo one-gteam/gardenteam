@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { assegnaFocusInline, selezionaOfferteInline, votaOfferteInline } from "@/lib/zoo-actions";
+import { assegnaFocusInline, selezionaOfferteInline, votaOfferteInline, unisciPadriDaOfferte } from "@/lib/zoo-actions";
 
 /*
  * Scelta offerte Volantino: "Proponi", "Non tratto" e "Aggiungi al volantino"
@@ -74,10 +74,14 @@ export function VotoOfferta({
 }
 
 /** I pulsanti sopra la tabella: votano le righe spuntate, senza ricaricare. */
-export function VotoSpuntate({ scopeParam, formId, focus }: {
+export function VotoSpuntate({ scopeParam, formId, focus, vota = true, consortium = false }: {
   scopeParam: string; formId: string;
   /** Solo per il Consorzio: i focus già usati nel volantino; attiva «Dai questo focus alle spuntate». */
   focus?: string[];
+  /** Mostra «Proponi» e «Non tratto» (capo reparto). */
+  vota?: boolean;
+  /** Strumenti del Consorzio: unire i padri spuntati. */
+  consortium?: boolean;
 }) {
   const [pending, startTransition] = useTransition();
   const [esito, setEsito] = useState("");
@@ -97,7 +101,7 @@ export function VotoSpuntate({ scopeParam, formId, focus }: {
     });
   };
 
-  const vota = (tipo: Tipo) => {
+  const votaSpuntate = (tipo: Tipo) => {
     const spunte = [...document.querySelectorAll<HTMLInputElement>(`input[name="zsel"][form="${formId}"]:checked`)];
     const ids = spunte.map((c) => c.value);
     if (ids.length === 0) { setEsito("Spunta prima almeno una riga."); return; }
@@ -110,14 +114,39 @@ export function VotoSpuntate({ scopeParam, formId, focus }: {
     });
   };
 
+  /** «Unisci i padri spuntati»: gli articoli passano tutti sotto il primo spuntato (come in Offerte in corso). */
+  const unisciPadri = () => {
+    const spunte = [...document.querySelectorAll<HTMLInputElement>(`input[name="zsel"][form="${formId}"]:checked`)];
+    const ids = spunte.map((c) => c.value);
+    if (ids.length < 2) { setEsito("Spunta prima due o più righe di padri diversi."); return; }
+    if (!confirm(`Unire i prodotti padre delle ${ids.length} righe spuntate? Gli articoli passano tutti sotto il primo spuntato, che dà i testi.`)) return;
+    startTransition(async () => {
+      const r = await unisciPadriDaOfferte(ids).catch(() => ({ ok: false, n: 0, error: "errore" }));
+      if (!r.ok) { setEsito(r.error ?? "Non sono riuscito a unire i padri."); return; }
+      for (const c of spunte) c.checked = false;
+      setEsito(`✓ ${r.n} padri uniti in uno.`);
+      router.refresh();
+    });
+  };
+
   return (
     <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap", alignItems: "center" }}>
-      <button type="button" className="btn btn-sm" disabled={pending} onClick={() => vota("preferita")}>
-        Proponi le offerte spuntate
-      </button>
-      <button type="button" className="btn btn-outline btn-sm" disabled={pending} onClick={() => vota("nontrattato")}>
-        Segna spuntate come non trattate
-      </button>
+      {vota && (
+        <>
+          <button type="button" className="btn btn-sm" disabled={pending} onClick={() => votaSpuntate("preferita")}>
+            Proponi le offerte spuntate
+          </button>
+          <button type="button" className="btn btn-outline btn-sm" disabled={pending} onClick={() => votaSpuntate("nontrattato")}>
+            Segna spuntate come non trattate
+          </button>
+        </>
+      )}
+      {consortium && (
+        <button type="button" className="btn btn-outline btn-sm" disabled={pending} onClick={unisciPadri}
+          title="Spunta due o più righe: i loro padri diventano uno solo (il primo spuntato dà i testi)">
+          Unisci i padri spuntati
+        </button>
+      )}
       {focus && (
         <span style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
           <input list="focus-volantino" value={testoFocus} onChange={(e) => setTestoFocus(e.target.value)}

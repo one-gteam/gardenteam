@@ -19,12 +19,13 @@ import InlineEdit from "@/components/stampe/InlineEdit";
 import InlineSelect from "@/components/stampe/InlineSelect";
 import ColumnTools from "@/components/stampe/ColumnTools";
 import AvvisaColleghi from "@/components/stampe/AvvisaColleghi";
+import AvanzamentoVolantino from "@/components/stampe/AvanzamentoVolantino";
 import ParentQuickEdit from "@/components/stampe/ParentQuickEdit";
 import { DettagliPadre, PannelloPadre } from "@/components/stampe/DettagliPadre";
 import {
   getZooDb, zooImageUrl, effectiveParentText, campagnaInLavorazione, campagnaInCorso, campaignStato,
   fotoDaAbbinare, promoDaTesto, chiavePrezzo, animaliDi, caratteristicheProdottoDi, migraVolantinoPages, prezzoUnitaDi,
-  NO_VOLANTINO, marcaEffettiva, type ZooProduct, type ZooOffer,
+  NO_VOLANTINO, marcaEffettiva, prezziDelPadre, passiVolantino, type ZooProduct, type ZooOffer, type ZooParent,
 } from "@/lib/zoo";
 import {
   interpretaPromoScritte, avviaAssociaConAI, chiudiAvvisoAssocia,
@@ -33,7 +34,7 @@ import {
   toggleParentCaratteristica, scioglieParent, chiudiVolantino, riapriVolantino, nuovoVolantino,
   svuotaOfferteVolantino, rimuoviOfferteMarginiamo, updateParentFieldInline, updateOfferFieldInline,
   updateOfferGroupFieldInline, setParentTagInline, moveProductToParent, setParentImageFromFile,
-  mergeParentsForm, archiviaOfferteSelezionate,
+  mergeParentsForm, archiviaOfferteSelezionate, aggiungiOffertaAMano, dividiPadrePerPrezzo, dividiTuttiIPadriPerPrezzo,
 } from "@/lib/zoo-actions";
 
 // "Associa con AI" può richiedere più dei 10s di default per un lotto di articoli:
@@ -171,7 +172,12 @@ export default async function ZooOffertePage({
       if (sp.animale && !caratts.includes(sp.animale)) return false;
       if (sp.caratt && !caratts.includes(sp.caratt)) return false;
     }
-    if (q && !`${o.descrizione} ${o.ean}`.toLowerCase().includes(q)) return false;
+    if (q) {
+      // "royal" deve trovare anche chi ha Royal solo nel nome del padre o nella marca
+      const parent = parentOf(o);
+      const testo = `${o.descrizione} ${o.ean} ${prod?.descrizione ?? ""} ${prod?.codice ?? ""} ${parent?.nome ?? ""} ${parent?.descVolantino ?? ""} ${prod ? marcaEffettiva(prod) : ""} ${prod?.fornitore ?? ""}`.toLowerCase();
+      if (!q.split(/\s+/).filter(Boolean).every((parola) => testo.includes(parola))) return false;
+    }
     return true;
   });
 
@@ -197,6 +203,15 @@ export default async function ZooOffertePage({
   })();
   const RIGHE_MAX = 300;
   const gruppiVisibili = gruppi.slice(0, RIGHE_MAX);
+  /*
+   * Padri "sbagliati" da sistemare: quelli con più prezzi (vanno divisi, un
+   * padre per formato) e quelli senza animale (l'AI non l'ha riconosciuto: si
+   * assegna a mano, altrimenti il filtro per animale non li trova).
+   */
+  const padriInOfferta = [...new Set(offers.map((o) => parentOf(o)).filter(Boolean) as ZooParent[])];
+  const padriConPiuPrezzi = campaign ? padriInOfferta.filter((p) => prezziDelPadre(db, p.id, campaign.id).length > 1) : [];
+  const padriSenzaAnimale = padriInOfferta.filter((p) => animaliDi(db, p.caratteristiche).length === 0);
+  const offerteSenzaPadre = offers.filter((o) => !parentOf(o)).length;
   const visibiliCap = visibili.slice(0, RIGHE_MAX);
   const nCols = ((consortium ? 1 : 0) + (vistaArticoli ? 14 : 13)) + 1;
 
@@ -255,6 +270,30 @@ export default async function ZooOffertePage({
               </div>
             </details>
           )}
+          {consortium && campaign && (
+            <details className="strumento" open={sp.aggiunta !== undefined && sp.aggiunta !== "ok"}>
+              <summary className="btn btn-outline btn-sm">+ Offerta a mano</summary>
+              <div className="card" style={{ marginTop: 10, padding: 14, minWidth: 320 }}>
+                <strong>Aggiungi un&apos;offerta a mano</strong>
+                <p className="hint" style={{ margin: "4px 0 8px" }}>
+                  Entra nel volantino in lavorazione come quelle dell&apos;Excel. Se l&apos;EAN è già nel database bastano EAN e
+                  prezzo; se è nuovo servono anche descrizione, marca e fornitore (l&apos;articolo si crea senza padre).
+                </p>
+                <form action={aggiungiOffertaAMano.bind(null, scopeParam)} style={{ display: "grid", gap: 8, gridTemplateColumns: "1fr 1fr" }}>
+                  <label className="field" style={{ marginBottom: 0 }}>EAN<input type="text" name="ean" required inputMode="numeric" /></label>
+                  <label className="field" style={{ marginBottom: 0 }}>Prezzo promo €<input type="text" name="prezzoPromo" placeholder="es. 3,99" /></label>
+                  <label className="field" style={{ marginBottom: 0 }}>Prezzo di partenza €<input type="text" name="prezzoListino" placeholder="es. 4,69" /></label>
+                  <label className="field" style={{ marginBottom: 0 }}>Meccanica<input type="text" name="meccanica" placeholder="es. 3x2 (anche senza prezzo)" /></label>
+                  <label className="field" style={{ marginBottom: 0, gridColumn: "1 / -1" }}>Descrizione<input type="text" name="descrizione" placeholder="obbligatoria se l'articolo è nuovo" /></label>
+                  <label className="field" style={{ marginBottom: 0 }}>Marca<input type="text" name="marca" /></label>
+                  <label className="field" style={{ marginBottom: 0 }}>Fornitore<input type="text" name="fornitore" /></label>
+                  <label className="field" style={{ marginBottom: 0 }}>Codice fornitore<input type="text" name="codice" /></label>
+                  <label className="field" style={{ marginBottom: 0 }}>Condizioni<input type="text" name="condizioni" placeholder="es. fino a esaurimento" /></label>
+                  <button className="btn btn-sm" type="submit" style={{ gridColumn: "1 / -1", justifySelf: "start" }}>Aggiungi al volantino</button>
+                </form>
+              </div>
+            </details>
+          )}
           {consortium && campaign && <AvvisaColleghi tipo="offerte" scopeParam={scopeParam} colleghi={colleghiZoo} />}
           <form method="get" style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <label style={{ fontSize: 12.5, fontWeight: 700 }}>
@@ -269,6 +308,28 @@ export default async function ZooOffertePage({
           </form>
         </div>
 
+        {sp.aggiunta === "ok" && <div className="alert alert-green">✓ Offerta aggiunta al volantino.</div>}
+        {sp.aggiunta && sp.aggiunta !== "ok" && (
+          <div className="alert alert-amber">
+            {sp.aggiunta === "dati" ? "Servono l'EAN e un prezzo promo (o una meccanica)."
+              : sp.aggiunta === "descrizione" ? "EAN nuovo: serve anche la descrizione dell'articolo."
+              : sp.aggiunta === "doppia" ? "Questo articolo è già in offerta in questo volantino."
+              : sp.aggiunta === "ambito" ? "Le offerte a mano del volantino comune si aggiungono dall'ambito Consorzio; per un cartello proprio usa Stampa cartelli."
+              : sp.aggiunta === "volantino" ? "Nessun volantino in lavorazione." : "Non consentito."}
+          </div>
+        )}
+        {consortium && campaign && (padriSenzaAnimale.length > 0 || offerteSenzaPadre > 0) && (
+          <div className="alert alert-amber" style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+            <span>
+              ⚠ Da sistemare a mano:
+              {padriSenzaAnimale.length > 0 && <> <strong>{padriSenzaAnimale.length}</strong> padri senza animale (segnati «senza animale» in tabella)</>}
+              {padriSenzaAnimale.length > 0 && offerteSenzaPadre > 0 && " ·"}
+              {offerteSenzaPadre > 0 && <> <strong>{offerteSenzaPadre}</strong> offerte senza padre</>}
+            </span>
+            <a className="btn btn-outline btn-sm" href={`/stampe/zoo/dati?scope=${scopeParam}&senzaanimale=1`}>Vedi nel Database prodotti</a>
+          </div>
+        )}
+        {sp.divisi !== undefined && <div className="alert alert-green">✓ {sp.divisi} padri divisi per prezzo: controlla nomi e descrizioni delle nuove righe.</div>}
         {sp.importate !== undefined && (
           <div className="alert alert-green">
             ✓ Importate {sp.importate} offerte ({sp.nuovi ?? 0} prodotti nuovi aggiunti al database base).
@@ -311,6 +372,7 @@ export default async function ZooOffertePage({
           <div className="alert alert-green">✓ Rimosse {sp.rimossemarginiamo} offerte &quot;marginiamo&quot;.</div>
         )}
         {sp.nuovo && <div className="alert alert-green">✓ Nuovo volantino aperto: le pagine ripartono pulite.</div>}
+        {campaign && <AvanzamentoVolantino passi={passiVolantino(db, campaign)} campaignId={campaign.id} puoSegnare={consortium} />}
         {sp.riaperto && <div className="alert alert-green">✓ Volantino riaperto: puoi modificarlo di nuovo.</div>}
         {sp.errore === "giaaperto" && (
           <div className="alert alert-amber">
@@ -491,6 +553,9 @@ export default async function ZooOffertePage({
                   href={`${BACK}?${vistaQs(sp, scopeParam, "articoli")}`}>
                   Vista articoli singoli ({visibili.length})
                 </a>
+                <span className="hint" style={{ fontSize: 12 }}>
+                  {visibili.length === offers.length ? `${offers.length} offerte` : `${visibili.length} offerte su ${offers.length} (filtrate)`}
+                </span>
                 <span className="btn btn-outline btn-sm" style={{ marginLeft: "auto" }}>
                   ⚲ Filtri{(sp.q || sp.animale || sp.caratt || sp.marca || sp.fornitore || sp.tipopromo || sp.senzapadre === "1") ? " (attivi)" : ""}
                 </span>
@@ -576,6 +641,13 @@ export default async function ZooOffertePage({
                       Unisci i padri selezionati
                     </button>
                   )}
+                  {padriConPiuPrezzi.length > 0 && (
+                    <PulsanteAzione azione={dividiTuttiIPadriPerPrezzo} className="btn btn-outline btn-sm"
+                      conferma={`Dividere ${padriConPiuPrezzi.length} padri che hanno articoli a prezzi diversi? Nascono padri separati, uno per prezzo, con il formato nel nome e nella descrizione. Le scelte del volantino restano.`}
+                      title="Un padre per prezzo: la descrizione «160 g o 400 g» non finisce più sul padre delle sole lattine da 400 g">
+                      ⑂ Dividi per prezzo i padri con più prezzi ({padriConPiuPrezzi.length})
+                    </PulsanteAzione>
+                  )}
                   <button className="btn btn-outline btn-sm" formAction={archiviaOfferteSelezionate.bind(null, scopeParam)} type="submit"
                     style={{ color: "var(--red)", borderColor: "var(--red)" }}
                     title="Toglie dal volantino in lavorazione le offerte spuntate: gli articoli e i padri restano">
@@ -658,6 +730,18 @@ export default async function ZooOffertePage({
                             )}
                             {!parent && <span className="pill pill-gray">senza padre</span>}
                             {parent && <DettagliPadre parentId={parent.id} />}
+                            {parent && consortium && padriConPiuPrezzi.includes(parent) && (
+                              <div style={{ marginTop: 3 }}>
+                                <PulsanteAzione azione={dividiPadrePerPrezzo.bind(null, parent.id)} className="pill pill-amber"
+                                  conferma={`Dividere «${parent.nome}» in un padre per prezzo? Il formato finisce nel nome e nella descrizione dei nuovi padri.`}
+                                  title="Questo padre ha articoli in offerta a prezzi diversi: stesse descrizioni su righe che dicono cose diverse">
+                                  ⚠ più prezzi · dividi
+                                </PulsanteAzione>
+                              </div>
+                            )}
+                            {parent && animali.length === 0 && (
+                              <span className="pill pill-amber" title="L'animale non è stato riconosciuto: scegli nella colonna Animale">senza animale</span>
+                            )}
                           </td>
                           <td className="col-wide">
                             {consortium && parent ? (

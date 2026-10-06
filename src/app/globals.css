@@ -1186,3 +1186,31 @@ form[aria-busy="true"] { opacity: .6; }
 .permessi-ruoli .autosalva-stato .hint { display: none; }
 .permessi-ruoli .autosalva-stato { font-size: 10.5px; min-height: 0; margin: 0; }
 .titolo-modificabile { font-size: 13px; font-weight: 700; }
+
+/* Scelta offerte Volantino: la barra delle azioni in blocco resta in vista scorrendo */
+.barra-fissa { position: sticky; top: 0; z-index: 6; background: var(--bg); padding: 6px 0 2px; }
+/* colonne secondarie (fornitore, marca): sugli schermi stretti spariscono da sole; si riaprono da «Colonne» */
+@media (max-width: 1250px) { .tabella-stretta .col-opz:not(.col-forzata) { display: none; } }
+@media (max-width: 1400px) {
+  .tabella-stretta td, .tabella-stretta th { padding: 5px 6px; font-size: 12px; }
+  .tabella-stretta .btn-sm { padding: 3px 7px; font-size: 11px; }
+}
+/* menu «Colonne» delle tabelle (ColumnTools) */
+.colonne-menu { position: relative; display: inline-block; margin: 6px 0 0 8px; font-size: 12px; }
+.colonne-menu > summary { list-style: none; cursor: pointer; }
+.colonne-menu > summary::-webkit-details-marker { display: none; }
+.colonne-menu > div {
+  position: absolute; z-index: 20; top: 100%; left: 0; min-width: 200px; margin-top: 4px;
+  background: #fff; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,.12); padding: 8px 10px;
+}
+.colonne-menu label { display: flex; gap: 6px; align-items: center; padding: 2px 0; white-space: nowrap; }
+
+/* Offerte in corso: i passi del volantino */
+.avanzamento > summary::-webkit-details-marker { display: none; }
+.avanzamento-passi { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.avanzamento-passi li { display: flex; gap: 8px; align-items: flex-start; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: #fff; }
+.avanzamento-passi li.fatto { background: #f1f8f2; border-color: #cfe6d3; }
+.avanzamento-passi li.prossimo { border-color: #f0b35b; background: #fff8ec; }
+.avanzamento-passi .numero { width: 20px; height: 20px; border-radius: 50%; background: #e7ece8; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; flex-shrink: 0; }
+.avanzamento-passi li.fatto .numero { background: var(--green-700); color: #fff; }
+.avanzamento-passi li.prossimo .numero { background: #f0b35b; color: #fff; }

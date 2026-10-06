@@ -77,6 +77,8 @@ function buildPrompt(products: ZooProduct[], settings: ZooSettings, singleGroup:
     "",
     "4) \"caratteristiche\": scegli SOLO tra questi valori, in italiano esatti come scritti:",
     `   categorie di animale → ${settings.categorieAnimali.join(", ")}`,
+    "   (\"Rettili\" = tartarughe, iguane, gechi, draghi barbuti, serpenti, terrari e i loro accessori e mangimi;",
+    "   \"Roditori\" = conigli, criceti, cavie, cincillà; \"Pesci\" = acquariologia)",
     `   caratteristiche di prodotto → ${settings.caratteristicheProdotto.join(", ")}`,
     "   Includi ALMENO una categoria di animale E ALMENO una caratteristica di prodotto quando pertinenti all'articolo",
     "   (es. un croccantino per gatti è insieme \"Gatto\" e \"Secco\"; un accessorio generico può avere solo la caratteristica di prodotto).",

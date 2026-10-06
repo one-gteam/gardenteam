@@ -112,6 +112,34 @@ export interface ZooCampaign {
   svuotataIl?: string;
   /** Nota libera nello Storico focus (com'è andato, cosa ripetere o evitare). */
   focusNote?: string;
+  /** Passi del volantino segnati a mano (fatto/riaperto): vincono sul calcolo automatico. */
+  passi?: Partial<Record<PassoVolantinoId, { fatto: boolean; da: string; il: string }>>;
+}
+
+/**
+ * Più righe unite in UNA voce del volantino (es. tutti gli snack di una marca):
+ * titolo, descrizione e prezzo della voce. Le offerte puntano all'unione con
+ * `unioneVolantino`; i cartelli restano uno per prezzo.
+ */
+export interface ZooUnioneVolantino {
+  id: string;
+  campaignId: string;
+  titolo?: string;
+  descrizione?: string;
+  /** "minimo" = «a partire da» il prezzo più basso (predefinito); "sconto"/"testo" = si stampa `prezzoTesto`. */
+  prezzo?: "minimo" | "sconto" | "testo";
+  prezzoTesto?: string;
+}
+
+export type PassoVolantinoId = "offerte" | "scelta" | "foto" | "testi" | "focus" | "impaginazione";
+export interface PassoVolantino {
+  id: PassoVolantinoId;
+  nome: string;
+  dettaglio: string;
+  fatto: boolean;
+  /** Il primo passo non fatto: quello su cui lavorare. */
+  prossimo?: boolean;
+  segnato?: { da: string; il: string };
 }
 
 /**
@@ -718,11 +746,12 @@ export interface ZooDB {
   condizioniScopo: ZooCondizioniScopo[];
   testate: ZooTestataScopo[];
   focusManuali: ZooFocusVolantino[];
+  unioniVolantino: ZooUnioneVolantino[];
 }
 
 /* ================== Persistenza ================== */
 
-const CATEGORIE_ANIMALI_DEFAULT = ["Cane", "Gatto", "Roditori", "Uccelli", "Pesci"];
+const CATEGORIE_ANIMALI_DEFAULT = ["Cane", "Gatto", "Roditori", "Uccelli", "Pesci", "Rettili"];
 const CARATTERISTICHE_PRODOTTO_DEFAULT = ["Umido", "Secco", "Snack", "Accessori", "Igiene"];
 
 const DEFAULT_SETTINGS: ZooSettings = {
@@ -745,16 +774,24 @@ export async function getZooDb(): Promise<ZooDB> {
     products: [], parents: [], textOverrides: [], tagOverrides: [], offerOverrides: [], printed: [],
     campaigns: [], offers: [],
     votes: [], hidden: [], pvPrices: [], suggestions: [], volantinoLayouts: [], zooLayouts: [],
-    noPrint: [], layoutImages: [], pvPromoCodes: [], pvPromos: [], scopeApiKeys: [], noteBozza: [], coda: [], giacenze: [], nonConformi: [], condizioniScopo: [], testate: [], focusManuali: [],
+    noPrint: [], layoutImages: [], pvPromoCodes: [], pvPromos: [], scopeApiKeys: [], noteBozza: [], coda: [], giacenze: [], nonConformi: [], condizioniScopo: [], testate: [], focusManuali: [], unioniVolantino: [],
   };
   const db = await readDomain<ZooDB>("zoo", empty);
   db.settings = { ...DEFAULT_SETTINGS, ...(db.settings ?? {}) };
-  for (const k of ["products", "parents", "textOverrides", "tagOverrides", "offerOverrides", "printed", "campaigns", "offers", "votes", "hidden", "pvPrices", "suggestions", "volantinoLayouts", "zooLayouts", "noPrint", "layoutImages", "pvPromoCodes", "pvPromos", "scopeApiKeys", "noteBozza", "coda", "giacenze", "nonConformi", "condizioniScopo", "testate", "focusManuali"] as const) {
+  for (const k of ["products", "parents", "textOverrides", "tagOverrides", "offerOverrides", "printed", "campaigns", "offers", "votes", "hidden", "pvPrices", "suggestions", "volantinoLayouts", "zooLayouts", "noPrint", "layoutImages", "pvPromoCodes", "pvPromos", "scopeApiKeys", "noteBozza", "coda", "giacenze", "nonConformi", "condizioniScopo", "testate", "focusManuali", "unioniVolantino"] as const) {
     if (!db[k]) (db as unknown as Record<string, unknown>)[k] = [];
   }
   // i layout salvati prima delle tipologie non hanno il campo: senza questo la
   // stampa va in errore appena incontra uno di quei layout
   for (const l of db.zooLayouts) if (!l.tipologie) l.tipologie = [];
+  /*
+   * "Rettili" è una categoria nuova (tartarughe, iguane, gechi, draghi barbuti…):
+   * le impostazioni salvate prima non la conoscono, la si aggiunge una volta sola.
+   */
+  if (!db.settings.categorieAnimali.includes("Rettili")) {
+    db.settings.categorieAnimali = [...db.settings.categorieAnimali, "Rettili"];
+    db.settings.caratteristiche = [...new Set([...db.settings.categorieAnimali, ...db.settings.caratteristicheProdotto])];
+  }
   return db;
 }
 
@@ -1982,6 +2019,76 @@ export function animaleFocus(db: ZooDB, o: ZooOffer): string {
   const product = db.products.find((p) => p.id === o.productId);
   const parent = product?.parentId ? db.parents.find((x) => x.id === product.parentId) : undefined;
   return parent ? (animaliDi(db, parent.caratteristiche)[0] ?? "Altro") : "Altro";
+}
+
+/**
+ * Testo dei formati di un gruppo di articoli ("160 g", "400 g o 1,5 kg"): dal
+ * contenuto letto nella descrizione; vuoto se non si sa.
+ */
+export function formatiDi(prodotti: ZooProduct[]): string {
+  const voci = [...new Set(prodotti.map((p) => testoContenuto(p.contenuto ?? contenutoDa(p.descrizione))).filter(Boolean))];
+  return voci.join(" o ");
+}
+
+/**
+ * Riscrive la descrizione volantino di un padre con i formati giusti: la parte
+ * iniziale "160 g o 400 g, " (quantità e unità prima della prima virgola) viene
+ * sostituita, il resto resta. Serve quando un padre si divide per prezzo: il
+ * padre delle lattine da 400 g non può dire "160 g o 400 g".
+ */
+export function descrizioneConFormati(descrizione: string, formati: string): string {
+  const d = (descrizione ?? "").trim();
+  if (!formati) return d;
+  const testa = /^(?:da\s+)?[\d.,]+(?:\s*(?:a|-|–|o|e|\/|x)\s*[\d.,]+)*\s*(?:g|gr|kg|ml|l|lt|cl|cm|m|pz|pezzi)\b[^,]*,\s*/i;
+  if (testa.test(d)) return d.replace(testa, `${formati}, `);
+  return d ? `${formati}, ${d.charAt(0).toLowerCase()}${d.slice(1)}` : formati;
+}
+
+/** I prezzi diversi (chiavi) con cui un padre è in offerta nel volantino: più di uno = righe e cartelli separati. */
+export function prezziDelPadre(db: ZooDB, parentId: string, campaignId: string): string[] {
+  const figli = new Set(db.products.filter((p) => p.parentId === parentId).map((p) => p.id));
+  return [...new Set(db.offers.filter((o) => o.campaignId === campaignId && !o.scopeType && figli.has(o.productId ?? "")).map(chiavePrezzo))];
+}
+
+/** L'unione del volantino a cui appartiene un'offerta, se c'è. */
+export function unioneDi(db: ZooDB, o: ZooOffer): ZooUnioneVolantino | undefined {
+  return o.unioneVolantino ? db.unioniVolantino.find((u) => u.id === o.unioneVolantino) : undefined;
+}
+
+/**
+ * I passi del volantino in lavorazione, con quanto manca per ciascuno. Quelli
+ * misurabili si considerano fatti da soli; un passo segnato a mano vince.
+ */
+export function passiVolantino(db: ZooDB, campaign: ZooCampaign): PassoVolantino[] {
+  const offerte = db.offers.filter((o) => o.campaignId === campaign.id && !o.scopeType);
+  const scelte = offerte.filter((o) => o.selezionata && o.paginaId !== NO_VOLANTINO);
+  const daAssegnare = offerte.filter((o) => !o.paginaId).length;
+  const prodById = new Map(db.products.map((p) => [p.id, p]));
+  const parentById = new Map(db.parents.map((p) => [p.id, p]));
+  const senzaFoto = new Set(scelte.filter((o) => {
+    const p = prodById.get(o.productId ?? "");
+    const parent = p?.parentId ? parentById.get(p.parentId) : undefined;
+    return !(parent?.image || p?.image);
+  }).map((o) => prodById.get(o.productId ?? "")?.parentId ?? o.id)).size;
+  const senzaFocus = new Set(scelte.filter((o) => !(o.focus ?? "").trim()).map((o) => prodById.get(o.productId ?? "")?.parentId ?? o.id)).size;
+  const layout = db.volantinoLayouts.find((l) => l.campaignId === campaign.id);
+  const pagine = layout ? migraVolantinoPages(layout.pages) : [];
+  const collocate = new Set(pagine.flatMap((p) => p.blocks.flatMap((b) => b.offerIds ?? []))).size;
+  const auto: { id: PassoVolantinoId; nome: string; dettaglio: string; fatto: boolean }[] = [
+    { id: "offerte", nome: "Offerte caricate", dettaglio: offerte.length ? `${offerte.length} offerte nel volantino` : "nessuna offerta: carica l'Excel", fatto: offerte.length > 0 },
+    { id: "scelta", nome: "Scelta offerte volantino", dettaglio: `${scelte.length} scelte · ${daAssegnare} ancora da assegnare a una pagina (o a «no volantino»)`, fatto: scelte.length > 0 && daAssegnare === 0 },
+    { id: "foto", nome: "Foto caricate", dettaglio: scelte.length ? (senzaFoto ? `${senzaFoto} voci scelte senza foto` : "tutte le voci scelte hanno la foto") : "prima scegli le offerte", fatto: scelte.length > 0 && senzaFoto === 0 },
+    { id: "testi", nome: "Titoli e descrizioni controllate", dettaglio: "da segnare a mano quando i testi delle voci scelte sono stati riletti", fatto: false },
+    { id: "focus", nome: "Focus completati", dettaglio: scelte.length ? (senzaFocus ? `${senzaFocus} voci scelte senza focus` : "tutte le voci scelte hanno un focus") : "prima scegli le offerte", fatto: scelte.length > 0 && senzaFocus === 0 },
+    { id: "impaginazione", nome: "Impaginazione completata", dettaglio: pagine.length ? `${pagine.length} pagine · ${collocate} offerte collocate su ${scelte.length} scelte` : "nessuna pagina ancora (Crea Volantino)", fatto: false },
+  ];
+  const passi: PassoVolantino[] = auto.map((p) => {
+    const mano = campaign.passi?.[p.id];
+    return { ...p, fatto: mano ? mano.fatto : p.fatto, segnato: mano ? { da: mano.da, il: mano.il } : undefined };
+  });
+  const primo = passi.find((p) => !p.fatto);
+  if (primo) primo.prossimo = true;
+  return passi;
 }
 
 /** Le foto del bucket che nessun articolo né padre usa, tolte quelle che si è scelto di ignorare. */
