@@ -10,6 +10,7 @@ import {
   unioneDi,
 } from "@/lib/zoo";
 import { aggiungiNotaBozza, risolviNotaBozza } from "@/lib/zoo-actions";
+import TabellaVolantino from "@/components/stampe/TabellaVolantino";
 
 /**
  * Bozza del volantino in sola lettura, con le note di chi la rivede.
@@ -61,7 +62,14 @@ export default async function ZooBozzaPage({
                 : "Nessun volantino in lavorazione."}
             </p>
           </div>
+          {campaign && (
+            <div className="sottoschede-prodotti">
+              <a className={`pill ${sp.vista !== "tabella" ? "pill-blue" : "pill-gray"}`} href={`/stampe/zoo/bozza?scope=${scopeParam}`}>Pagine</a>
+              <a className={`pill ${sp.vista === "tabella" ? "pill-blue" : "pill-gray"}`} href={`/stampe/zoo/bozza?vista=tabella&scope=${scopeParam}`}>Tabella delle offerte</a>
+            </div>
+          )}
           <form method="get" style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            {sp.vista === "tabella" && <input type="hidden" name="vista" value="tabella" />}
             <label style={{ fontSize: 12.5, fontWeight: 700 }}>
               Insegna / PV{" "}
               <select name="scope" defaultValue={scopeParam} style={{ marginTop: 2 }}>
@@ -99,7 +107,10 @@ export default async function ZooBozzaPage({
           </div>
         )}
 
-        {pages.length === 0 && (
+        {campaign && sp.vista === "tabella" && (
+          <TabellaVolantino db={db} academyDb={academyDb} scope={scope} scopeParam={scopeParam} campaign={campaign} sp={sp} base="/stampe/zoo/bozza" />
+        )}
+        {sp.vista !== "tabella" && pages.length === 0 && (
           <div className="card"><p className="empty">Non c&apos;è ancora una bozza: si compone in Crea Volantino.</p></div>
         )}
 
@@ -109,7 +120,7 @@ export default async function ZooBozzaPage({
           * Prima erano una sotto l'altra a tutta larghezza e non si capiva cosa
           * sarebbe finito accanto a cosa.
           */}
-        {spreads.map((gruppo, gi) => (
+        {sp.vista !== "tabella" && spreads.map((gruppo, gi) => (
           <div key={gi} className="vol-spread" style={{ marginBottom: 22 }}>
             {gruppo.map((i) => {
               const page = pages[i];

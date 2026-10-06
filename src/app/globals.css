@@ -1228,3 +1228,5 @@ form[aria-busy="true"] { opacity: .6; }
 .avanzamento-passi .numero { width: 20px; height: 20px; border-radius: 50%; background: #e7ece8; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; flex-shrink: 0; }
 .avanzamento-passi li.fatto .numero { background: var(--green-700); color: #fff; }
 .avanzamento-passi li.prossimo .numero { background: #f0b35b; color: #fff; }
+
+.alert-gray { background: #f1f3f1; border: 1px solid #d9ded9; color: #333; }

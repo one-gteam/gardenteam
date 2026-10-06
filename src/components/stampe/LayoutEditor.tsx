@@ -83,7 +83,8 @@ export default function LayoutEditor({
   tipologieDisponibili,
   tipologiePromo = [],
   sampleValues,
-  canEdit,
+  canEdit: puoModificare,
+  bloccato = false,
   images = [],
   area = "arredo",
   ambiti = [],
@@ -105,6 +106,12 @@ export default function LayoutEditor({
   tipologiePromo?: string[];
   sampleValues: Record<string, string>;
   canEdit: boolean;
+  /**
+   * Lucchetto per chi non è amministratore: il layout si apre in sola lettura
+   * e si modifica solo dopo aver cliccato il lucchetto (con avviso). Evita i
+   * ritocchi per sbaglio su un layout che stampa tutto il Consorzio.
+   */
+  bloccato?: boolean;
   images?: { name: string; url: string }[];
   area?: "arredo" | "zoo"; // dove salvare il layout (default: arredo)
   /** Insegne/PV a cui chi gestisce può assegnare una copia di questo layout. */
@@ -130,6 +137,8 @@ export default function LayoutEditor({
   const [margins, setMargins] = useState<LayoutMargins>(initialMargins ?? { top: 0, right: 0, bottom: 0, left: 0 });
   const [tipologie, setTipologie] = useState<string[]>(initialTipologie);
   const [selected, setSelected] = useState<number | null>(null);
+  const [sbloccato, setSbloccato] = useState(false);
+  const canEdit = puoModificare && (!bloccato || sbloccato);
   const [saved, setSaved] = useState(false);
   const [pending, startTransition] = useTransition();
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -571,6 +580,22 @@ export default function LayoutEditor({
       </div>
 
       <div>
+        {puoModificare && bloccato && (
+          <div className={`alert ${sbloccato ? "alert-amber" : "alert-gray"}`} style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 8 }}>
+            <span style={{ flex: 1 }}>
+              {sbloccato
+                ? "🔓 Layout sbloccato: ogni modifica salvata cambia i cartelli di chi usa questo layout."
+                : "🔒 Layout protetto: si guarda ma non si modifica. Per cambiarlo clicca il lucchetto."}
+            </span>
+            <button type="button" className="btn btn-outline btn-sm"
+              onClick={() => {
+                if (sbloccato) { setSbloccato(false); setSelected(null); return; }
+                if (confirm("Sbloccare il layout? Le modifiche che salverai cambiano i cartelli stampati con questo layout. Se vuoi solo provare, fai prima una copia.")) setSbloccato(true);
+              }}>
+              {sbloccato ? "🔒 Blocca di nuovo" : "🔓 Sblocca per modificare"}
+            </button>
+          </div>
+        )}
         <div style={{ display: "flex", gap: 6, marginBottom: 8, alignItems: "center", flexWrap: "wrap" }}>
           <div style={{ display: "flex", gap: 4 }}>
             <button type="button" className={`btn btn-sm ${mode === "normal" ? "" : "btn-outline"}`} onClick={() => switchMode("normal")}>

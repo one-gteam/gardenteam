@@ -134,7 +134,9 @@ export interface ZooUnioneVolantino {
 export type PassoVolantinoId = "offerte" | "scelta" | "foto" | "testi" | "focus" | "impaginazione";
 export interface PassoVolantino {
   id: PassoVolantinoId;
+  /** Come si chiama il passo da fare ("Foto") e una volta fatto ("Foto caricate"). */
   nome: string;
+  nomeFatto: string;
   dettaglio: string;
   fatto: boolean;
   /** Il primo passo non fatto: quello su cui lavorare. */
@@ -2074,13 +2076,14 @@ export function passiVolantino(db: ZooDB, campaign: ZooCampaign): PassoVolantino
   const layout = db.volantinoLayouts.find((l) => l.campaignId === campaign.id);
   const pagine = layout ? migraVolantinoPages(layout.pages) : [];
   const collocate = new Set(pagine.flatMap((p) => p.blocks.flatMap((b) => b.offerIds ?? []))).size;
-  const auto: { id: PassoVolantinoId; nome: string; dettaglio: string; fatto: boolean }[] = [
-    { id: "offerte", nome: "Offerte caricate", dettaglio: offerte.length ? `${offerte.length} offerte nel volantino` : "nessuna offerta: carica l'Excel", fatto: offerte.length > 0 },
-    { id: "scelta", nome: "Scelta offerte volantino", dettaglio: `${scelte.length} scelte · ${daAssegnare} ancora da assegnare a una pagina (o a «no volantino»)`, fatto: scelte.length > 0 && daAssegnare === 0 },
-    { id: "foto", nome: "Foto caricate", dettaglio: scelte.length ? (senzaFoto ? `${senzaFoto} voci scelte senza foto` : "tutte le voci scelte hanno la foto") : "prima scegli le offerte", fatto: scelte.length > 0 && senzaFoto === 0 },
-    { id: "testi", nome: "Titoli e descrizioni controllate", dettaglio: "da segnare a mano quando i testi delle voci scelte sono stati riletti", fatto: false },
-    { id: "focus", nome: "Focus completati", dettaglio: scelte.length ? (senzaFocus ? `${senzaFocus} voci scelte senza focus` : "tutte le voci scelte hanno un focus") : "prima scegli le offerte", fatto: scelte.length > 0 && senzaFocus === 0 },
-    { id: "impaginazione", nome: "Impaginazione completata", dettaglio: pagine.length ? `${pagine.length} pagine · ${collocate} offerte collocate su ${scelte.length} scelte` : "nessuna pagina ancora (Crea Volantino)", fatto: false },
+  // "scelta" guarda solo quello che è a volantino: le offerte non scelte restano semplicemente senza pagina
+  const auto: { id: PassoVolantinoId; nome: string; nomeFatto: string; dettaglio: string; fatto: boolean }[] = [
+    { id: "offerte", nome: "Offerte", nomeFatto: "Offerte caricate", dettaglio: offerte.length ? `${offerte.length} offerte nel volantino` : "nessuna offerta: carica l'Excel", fatto: offerte.length > 0 },
+    { id: "scelta", nome: "Scelta offerte", nomeFatto: "Scelta offerte fatta", dettaglio: scelte.length ? `${scelte.length} offerte a volantino${daAssegnare ? ` · ${daAssegnare} senza pagina (non scelte)` : ""}` : "nessuna offerta scelta ancora", fatto: scelte.length > 0 },
+    { id: "foto", nome: "Foto", nomeFatto: "Foto caricate", dettaglio: scelte.length ? (senzaFoto ? `${senzaFoto} voci a volantino senza foto` : "tutte le voci a volantino hanno la foto") : "prima scegli le offerte", fatto: scelte.length > 0 && senzaFoto === 0 },
+    { id: "testi", nome: "Titoli e descrizioni", nomeFatto: "Titoli e descrizioni controllati", dettaglio: "da segnare a mano quando i testi delle voci a volantino sono stati riletti", fatto: false },
+    { id: "focus", nome: "Focus", nomeFatto: "Focus completati", dettaglio: scelte.length ? (senzaFocus ? `${senzaFocus} voci a volantino senza focus` : "tutte le voci a volantino hanno un focus") : "prima scegli le offerte", fatto: scelte.length > 0 && senzaFocus === 0 },
+    { id: "impaginazione", nome: "Impaginazione", nomeFatto: "Impaginazione completata", dettaglio: pagine.length ? `${pagine.length} pagine · ${collocate} offerte collocate su ${scelte.length} a volantino` : "nessuna pagina ancora (Crea Volantino)", fatto: false },
   ];
   const passi: PassoVolantino[] = auto.map((p) => {
     const mano = campaign.passi?.[p.id];

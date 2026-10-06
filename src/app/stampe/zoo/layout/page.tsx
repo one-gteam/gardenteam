@@ -163,6 +163,7 @@ export default async function ZooLayoutPage({
           tipologiePromo={[...ZOO_TIPI_OFFERTA, ...promoPv]}
           sampleValues={sampleValues}
           canEdit={canEdit}
+          bloccato={!["system_admin", "group_admin", "store_admin"].includes(user.role)}
           area="zoo"
           ambiti={scopes.map((sc) => ({ value: `${sc.type}:${sc.id}`, label: sc.label }))}
           images={db.layoutImages

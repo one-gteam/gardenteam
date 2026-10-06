@@ -30,7 +30,7 @@ export default function AvanzamentoVolantino({
           <li key={p.id} className={p.fatto ? "fatto" : p.prossimo ? "prossimo" : ""}>
             <span className="numero">{p.fatto ? "✓" : i + 1}</span>
             <span style={{ flex: 1, minWidth: 0 }}>
-              <span style={{ fontWeight: 700, fontSize: 12.5 }}>{p.nome}</span>
+              <span style={{ fontWeight: 700, fontSize: 12.5 }}>{p.fatto ? p.nomeFatto : p.nome}</span>
               <span className="hint" style={{ display: "block", fontSize: 11 }}>
                 {p.dettaglio}
                 {p.segnato && <> · segnato da {p.segnato.da} il {new Date(p.segnato.il).toLocaleDateString("it-IT")}</>}

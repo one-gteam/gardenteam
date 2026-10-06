@@ -159,6 +159,10 @@ export default async function OfferteInCorso({ user, sp }: { user: User; sp: Rec
     if (sp.marca && (!prod || marcaEffettiva(prod) !== sp.marca)) return false;
     if (sp.fornitore && prod?.fornitore !== sp.fornitore) return false;
     if (sp.tipopromo && (o.condizioni ?? "").trim() !== sp.tipopromo) return false;
+    // a volantino = scelta in Scelta offerte Volantino (ha una pagina, non «no volantino»)
+    const aVolantino = Boolean(o.selezionata) && o.paginaId !== NO_VOLANTINO;
+    if (sp.volantino === "si" && !aVolantino) return false;
+    if (sp.volantino === "no" && aVolantino) return false;
     if (sp.animale || sp.caratt) {
       const caratts = parentOf(o)?.caratteristiche ?? [];
       if (sp.animale && !caratts.includes(sp.animale)) return false;
@@ -205,7 +209,7 @@ export default async function OfferteInCorso({ user, sp }: { user: User; sp: Rec
   const padriSenzaAnimale = padriInOfferta.filter((p) => animaliDi(db, p.caratteristiche).length === 0);
   const offerteSenzaPadre = offers.filter((o) => !parentOf(o)).length;
   const visibiliCap = visibili.slice(0, RIGHE_MAX);
-  const nCols = ((consortium ? 1 : 0) + (vistaArticoli ? 14 : 13)) + 1;
+  const nCols = ((consortium ? 1 : 0) + (vistaArticoli ? 16 : 15)) + 1;
 
 
   return (
@@ -219,6 +223,12 @@ export default async function OfferteInCorso({ user, sp }: { user: User; sp: Rec
             <a className={`pill ${VISTA === "catalogo" ? "pill-blue" : "pill-gray"}`} href={`/stampe/zoo/prodotti?vista=catalogo&scope=${scopeParam}`}>Tutto il catalogo</a>
           </div>
           <span style={{ flex: 1 }} />
+          {campaign && (
+            <a className="btn btn-outline btn-sm" href={`/stampe/zoo/excel?singole=1&scope=${scopeParam}${sp.volantino === "si" ? "&volantino=1" : ""}`}
+              title="Tutte le offerte del volantino in lavorazione, una riga per articolo (con filtro «a volantino»: solo quelle scelte)">
+              ⬇ Excel offerte{sp.volantino === "si" ? " a volantino" : ""}
+            </a>
+          )}
           {consortium && (
             <a className="btn btn-outline btn-sm" href={`/stampe/zoo/prodotti?vista=catalogo&scope=${scopeParam}&abbina=1`}
               title="Importare l'Excel dei prodotti e abbinare le foto si fa dal catalogo">
@@ -546,7 +556,7 @@ export default async function OfferteInCorso({ user, sp }: { user: User; sp: Rec
             )}
 
             {/* filtri + vista: una riga; il modulo dei filtri si apre solo quando serve */}
-            <details className="card filtri-compatti" style={{ marginBottom: 10, padding: "8px 12px" }} open={Boolean((sp.q || sp.animale || sp.caratt || sp.marca || sp.fornitore || sp.tipopromo || sp.senzapadre === "1"))}>
+            <details className="card filtri-compatti" style={{ marginBottom: 10, padding: "8px 12px" }} open={Boolean((sp.q || sp.animale || sp.caratt || sp.marca || sp.fornitore || sp.tipopromo || sp.volantino || sp.senzapadre === "1"))}>
               <summary style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", cursor: "pointer", listStyle: "none" }}>
                 <a className={`pill ${!vistaArticoli ? "pill-blue" : "pill-gray"}`} style={{ textDecoration: "none" }}
                   href={`${BACK}?${vistaQs(sp, scopeParam, "raggruppata")}`}>
@@ -560,13 +570,14 @@ export default async function OfferteInCorso({ user, sp }: { user: User; sp: Rec
                   {visibili.length === offers.length ? `${offers.length} offerte` : `${visibili.length} offerte su ${offers.length} (filtrate)`}
                 </span>
                 <span className="btn btn-outline btn-sm" style={{ marginLeft: "auto" }}>
-                  ⚲ Filtri{(sp.q || sp.animale || sp.caratt || sp.marca || sp.fornitore || sp.tipopromo || sp.senzapadre === "1") ? " (attivi)" : ""}
+                  ⚲ Filtri{(sp.q || sp.animale || sp.caratt || sp.marca || sp.fornitore || sp.tipopromo || sp.volantino || sp.senzapadre === "1") ? " (attivi)" : ""}
                 </span>
               </summary>
               <div style={{ marginTop: 10 }}>
               <FiltriMobile id="filtri-offerte" scelte={[
                 vistaArticoli ? "articoli singoli" : "raggruppata",
                 sp.q && `«${sp.q}»`, sp.animale, sp.caratt, sp.marca, sp.fornitore, sp.tipopromo,
+                sp.volantino === "si" ? "a volantino" : sp.volantino === "no" ? "non a volantino" : undefined,
                 sp.senzapadre === "1" && "solo senza padre",
               ]}>
               <form method="get" style={{ display: "grid", gridTemplateColumns: "repeat(6, minmax(0, 1fr)) auto", gap: 10, alignItems: "end" }}>
@@ -608,6 +619,14 @@ export default async function OfferteInCorso({ user, sp }: { user: User; sp: Rec
                   <select name="tipopromo" defaultValue={sp.tipopromo ?? ""}>
                     <option value="">Tutti</option>
                     {tipiPromo.map((t) => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </label>
+                <label className="field" style={{ marginBottom: 0 }}>
+                  Volantino
+                  <select name="volantino" defaultValue={sp.volantino ?? ""}>
+                    <option value="">Tutte</option>
+                    <option value="si">a volantino (scelte)</option>
+                    <option value="no">non a volantino</option>
                   </select>
                 </label>
                 <button className="btn btn-sm" type="submit">Filtra</button>
@@ -672,6 +691,8 @@ export default async function OfferteInCorso({ user, sp }: { user: User; sp: Rec
                       <th style={{ width: 56 }}>Foto</th>
                       <ColonnaOrdinabile campo="nome">{vistaArticoli ? "Offerta" : "Prodotto"}</ColonnaOrdinabile>
                       <th className="col-wide">Descrizione</th>
+                      <th>Marca</th>
+                      <th>Fornitore</th>
                       <ColonnaOrdinabile campo="animale">Animale</ColonnaOrdinabile>
                       <ColonnaOrdinabile campo="caratt">Caratteristica</ColonnaOrdinabile>
                       <th>Pagina</th>
@@ -754,6 +775,8 @@ export default async function OfferteInCorso({ user, sp }: { user: User; sp: Rec
                               <span style={{ fontSize: 11.5, color: "var(--muted)" }}>{descr || "—"}</span>
                             )}
                           </td>
+                          <td style={{ fontSize: 12.5 }}>{product ? marcaEffettiva(product) || "—" : "—"}</td>
+                          <td style={{ fontSize: 12.5 }}>{product?.fornitore || "—"}</td>
                           <td>
                             {consortium && parent ? (
                               <InlineSelect value={animali[0] ?? ""} options={db.settings.categorieAnimali}
@@ -883,6 +906,8 @@ export default async function OfferteInCorso({ user, sp }: { user: User; sp: Rec
                             {o.nuovo && <span className="pill pill-orange" style={{ marginTop: 2 }}>nuovo nel database</span>}
                           </td>
                           <td className="col-wide" style={{ fontSize: 11.5, color: "var(--muted)" }}>{parentDescr || "—"}</td>
+                          <td style={{ fontSize: 12.5 }}>{product ? marcaEffettiva(product) || "—" : "—"}</td>
+                          <td style={{ fontSize: 12.5 }}>{product?.fornitore || "—"}</td>
                           <td>
                             {consortium && parent ? (
                               <InlineSelect value={animali[0] ?? ""} options={db.settings.categorieAnimali}

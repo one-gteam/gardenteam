@@ -3,7 +3,10 @@ import * as XLSX from "xlsx";
 import { getCurrentUser } from "@/lib/auth";
 import { canAccessArea, resolveScope } from "@/lib/stampe";
 import { getDb } from "@/lib/db";
-import { getZooDb, activeCampaign, pvPriceFor, volantinoExportRows, offerteExportRows, noPrintSets } from "@/lib/zoo";
+import {
+  getZooDb, activeCampaign, pvPriceFor, volantinoExportRows, offerteExportRows, noPrintSets,
+  campagnaInLavorazione, datiPrezzoOfferta, animaliDi, caratteristicheProdottoDi, migraVolantinoPages, marcaEffettiva, NO_VOLANTINO,
+} from "@/lib/zoo";
 
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
@@ -81,6 +84,33 @@ export async function GET(req: NextRequest) {
     rows = offerteExportRows(db, academyDb, scope, campaign, tipo);
     const nome = (campaign?.nome ?? "zoo").replace(/\s+/g, "_").toLowerCase();
     filename = `${tipo === "volantino" ? "offerte_volantino" : "offerte_fuori_volantino"}_${nome}.xlsx`;
+  } else if (sp.singole === "1") {
+    // tutte le offerte del volantino in lavorazione, una riga per articolo (anche quelle non scelte)
+    const campaign = db.campaigns.find((c) => c.id === sp.campagna) ?? campagnaInLavorazione(db) ?? activeCampaign(db);
+    const layout = campaign ? db.volantinoLayouts.find((l) => l.campaignId === campaign.id) : undefined;
+    const nomePagina = new Map((layout ? migraVolantinoPages(layout.pages) : []).map((p, i) => [p.id, `${i + 1}. ${p.titolo || `Pagina ${i + 1}`}`]));
+    const soloScelte = sp.volantino === "1";
+    rows = db.offers
+      .filter((o) => campaign && o.campaignId === campaign.id && !o.scopeType)
+      .filter((o) => !soloScelte || (o.selezionata && o.paginaId !== NO_VOLANTINO))
+      .map((o) => {
+        const p = db.products.find((x) => x.id === o.productId);
+        const parent = p?.parentId ? db.parents.find((x) => x.id === p.parentId) : undefined;
+        const dati = datiPrezzoOfferta(db, o, scope, academyDb);
+        const aVolantino = Boolean(o.selezionata) && o.paginaId !== NO_VOLANTINO;
+        return {
+          EAN: o.ean, "CODICE FORNITORE": p?.codice ?? "", ARTICOLO: o.descrizione,
+          "PRODOTTO PADRE": parent?.nome ?? "", "DESCRIZIONE VOLANTINO": parent?.descVolantino ?? "",
+          MARCA: p ? marcaEffettiva(p) : "", FORNITORE: p?.fornitore ?? "",
+          ANIMALE: animaliDi(db, parent?.caratteristiche ?? []).join(", "), CARATTERISTICA: caratteristicheProdottoDi(db, parent?.caratteristiche ?? []).join(", "),
+          "PREZZO PROMO": dati.prezzo, "PREZZO DI PARTENZA": dati.listino, SCONTO: dati.sconto, "TIPO PROMO": dati.tipi.join(" · "),
+          MECCANICA: o.meccanica ?? "", CONDIZIONI: o.condizioni ?? "", "PROMO SCRITTA": o.promoTesto ?? "",
+          "A VOLANTINO": aVolantino ? "sì" : o.paginaId === NO_VOLANTINO ? "no" : "",
+          PAGINA: o.paginaId && o.paginaId !== NO_VOLANTINO ? (nomePagina.get(o.paginaId) ?? "") : "",
+          FOCUS: o.focus ?? "", ETICHETTA: o.label ?? "", FOTO: p?.image ?? parent?.image ?? "",
+        };
+      });
+    filename = `offerte_${(campaign?.nome ?? "zoo").replace(/\s+/g, "_").toLowerCase()}${soloScelte ? "_a_volantino" : ""}.xlsx`;
   } else if (sp.volantino === "1") {
     // export per il grafico: offerte selezionate con testi e riferimento foto (stessa lista usata dallo ZIP con le foto)
     const campaign = db.campaigns.find((c) => c.id === sp.campagna) ?? activeCampaign(db);
