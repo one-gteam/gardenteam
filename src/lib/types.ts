@@ -19,6 +19,8 @@ export type Role =
   | "store_admin"
   | "manager"
   | "dept_head"
+  /** Grafico: stampa i cartelli e cura i layout del proprio ambito (Consorzio, insegna o PV), in tutte le aree Stampe. */
+  | "grafico"
   | "student";
 
 /** Ruoli di prima della riforma, accettati solo per convertirli. */
@@ -68,6 +70,7 @@ export const PERMESSI_PREDEFINITI: Record<Role, Record<PermessoRuolo, boolean>> 
   store_admin: { gestisce_academy: true, gestisce_arredo: true, gestisce_zoo: true, gestisce_piante: true, pannelloFormazione: true, gestioneUtenti: true, organizzazione: true, corsi: true, percorsi: false, modelliEmail: true },
   manager: { ...TUTTI_NO, corsi: true, modelliEmail: true },
   dept_head: { ...TUTTI_NO, pannelloFormazione: true },
+  grafico: { ...TUTTI_NO },
   student: { ...TUTTI_NO },
 };
 
@@ -94,11 +97,16 @@ export const ROLE_LABELS: Record<Role, string> = {
   store_admin: "Amministratore punto vendita",
   manager: "Gestore",
   dept_head: "Capo reparto",
+  grafico: "Grafico",
   student: "Studente",
 };
 
 /** Etichetta del ruolo con, per il gestore, le aree che gestisce. */
 export function ruoloEsteso(user: User): string {
+  if (user.role === "grafico") {
+    const l = livelloDi(user);
+    return `Grafico ${l === "consorzio" ? "Consorzio" : l === "insegna" ? "insegna" : "punto vendita"}`;
+  }
   if (user.role !== "manager") return ROLE_LABELS[user.role];
   const aree = (user.manages ?? []).map((s) => SITE_LABELS_BREVI[s]);
   return aree.length > 0 ? `Gestore ${aree.join(", ")}` : "Gestore (nessuna area)";
@@ -215,6 +223,8 @@ export const SITE_LABELS_BREVI: Record<SiteId, string> = {
  */
 export function userSites(user: User): SiteId[] {
   if (user.role === "system_admin") return ["academy", "arredo", "zoo", "piante"];
+  // il grafico senza aree spuntate ha tutte le aree Stampe: è il suo mestiere
+  if (user.role === "grafico" && !(user.sites ?? []).length) return ["arredo", "zoo", "piante"];
   return user.sites ?? [];
 }
 

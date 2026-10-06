@@ -15,9 +15,10 @@ import type { PermessoRuolo, Role, SiteId } from "./types";
  *  volantino — come "consorzio", oppure essere fra gli editor del volantino
  *  insegna   — essere amministratore di insegna
  *  sistema   — solo l'amministratore di sistema
+ *  layout    — come "gestione", oppure essere il Grafico (nel suo ambito)
  *  articoli  — lo decide Articoli → Gestione (chi vede, chi pubblica, chi gestisce)
  */
-export type Condizione = "accesso" | "ambito" | "gestione" | "consorzio" | "volantino" | "insegna" | "sistema"
+export type Condizione = "accesso" | "ambito" | "gestione" | "layout" | "consorzio" | "volantino" | "insegna" | "sistema"
   | "articoli-vede" | "articoli-pubblica" | "articoli-gestisce" | PermessoRuolo;
 
 export interface Capacita { testo: string; condizione: Condizione; nota?: string }
@@ -35,7 +36,7 @@ export const CATALOGO: SezioneCatalogo[] = [
       { testo: "Caricare i prezzi e le promozioni del proprio punto vendita", condizione: "ambito" },
       { testo: "Nascondere fornitori, marche o articoli non trattati", condizione: "ambito" },
       { testo: "Duplicare o creare cartelli propri", condizione: "ambito" },
-      { testo: "Layout dei cartelli", condizione: "gestione" },
+      { testo: "Layout dei cartelli", condizione: "layout" },
       { testo: "Impostazioni: condizioni dei cartelli, chiave AI propria, giacenze dal gestionale", condizione: "gestione" },
       { testo: "Offerte proprie fuori volantino e articoli propri (anche con l'AI)", condizione: "gestione", nota: "per l'insegna o il PV" },
       { testo: "Storico dei focus (consultazione)", condizione: "gestione" },
@@ -52,7 +53,7 @@ export const CATALOGO: SezioneCatalogo[] = [
       { testo: "Consultare i dati prodotti e le linee guida", condizione: "accesso" },
       { testo: "Stampa cartelli", condizione: "accesso" },
       { testo: "Personalizzare i testi dei prodotti per la propria insegna o PV", condizione: "ambito", nota: "salvo blocco dell'insegna" },
-      { testo: "Layout dei cartelli del proprio ambito", condizione: "gestione" },
+      { testo: "Layout dei cartelli del proprio ambito", condizione: "layout" },
       { testo: "Scheda online (QR): cosa si vede sul cartello e cosa online", condizione: "gestione" },
       { testo: "Impostazioni: campi personalizzati, liste, sfondi, codici interni", condizione: "gestione" },
       { testo: "Bloccare la personalizzazione ai propri punti vendita", condizione: "insegna" },
@@ -90,7 +91,7 @@ export const CATALOGO: SezioneCatalogo[] = [
   },
 ];
 
-export const RUOLI_CONFIGURABILI: Role[] = ["group_admin", "store_admin", "manager", "dept_head", "student"];
+export const RUOLI_CONFIGURABILI: Role[] = ["group_admin", "store_admin", "manager", "dept_head", "grafico", "student"];
 
 /** Un profilo da provare: ruolo, dove è collocato, aree abilitate e (per il gestore) aree gestite. */
 export interface Profilo {
@@ -122,6 +123,10 @@ export function puoFare(c: Capacita, area: SezioneCatalogo["area"], p: Profilo, 
     case "gestione":
       return gestisceArea(area as SiteId) ? { si: true, perche: "gestisce l'area nel suo ambito" }
         : { si: false, perche: haArea ? "non gestisce l'area" : "l'area non è abilitata alla persona" };
+    case "layout":
+      if (p.role === "grafico" && haArea) return { si: true, perche: "è il grafico: i layout del suo ambito sono suoi" };
+      return gestisceArea(area as SiteId) ? { si: true, perche: "gestisce l'area nel suo ambito" }
+        : { si: false, perche: haArea ? "non gestisce l'area (e non è il grafico)" : "l'area non è abilitata alla persona" };
     case "consorzio":
     case "volantino": {
       const g = gestisceArea(area as SiteId);

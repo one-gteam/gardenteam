@@ -288,6 +288,30 @@ export function gestisceArea(user: User, area: SiteId, scope: { type: ScopeType;
   return scope.type === "store" && scope.id === user.storeId;
 }
 
+/**
+ * Può cambiare i layout dei cartelli in questo ambito? Chi gestisce l'area, e
+ * il Grafico nel suo ambito: al Consorzio ovunque, in un'insegna sui suoi PV,
+ * in un PV solo lì. Il grafico non tocca prodotti, offerte e testi: solo
+ * layout e stampa.
+ */
+export function puoModificareLayout(user: User, area: SiteId, scope: { type: ScopeType; id: string }, academyDb: DB): boolean {
+  if (gestisceArea(user, area, scope, academyDb)) return true;
+  if (user.role !== "grafico" || !userSites(user).includes(area)) return false;
+  const livello = livelloDi(user);
+  if (livello === "consorzio") return true;
+  if (scope.type === "system") return false;
+  if (livello === "insegna") {
+    if (scope.type === "tenant") return scope.id === user.tenantId;
+    return academyDb.stores.find((s) => s.id === scope.id)?.tenantId === user.tenantId;
+  }
+  return scope.type === "store" && scope.id === user.storeId;
+}
+
+/** Vede la pagina Layout? Chi gestisce l'area o il Grafico (il menu la mostra solo a loro). */
+export function vedeLayout(user: User, area: SiteId): boolean {
+  return gestisce(user, area) || (user.role === "grafico" && userSites(user).includes(area));
+}
+
 /** Il responsabile contenuti del Consorzio (area Arredo) modifica la versione comune. */
 export function isConsortiumEditor(user: User): boolean {
   return gestisceConsorzio(user, "arredo");

@@ -16,8 +16,7 @@ import {
   effectiveValue,
   ScopeType,
   sanitizeMargins,
-  Cornice,
-} from "./stampe";
+  Cornice, puoModificareLayout } from "./stampe";
 import { ELEMENTO_IMMAGINE, ELEMENTO_QR, ELEMENTO_RIQUADRO, gruppoDi } from "./cartello-campi";
 import { postLoginPath } from "./types";
 import { LAYOUT_FONTS } from "./layout-fonts";
@@ -802,7 +801,7 @@ export async function saveLayout(
   const db = await getStampeDb();
   const academyDb = await getDb();
   const scope = resolveScope(user, scopeParam, academyDb);
-  if (!gestisceArea(user, "arredo", scope, academyDb)) return { ok: false };
+  if (!puoModificareLayout(user, "arredo", scope, academyDb)) return { ok: false };
 
   let items: unknown;
   try {
@@ -852,7 +851,7 @@ export async function deleteLayout(layoutId: string, scopeParam: string) {
   const scope = resolveScope(user, scopeParam, academyDb);
   const l = db.layouts.find((x) => x.id === layoutId);
   if (l && l.scopeType === scope.type && l.scopeId === scope.id) {
-    if (!gestisceArea(user, "arredo", scope, academyDb)) redirect("/stampe/arredo/layout");
+    if (!puoModificareLayout(user, "arredo", scope, academyDb)) redirect("/stampe/arredo/layout");
     db.layouts = db.layouts.filter((x) => x.id !== layoutId);
     await saveStampeDb(db);
   }

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { getDb } from "@/lib/db";
 import { User, userSites, gestisce, ruoloEsteso } from "@/lib/types";
 import { logout } from "@/lib/actions";
-import { isConsortiumEditor, isZooEditor } from "@/lib/stampe";
+import { isConsortiumEditor, isZooEditor, vedeLayout } from "@/lib/stampe";
 import HeaderMenu from "@/components/HeaderMenu";
 
 export default async function StampeHeader({
@@ -34,7 +34,7 @@ export default async function StampeHeader({
           ? [{ href: "/stampe/zoo/crea-volantino", label: "Crea Volantino", key: "crea-volantino" }]
           : []),
         { href: "/stampe/zoo/bozza", label: "Bozza volantino", key: "bozza" },
-        ...(gestZoo ? [{ href: "/stampe/zoo/layout", label: "Layout", key: "layout" }] : []),
+        ...(vedeLayout(user, "zoo") ? [{ href: "/stampe/zoo/layout", label: "Layout", key: "layout" }] : []),
         { href: "/stampe/zoo/stampa", label: "Stampa cartelli", key: "stampa" },
         { href: "/stampe/zoo/reparto", label: "📱 In reparto", key: "reparto" },
         ...(isZooEditor(user) ? [{ href: "/stampe/zoo/archivio", label: "Archivio volantini", key: "archivio" }] : []),
@@ -44,7 +44,7 @@ export default async function StampeHeader({
       ]
     : [
         { href: "/stampe/arredo/dati", label: "Dati prodotti", key: "dati" },
-        ...(gestArredo ? [{ href: "/stampe/arredo/layout", label: "Layout", key: "layout" }] : []),
+        ...(vedeLayout(user, "arredo") ? [{ href: "/stampe/arredo/layout", label: "Layout", key: "layout" }] : []),
         { href: "/stampe/arredo/stampa", label: "Stampa cartelli", key: "stampa" },
         ...(gestArredo ? [{ href: "/stampe/arredo/scheda", label: "Scheda online", key: "scheda" }] : []),
         { href: "/stampe/arredo/linee-guida", label: "Linee guida", key: "linee-guida" },

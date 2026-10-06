@@ -4,8 +4,7 @@ import { getDb } from "@/lib/db";
 import StampeHeader from "@/components/stampe/StampeHeader";
 import LayoutEditor from "@/components/stampe/LayoutEditor";
 import AutoSubmitSelect from "@/components/stampe/AutoSubmitSelect";
-import { canAccessArea, gestisceArea, scopesForUser, resolveScope, layoutMargins } from "@/lib/stampe";
-import { gestisce } from "@/lib/types";
+import { canAccessArea, scopesForUser, resolveScope, layoutMargins, vedeLayout, puoModificareLayout } from "@/lib/stampe";
 import {
   getZooDb, activeCampaign, zooCartelloValues, ZOO_FIELDS, ZOO_FORMATS, ZOO_TIPI_OFFERTA, pvPromoCodesFor,
   pvPromoFor, tagsOfferta, testataPer,
@@ -31,8 +30,8 @@ export default async function ZooLayoutPage({
   const scope = resolveScope(user, sp.scope, academyDb);
   const scopeParam = `${scope.type}:${scope.id}`;
   // il layout è di chi gestisce l'area: il capo reparto non entra proprio (il menu non glielo mostra)
-  if (!gestisce(user, "zoo")) redirect("/stampe/zoo/stampa");
-  const canEdit = gestisceArea(user, "zoo", scope, academyDb);
+  if (!vedeLayout(user, "zoo")) redirect("/stampe/zoo/stampa");
+  const canEdit = puoModificareLayout(user, "zoo", scope, academyDb);
   const testataMia = testataPer(db, scope, academyDb);
 
   const format = ZOO_FORMATS.find((f) => f.id === sp.formato) ?? ZOO_FORMATS[0];

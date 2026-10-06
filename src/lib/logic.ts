@@ -155,12 +155,12 @@ export function livelloGestioneUtenti(db: DB, user: User): "consorzio" | "insegn
 
 export function assignableRolesFor(admin: User): Role[] {
   // chi ha solo l'incarico gestisce le persone ma non nomina amministratori
-  if (delegatoUtenti(admin)) return ["manager", "dept_head", "student"];
+  if (delegatoUtenti(admin)) return ["manager", "dept_head", "grafico", "student"];
   if (admin.role === "system_admin")
-    return ["system_admin", "group_admin", "store_admin", "manager", "dept_head", "student"];
-  // insegna e punto vendita possono nominare un gestore per le aree del loro ambito
-  if (admin.role === "group_admin") return ["store_admin", "manager", "dept_head", "student"];
-  if (admin.role === "store_admin") return ["manager", "dept_head", "student"];
+    return ["system_admin", "group_admin", "store_admin", "manager", "dept_head", "grafico", "student"];
+  // insegna e punto vendita possono nominare un gestore (o un grafico) per il loro ambito
+  if (admin.role === "group_admin") return ["store_admin", "manager", "dept_head", "grafico", "student"];
+  if (admin.role === "store_admin") return ["manager", "dept_head", "grafico", "student"];
   return [];
 }
 

@@ -7,7 +7,7 @@ import { creaMiniature } from "./miniature";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "./auth";
 import { getDb } from "./db";
-import { canAccessArea, gestisceArea, isZooEditor, resolveScope, sanitizeMargins } from "./stampe";
+import { canAccessArea, gestisceArea, isZooEditor, resolveScope, sanitizeMargins, puoModificareLayout } from "./stampe";
 import { postLoginPath } from "./types";
 import { LAYOUT_FONTS } from "./layout-fonts";
 import {
@@ -2399,7 +2399,7 @@ export async function saveZooLayout(
   const db = await getZooDb();
   const academyDb = await getDb();
   const scope = resolveScope(user, scopeParam, academyDb);
-  if (!gestisceArea(user, "zoo", scope, academyDb)) return { ok: false };
+  if (!puoModificareLayout(user, "zoo", scope, academyDb)) return { ok: false };
   let items: unknown;
   try { items = JSON.parse(itemsJson); } catch { return { ok: false }; }
   if (!Array.isArray(items)) return { ok: false };
@@ -2440,7 +2440,7 @@ export async function deleteZooLayout(layoutId: string, scopeParam: string) {
   const academyDb = await getDb();
   const scope = resolveScope(user, scopeParam, academyDb);
   const l = db.zooLayouts.find((x) => x.id === layoutId);
-  if (l && l.scopeType === scope.type && l.scopeId === scope.id && gestisceArea(user, "zoo", scope, academyDb)) {
+  if (l && l.scopeType === scope.type && l.scopeId === scope.id && puoModificareLayout(user, "zoo", scope, academyDb)) {
     db.zooLayouts = db.zooLayouts.filter((x) => x.id !== layoutId);
     await saveZooDb(db);
   }
@@ -2643,7 +2643,7 @@ export async function uploadZooLayoutImage(scopeParam: string, formData: FormDat
   const db = await getZooDb();
   const academyDb = await getDb();
   const scope = resolveScope(user, scopeParam, academyDb);
-  if (!gestisceArea(user, "zoo", scope, academyDb)) redirect(backUrl("/stampe/zoo/layout", scopeParam));
+  if (!puoModificareLayout(user, "zoo", scope, academyDb)) redirect(backUrl("/stampe/zoo/layout", scopeParam));
   const file = formData.get("image") as File | null;
   const formato = String(formData.get("formato") ?? "");
   if (file && file.size > 0 && file.type.startsWith("image/")) {
@@ -2715,7 +2715,7 @@ export async function copiaZooLayoutSuFormato(layoutId: string, scopeParam: stri
   const db = await getZooDb();
   const academyDb = await getDb();
   const scope = resolveScope(user, scopeParam, academyDb);
-  if (!gestisceArea(user, "zoo", scope, academyDb)) redirect(backUrl("/stampe/zoo/layout", scopeParam));
+  if (!puoModificareLayout(user, "zoo", scope, academyDb)) redirect(backUrl("/stampe/zoo/layout", scopeParam));
   const sorgente = db.zooLayouts.find((l) => l.id === layoutId);
   const destFormatId = String(formData.get("formatId") ?? "");
   const da = ZOO_FORMATS.find((f) => f.id === sorgente?.formatId);

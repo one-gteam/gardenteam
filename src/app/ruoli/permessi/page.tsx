@@ -54,6 +54,10 @@ export default async function PermessiPage() {
       case "ambito": return <span className="si" title="lavorando per la propria insegna o il proprio PV">✓ insegna/PV</span>;
       case "gestione":
         return gestisceRuolo ? <span className="si">✓</span> : r === "manager" ? <span className="forse">se la gestisce</span> : <span className="no">—</span>;
+      case "layout":
+        return gestisceRuolo || r === "grafico"
+          ? <span className="si" title={r === "grafico" ? "nel suo ambito: Consorzio, insegna o PV" : undefined}>✓{r === "grafico" ? " nel suo ambito" : ""}</span>
+          : r === "manager" ? <span className="forse">se la gestisce</span> : <span className="no">—</span>;
       case "consorzio":
         return gestisceRuolo || r === "manager"
           ? <span className="forse" title="solo chi è collocato al Consorzio">al Consorzio{!gestisceRuolo ? ", se la gestisce" : ""}</span>

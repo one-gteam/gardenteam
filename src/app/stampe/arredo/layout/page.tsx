@@ -1,14 +1,13 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
-import { gestisce } from "@/lib/types";
 import StampeHeader from "@/components/stampe/StampeHeader";
 import LayoutEditor from "@/components/stampe/LayoutEditor";
 import AutoSubmitSelect from "@/components/stampe/AutoSubmitSelect";
 import {
   getStampeDb,
   canAccessArea,
-  gestisceArea,
+  gestisceArea, vedeLayout, puoModificareLayout,
   isConsortiumEditor,
   scopesForUser,
   resolveScope,
@@ -36,8 +35,8 @@ export default async function LayoutPage({
   const scopeParam = `${scope.type}:${scope.id}`;
   const consortium = isConsortiumEditor(user);
   const blocked = isStoreBlocked(db, scope);
-  if (!gestisce(user, "arredo")) redirect("/stampe/arredo/stampa");
-  const canEdit = !blocked && gestisceArea(user, "arredo", scope, academyDb);
+  if (!vedeLayout(user, "arredo")) redirect("/stampe/arredo/stampa");
+  const canEdit = !blocked && puoModificareLayout(user, "arredo", scope, academyDb);
 
   const formatId = sp.formato ?? db.formats[0]?.id;
   const format = db.formats.find((f) => f.id === formatId) ?? db.formats[0];

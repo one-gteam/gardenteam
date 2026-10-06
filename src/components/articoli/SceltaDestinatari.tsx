@@ -2,7 +2,7 @@ import type { DB, Role } from "@/lib/types";
 import { ROLE_LABELS } from "@/lib/types";
 import type { Destinatari } from "@/lib/articoli";
 
-const RUOLI: Role[] = ["system_admin", "group_admin", "store_admin", "manager", "dept_head", "student"];
+const RUOLI: Role[] = ["system_admin", "group_admin", "store_admin", "manager", "dept_head", "grafico", "student"];
 
 /**
  * Le caselle per scegliere "chi": ruoli, insegne, punti vendita, reparti,

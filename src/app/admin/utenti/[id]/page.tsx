@@ -33,10 +33,10 @@ export default async function EditUserPage({
 
   const assignableRoles: Role[] =
     admin.role === "system_admin"
-      ? ["system_admin", "group_admin", "store_admin", "manager", "dept_head", "student"]
+      ? ["system_admin", "group_admin", "store_admin", "manager", "dept_head", "grafico", "student"]
       : admin.role === "group_admin"
-        ? ["store_admin", "dept_head", "student"]
-        : ["dept_head", "student"];
+        ? ["store_admin", "dept_head", "grafico", "student"]
+        : ["dept_head", "grafico", "student"];
 
   const selectableStores =
     admin.role === "system_admin"
