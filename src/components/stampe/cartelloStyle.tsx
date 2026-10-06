@@ -2,6 +2,7 @@ import type { Cornice, LayoutItem, PrintField } from "@/lib/stampe";
 import { layoutFontCss } from "@/lib/layout-fonts";
 import { stickerShapeStyle } from "./stickerStyle";
 import FitText from "./FitText";
+import PrezzoAdattato from "./PrezzoAdattato";
 
 /*
  * Regole grafiche del cartello, in un modulo a sé perché le usano sia la stampa
@@ -60,19 +61,14 @@ export function Prezzo(
   const [int, cent] = (valuta ? testo.slice(1).trim() : testo).split(",");
   const fs = (size * scale) / 2.4;
   /*
-   * Anche il prezzo si adatta al suo riquadro: se il corpo scelto nel layout è
-   * troppo grande per lo spazio, si riduce invece di uscire dai bordi.
+   * Il prezzo riempie il riquadro: le cifre (non la riga del carattere) si
+   * fanno grandi quanto lo spazio permette, fino al corpo scelto nel layout.
+   * Vedi PrezzoAdattato per il perché.
    */
   return (
-    <FitText style={{
-      width: "100%", height: "100%", display: "flex", alignItems: versoIlBasso, justifyContent: "inherit",
-      fontFamily: font ?? FONT_CN, fontWeight: 800, lineHeight: 0.95, whiteSpace: "nowrap",
-      fontSize: fs, overflow: "hidden",
-    }}>
-      {valuta && <span style={{ fontSize: "0.45em", marginRight: "0.08em", alignSelf: "flex-start" }}>{valuta}</span>}
-      <span>{int}</span>
-      {cent !== undefined && <span style={{ fontSize: "0.5em", marginLeft: "0.05em", alignSelf: "flex-start" }}>,{cent}</span>}
-    </FitText>
+    <div style={{ width: "100%", height: "100%", display: "flex", justifyContent: "inherit", alignItems: "flex-start", overflow: "visible" }}>
+      <PrezzoAdattato valuta={valuta} int={int} cent={cent} size={fs} font={font ?? FONT_CN} verso={versoIlBasso} />
+    </div>
   );
 }
 

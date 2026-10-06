@@ -109,6 +109,8 @@ export default function VolantinoBuilder({
   const [filtroChiuso, setFiltroChiuso] = useState(false);
   const [mostraScartate, setMostraScartate] = useState(false);
   const [soloQuestaPagina, setSoloQuestaPagina] = useState(true);
+  // le offerte senza pagina (non scelte in Scelta offerte Volantino) non si propongono, salvo richiesta
+  const [ancheSenzaPagina, setAncheSenzaPagina] = useState(false);
   const [vociDaUnire, setVociDaUnire] = useState<string[]>([]); // id delle voci spuntate
   const [pdfPending, setPdfPending] = useState(false);
   const primoRender = useRef(true);
@@ -152,9 +154,10 @@ export default function VolantinoBuilder({
   const disponibili = useMemo(() => offers.filter((o) => {
     // le offerte marcate "no volantino" restano fuori, salvo richiesta esplicita
     if (o.paginaId === NO_VOLANTINO && !mostraScartate) return false;
-    if (!soloQuestaPagina || !o.paginaId || idPagineVisibili.has(o.paginaId)) {
-      // passa: è di queste pagine, oppure non ha ancora una pagina
-    } else return false;
+    if (soloQuestaPagina) {
+      // solo le offerte assegnate a queste pagine in Scelta offerte Volantino; quelle senza pagina solo se richieste
+      if (o.paginaId && o.paginaId !== NO_VOLANTINO ? !idPagineVisibili.has(o.paginaId) : !ancheSenzaPagina) return false;
+    }
     if (f.animale && !o.caratts.includes(f.animale)) return false;
     if (f.caratt && !o.caratts.includes(f.caratt)) return false;
     if (f.label && o.label !== f.label) return false;
@@ -164,7 +167,7 @@ export default function VolantinoBuilder({
     if (f.fornitore && o.fornitore !== f.fornitore) return false;
     return true;
   }).sort((a, b) => Number(inserite.has(a.id)) - Number(inserite.has(b.id))),
-  [offers, f, inserite, mostraScartate, soloQuestaPagina, idPagineVisibili]);
+  [offers, f, inserite, mostraScartate, soloQuestaPagina, ancheSenzaPagina, idPagineVisibili]);
   const daCollocare = disponibili.filter((o) => !inserite.has(o.id)).length;
 
   /*
@@ -715,8 +718,14 @@ export default function VolantinoBuilder({
               </label>
               <label style={{ fontSize: 11.5, display: "block", marginBottom: 4 }}>
                 <input type="checkbox" checked={soloQuestaPagina} onChange={(e) => setSoloQuestaPagina(e.target.checked)} />{" "}
-                solo le offerte di queste pagine (più quelle senza pagina)
+                solo le offerte scelte per queste pagine (in Scelta offerte Volantino)
               </label>
+              {soloQuestaPagina && (
+                <label style={{ fontSize: 11.5, display: "block", marginBottom: 4, paddingLeft: 18 }}>
+                  <input type="checkbox" checked={ancheSenzaPagina} onChange={(e) => setAncheSenzaPagina(e.target.checked)} />{" "}
+                  anche quelle senza pagina
+                </label>
+              )}
               <label style={{ fontSize: 11.5, display: "block", marginBottom: 8 }}>
                 <input type="checkbox" checked={mostraScartate} onChange={(e) => setMostraScartate(e.target.checked)} />{" "}
                 mostra offerte non selezionate (&quot;no volantino&quot;)
