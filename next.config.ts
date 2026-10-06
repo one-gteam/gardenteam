@@ -52,9 +52,11 @@ const nextConfig: NextConfig = {
         headers: [
           ...sicurezza.filter((h) => h.key !== "Content-Security-Policy"),
           { key: "Content-Security-Policy", value: csp.replace("style-src 'self' 'unsafe-inline'", "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com").replace("font-src 'self' data:", "font-src 'self' data: https://fonts.gstatic.com") },
-          ...cache,
+          // la pagina si ricontrolla a ogni apertura (così le modifiche si vedono subito); le foto restano in cache
+          { key: "Cache-Control", value: "public, max-age=0, must-revalidate" },
         ],
       },
+      { source: "/demo-volantino/img/:path*", headers: cache },
       ...["/immagini/:path*", "/loghi/:path*", "/fonts/:path*", "/uploads/:path*"].map((source) => ({ source, headers: cache })),
     ];
   },
