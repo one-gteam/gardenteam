@@ -74,7 +74,7 @@ export function VotoOfferta({
 }
 
 /** I pulsanti sopra la tabella: votano le righe spuntate, senza ricaricare. */
-export function VotoSpuntate({ scopeParam, formId, focus, vota = true, consortium = false }: {
+export function VotoSpuntate({ scopeParam, formId, focus, vota = true, consortium = false, children }: {
   scopeParam: string; formId: string;
   /** Solo per il Consorzio: i focus già usati nel volantino; attiva «Dai questo focus alle spuntate». */
   focus?: string[];
@@ -82,6 +82,8 @@ export function VotoSpuntate({ scopeParam, formId, focus, vota = true, consortiu
   vota?: boolean;
   /** Strumenti del Consorzio: unire i padri spuntati. */
   consortium?: boolean;
+  /** Altri pulsanti da mettere nella stessa barra (es. «Unisci nel volantino»). */
+  children?: React.ReactNode;
 }) {
   const [pending, startTransition] = useTransition();
   const [esito, setEsito] = useState("");
@@ -130,7 +132,8 @@ export function VotoSpuntate({ scopeParam, formId, focus, vota = true, consortiu
   };
 
   return (
-    <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap", alignItems: "center" }}>
+    <div className="barra-spuntate">
+      <span className="hint" style={{ fontWeight: 700, whiteSpace: "nowrap" }}>Con le righe spuntate:</span>
       {vota && (
         <>
           <button type="button" className="btn btn-sm" disabled={pending} onClick={() => votaSpuntate("preferita")}>
@@ -144,22 +147,23 @@ export function VotoSpuntate({ scopeParam, formId, focus, vota = true, consortiu
       {consortium && (
         <button type="button" className="btn btn-outline btn-sm" disabled={pending} onClick={unisciPadri}
           title="Spunta due o più righe: i loro padri diventano uno solo (il primo spuntato dà i testi)">
-          Unisci i padri spuntati
+          Unisci i padri
         </button>
       )}
+      {children}
       {focus && (
-        <span style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
+        <span style={{ display: "inline-flex", gap: 4, alignItems: "center", borderLeft: "1px solid var(--line)", paddingLeft: 10 }}>
           <input list="focus-volantino" value={testoFocus} onChange={(e) => setTestoFocus(e.target.value)}
             placeholder="focus… (anche uno già usato)" style={{ marginTop: 0, fontSize: 12.5, padding: "4px 7px", width: 220 }}
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); daiFocus(); } }} />
           <datalist id="focus-volantino">{focus.map((x) => <option key={x} value={x} />)}</datalist>
           <button type="button" className="btn btn-outline btn-sm" disabled={pending} onClick={daiFocus}
             title="Lo stesso focus a tutte le righe spuntate; vuoto = toglie il focus">
-            Dai questo focus alle spuntate
+            Dai questo focus
           </button>
         </span>
       )}
-      {esito && <span className="hint">{esito}</span>}
+      {esito && <span className="hint" style={{ flexBasis: "100%" }}>{esito}</span>}
     </div>
   );
 }

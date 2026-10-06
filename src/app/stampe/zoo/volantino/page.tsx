@@ -94,11 +94,13 @@ export default async function ZooVolantinoPage({
     ? migraVolantinoPages(layoutVol.pages).map((p, i) => ({ id: p.id, nome: `${i + 1}. ${p.titolo || `Pagina ${i + 1}`}` }))
     : [];
   const nomePagina = new Map(pagineVolantino.map((p) => [p.id, p.nome]));
-  const filtroPagina = sp.pagina ?? "";
+  // più pagine insieme: "pagina=a,b,_nessuna"; un clic su una pillola la aggiunge o la toglie
+  const filtriPagina = (sp.pagina ?? "").split(",").filter(Boolean);
+  const filtroPagina = filtriPagina[0] ?? "";
+  const inPagine = (o: { paginaId?: string }) => filtriPagina.some((f) => (f === "_nessuna" ? !o.paginaId : o.paginaId === f));
   const storico = storicoOfferteByEan(db);
   const offers = baseOffers.filter((o) => {
-    if (filtroPagina === "_nessuna" && o.paginaId) return false;
-    if (filtroPagina && filtroPagina !== "_nessuna" && o.paginaId !== filtroPagina) return false;
+    if (filtriPagina.length > 0 && !inPagine(o)) return false;
     if (animale && !caratteristicheOf(o).includes(animale)) return false;
     if (caratt && !caratteristicheOf(o).includes(caratt)) return false;
     if (sp.marca && prodOf(o)?.marca !== sp.marca) return false;
@@ -171,9 +173,12 @@ export default async function ZooVolantinoPage({
     const params = new URLSearchParams();
     for (const [k, v] of Object.entries(sp)) if (v && k !== "pagina" && k !== "scope") params.set(k, v);
     params.set("scope", scopeParam);
-    if (pid) params.set("pagina", pid);
+    // clic su una pagina già scelta = la toglie; "" = tutte
+    const prossime = !pid ? [] : filtriPagina.includes(pid) ? filtriPagina.filter((x) => x !== pid) : [...filtriPagina, pid];
+    if (prossime.length) params.set("pagina", prossime.join(","));
     return `?${params.toString()}`;
   };
+  const nomeFiltroPagina = (f: string) => (f === "_nessuna" ? "da assegnare" : f === NO_VOLANTINO ? "no volantino" : nomePagina.get(f) ?? f);
 
   const sortHref = (field: string) => {
     const params = new URLSearchParams();
@@ -227,7 +232,9 @@ export default async function ZooVolantinoPage({
 
         {campaign && (
           <>
-            {/* schede (pagine del volantino) */}
+            {/* schede: il vecchio modo di dividere il volantino, prima delle pagine di Crea Volantino.
+                Restano visibili solo se qualche offerta le usa ancora (o se una è aperta). */}
+            {(schedaFilter || allOffers.some((o) => o.selezionata && o.schedaId)) && (
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }}>
               <a className={`pill ${!schedaFilter ? "pill-blue" : "pill-gray"}`} href={`/stampe/zoo/volantino?scope=${scopeParam}`} style={{ textDecoration: "none" }}>
                 Tutte le offerte ({allOffers.length})
@@ -247,6 +254,7 @@ export default async function ZooVolantinoPage({
                 </form>
               )}
             </div>
+            )}
 
             {/* rinomina schede */}
             {consortium && schedaFilter && (
@@ -313,18 +321,20 @@ export default async function ZooVolantinoPage({
             {consortium && (
               <div className="contatore-pagine">
                 <strong style={{ fontSize: 12.5 }}>Voci per pagina:</strong>
-                <a className={`pill ${!filtroPagina ? "pill-blue" : "pill-gray"}`} href={hrefPagina("")}>tutte</a>
+                <a className={`pill ${filtriPagina.length === 0 ? "pill-blue" : "pill-gray"}`} href={hrefPagina("")} title="Tutte le pagine">tutte</a>
                 {pagineVolantino.map((p) => (
-                  <a key={p.id} className={`pill ${filtroPagina === p.id ? "pill-blue" : "pill-green"}`} href={hrefPagina(p.id)}>
-                    {p.nome} <strong>{vociPerPagina(p.id)}</strong>
+                  <a key={p.id} className={`pill ${filtriPagina.includes(p.id) ? "pill-blue" : "pill-green"}`} href={hrefPagina(p.id)}
+                    title="Clic per vedere solo questa pagina; clic su più pagine per vederle insieme">
+                    {filtriPagina.includes(p.id) ? "✓ " : ""}{p.nome} <strong>{vociPerPagina(p.id)}</strong>
                   </a>
                 ))}
-                <a className={`pill ${filtroPagina === "_nessuna" ? "pill-blue" : "pill-amber"}`} href={hrefPagina("_nessuna")}>
-                  da assegnare <strong>{vociPerPagina("_nessuna")}</strong>
+                <a className={`pill ${filtriPagina.includes("_nessuna") ? "pill-blue" : "pill-amber"}`} href={hrefPagina("_nessuna")}>
+                  {filtriPagina.includes("_nessuna") ? "✓ " : ""}da assegnare <strong>{vociPerPagina("_nessuna")}</strong>
                 </a>
-                <a className={`pill ${filtroPagina === NO_VOLANTINO ? "pill-blue" : "pill-gray"}`} href={hrefPagina(NO_VOLANTINO)}>
-                  no volantino <strong>{vociPerPagina(NO_VOLANTINO)}</strong>
+                <a className={`pill ${filtriPagina.includes(NO_VOLANTINO) ? "pill-blue" : "pill-gray"}`} href={hrefPagina(NO_VOLANTINO)}>
+                  {filtriPagina.includes(NO_VOLANTINO) ? "✓ " : ""}no volantino <strong>{vociPerPagina(NO_VOLANTINO)}</strong>
                 </a>
+                {filtriPagina.length > 1 && <span className="hint">{filtriPagina.length} pagine insieme</span>}
                 {pagineVolantino.length === 0 && <span className="hint">Le pagine si creano in Crea Volantino.</span>}
               </div>
             )}
@@ -340,7 +350,7 @@ export default async function ZooVolantinoPage({
               </summary>
               <div style={{ marginTop: 10 }}>
               <FiltriMobile id="filtri-volantino" scelte={[animale, caratt, sp.marca, sp.fornitore,
-                filtroPagina && (filtroPagina === "_nessuna" ? "da assegnare" : filtroPagina === NO_VOLANTINO ? "no volantino" : nomePagina.get(filtroPagina))]}>
+                filtriPagina.length > 0 && filtriPagina.map(nomeFiltroPagina).join(" + ")]}>
               <form method="get" style={{ display: "grid", gridTemplateColumns: `repeat(${consortium ? 5 : 4}, minmax(0, 1fr)) auto`, gap: 10, alignItems: "end" }}>
                 <input type="hidden" name="scope" value={scopeParam} />
                 {schedaFilter && <input type="hidden" name="scheda" value={schedaFilter} />}
@@ -392,8 +402,9 @@ export default async function ZooVolantinoPage({
             {spunte && (
               <div className="barra-fissa">
                 <VotoSpuntate scopeParam={scopeParam} formId="bulkform" vota={vota} consortium={consortium}
-                  focus={consortium ? focusEsistenti : undefined} />
-                {consortium && <div style={{ marginTop: -4, marginBottom: 6 }}><UnisciNelVolantino formId="bulkform" /></div>}
+                  focus={consortium ? focusEsistenti : undefined}>
+                  {consortium && <UnisciNelVolantino formId="bulkform" />}
+                </VotoSpuntate>
               </div>
             )}
             <div className="card table-wrap">

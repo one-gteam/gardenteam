@@ -43,7 +43,7 @@ export default function UnisciNelVolantino({ formId }: { formId: string }) {
     <span style={{ position: "relative", display: "inline-flex", gap: 6, alignItems: "center" }}>
       <button type="button" className="btn btn-outline btn-sm" onClick={() => setAperto(!aperto)}
         title="Le righe spuntate diventano una voce sola nel volantino; i cartelli restano separati">
-        ⛓ Unisci nel volantino le spuntate
+        ⛓ Unisci nel volantino
       </button>
       {esito && <span className="hint">{esito}</span>}
       {aperto && (

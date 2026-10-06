@@ -1188,7 +1188,18 @@ form[aria-busy="true"] { opacity: .6; }
 .titolo-modificabile { font-size: 13px; font-weight: 700; }
 
 /* Scelta offerte Volantino: la barra delle azioni in blocco resta in vista scorrendo */
-.barra-fissa { position: sticky; top: 0; z-index: 6; background: var(--bg); padding: 6px 0 2px; }
+.barra-fissa { position: sticky; top: 0; z-index: 6; background: var(--bg); padding: 6px 0 4px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+.barra-spuntate { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+/* colonna Pagina: pulsanti veri (vuoti = da scegliere, pieno = pagina assegnata) */
+.pagina-btn {
+  font: inherit; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--green-700); background: #fff; color: var(--green-700); line-height: 1.5;
+}
+.pagina-btn:hover { background: #eef6ef; }
+.pagina-btn.attiva { background: var(--green-700); color: #fff; }
+.pagina-btn.no { border-color: #b9b9b9; color: #777; }
+.pagina-btn.no.attiva { background: #777; color: #fff; }
+.pagina-btn:disabled { opacity: .6; cursor: default; }
 /* colonne secondarie (fornitore, marca): sugli schermi stretti spariscono da sole; si riaprono da «Colonne» */
 @media (max-width: 1250px) { .tabella-stretta .col-opz:not(.col-forzata) { display: none; } }
 @media (max-width: 1400px) {

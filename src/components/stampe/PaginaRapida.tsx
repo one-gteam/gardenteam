@@ -37,16 +37,15 @@ export default function PaginaRapida({
   const nomeDi = (id: string) => tutte.find((p) => p.id === id)?.nome;
   const altre = tutte.filter((p) => !suggerite.some((s) => s.id === p.id));
   const pill = (id: string, testo: string, titolo: string) => (
-    <button key={id} type="button" className={`pill ${v === id ? "pill-blue" : "pill-gray"}`}
-      style={{ cursor: "pointer", border: "none", fontSize: 11, padding: "2px 8px" }} title={titolo} disabled={pending}
-      onClick={() => scegli(v === id ? "" : id)}>
-      {testo}
+    <button key={id} type="button" className={`pagina-btn${v === id ? " attiva" : ""}${id === noVolantino ? " no" : ""}`}
+      title={titolo} disabled={pending} onClick={() => scegli(v === id ? "" : id)}>
+      {v === id ? "✓ " : ""}{testo}
     </button>
   );
 
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center", minWidth: 150 }}>
-      {suggerite.map((p) => pill(p.id, p.nome, "Metti in questa pagina (clic di nuovo per togliere)"))}
+      {suggerite.map((p) => pill(p.id, p.nome, v === p.id ? "È in questa pagina (clic per toglierla)" : "Metti in questa pagina"))}
       {pill(noVolantino, "✕ no", "Non va sul volantino")}
       {/* pagina scelta fuori dalle proposte: si vede comunque */}
       {v && v !== noVolantino && !suggerite.some((s) => s.id === v) && (
