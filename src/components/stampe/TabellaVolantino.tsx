@@ -1,5 +1,6 @@
 import FotoMini from "@/components/stampe/FotoMini";
 import FiltriMobile from "@/components/FiltriMobile";
+import ColumnTools from "@/components/stampe/ColumnTools";
 import type { DB } from "@/lib/types";
 import type { Scope } from "@/lib/stampe";
 import {
@@ -62,8 +63,48 @@ export default function TabellaVolantino({
       g.offs.push(o);
       map.set(key, g);
     }
-    return [...map.values()].sort((a, b) => (nomePagina.get(a.offs[0].paginaId ?? "") ?? "").localeCompare(nomePagina.get(b.offs[0].paginaId ?? "") ?? ""));
+    return [...map.values()];
   })();
+  /*
+   * Ordinamento per colonna (clic sull'intestazione, un secondo clic inverte):
+   * di partenza per pagina, così la tabella segue il volantino.
+   */
+  const dir = sp.dir === "desc" ? -1 : 1;
+  const campo = sp.sort || "pagina";
+  const valore = (g: (typeof gruppi)[number]): string | number => {
+    const o = g.offs[0];
+    const product = prodById.get(o.productId ?? "");
+    switch (campo) {
+      case "offerta": return (g.parent ? effectiveParentText(db, scope, g.parent, "nome", academyDb).value : o.descrizione).toLowerCase();
+      case "marca": return product ? marcaEffettiva(product).toLowerCase() : "";
+      case "fornitore": return (product?.fornitore ?? "").toLowerCase();
+      case "animale": return animaliDi(db, g.parent?.caratteristiche ?? []).join(", ");
+      case "caratt": return caratteristicheProdottoDi(db, g.parent?.caratteristiche ?? []).join(", ");
+      case "prezzo": return Number.parseFloat((datiPrezzoOfferta(db, o, scope, academyDb).prezzo || "0").replace(",", ".")) || 0;
+      case "focus": return (o.focus ?? "").toLowerCase();
+      case "etichetta": return (o.label ?? "").toLowerCase();
+      case "voti": return new Set(db.votes.filter((v) => v.tipo === "preferita" && g.offs.some((x) => x.id === v.offerId)).map((v) => v.userId)).size;
+      default: return nomePagina.get(o.paginaId ?? "") ?? "zzz";
+    }
+  };
+  gruppi.sort((a, b) => {
+    const va = valore(a), vb = valore(b);
+    const cmp = typeof va === "number" && typeof vb === "number" ? va - vb : String(va).localeCompare(String(vb), "it");
+    return cmp * dir;
+  });
+  const hrefOrdina = (c: string) => {
+    const params = new URLSearchParams();
+    for (const [k, v] of Object.entries(sp)) if (v && k !== "sort" && k !== "dir" && k !== "scope") params.set(k, v);
+    params.set("scope", scopeParam);
+    params.set("sort", c);
+    params.set("dir", campo === c && dir === 1 ? "desc" : "asc");
+    return `${base}?${params.toString()}`;
+  };
+  const Th = ({ c, children }: { c: string; children: React.ReactNode }) => (
+    <th><a href={hrefOrdina(c)} style={{ textDecoration: "none", color: "inherit" }} title="Clic per ordinare (di nuovo per invertire)">
+      {children}{campo === c ? (dir === 1 ? " ▲" : " ▼") : ""}
+    </a></th>
+  );
   const votiPer = new Map<string, number>();
   for (const v of db.votes) if (v.tipo === "preferita") votiPer.set(v.offerId, (votiPer.get(v.offerId) ?? 0) + 1);
   const attivi = Boolean(sp.animale || sp.caratt || sp.marca || sp.fornitore || sp.q || pagineScelte.length);
@@ -131,12 +172,17 @@ export default function TabellaVolantino({
         </div>
       </details>
 
+      <p className="hint" style={{ margin: "0 0 6px", fontSize: 11.5 }}>
+        Clic sulle intestazioni per ordinare · trascina un&apos;intestazione per spostare la colonna, il suo bordo destro per allargarla · «Colonne» per nasconderne.
+      </p>
       <div className="card table-wrap">
-        <table className="data tabella-stretta">
+        <ColumnTools tableId="tab-bozza-volantino" />
+        <table className="data tabella-stretta" id="tab-bozza-volantino">
           <thead>
             <tr>
-              <th style={{ width: 56 }}>Foto</th><th>Offerta</th><th>Marca</th><th>Fornitore</th><th>Animale</th><th>Caratteristica</th>
-              <th>Prezzo</th><th>Pagina</th><th>Focus</th><th>Etichetta</th><th>Voti</th>
+              <th style={{ width: 56 }}>Foto</th><Th c="offerta">Offerta</Th><Th c="marca">Marca</Th><Th c="fornitore">Fornitore</Th>
+              <Th c="animale">Animale</Th><Th c="caratt">Caratteristica</Th><Th c="prezzo">Prezzo</Th><Th c="pagina">Pagina</Th>
+              <Th c="focus">Focus</Th><Th c="etichetta">Etichetta</Th><Th c="voti">Voti</Th>
             </tr>
           </thead>
           <tbody>
