@@ -1,0 +1,792 @@
+import FotoMini from "@/components/stampe/FotoMini";
+import type { User } from "@/lib/types";
+import ColonnaOrdinabile from "@/components/stampe/ColonnaOrdinabile";
+import FiltriMobile from "@/components/FiltriMobile";
+import StampeHeader from "@/components/stampe/StampeHeader";
+import { gestisceArea, isZooEditor, scopesForUser, resolveScope } from "@/lib/stampe";
+import { getDb } from "@/lib/db";
+import { listStorageFilesConData, publicUrlFor } from "@/lib/supabase";
+import PhotoUploader from "@/components/stampe/PhotoUploader";
+import BulkCheckbox from "@/components/stampe/BulkCheckbox";
+import InlineEdit from "@/components/stampe/InlineEdit";
+import InlineSelect from "@/components/stampe/InlineSelect";
+import ColumnTools from "@/components/stampe/ColumnTools";
+import ParentQuickEdit from "@/components/stampe/ParentQuickEdit";
+import PhotoMatcher from "@/components/stampe/PhotoMatcher";
+import { PulsanteAzione } from "@/components/AzioneSenzaRicarica";
+import { ignoraZooFoto, ripristinaZooFotoIgnorate } from "@/lib/zoo-focus-actions";
+import { DettagliPadre, PannelloPadre } from "@/components/stampe/DettagliPadre";
+import {
+  getZooDb, zooImageUrl, effectiveParentText, isZooHidden, hiddenEntriesFor, fornitoriList, marcheList, marcaEffettiva,
+  suggestPhotoMatch, buildAbbinamentoIndex, volantinoDiFoto, fotoDaControllare, fotoDaAbbinare, contenutoDa, testoContenuto, animaliDi, caratteristicheProdottoDi, storicoOfferteByEan,
+  periodoBreve, visibleProducts, type ZooProduct, type ZooParent, type ZooStoricoVoce,
+} from "@/lib/zoo";
+import {
+  importZooProducts, finalizeZooPhotoUpload, confirmZooPhotoTargets, createZooParent, associaConAI,
+  rigeneraTestiAI, saveParentTexts, setParentImage, toggleParentCaratteristica, scioglieParent, toggleZooHidden,
+  toggleZooHiddenBulk, updateParentFieldInline, updateProductFieldInline, setParentTagInline, moveProductToParent,
+  setParentImageFromFile, mergeParentsForm, promuoviProdottoAConsorzio, adottaProdotto, staccaZooFoto,
+} from "@/lib/zoo-actions";
+
+// "Associa con AI" può richiedere più dei 10s di default per un lotto di articoli.
+export const maxDuration = 60;
+
+/** Pagina a cui tornano le azioni su foto e prodotti padre (le stesse servono a Offerte in corso). */
+const BACK = "/stampe/zoo/prodotti";
+const VISTA: string = "catalogo";
+
+/** Ricostruisce la query string corrente, con delle sovrascritture (undefined = togli il parametro). */
+function pageQs(sp: Record<string, string | undefined>, overrides: Record<string, string | undefined>): string {
+  const params = new URLSearchParams();
+  const merged = { vista: VISTA, ...sp, ...overrides };
+  for (const [k, v] of Object.entries(merged)) if (v) params.set(k, v);
+  return params.toString();
+}
+
+/** Query string corrente con "abbina" aggiornato (undefined = sezione chiusa). */
+function datiQs(sp: Record<string, string | undefined>, scopeParam: string, abbina?: string): string {
+  return pageQs(sp, { scope: scopeParam, abbina });
+}
+
+export default async function CatalogoProdotti({ user, sp }: { user: User; sp: Record<string, string | undefined> }) {
+
+  // letture indipendenti: in parallelo pesa solo la più lenta, non la somma
+  const [db, academyDb, fotoConData] = await Promise.all([
+    getZooDb(),
+    getDb(),
+    listStorageFilesConData("zoo-foto"),
+  ]);
+  const tutteLeFoto = fotoConData.map((f) => f.nome);
+  const scopes = scopesForUser(user, academyDb);
+  const scope = resolveScope(user, sp.scope, academyDb);
+  const scopeParam = `${scope.type}:${scope.id}`;
+  const consortium = isZooEditor(user);
+  // gestione dell'area in questo ambito: articoli propri, adozione, AI sui propri
+  const gestione = gestisceArea(user, "zoo", scope, academyDb);
+
+  const parentById = new Map(db.parents.map((p) => [p.id, p]));
+
+  // filtri
+  const q = (sp.q ?? "").toLowerCase();
+  const soloSenzaPadre = sp.senzapadre === "1";
+  const soloSenzaAnimale = sp.senzaanimale === "1";
+  /*
+   * Di norma si vede il catalogo comune più i propri articoli. Con "mostra anche
+   * quelli di altri" si guardano quelli caricati dalle altre insegne/PV: il
+   * Consorzio per renderli comuni, gli altri per farne una copia propria.
+   */
+  const mostraAltrui = sp.altrui === "1";
+  const catalogo = mostraAltrui ? db.products : visibleProducts(db, scope, academyDb);
+  const etichettaAmbito = (p: ZooProduct) =>
+    !p.scopeType ? "Consorzio"
+      : p.scopeType === "tenant" ? (academyDb.tenants.find((t) => t.id === p.scopeId)?.name ?? "Insegna")
+        : (academyDb.stores.find((x) => x.id === p.scopeId)?.name ?? "Punto vendita");
+  const proprio = (p: ZooProduct) => !p.scopeType || (p.scopeType === scope.type && p.scopeId === scope.id);
+  let products = catalogo.filter((p) => {
+    if (sp.fornitore && p.fornitore !== sp.fornitore) return false;
+    if (sp.marca && marcaEffettiva(p) !== sp.marca) return false;
+    if (soloSenzaPadre && p.parentId) return false;
+    if (soloSenzaAnimale) {
+      const par = p.parentId ? parentById.get(p.parentId) : undefined;
+      if (par && animaliDi(db, par.caratteristiche).length > 0) return false;
+    }
+    if (sp.animale || sp.caratt) {
+      const caratts = (p.parentId ? parentById.get(p.parentId) : undefined)?.caratteristiche ?? [];
+      if (sp.animale && !caratts.includes(sp.animale)) return false;
+      if (sp.caratt && !caratts.includes(sp.caratt)) return false;
+    }
+    if (q && !`${p.descrizione} ${p.ean} ${p.codice} ${marcaEffettiva(p)}`.toLowerCase().includes(q)) return false;
+    return true;
+  });
+  const hiddenHere = hiddenEntriesFor(db, scope);
+  const showHidden = sp.nascosti === "1";
+  if (scope.type !== "system" && !showHidden) products = products.filter((p) => !isZooHidden(db, scope, p, academyDb));
+
+
+  // foto disponibili non ancora abbinate (per l'associazione manuale)
+  // anche le foto dei padri contano come usate; quelle ignorate non si propongono più
+  const { daAbbinare: tutteDaAbbinare, ignorate: fotoIgnorate } = fotoDaAbbinare(db, tutteLeFoto);
+  /*
+   * Foto divise per volantino (quello in lavorazione quando sono state caricate):
+   * si sistemano solo quelle dell'ultimo, senza ritrovarsi davanti le vecchie.
+   */
+  const caricataIl = new Map(fotoConData.map((f) => [f.nome, f.caricato]));
+  const volDiFoto = new Map(tutteDaAbbinare.map((f) => [f, volantinoDiFoto(db, caricataIl.get(f) ?? "")?.id ?? ""]));
+  const volantiniFoto = db.campaigns
+    .map((c) => ({ c, n: tutteDaAbbinare.filter((f) => volDiFoto.get(f) === c.id).length }))
+    .filter((x) => x.n > 0)
+    .reverse();
+  const senzaVolantino = tutteDaAbbinare.filter((f) => !volDiFoto.get(f)).length;
+  const fotoVol = sp.fotovol && (sp.fotovol === "tutte" || volantiniFoto.some((x) => x.c.id === sp.fotovol))
+    ? sp.fotovol
+    : volantiniFoto[0]?.c.id ?? "tutte";
+  const availablePhotos = fotoVol === "tutte" ? tutteDaAbbinare : tutteDaAbbinare.filter((f) => volDiFoto.get(f) === fotoVol);
+  /*
+   * Proposte di abbinamento per nome (nessuna AI), su tutto il catalogo senza foto.
+   * Calcolate solo a sezione aperta (?abbina=1): tokenizzare l'intero catalogo e
+   * confrontarlo con ogni file costa centinaia di ms, sprecati se non si stanno
+   * abbinando foto.
+   */
+  const abbinaAperto = sp.abbina === "1";
+  const senzaFotoCatalogo = db.products.filter((p) => !p.image);
+  const daControllare = abbinaAperto ? fotoDaControllare(visibleProducts(db, scope, academyDb)) : [];
+  const senzaFotoById = new Map(senzaFotoCatalogo.map((p) => [p.id, p]));
+  const photoSuggestions = abbinaAperto
+    ? (() => {
+        const index = buildAbbinamentoIndex(senzaFotoCatalogo);
+        // con un volantino scelto, le proposte vengono prima dai suoi articoli; se lì non c'è nulla, da tutto il catalogo
+        const delVolantino = fotoVol === "tutte" ? null : new Set(db.offers.filter((o) => o.campaignId === fotoVol).map((o) => o.productId));
+        const indexVol = delVolantino ? buildAbbinamentoIndex(senzaFotoCatalogo.filter((p) => delVolantino.has(p.id))) : null;
+        return availablePhotos.slice(0, 200).map((f) => {
+          const nome = f.replace(/\.[a-z0-9]+$/i, "");
+          const vol = indexVol ? suggestPhotoMatch(nome, indexVol, 5) : [];
+          // proposta buona fra gli articoli del volantino: vale quella; altrimenti si confronta con tutto il catalogo
+          if (vol.length && vol[0].score >= 0.4) return { file: f, candidates: vol };
+          const visti = new Set<string>();
+          const uniti = [...vol, ...suggestPhotoMatch(nome, index, 5)]
+            .sort((x, y) => y.score - x.score)
+            .filter((c) => !visti.has(c.productId) && (visti.add(c.productId), true))
+            .slice(0, 5);
+          return { file: f, candidates: uniti };
+        });
+      })()
+    : [];
+
+  const senzaPadre = db.products.filter((p) => !p.parentId).length;
+
+  /*
+   * Vista raggruppata (default): una riga per padre invece che per articolo,
+   * come in Offerte in corso — molto più leggera da caricare con l'intero
+   * catalogo, ed è il modo naturale di navigare i prodotti padre.
+   */
+  const vistaArticoli = sp.vista === "articoli";
+  const gruppi = (() => {
+    const map = new Map<string, { parent?: ZooParent; prods: ZooProduct[] }>();
+    for (const p of products) {
+      const parent = p.parentId ? parentById.get(p.parentId) : undefined;
+      const key = parent?.id ?? `_o_${p.id}`;
+      const g = map.get(key) ?? { parent, prods: [] };
+      g.prods.push(p);
+      map.set(key, g);
+    }
+    return [...map.values()];
+  })();
+  const RIGHE_MAX = 400;
+  const gruppiVisibili = gruppi.slice(0, RIGHE_MAX);
+  const productsVisibili = products.slice(0, RIGHE_MAX);
+  const nCols = (consortium || scope.type !== "system" ? 1 : 0) + (vistaArticoli ? 10 : 9)
+    + (scope.type !== "system" ? 1 : 0);
+
+  /*
+   * Storia commerciale dell'articolo, per le colonne "Volantino" e "Promo":
+   * in quali volantini è finito sulla carta e in quali periodi è comunque stato
+   * in promozione (esposto in reparto col cartello, anche senza andare a volantino).
+   */
+  const storico = storicoOfferteByEan(db);
+  const storicoDi = (prods: ZooProduct[]) => {
+    const promo = new Map<string, ZooStoricoVoce>();
+    const volantino = new Map<string, ZooStoricoVoce>();
+    for (const p of prods) {
+      const s = storico.get(p.ean);
+      s?.promo.forEach((v) => promo.set(v.campaign.id, v));
+      // fra più articoli dello stesso padre tiene la voce che dice anche la pagina
+      s?.volantino.forEach((v) => {
+        if (!volantino.get(v.campaign.id)?.pagina) volantino.set(v.campaign.id, v);
+      });
+    }
+    return { promo: [...promo.values()], volantino: [...volantino.values()] };
+  };
+  /**
+   * Elenco compatto: i due volantini più recenti, il resto contato e nel tooltip.
+   * Sulla colonna Volantino la pastiglia porta la pagina (Gatto, Cane…) quando c'è,
+   * che è l'informazione utile a colpo d'occhio; su Promo porta il periodo.
+   */
+  const cellaCampagne = (voci: ZooStoricoVoce[], mostra: "volantino" | "promo") => {
+    if (voci.length === 0) return <span style={{ fontSize: 11.5, color: "var(--muted)" }}>—</span>;
+    const titolo = voci
+      .map((v) => `${v.campaign.nome} (${periodoBreve(v.campaign)})${v.pagina ? ` — ${v.pagina}` : ""}`)
+      .join("\n");
+    return (
+      <span title={titolo} style={{ display: "inline-flex", flexWrap: "wrap", gap: 3 }}>
+        {voci.slice(0, 2).map((v) => (
+          <span key={v.campaign.id} className={mostra === "volantino" ? "pill pill-blue" : "pill pill-gray"} style={{ fontSize: 10.5 }}>
+            {mostra === "volantino" ? (v.pagina ?? v.campaign.nome) : periodoBreve(v.campaign)}
+          </span>
+        ))}
+        {voci.length > 2 && <span className="pill pill-gray" style={{ fontSize: 10.5 }}>+{voci.length - 2}</span>}
+      </span>
+    );
+  };
+
+  /** Catalogo su cui cerca l'abbinamento manuale delle foto: articoli e prodotti padre. */
+  const catalogoAbbinabile = abbinaAperto
+    ? [
+        ...db.parents.map((p) => ({ id: `p:${p.id}`, label: `[padre] ${p.nome}` })),
+        ...db.products.map((p) => ({ id: p.id, label: `${p.descrizione} · ${p.ean}` })),
+      ]
+    : [];
+
+
+  return (
+    <div>
+      <StampeHeader user={user} active="prodotti" area="zoo" />
+      <div className="container">
+        <div style={{ display: "flex", gap: 14, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 12 }}>
+          <div style={{ flex: 1 }}>
+            <h1 style={{ margin: 0 }}>Prodotti</h1>
+          <div className="sottoschede-prodotti">
+            <a className={`pill ${VISTA === "offerte" ? "pill-blue" : "pill-gray"}`} href={`/stampe/zoo/prodotti?scope=${scopeParam}`}>Offerte in corso</a>
+            <a className={`pill ${VISTA === "catalogo" ? "pill-blue" : "pill-gray"}`} href={`/stampe/zoo/prodotti?vista=catalogo&scope=${scopeParam}`}>Tutto il catalogo</a>
+          </div>
+
+            <p className="subtitle" style={{ margin: "4px 0 0" }}>
+              {db.products.length} articoli · {db.parents.length} prodotti padre · {senzaPadre} da raggruppare
+            </p>
+          </div>
+          {consortium && scope.type === "system" && (
+            <details className="strumento" open={sp.importati !== undefined}>
+              <summary className="btn btn-outline btn-sm">Import Excel prodotti</summary>
+              <div className="card" style={{ marginTop: 10, padding: 14 }}>
+                <strong>Import Excel prodotti</strong>
+                <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "4px 0 8px" }}>
+                  Colonne: EAN, CODICE FORNITORE, DESCRIZIONE, MARCA, FORNITORE, CATEGORIA, PREZZO.{" "}
+                  <a href={`/stampe/zoo/excel?template=1&scope=${scopeParam}`}>Scarica il modello</a>
+                </p>
+                <form action={importZooProducts.bind(null, scopeParam)} style={{ display: "flex", gap: 8 }}>
+                  <input type="file" name="file" accept=".xlsx,.xls,.csv" required />
+                  <button className="btn btn-sm" type="submit">Importa</button>
+                </form>
+              </div>
+            </details>
+          )}
+          {consortium && scope.type === "system" && (
+            <details className="strumento" open={sp.foto !== undefined}>
+              <summary className="btn btn-outline btn-sm">Caricamento foto</summary>
+              <div className="card" style={{ marginTop: 10, padding: 14 }}>
+                <strong>Caricamento foto</strong>
+                <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "4px 0 8px" }}>
+                  Puoi selezionare anche centinaia di foto insieme (caricate direttamente, niente limiti di
+                  dimensione): se il nome del file contiene l&apos;EAN o il codice fornitore, l&apos;abbinamento è
+                  automatico.
+                </p>
+                <PhotoUploader back={BACK} scopeParam={scopeParam} finalize={finalizeZooPhotoUpload} />
+              </div>
+            </details>
+          )}
+          <form method="get" style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <label style={{ fontSize: 12.5, fontWeight: 700 }}>
+              Insegna / PV{" "}
+              <select name="scope" defaultValue={scopeParam} style={{ marginTop: 2 }}>
+                {scopes.map((s) => (
+                  <option key={`${s.type}:${s.id}`} value={`${s.type}:${s.id}`}>{s.label}</option>
+                ))}
+              </select>
+            </label>
+            <button className="btn btn-sm" type="submit">OK</button>
+          </form>
+        </div>
+
+        {sp.promosso && <div className="alert alert-green">✓ Articolo reso comune: ora lo vedono tutte le insegne.</div>}
+        {sp.adottato && <div className="alert alert-green">✓ Copia creata fra i vostri articoli: modificala pure, l&apos;originale resta di chi l&apos;ha caricato.</div>}
+        {sp.importati !== undefined && <div className="alert alert-green">✓ Import Excel: {sp.importati} articoli elaborati.</div>}
+        {sp.foto !== undefined && <div className="alert alert-green">✓ {sp.foto} foto caricate, {sp.abbinate} abbinate in automatico per EAN/codice.</div>}
+        {sp.abbinatenome !== undefined && <div className="alert alert-green">✓ {sp.abbinatenome} foto abbinate per nome.</div>}
+        {sp.padri !== undefined && (
+          <div className="alert alert-green">
+            ✓ Creati {sp.padri} prodotti padre {sp.ai === "1" ? "con l'AI (testi volantino e cartello generati)" : "con raggruppamento automatico (testi bozza da rivedere)"}.
+            {sp.restanti && ` Ne restano ${sp.restanti} da raggruppare: si lavora a lotti, ripeti l'operazione per continuare.`}
+            {sp.aierr && <span style={{ color: "#a33" }}> Nota AI: {sp.aierr}</span>}
+          </div>
+        )}
+        {sp.nontenuti !== undefined && (
+          <div className="alert alert-green">
+            ✓ {sp.nontenuti} articoli segnati come non tenuti da {scope.label}: non compariranno nella stampa cartelli, ora né in futuro, finché non li rendi di nuovo visibili.
+          </div>
+        )}
+
+        {/* import dei propri articoli per insegna/PV: codici interni, sfusi, private label */}
+        {scope.type !== "system" && gestione && (
+          <div className="card" style={{ marginBottom: 14, padding: 14 }}>
+            <strong>I tuoi articoli</strong>
+            <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "4px 0 8px" }}>
+              Carica gli articoli che hai solo tu — codici interni, sfusi, private label — e che nel catalogo del
+              Consorzio non ci sono. Restano <strong>tuoi</strong>: li vedi qui e li stampi, gli altri no.
+              Colonne: EAN, DESCRIZIONE, CODICE FORNITORE, MARCA, FORNITORE, CATEGORIA, PREZZO.
+            </p>
+            <form action={importZooProducts.bind(null, scopeParam)} style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <input type="file" name="file" accept=".xlsx,.xls,.csv" required />
+              <button className="btn btn-sm" type="submit">Importa i miei articoli</button>
+            </form>
+          </div>
+        )}
+
+        {/* ---------- proposte di abbinamento foto→articolo per nome (nessuna AI) ---------- */}
+        {consortium && scope.type === "system" && tutteDaAbbinare.length > 0 && (
+          <div className="card" style={{ marginBottom: 14, padding: 14 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <strong>Abbina le foto agli articoli</strong>
+              <span className="pill pill-orange">{availablePhotos.length} da abbinare</span>
+              <PulsanteAzione azione={ignoraZooFoto.bind(null, fotoVol === "tutte" ? null : availablePhotos)} style={{ marginLeft: "auto" }}
+                conferma={`Ignorare tutte le ${availablePhotos.length} foto da abbinare${fotoVol === "tutte" ? "" : " di questo volantino"}? Non compariranno più qui (si possono ripristinare).`}
+                title="Le foto restano caricate, ma non vengono più proposte da abbinare">
+                Ignora tutte
+              </PulsanteAzione>
+              <a className="btn btn-outline btn-sm"
+                href={`${BACK}?${datiQs(sp, scopeParam, abbinaAperto ? undefined : "1")}`}>
+                {abbinaAperto ? "▴ Comprimi" : "▾ Apri"}
+              </a>
+            </div>
+            {/* quale volantino: le foto caricate mentre era in lavorazione */}
+            {(volantiniFoto.length > 1 || senzaVolantino > 0) && (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
+                <span className="hint">Foto caricate per:</span>
+                {volantiniFoto.map(({ c, n }) => (
+                  <a key={c.id} className={`pill ${fotoVol === c.id ? "pill-blue" : "pill-gray"}`}
+                    href={`${BACK}?${pageQs(sp, { scope: scopeParam, abbina: "1", fotovol: c.id })}`}>
+                    {c.nome} · {n}
+                  </a>
+                ))}
+                <a className={`pill ${fotoVol === "tutte" ? "pill-blue" : "pill-gray"}`}
+                  href={`${BACK}?${pageQs(sp, { scope: scopeParam, abbina: "1", fotovol: "tutte" })}`}>
+                  Tutte · {tutteDaAbbinare.length}
+                </a>
+              </div>
+            )}
+            {abbinaAperto && (
+            <>
+            {/* abbinamenti che non tornano: nel nome del file non c'è nessuna parola dell'articolo */}
+            {daControllare.length > 0 && (
+              <div className="card" style={{ padding: 12, marginTop: 8, borderColor: "#f0c000" }}>
+                <strong>Foto da controllare ({daControllare.length})</strong>
+                <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "4px 0 8px" }}>
+                  Il nome del file non ha nessuna parola in comune con l&apos;articolo: quasi sempre è un
+                  abbinamento sbagliato, fatto quando bastava un numero uguale. Togliendo la foto, il file
+                  torna qui sotto fra quelli da abbinare.
+                </p>
+                <div style={{ display: "grid", gap: 8 }}>
+                  {daControllare.map(({ product, file }) => (
+                    <div key={product.id} style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <FotoMini src={product.image ?? ""} style={{ width: 46, height: 46, objectFit: "contain", background: "#fff", border: "1px solid #eee", borderRadius: 6 }} />
+                      <div style={{ flex: 1, minWidth: 220, fontSize: 12.5 }}>
+                        <strong>{product.descrizione}</strong>
+                        <div style={{ color: "var(--muted)", fontSize: 11.5 }}>{product.ean} · foto: {file}</div>
+                      </div>
+                      <form action={staccaZooFoto.bind(null, product.id, scopeParam, `${BACK}?abbina=1`)}>
+                        <button className="btn btn-outline btn-sm" type="submit">Togli la foto</button>
+                      </form>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "8px 0" }}>
+              Le foto senza EAN/codice nel nome non si abbinano da sole: qui sotto trovi un&apos;ipotesi per ciascuna,
+              basata sul confronto tra il nome del file e la descrizione. Se la proposta non va bene — o se non ce
+              n&apos;è nessuna — usa la ricerca sotto il menu: puoi scegliere qualsiasi articolo o prodotto padre.
+            </p>
+            <PhotoMatcher
+              foto={photoSuggestions.map(({ file, candidates }) => ({
+                file,
+                url: publicUrlFor(`zoo-foto/${file}`),
+                candidati: candidates
+                  .map((c) => ({ c, p: senzaFotoById.get(c.productId) }))
+                  .filter((x): x is { c: typeof candidates[number]; p: ZooProduct } => Boolean(x.p))
+                  .map(({ c, p }) => ({ id: c.productId, label: p.descrizione, score: c.score })),
+              }))}
+              catalogo={catalogoAbbinabile}
+              onConfirm={confirmZooPhotoTargets}
+              onIgnora={ignoraZooFoto}
+            />
+            </>
+            )}
+          </div>
+        )}
+
+        {consortium && scope.type === "system" && fotoIgnorate.length > 0 && (
+          <p className="hint" style={{ margin: "-6px 0 12px", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            {fotoIgnorate.length} foto ignorate: non vengono proposte da abbinare.
+            <PulsanteAzione azione={ripristinaZooFotoIgnorate}>Ripristinale</PulsanteAzione>
+          </p>
+        )}
+
+        {/* vista + filtri */}
+        <div className="card" style={{ marginBottom: 14, padding: 14 }}>
+          <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+            <a className={`pill ${!vistaArticoli ? "pill-blue" : "pill-gray"}`} style={{ textDecoration: "none" }}
+              href={`${BACK}?${pageQs(sp, { scope: scopeParam, vista: "raggruppata" })}`}>
+              Vista raggruppata ({gruppi.length})
+            </a>
+            <a className={`pill ${vistaArticoli ? "pill-blue" : "pill-gray"}`} style={{ textDecoration: "none" }}
+              href={`${BACK}?${pageQs(sp, { scope: scopeParam, vista: "articoli" })}`}>
+              Vista articoli singoli ({products.length})
+            </a>
+          </div>
+          <FiltriMobile id="filtri-dati" scelte={[
+            vistaArticoli ? "articoli singoli" : "raggruppata",
+            sp.q && `«${sp.q}»`, sp.animale, sp.caratt, sp.fornitore, sp.marca,
+            soloSenzaPadre && "solo senza padre", soloSenzaAnimale && "solo senza animale", showHidden && "anche i nascosti",
+          ]}>
+          <form method="get" style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr)) auto", gap: 10, alignItems: "end" }}>
+            <input type="hidden" name="scope" value={scopeParam} />
+            <input type="hidden" name="vista" value={vistaArticoli ? "articoli" : "raggruppata"} />
+            {abbinaAperto && <input type="hidden" name="abbina" value="1" />}
+            <label className="field" style={{ marginBottom: 0 }}>Cerca<input type="text" name="q" defaultValue={sp.q ?? ""} placeholder="descrizione, EAN, codice" /></label>
+            <label className="field" style={{ marginBottom: 0 }}>
+              Animale
+              <select name="animale" defaultValue={sp.animale ?? ""}>
+                <option value="">Tutti</option>
+                {db.settings.categorieAnimali.map((a) => <option key={a} value={a}>{a}</option>)}
+              </select>
+            </label>
+            <label className="field" style={{ marginBottom: 0 }}>
+              Caratteristica
+              <select name="caratt" defaultValue={sp.caratt ?? ""}>
+                <option value="">Tutte</option>
+                {db.settings.caratteristicheProdotto.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </label>
+            <label className="field" style={{ marginBottom: 0 }}>
+              Fornitore
+              <select name="fornitore" defaultValue={sp.fornitore ?? ""}>
+                <option value="">Tutti</option>
+                {fornitoriList(db).map((f) => <option key={f} value={f}>{f}</option>)}
+              </select>
+            </label>
+            <label className="field" style={{ marginBottom: 0 }}>
+              Marca
+              <select name="marca" defaultValue={sp.marca ?? ""}>
+                <option value="">Tutte</option>
+                {marcheList(db).map((m) => <option key={m} value={m}>{m}</option>)}
+              </select>
+            </label>
+            <button className="btn btn-sm" type="submit">Filtra</button>
+            <label style={{ fontSize: 12.5, gridColumn: "1 / -1" }}>
+              <input type="checkbox" name="senzapadre" value="1" defaultChecked={soloSenzaPadre} /> solo senza padre
+              {" "}<input type="checkbox" name="senzaanimale" value="1" defaultChecked={soloSenzaAnimale} /> solo senza animale
+              {" "}<input type="checkbox" name="altrui" value="1" defaultChecked={mostraAltrui} /> mostra anche gli articoli di altre insegne/PV
+              {scope.type !== "system" && (
+                <>
+                  {" "}<input type="checkbox" name="nascosti" value="1" defaultChecked={showHidden} /> mostra nascosti
+                </>
+              )}
+              {(sp.animale || sp.caratt || sp.marca || sp.fornitore || sp.q) && (
+                <>
+                  {" · "}
+                  <a href={`${BACK}?${pageQs({}, { scope: scopeParam, vista: vistaArticoli ? "articoli" : undefined })}`}>
+                    azzera filtri
+                  </a>
+                </>
+              )}
+            </label>
+          </form>
+          </FiltriMobile>
+        </div>
+
+        {/* tabella prodotti con selezione multipla → crea padre / associa con AI / unisci / non tenuti */}
+        <form>
+          <input type="hidden" name="scope" value={scopeParam} />
+          {(consortium || scope.type !== "system") && (
+            <div style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "center", flexWrap: "wrap" }}>
+              {consortium && (
+                <>
+                  <button className="btn btn-sm" formAction={createZooParent.bind(null, BACK, scopeParam)} type="submit">
+                    Crea padre dagli articoli selezionati
+                  </button>
+                  <button className="btn btn-sm" formAction={associaConAI.bind(null, BACK, scopeParam)} type="submit" style={{ background: "#6d3fa7" }}>
+                    Associa con AI (raggruppa + genera testi)
+                  </button>
+                  {!vistaArticoli && (
+                    <button className="btn btn-outline btn-sm" formAction={mergeParentsForm.bind(null, BACK, scopeParam)} type="submit"
+                      title="Spunta due o più prodotti padre: gli articoli passeranno tutti sotto il primo spuntato">
+                      Unisci i padri selezionati
+                    </button>
+                  )}
+                  <span className="hint">
+                    {db.settings.apiKey ? "chiave API Claude configurata" : "nessuna chiave API: verrà usato il raggruppamento automatico con testi bozza"}
+                  </span>
+                </>
+              )}
+              {scope.type !== "system" && (
+                <button className="btn btn-outline btn-sm" formAction={toggleZooHiddenBulk.bind(null, BACK, scopeParam)} type="submit">
+                  Segna selezionati come non tenuti
+                </button>
+              )}
+            </div>
+          )}
+          <div className="card table-wrap">
+            <ColumnTools tableId="tab-dati" />
+            <table className="data" id="tab-dati">
+              <thead>
+                <tr>
+                  {(consortium || scope.type !== "system") && <th style={{ width: 30 }}><BulkCheckbox name="sel" also="selpadre" /></th>}
+                  <th style={{ width: 56 }}>Foto</th>
+                  <ColonnaOrdinabile campo="nome">{vistaArticoli ? "Articolo" : "Prodotto"}</ColonnaOrdinabile>
+                  <th className="col-wide">Descrizione</th>
+                  <ColonnaOrdinabile campo="animale">Animale</ColonnaOrdinabile>
+                  <ColonnaOrdinabile campo="caratt">Caratteristica</ColonnaOrdinabile>
+                  <th>{vistaArticoli ? "EAN" : "Articoli"}</th>
+                  <ColonnaOrdinabile campo="marca">Marca · Fornitore</ColonnaOrdinabile>
+                  <th title="Volantini su cui l'articolo è stato stampato">Volantino</th>
+                  <th title="Periodi in cui l'articolo è stato in promozione, anche senza andare a volantino">Promo</th>
+                  {vistaArticoli && <th>Padre</th>}
+                  {scope.type !== "system" && <th className="no-print">Visibilità</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {(vistaArticoli ? productsVisibili.length : gruppiVisibili.length) === 0 && (
+                  <tr><td colSpan={nCols} className="empty">Nessun articolo: importa l&apos;Excel dei prodotti per iniziare.</td></tr>
+                )}
+
+                {/* ---- vista raggruppata: una riga per padre (le orfane restano singole) ---- */}
+                {!vistaArticoli && gruppiVisibili.map((g) => {
+                  const { parent, prods } = g;
+                  const first = prods[0];
+                  const animali = animaliDi(db, parent?.caratteristiche ?? []);
+                  const prodottoCarat = caratteristicheProdottoDi(db, parent?.caratteristiche ?? []);
+                  const key = parent?.id ?? `_o_${first.id}`;
+                  const nome = parent ? effectiveParentText(db, scope, parent, "nome", academyDb).value : first.descrizione;
+                  const descr = parent ? effectiveParentText(db, scope, parent, "descVolantino", academyDb).value : "";
+                  const hidden = scope.type !== "system" && prods.length === 1 && isZooHidden(db, scope, first, academyDb);
+                  const st = storicoDi(prods);
+                  return [
+                    <tr key={key} style={hidden ? { opacity: 0.45 } : undefined}
+                      data-nome={nome} data-animale={animali.join(", ")} data-caratt={prodottoCarat.join(", ")}
+                      data-marca={marcaEffettiva(first)}>
+                      {(consortium || scope.type !== "system") && (
+                        <td>
+                          {parent
+                            ? <input type="checkbox" name="selpadre" value={parent.id}
+                                title={consortium ? "Spunta due o più padri e usa «Unisci i padri selezionati»: il primo dà i testi" : "Spunta i padri e usa «Segna selezionati come non tenuti»"} />
+                            : <input type="checkbox" name="sel" value={first.id} />}
+                        </td>
+                      )}
+                      <td>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <FotoMini src={zooImageUrl(first, parent)} style={{ width: 44, height: 44, objectFit: "contain", background: "#fff", borderRadius: 6, border: "1px solid #eee" }} />
+                      </td>
+                      <td>
+                        {consortium ? (
+                          <InlineEdit value={nome} onSave={parent
+                            ? updateParentFieldInline.bind(null, parent.id, "nome", scopeParam)
+                            : updateProductFieldInline.bind(null, first.id, "descrizione")} />
+                        ) : (
+                          <strong style={{ fontSize: 13 }}>{nome}</strong>
+                        )}
+                        {!parent && <span className="pill pill-gray">senza padre</span>}
+                        {parent && <DettagliPadre parentId={parent.id} />}
+                      </td>
+                      <td className="col-wide">
+                        {consortium && parent ? (
+                          <InlineEdit value={descr} multiline placeholder="descrizione volantino…"
+                            onSave={updateParentFieldInline.bind(null, parent.id, "descVolantino", scopeParam)} />
+                        ) : (
+                          <span style={{ fontSize: 11.5, color: "var(--muted)" }}>{descr || "—"}</span>
+                        )}
+                      </td>
+                      <td>
+                        {consortium && parent ? (
+                          <InlineSelect value={animali[0] ?? ""} options={db.settings.categorieAnimali}
+                            onSave={setParentTagInline.bind(null, parent.id, "animale")} />
+                        ) : (
+                          <span style={{ fontSize: 11.5, color: "var(--muted)" }}>{animali.join(", ") || "—"}</span>
+                        )}
+                      </td>
+                      <td>
+                        {consortium && parent ? (
+                          <InlineSelect value={prodottoCarat[0] ?? ""} options={db.settings.caratteristicheProdotto}
+                            onSave={setParentTagInline.bind(null, parent.id, "prodotto")} />
+                        ) : (
+                          <span style={{ fontSize: 11.5, color: "var(--muted)" }}>{prodottoCarat.join(", ") || "—"}</span>
+                        )}
+                      </td>
+                      <td style={{ fontSize: 12 }}>
+                        {prods.length > 1 ? (
+                          <details>
+                            <summary style={{ cursor: "pointer", color: "#274b7a" }}>{prods.length} articoli</summary>
+                            <ul style={{ margin: "4px 0 0", paddingLeft: 16, fontSize: 11 }}>
+                              {prods.map((p) => <li key={p.id}>{p.descrizione} · EAN {p.ean}</li>)}
+                            </ul>
+                          </details>
+                        ) : (
+                          <>{first.ean}<div style={{ color: "var(--muted)" }}>{first.codice}</div></>
+                        )}
+                      </td>
+                      <td style={{ fontSize: 12.5 }}>
+                        {marcaEffettiva(first)}<div style={{ color: "var(--muted)", fontSize: 11.5 }}>{first.fornitore}</div>
+                      </td>
+                      <td>{cellaCampagne(st.volantino, "volantino")}</td>
+                      <td>{cellaCampagne(st.promo, "promo")}</td>
+                      {scope.type !== "system" && (
+                        <td className="no-print" style={{ whiteSpace: "nowrap" }}>
+                          {prods.length === 1 ? (
+                            <button
+                              className="btn btn-outline btn-sm" type="submit" title={hidden ? "Rendi di nuovo visibile" : "Nascondi questo articolo"}
+                              formAction={toggleZooHidden.bind(null, scopeParam, "articolo", first.ean, "/stampe/zoo/dati")}
+                            >
+                              {hidden ? "Mostra" : "Nascondi"}
+                            </button>
+                          ) : (
+                            <span className="hint">usa la selezione multipla</span>
+                          )}
+                        </td>
+                      )}
+                    </tr>,
+                    parent ? (
+                      <tr key={`pan_${parent.id}`} className="riga-pannello">
+                        <td colSpan={nCols} style={{ padding: 0 }}>
+                          <PannelloPadre parentId={parent.id} scopeParam={scopeParam} back={BACK} />
+                        </td>
+                      </tr>
+                    ) : null,
+                  ];
+                })}
+
+                {/* ---- vista articoli singoli: una riga per articolo ---- */}
+                {vistaArticoli && productsVisibili.map((p) => {
+                  const parent = p.parentId ? parentById.get(p.parentId) : undefined;
+                  const animali = animaliDi(db, parent?.caratteristiche ?? []);
+                  const prodottoCarat = caratteristicheProdottoDi(db, parent?.caratteristiche ?? []);
+                  const parentDescr = parent ? effectiveParentText(db, scope, parent, "descVolantino", academyDb).value : "";
+                  const hidden = scope.type !== "system" && isZooHidden(db, scope, p, academyDb);
+                  return [
+                    <tr key={p.id} style={hidden ? { opacity: 0.45 } : undefined}>
+                      {(consortium || scope.type !== "system") && <td><input type="checkbox" name="sel" value={p.id} /></td>}
+                      <td>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <FotoMini src={zooImageUrl(p, parent)} style={{ width: 44, height: 44, objectFit: "contain", background: "#fff", borderRadius: 6, border: "1px solid #eee" }} />
+                      </td>
+                      <td>
+                        <strong style={{ fontSize: 13 }}>{p.descrizione}</strong>
+                        {p.scopeType && (
+                          <span className={`pill ${proprio(p) ? "pill-orange" : "pill-gray"}`} style={{ marginLeft: 6 }}>
+                            {proprio(p) ? "vostro" : etichettaAmbito(p)}
+                          </span>
+                        )}
+                        {p.scopeType && !proprio(p) && (
+                          <span style={{ display: "inline-flex", gap: 4, marginLeft: 6 }}>
+                            {consortium && scope.type === "system" && (
+                              <form action={promuoviProdottoAConsorzio.bind(null, p.id, scopeParam, BACK)}>
+                                <button className="btn btn-outline btn-sm" type="submit" style={{ padding: "0 6px", fontSize: 11 }}
+                                  title="Rendilo comune a tutte le insegne">
+                                  Rendi comune
+                                </button>
+                              </form>
+                            )}
+                            {scope.type !== "system" && (
+                              <form action={adottaProdotto.bind(null, p.id, scopeParam, BACK)}>
+                                <button className="btn btn-outline btn-sm" type="submit" style={{ padding: "0 6px", fontSize: 11 }}
+                                  title="Fanne una copia tua, che puoi modificare senza toccare l'originale">
+                                  Copia fra i miei
+                                </button>
+                              </form>
+                            )}
+                          </span>
+                        )}
+                        <div style={{ fontSize: 11.5, color: "var(--muted)", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                          {p.prezzo && <span>prezzo base € {p.prezzo}</span>}
+                          <span title="Contenuto della confezione, per il prezzo al chilo/litro">
+                            {consortium
+                              ? <InlineEdit value={testoContenuto(p.contenuto ?? contenutoDa(p.descrizione))} placeholder="contenuto (es. 1,5 kg)"
+                                  onSave={updateProductFieldInline.bind(null, p.id, "contenuto")} />
+                              : (testoContenuto(p.contenuto ?? contenutoDa(p.descrizione)) || "")}
+                          </span>
+                        </div>
+                        {parent && <DettagliPadre parentId={parent.id} />}
+                      </td>
+                      <td className="col-wide" style={{ fontSize: 11.5, color: "var(--muted)" }}>{parentDescr || "—"}</td>
+                      <td>
+                        {consortium && parent ? (
+                          <InlineSelect value={animali[0] ?? ""} options={db.settings.categorieAnimali}
+                            onSave={setParentTagInline.bind(null, parent.id, "animale")} />
+                        ) : (
+                          <span style={{ fontSize: 11.5, color: "var(--muted)" }}>{animali.join(", ") || "—"}</span>
+                        )}
+                      </td>
+                      <td>
+                        {consortium && parent ? (
+                          <InlineSelect value={prodottoCarat[0] ?? ""} options={db.settings.caratteristicheProdotto}
+                            onSave={setParentTagInline.bind(null, parent.id, "prodotto")} />
+                        ) : (
+                          <span style={{ fontSize: 11.5, color: "var(--muted)" }}>{prodottoCarat.join(", ") || "—"}</span>
+                        )}
+                      </td>
+                      <td style={{ fontSize: 12 }}>{p.ean}<div style={{ color: "var(--muted)" }}>{p.codice}</div></td>
+                      <td style={{ fontSize: 12.5 }}>{marcaEffettiva(p)}<div style={{ color: "var(--muted)", fontSize: 11.5 }}>{p.fornitore}</div></td>
+                      <td>{cellaCampagne(storico.get(p.ean)?.volantino ?? [], "volantino")}</td>
+                      <td>{cellaCampagne(storico.get(p.ean)?.promo ?? [], "promo")}</td>
+                      <td>
+                        {parent ? (
+                          <>
+                            <span className="pill pill-blue">{effectiveParentText(db, scope, parent, "nome", academyDb).value.slice(0, 24)}</span>
+                            {" "}<DettagliPadre parentId={parent.id} />
+                          </>
+                        ) : (
+                          <span className="pill pill-gray">senza padre</span>
+                        )}
+                      </td>
+                      {scope.type !== "system" && (
+                        <td className="no-print" style={{ whiteSpace: "nowrap" }}>
+                          <button
+                            className="btn btn-outline btn-sm" type="submit" title={hidden ? "Rendi di nuovo visibile" : "Nascondi questo articolo"}
+                            formAction={toggleZooHidden.bind(null, scopeParam, "articolo", p.ean, "/stampe/zoo/dati")}
+                          >
+                            {hidden ? "Mostra" : "Nascondi"}
+                          </button>
+                        </td>
+                      )}
+                    </tr>,
+                    parent && (
+                      <tr key={`pan_${parent.id}`} className="riga-pannello">
+                        <td colSpan={nCols} style={{ padding: 0 }}>
+                          <PannelloPadre parentId={parent.id} scopeParam={scopeParam} back={BACK} />
+                        </td>
+                      </tr>
+                    ),
+                  ];
+                })}
+              </tbody>
+            </table>
+          </div>
+          {((vistaArticoli && products.length > RIGHE_MAX) || (!vistaArticoli && gruppi.length > RIGHE_MAX)) && (
+            <p className="hint" style={{ marginTop: 6 }}>
+              Mostrate le prime {RIGHE_MAX} righe: usa la ricerca per restringere l&apos;elenco.
+            </p>
+          )}
+        </form>
+
+        {/* fornitori/marchi nascosti per questo ambito */}
+        {scope.type !== "system" && (
+          <div className="card" style={{ marginTop: 14, padding: 14 }}>
+            <strong>Fornitori e marchi non trattati da {scope.label}</strong>
+            <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "4px 0 8px" }}>
+              Clicca per nascondere/mostrare: gli articoli nascosti non compariranno nelle pagine di stampa di questo ambito.
+            </p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {fornitoriList(db).map((f) => {
+                const off = hiddenHere.some((h) => h.kind === "fornitore" && h.value === f);
+                return (
+                  <form key={`f_${f}`} action={toggleZooHidden.bind(null, scopeParam, "fornitore", f, "/stampe/zoo/dati")}>
+                    <button type="submit" className={`pill ${off ? "pill-gray" : "pill-green"}`} style={{ cursor: "pointer", border: "none" }}>
+                      {off ? "✕ " : ""}Fornitore: {f}
+                    </button>
+                  </form>
+                );
+              })}
+              {marcheList(db).map((m) => {
+                const off = hiddenHere.some((h) => h.kind === "marca" && h.value === m);
+                return (
+                  <form key={`m_${m}`} action={toggleZooHidden.bind(null, scopeParam, "marca", m, "/stampe/zoo/dati")}>
+                    <button type="submit" className={`pill ${off ? "pill-gray" : "pill-blue"}`} style={{ cursor: "pointer", border: "none" }}>
+                      {off ? "✕ " : ""}Marca: {m}
+                    </button>
+                  </form>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

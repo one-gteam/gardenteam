@@ -174,7 +174,7 @@ export async function ignoraZooFoto(files: string[] | null): Promise<Esito> {
   const elenco = files ?? fotoDaAbbinare(db, await listStorageFiles("zoo-foto")).daAbbinare;
   db.settings.fotoIgnorate = [...new Set([...(db.settings.fotoIgnorate ?? []), ...elenco.filter((f) => typeof f === "string" && f)])];
   await saveZooDb(db);
-  revalidatePath("/stampe/zoo/dati");
+  revalidatePath("/stampe/zoo/prodotti");
   return { ok: true, error: `${elenco.length} foto ignorate` };
 }
 
@@ -184,6 +184,6 @@ export async function ripristinaZooFotoIgnorate(): Promise<Esito> {
   const db = await getZooDb();
   db.settings.fotoIgnorate = [];
   await saveZooDb(db);
-  revalidatePath("/stampe/zoo/dati");
+  revalidatePath("/stampe/zoo/prodotti");
   return { ok: true };
 }

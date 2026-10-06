@@ -22,7 +22,7 @@ export default async function ZooImpostazioniPage({
   if (!user) redirect("/login");
   if (!canAccessArea(user, "zoo")) redirect("/studente");
   // le impostazioni sono di chi gestisce l'area: il capo reparto qui non entra
-  if (!gestisce(user, "zoo")) redirect("/stampe/zoo/dati");
+  if (!gestisce(user, "zoo")) redirect("/stampe/zoo/prodotti");
   const sp = await searchParams;
 
   const db = await getZooDb();

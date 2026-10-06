@@ -93,7 +93,7 @@ export default async function ZooArchivioPage({
               </div>
             ) : (
               <div style={{ fontSize: 13, color: "var(--muted)" }}>
-                Nessun volantino in lavorazione: aprine uno da <a href="/stampe/zoo/offerte">Offerte in corso</a>.
+                Nessun volantino in lavorazione: aprine uno da <a href="/stampe/zoo/prodotti">Prodotti → Offerte in corso</a>.
               </div>
             )}
             {inCorso && (

@@ -1188,7 +1188,10 @@ form[aria-busy="true"] { opacity: .6; }
 .titolo-modificabile { font-size: 13px; font-weight: 700; }
 
 /* Scelta offerte Volantino: la barra delle azioni in blocco resta in vista scorrendo */
-.barra-fissa { position: sticky; top: 0; z-index: 6; background: var(--bg); padding: 6px 0 4px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+.barra-fissa { z-index: 6; background: var(--bg); padding: 6px 0 4px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+.barra-fissa.agganciata { box-shadow: 0 4px 12px rgba(0,0,0,.08); padding-left: 8px; padding-right: 8px; box-sizing: border-box; }
+.sottoschede-prodotti { display: inline-flex; gap: 4px; align-items: center; }
+.sottoschede-prodotti .pill { text-decoration: none; font-size: 12px; }
 .barra-spuntate { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 /* colonna Pagina: pulsanti veri (vuoti = da scegliere, pieno = pagina assegnata) */
 .pagina-btn {

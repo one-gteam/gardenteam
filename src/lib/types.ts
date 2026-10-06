@@ -273,7 +273,7 @@ export function postLoginPath(user: User): string {
   if (sites.length === 0) return "/scegli";
   if (sites.length > 1) return "/scegli";
   if (sites[0] === "arredo") return "/stampe/arredo/dati";
-  if (sites[0] === "zoo") return "/stampe/zoo/dati";
+  if (sites[0] === "zoo") return "/stampe/zoo/prodotti";
   if (sites[0] === "piante") return "/scegli"; // area in preparazione
   return isAcademyAdmin(user) ? "/admin" : "/studente";
 }

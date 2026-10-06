@@ -179,7 +179,7 @@ export default async function CreaVolantinoPage({
         {!campaign ? (
           <div className="card" style={{ padding: 24, textAlign: "center", color: "var(--muted)" }}>
             Nessun volantino in lavorazione: aprine uno e importa le offerte nella pagina{" "}
-            <a href="/stampe/zoo/offerte">Offerte in corso</a>.
+            <a href="/stampe/zoo/prodotti">Prodotti → Offerte in corso</a>.
           </div>
         ) : (
           <VolantinoBuilder

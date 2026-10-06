@@ -28,8 +28,7 @@ export default async function StampeHeader({
 
   const links = area === "zoo"
     ? [
-        { href: "/stampe/zoo/dati", label: "Database prodotti", key: "dati" },
-        { href: "/stampe/zoo/offerte", label: "Offerte in corso", key: "offerte" },
+        { href: "/stampe/zoo/prodotti", label: "Prodotti", key: "prodotti" },
         { href: "/stampe/zoo/volantino", label: "Scelta offerte Volantino", key: "volantino" },
         ...(isZooEditor(user)
           ? [{ href: "/stampe/zoo/crea-volantino", label: "Crea Volantino", key: "crea-volantino" }]

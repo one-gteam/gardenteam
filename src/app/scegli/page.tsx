@@ -50,7 +50,7 @@ export default async function ScegliPage() {
       : []),
     ...(sites.includes("zoo")
       ? [{
-          chiave: "zoo", href: "/stampe/zoo/dati", foto: foto("zoo", "/immagini/aree/zoo.jpg"), icona: <PawPrint size={18} />,
+          chiave: "zoo", href: "/stampe/zoo/prodotti", foto: foto("zoo", "/immagini/aree/zoo.jpg"), icona: <PawPrint size={18} />,
           titolo: "Offerte Zoo", desc: "Volantino e cartelli promo", attiva: true,
         }]
       : []),

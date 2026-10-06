@@ -17,7 +17,8 @@ import InlineSelect from "@/components/stampe/InlineSelect";
 import InlineEdit from "@/components/stampe/InlineEdit";
 import FiltriMobile from "@/components/FiltriMobile";
 import ShiftChecks from "@/components/stampe/ShiftChecks";
-import { SceltaVolantino, VotoOfferta, VotoSpuntate } from "@/components/stampe/VotoOfferta";
+import { VotoOfferta, VotoSpuntate } from "@/components/stampe/VotoOfferta";
+import BarraFissa from "@/components/stampe/BarraFissa";
 import PaginaRapida from "@/components/stampe/PaginaRapida";
 import UnisciNelVolantino from "@/components/stampe/UnisciNelVolantino";
 import { PulsanteAzione } from "@/components/AzioneSenzaRicarica";
@@ -400,12 +401,12 @@ export default async function ZooVolantinoPage({
             {/* le spunte in tabella appartengono a questo form via attributo form="bulkform" */}
             <form id="bulkform" />
             {spunte && (
-              <div className="barra-fissa">
+              <BarraFissa>
                 <VotoSpuntate scopeParam={scopeParam} formId="bulkform" vota={vota} consortium={consortium}
                   focus={consortium ? focusEsistenti : undefined}>
                   {consortium && <UnisciNelVolantino formId="bulkform" />}
                 </VotoSpuntate>
-              </div>
+              </BarraFissa>
             )}
             <div className="card table-wrap">
               <ColumnTools tableId="tab-volantino" />
@@ -425,7 +426,7 @@ export default async function ZooVolantinoPage({
                     {consortium && <th>Etichetta</th>}
                     <th>Voti dei PV</th>
                     {vota && <th className="no-print">Il tuo voto</th>}
-                    {consortium && <th>Volantino (selezione finale)</th>}
+                    {consortium && <th>Seleziona pagina volantino</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -450,9 +451,8 @@ export default async function ZooVolantinoPage({
                     const myNon = non.some((v) => v.userId === user.id);
                     const scheda = campaign.schede.find((s) => s.id === first.schedaId);
                     const ids = offs.map((o) => o.id);
-                    const selCountGroup = offs.filter((o) => o.selezionata).length;
                     return (
-                      <tr key={parent ? `${parent.id}~${chiavePrezzo(first)}` : first.id} style={selCountGroup === offs.length ? { background: "#f4faf4" } : undefined}>
+                      <tr key={parent ? `${parent.id}~${chiavePrezzo(first)}` : first.id} style={offs.every((o) => o.selezionata) ? { background: "#f4faf4" } : undefined}>
                         {spunte && (
                           <td>
                             {/* la spunta porta l'id della prima offerta: l'azione in blocco estende
@@ -566,10 +566,12 @@ export default async function ZooVolantinoPage({
                           {dati.tipi.length > 0 && <div style={{ fontSize: 10.5, color: "#274b7a", fontWeight: 700 }}>{dati.tipi.join(" · ")}</div>}
                         </td>
                         {consortium && (
-                          <td>
-                            <PaginaRapida value={first.paginaId ?? ""} tutte={pagineVolantino} noVolantino={NO_VOLANTINO}
-                              suggerite={pagineVolantino.filter((p) => animaliOfferta.some((a) => paginaPerAnimale(p.nome, a)))}
-                              onSave={updateOfferGroupFieldInline.bind(null, ids, "paginaId")} />
+                          <td style={{ whiteSpace: "nowrap" }}>
+                            {first.paginaId === NO_VOLANTINO
+                              ? <span className="pill pill-gray">✕ no volantino</span>
+                              : first.paginaId
+                                ? <span className="pill pill-green">✓ {nomePagina.get(first.paginaId) ?? first.paginaId}</span>
+                                : <span className="pill pill-amber">da assegnare</span>}
                           </td>
                         )}
                         {consortium && (
@@ -612,15 +614,16 @@ export default async function ZooVolantinoPage({
                         </td>
                         )}
                         {consortium && (
-                          <td style={{ whiteSpace: "nowrap" }}>
-                            {isGroup ? (
-                              <SceltaVolantino ids={ids} dentro={selCountGroup === offs.length}
-                                parziale={selCountGroup > 0 ? `${selCountGroup}/${offs.length} nel volantino` : undefined} />
-                            ) : (
-                              <>
-                                <SceltaVolantino ids={ids} dentro={Boolean(first.selezionata)} />{" "}
-                                <a className="btn btn-outline btn-sm" href={`/stampe/zoo/volantino?scope=${scopeParam}${schedaFilter ? `&scheda=${schedaFilter}` : ""}&offerta=${first.id}`}>Modifica</a>
-                              </>
+                          <td>
+                            {/* la pagina scelta mette l'offerta nel volantino; «✕ no» la toglie */}
+                            <PaginaRapida value={first.paginaId ?? ""} tutte={pagineVolantino} noVolantino={NO_VOLANTINO}
+                              suggerite={pagineVolantino.filter((p) => animaliOfferta.some((a) => paginaPerAnimale(p.nome, a)))}
+                              onSave={updateOfferGroupFieldInline.bind(null, ids, "paginaId")} />
+                            {!isGroup && (
+                              <a className="hint" style={{ display: "inline-block", marginTop: 3 }}
+                                href={`/stampe/zoo/volantino?scope=${scopeParam}${schedaFilter ? `&scheda=${schedaFilter}` : ""}&offerta=${first.id}`}>
+                                modifica l&apos;offerta…
+                              </a>
                             )}
                           </td>
                         )}

@@ -32,7 +32,7 @@ export default async function StampeHome() {
             </p>
             <span className="pill pill-green">Attiva</span>
           </a>
-          <a className="card card-link" href="/stampe/zoo/dati">
+          <a className="card card-link" href="/stampe/zoo/prodotti">
             <div style={{ fontSize: 34 }}></div>
             <h3>Cartelli Offerte ZOO</h3>
             <p style={{ fontSize: 13, color: "var(--muted)" }}>

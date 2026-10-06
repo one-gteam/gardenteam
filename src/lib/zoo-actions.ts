@@ -882,7 +882,7 @@ export async function aggiungiOffertaAMano(scopeParam: string, formData: FormDat
   const db = await getZooDb();
   const academyDb = await getDb();
   const scope = resolveScope(user, scopeParam, academyDb);
-  const BACK = "/stampe/zoo/offerte";
+  const BACK = "/stampe/zoo/prodotti";
   if (scope.type !== "system") redirect(backUrl(BACK, scopeParam, { aggiunta: "ambito" }));
   if (!isZooEditor(user)) redirect(backUrl(BACK, scopeParam, { aggiunta: "permessi" }));
   const campaign = campagnaInLavorazione(db);
@@ -1145,12 +1145,12 @@ export async function toggleZooHiddenBulk(back: string, scopeParam: string, form
 
 export async function importZooOffers(scopeParam: string, formData: FormData) {
   const user = await requireZooUser();
-  if (!isZooEditor(user)) redirect("/stampe/zoo/offerte");
+  if (!isZooEditor(user)) redirect("/stampe/zoo/prodotti");
   const file = formData.get("file") as File | null;
   const nome = String(formData.get("nome") ?? "").trim() || `Offerte ${new Date().toLocaleDateString("it-IT")}`;
   const dal = String(formData.get("dal") ?? "");
   const al = String(formData.get("al") ?? "");
-  if (!file || file.size === 0) redirect(backUrl("/stampe/zoo/offerte", scopeParam, { importate: "0" }));
+  if (!file || file.size === 0) redirect(backUrl("/stampe/zoo/prodotti", scopeParam, { importate: "0" }));
   const XLSX = await import("xlsx");
   const wb = XLSX.read(Buffer.from(await file!.arrayBuffer()), { type: "buffer" });
   const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[wb.SheetNames[0]], { defval: "" });
@@ -1255,7 +1255,7 @@ export async function importZooOffers(scopeParam: string, formData: FormData) {
     nOffers++;
   }
   await saveZooDb(db);
-  redirect(backUrl("/stampe/zoo/offerte", scopeParam, {
+  redirect(backUrl("/stampe/zoo/prodotti", scopeParam, {
     ...(nMarginiamo ? { esclusemarginiamo: String(nMarginiamo) } : {}),
     importate: String(nOffers), nuovi: String(nNew), ...(nSenzaPrezzo ? { senzaprezzo: String(nSenzaPrezzo) } : {}),
   }));
@@ -1283,7 +1283,7 @@ export async function interpretaPromoScritte(campaignId: string): Promise<{ ok: 
   const tot = conta.sconto + conta.meccanica + conta.marginiamo;
   if (!tot) return { ok: true, error: "Niente da tradurre: le promo scritte sono già state lette." };
   await saveZooDb(db);
-  revalidatePath("/stampe/zoo/offerte");
+  revalidatePath("/stampe/zoo/prodotti");
   return {
     ok: true,
     error: `${conta.sconto} a sconto (${conPrezzo} col prezzo scontato calcolato, ${conta.sconto - conPrezzo} senza prezzo di vendita: il cartello dirà solo «SCONTO»), ${conta.meccanica} a meccanica (3x2…), ${conta.marginiamo} «marginiamo».`,
@@ -1292,7 +1292,7 @@ export async function interpretaPromoScritte(campaignId: string): Promise<{ ok: 
 
 export async function updateCampaignDates(campaignId: string, scopeParam: string, formData: FormData) {
   const user = await requireZooUser();
-  if (!isZooEditor(user)) redirect(backUrl("/stampe/zoo/offerte", scopeParam));
+  if (!isZooEditor(user)) redirect(backUrl("/stampe/zoo/prodotti", scopeParam));
   const db = await getZooDb();
   const c = db.campaigns.find((x) => x.id === campaignId);
   if (c) {
@@ -1301,7 +1301,7 @@ export async function updateCampaignDates(campaignId: string, scopeParam: string
     c.al = String(formData.get("al") ?? c.al);
     await saveZooDb(db);
   }
-  redirect(backUrl("/stampe/zoo/offerte", scopeParam));
+  redirect(backUrl("/stampe/zoo/prodotti", scopeParam));
 }
 
 /**
@@ -1311,13 +1311,13 @@ export async function updateCampaignDates(campaignId: string, scopeParam: string
  */
 export async function svuotaOfferteVolantino(campaignId: string, scopeParam: string) {
   const user = await requireZooUser();
-  if (!isZooEditor(user)) redirect(backUrl("/stampe/zoo/offerte", scopeParam));
+  if (!isZooEditor(user)) redirect(backUrl("/stampe/zoo/prodotti", scopeParam));
   const db = await getZooDb();
   const rimosse = new Set(db.offers.filter((o) => o.campaignId === campaignId).map((o) => o.id));
   db.offers = db.offers.filter((o) => o.campaignId !== campaignId);
   db.votes = db.votes.filter((v) => !rimosse.has(v.offerId));
   await saveZooDb(db);
-  redirect(backUrl("/stampe/zoo/offerte", scopeParam, { svuotato: String(rimosse.size) }));
+  redirect(backUrl("/stampe/zoo/prodotti", scopeParam, { svuotato: String(rimosse.size) }));
 }
 
 /**
@@ -1327,7 +1327,7 @@ export async function svuotaOfferteVolantino(campaignId: string, scopeParam: str
  */
 export async function rimuoviOfferteMarginiamo(campaignId: string, scopeParam: string) {
   const user = await requireZooUser();
-  if (!isZooEditor(user)) redirect(backUrl("/stampe/zoo/offerte", scopeParam));
+  if (!isZooEditor(user)) redirect(backUrl("/stampe/zoo/prodotti", scopeParam));
   const db = await getZooDb();
   const rimosse = new Set(
     db.offers
@@ -1337,7 +1337,7 @@ export async function rimuoviOfferteMarginiamo(campaignId: string, scopeParam: s
   db.offers = db.offers.filter((o) => !rimosse.has(o.id));
   db.votes = db.votes.filter((v) => !rimosse.has(v.offerId));
   await saveZooDb(db);
-  redirect(backUrl("/stampe/zoo/offerte", scopeParam, { rimossemarginiamo: String(rimosse.size) }));
+  redirect(backUrl("/stampe/zoo/prodotti", scopeParam, { rimossemarginiamo: String(rimosse.size) }));
 }
 
 /* ---------- Ciclo di vita del volantino ---------- */
@@ -1349,7 +1349,7 @@ export async function rimuoviOfferteMarginiamo(campaignId: string, scopeParam: s
  */
 export async function chiudiVolantino(campaignId: string, scopeParam: string) {
   const user = await requireZooUser();
-  if (!isZooEditor(user)) redirect(backUrl("/stampe/zoo/offerte", scopeParam));
+  if (!isZooEditor(user)) redirect(backUrl("/stampe/zoo/prodotti", scopeParam));
   const db = await getZooDb();
   const c = db.campaigns.find((x) => x.id === campaignId);
   if (c) {
@@ -1358,15 +1358,15 @@ export async function chiudiVolantino(campaignId: string, scopeParam: string) {
     c.attiva = false;
     await saveZooDb(db);
   }
-  redirect(backUrl("/stampe/zoo/offerte", scopeParam, { chiuso: "1" }));
+  redirect(backUrl("/stampe/zoo/prodotti", scopeParam, { chiuso: "1" }));
 }
 
 /** Riapre un volantino chiuso per correggerlo (solo se non ce n'è già uno in lavorazione). */
 export async function riapriVolantino(campaignId: string, scopeParam: string) {
   const user = await requireZooUser();
-  if (!isZooEditor(user)) redirect(backUrl("/stampe/zoo/offerte", scopeParam));
+  if (!isZooEditor(user)) redirect(backUrl("/stampe/zoo/prodotti", scopeParam));
   const db = await getZooDb();
-  if (campagnaInLavorazione(db)) redirect(backUrl("/stampe/zoo/offerte", scopeParam, { errore: "giaaperto" }));
+  if (campagnaInLavorazione(db)) redirect(backUrl("/stampe/zoo/prodotti", scopeParam, { errore: "giaaperto" }));
   const c = db.campaigns.find((x) => x.id === campaignId);
   if (c) {
     c.stato = "lavorazione";
@@ -1374,7 +1374,7 @@ export async function riapriVolantino(campaignId: string, scopeParam: string) {
     delete c.chiusaIl;
     await saveZooDb(db);
   }
-  redirect(backUrl("/stampe/zoo/offerte", scopeParam, { riaperto: "1" }));
+  redirect(backUrl("/stampe/zoo/prodotti", scopeParam, { riaperto: "1" }));
 }
 
 /**
@@ -1384,9 +1384,9 @@ export async function riapriVolantino(campaignId: string, scopeParam: string) {
  */
 export async function nuovoVolantino(scopeParam: string, formData: FormData) {
   const user = await requireZooUser();
-  if (!isZooEditor(user)) redirect(backUrl("/stampe/zoo/offerte", scopeParam));
+  if (!isZooEditor(user)) redirect(backUrl("/stampe/zoo/prodotti", scopeParam));
   const db = await getZooDb();
-  if (campagnaInLavorazione(db)) redirect(backUrl("/stampe/zoo/offerte", scopeParam, { errore: "giaaperto" }));
+  if (campagnaInLavorazione(db)) redirect(backUrl("/stampe/zoo/prodotti", scopeParam, { errore: "giaaperto" }));
 
   const precedente = campagnaInCorso(db);
   if (precedente) {
@@ -1422,7 +1422,7 @@ export async function nuovoVolantino(scopeParam: string, formData: FormData) {
   }
 
   await saveZooDb(db);
-  redirect(backUrl("/stampe/zoo/offerte", scopeParam, { nuovo: "1" }));
+  redirect(backUrl("/stampe/zoo/prodotti", scopeParam, { nuovo: "1" }));
 }
 
 /** Archivia a mano un volantino chiuso, senza aprirne uno nuovo. */
@@ -1561,7 +1561,7 @@ export async function segnaPassoVolantino(campaignId: string, passo: PassoVolant
   if (!c) return { ok: false, error: "Volantino non trovato." };
   c.passi = { ...(c.passi ?? {}), [passo]: { fatto, da: `${user.firstName} ${user.lastName}`, il: new Date().toISOString() } };
   await saveZooDb(db);
-  revalidatePath("/stampe/zoo/offerte");
+  revalidatePath("/stampe/zoo/prodotti");
   return { ok: true };
 }
 
@@ -1597,7 +1597,7 @@ export async function avviaAssociaConAI(): Promise<{ ok: boolean; error?: string
   await saveZooDb(db);
   after(async () => {
     await eseguiAssociazione(apiKey, ids);
-    revalidatePath("/stampe/zoo/offerte");
+    revalidatePath("/stampe/zoo/prodotti");
   });
   return { ok: true, error: `Associazione partita: ${ids.length} articoli, 4 lotti da 30 alla volta. L'avanzamento compare qui sopra.` };
 }
@@ -1618,21 +1618,21 @@ export async function chiudiAvvisoAssocia(): Promise<{ ok: boolean }> {
  */
 export async function associaNuoviConAI(scopeParam: string) {
   const user = await requireZooUser();
-  if (!isZooEditor(user)) redirect(backUrl("/stampe/zoo/offerte", scopeParam));
+  if (!isZooEditor(user)) redirect(backUrl("/stampe/zoo/prodotti", scopeParam));
   const db = await getZooDb();
   const campaign = campagnaInLavorazione(db);
   const inVolantino = new Set(
     db.offers.filter((o) => o.campaignId === campaign?.id).map((o) => o.productId)
   );
   const orphans = db.products.filter((p) => !p.parentId && inVolantino.has(p.id));
-  if (orphans.length === 0) redirect(backUrl("/stampe/zoo/offerte", scopeParam, { padri: "0" }));
+  if (orphans.length === 0) redirect(backUrl("/stampe/zoo/prodotti", scopeParam, { padri: "0" }));
   const chiaveNuovi = db.settings.apiKey || process.env.ANTHROPIC_API_KEY;
   const { groups, usedAi, error, restanti } = await groupAndDescribeBatched(chiaveNuovi, orphans, db.settings);
-  if (chiaveNuovi && !usedAi) redirect(backUrl("/stampe/zoo/offerte", scopeParam, { padri: "0", ai: "0", aierr: (error ?? "L'AI non ha risposto").slice(0, 120) }));
+  if (chiaveNuovi && !usedAi) redirect(backUrl("/stampe/zoo/prodotti", scopeParam, { padri: "0", ai: "0", aierr: (error ?? "L'AI non ha risposto").slice(0, 120) }));
   const freschi = await getZooDb();
   const created = applyGroups(freschi, groups, usedAi, new Set(orphans.map((p) => p.id)));
   await saveZooDb(freschi);
-  redirect(backUrl("/stampe/zoo/offerte", scopeParam, {
+  redirect(backUrl("/stampe/zoo/prodotti", scopeParam, {
     padri: String(created), ai: usedAi ? "1" : "0",
     ...(restanti ? { restanti: String(restanti) } : {}),
     ...(error ? { aierr: error.slice(0, 120) } : {}),
@@ -2913,16 +2913,16 @@ export async function eliminaOffertaPropria(offerId: string, scopeParam: string)
  */
 export async function archiviaOfferteSelezionate(scopeParam: string, formData: FormData) {
   const user = await requireZooUser();
-  if (!isZooEditor(user)) redirect(backUrl("/stampe/zoo/offerte", scopeParam));
+  if (!isZooEditor(user)) redirect(backUrl("/stampe/zoo/prodotti", scopeParam));
   const db = await getZooDb();
   const campaign = campagnaInLavorazione(db);
-  if (!campaign) redirect(backUrl("/stampe/zoo/offerte", scopeParam));
+  if (!campaign) redirect(backUrl("/stampe/zoo/prodotti", scopeParam));
 
   const idProdotti = (formData.getAll("sel") as string[]).filter(Boolean);
   const idPadri = (formData.getAll("selpadre") as string[]).filter(Boolean);
   const daPadri = db.products.filter((p) => p.parentId && idPadri.includes(p.parentId)).map((p) => p.id);
   const prodotti = new Set([...idProdotti, ...daPadri]);
-  if (prodotti.size === 0) redirect(backUrl("/stampe/zoo/offerte", scopeParam, { archiviate: "0" }));
+  if (prodotti.size === 0) redirect(backUrl("/stampe/zoo/prodotti", scopeParam, { archiviate: "0" }));
 
   const rimosse = db.offers.filter(
     (o) => o.campaignId === campaign.id && !o.scopeType && o.productId && prodotti.has(o.productId)
@@ -2932,7 +2932,7 @@ export async function archiviaOfferteSelezionate(scopeParam: string, formData: F
   db.votes = db.votes.filter((v) => !ids.has(v.offerId));
   await saveZooDb(db);
   rigeneraZoo();
-  redirect(backUrl("/stampe/zoo/offerte", scopeParam, { archiviate: String(ids.size) }));
+  redirect(backUrl("/stampe/zoo/prodotti", scopeParam, { archiviate: String(ids.size) }));
 }
 
 /* ================== Avvisi ai colleghi ================== */
