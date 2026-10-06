@@ -64,11 +64,24 @@ a{color:inherit}
 .banners::-webkit-scrollbar{display:none}
 .banner{flex:0 0 100%;scroll-snap-align:start;position:relative;min-height:190px;border-radius:var(--raggio);overflow:hidden;color:#fff;padding:18px;display:flex;flex-direction:column;justify-content:flex-end;isolation:isolate}
 .banner .sfondo{position:absolute;inset:0;z-index:-1}
-.banner.dentale .sfondo{background:radial-gradient(130% 100% at 100% 0%,rgba(255,255,255,.25),transparent 55%),linear-gradient(135deg,#0d4f30,#1b7a3d 55%,#58b96f)}
-.banner.acqua .sfondo{background:linear-gradient(160deg,#052e5a,#0a62a8 60%,#35b5d8)}
-.banner.piccoli .sfondo{background:linear-gradient(135deg,#6b3e1f,#b26a2a 60%,#e8b25c)}
-.banner.foto .sfondo{background:url(img/hero_zoo.jpg) center/cover}
-.banner.foto .sfondo::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(0,0,0,.7),rgba(0,0,0,.15))}
+.banner .sfondo{background-size:cover;background-position:center;animation:carrellata 14s ease-in-out infinite alternate}
+.banner .sfondo::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(0,0,0,.72),rgba(0,0,0,.25) 60%,rgba(0,0,0,.05))}
+.banner.dentale .sfondo{background-image:url(img/em_cane_osso.jpg);background-position:70% 40%}
+.banner.acqua .sfondo{background-image:url(img/em_acquario.jpg);background-position:center 60%}
+.banner.gatto .sfondo{background-image:url(img/em_gatto_coperta.jpg);background-position:35% 50%}
+.banner.piccoli .sfondo{background-image:url(img/em_cavia.jpg);background-position:65% 40%}
+.banner.tarta .sfondo{background-image:url(img/em_tartaruga.jpg);background-position:30% 50%}
+@keyframes carrellata{from{transform:scale(1)}to{transform:scale(1.1)}}
+.banner{min-height:230px}
+.banner.acqua .prod,.banner.dentale .prod,.banner.tarta .prod{width:38%}
+/* fascia emozionale in testa a ogni sezione: foto larga, titolo sopra, entra con un leggero zoom */
+.fascia{position:relative;height:150px;border-radius:var(--raggio);overflow:hidden;margin:4px 0 12px;color:#fff;display:flex;align-items:flex-end;padding:14px;isolation:isolate}
+.fascia .sf{position:absolute;inset:0;z-index:-2;background-size:cover;background-position:center;transform:scale(1.15);transition:transform 1.4s cubic-bezier(.2,.8,.2,1)}
+.fascia.vis .sf{transform:scale(1)}
+.fascia::after{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(180deg,rgba(0,0,0,0) 30%,rgba(0,0,0,.65))}
+.fascia h2{font-family:var(--display);font-size:30px;margin:0;line-height:1;text-shadow:0 3px 12px rgba(0,0,0,.4);opacity:0;transform:translateY(10px);transition:opacity .6s .2s,transform .6s .2s}
+.fascia.vis h2{opacity:1;transform:none}
+.fascia span{position:absolute;right:14px;bottom:16px;font-size:12px;font-weight:800;background:rgba(255,255,255,.18);backdrop-filter:blur(6px);padding:4px 9px;border-radius:999px}
 .banner .k{font-size:11px;letter-spacing:.14em;text-transform:uppercase;opacity:.9}
 .banner h2{font-family:var(--display);font-size:26px;line-height:1.02;margin:4px 0 6px;text-wrap:balance;max-width:14ch}
 .banner p{margin:0 0 10px;font-size:13px;max-width:32ch;opacity:.95}
@@ -133,7 +146,7 @@ a{color:inherit}
 .storie .rotolo::-webkit-scrollbar{display:none}
 .storia{height:100%;scroll-snap-align:start;position:relative;color:#fff;display:flex;flex-direction:column;justify-content:flex-end;padding:0 22px calc(28px + env(safe-area-inset-bottom,0px));isolation:isolate;overflow:hidden}
 .storia .sf{position:absolute;inset:0;z-index:-2;background:var(--sf,#1b7a3d)}
-.storia .sf.foto{background:url(img/hero_zoo.jpg) center/cover;filter:brightness(.6)}
+.storia .sf.foto{background-size:cover;background-position:center;filter:brightness(.55);animation:carrellata 10s ease-in-out infinite alternate}
 .storia .velo{position:absolute;inset:0;z-index:-1;background:linear-gradient(180deg,rgba(0,0,0,.1),rgba(0,0,0,.55) 75%)}
 .storia .prod{width:min(68vw,320px);aspect-ratio:1;object-fit:contain;margin:0 auto 10px;filter:drop-shadow(0 20px 30px rgba(0,0,0,.5));opacity:0;transform:scale(.7) translateY(30px)}
 .storia.vis .prod{animation:arriva .8s cubic-bezier(.2,1.2,.3,1) .1s both}
@@ -171,7 +184,7 @@ a{color:inherit}
 .toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:var(--fg);color:var(--card);padding:9px 16px;border-radius:999px;font-size:13px;z-index:60;animation:su .3s}
 .fine{padding:18px 14px 10px;text-align:center;font-size:12px;color:var(--muted)}
 .fine a{color:var(--muted)}
-.ridotte .hero .foto,.ridotte .prod,.ridotte .badge.lampo,.ridotte .card.piu::before,.ridotte .bolle i{animation:none!important}
+.ridotte .hero .foto,.ridotte .prod,.ridotte .banner .sfondo,.ridotte .storia .sf,.ridotte .badge.lampo,.ridotte .card.piu::before,.ridotte .bolle i{animation:none!important}
 @media (prefers-reduced-motion:reduce){ *,*::before,*::after{animation:none!important;transition:none!important} .card,.sez-h{opacity:1;transform:none} }
 </style>
 </head>
@@ -288,12 +301,14 @@ function disegna(){
   $("banners").innerHTML = `
     <div class="banner dentale"><div class="sfondo"></div><span class="k">Focus del mese · dentale</span><h2>Denti sani, alito fresco</h2><p>Un bastoncino al giorno pulisce mentre il cane mastica. In offerta tutto il mese.</p><button type="button" class="cta" data-apri="${VOCI.indexOf(focus)}">Scopri a € ${focus.prezzo} ${ico("i-dx")}</button><img class="prod" src="${focus.foto}" alt=""></div>
     <div class="banner acqua"><div class="sfondo"></div><div class="bolle">${Array.from({ length: 14 }, (_, k) => `<i style="left:${(k * 7 + 3) % 100}%;width:${6 + (k % 4) * 4}px;height:${6 + (k % 4) * 4}px;animation-duration:${4 + (k % 5)}s;animation-delay:${(k * .7) % 4}s"></i>`).join("")}</div><span class="k">Acquario</span><h2>Luce nuova per l'acquario</h2><p>Plafoniere LED Amtra in offerta: colori vivi e consumi bassi.</p><button type="button" class="cta" data-apri="${VOCI.indexOf(acqua)}">Vedi le luci ${ico("i-dx")}</button><img class="prod" src="${acqua.foto}" alt=""></div>
-    <div class="banner foto"><div class="sfondo"></div><span class="k">Insieme è meglio</span><h2>Porta a casa qualcosa per tutti e due</h2><p>Snack, lettiere e crocchette: il meglio per cane e gatto, con un unico passaggio in negozio.</p><button type="button" class="cta" data-vai="sez-Gatto">Vai alle offerte ${ico("i-dx")}</button></div>
-    <div class="banner piccoli"><div class="sfondo"></div><span class="k">Piccoli amici</span><h2>Tartarughe e roditori, coccolati</h2><p>Mangimi e accessori scelti per chi è piccolo ma conta tanto.</p><button type="button" class="cta" data-apri="${VOCI.indexOf(piccoli)}">Scopri ${ico("i-dx")}</button><img class="prod" src="${piccoli.foto}" alt=""></div>`;
-  $("dots").innerHTML = `<i class="on"></i><i></i><i></i><i></i>`;
+    <div class="banner gatto"><div class="sfondo"></div><span class="k">Coccole da divano</span><h2>Il gatto sceglie, tu risparmi</h2><p>Umido, snack e lettiere delle marche che conosce: tutto il reparto gatto in offerta.</p><button type="button" class="cta" data-vai="sez-Gatto">Vai alle offerte gatto ${ico("i-dx")}</button></div>
+    <div class="banner piccoli"><div class="sfondo"></div><span class="k">Piccoli amici</span><h2>Piccoli, ma contano tanto</h2><p>Mangimi e accessori scelti per roditori e tartarughe.</p><button type="button" class="cta" data-apri="${VOCI.indexOf(piccoli)}">Scopri ${ico("i-dx")}</button></div>
+    <div class="banner tarta"><div class="sfondo"></div><span class="k">Tartarughe</span><h2>Il pasto giusto, tutto l'anno</h2><p>Pellet Prodac Tarvegetal per tartarughe di terra, con lo sconto di novembre.</p><button type="button" class="cta" data-apri="${VOCI.indexOf(piccoli)}">A € ${piccoli.prezzo} ${ico("i-dx")}</button><img class="prod" src="${piccoli.foto}" alt=""></div>`;
+  $("dots").innerHTML = `<i class="on"></i><i></i><i></i><i></i><i></i>`;
   $("sezioni").innerHTML = ANIMALI.map(([a, ic]) => {
     const voci = VOCI.map((v, i) => ({ v, i })).filter(({ v }) => v.animale === a);
-    return `<section class="sez" id="sez-${a}"><div class="sez-h"><h2>${nomeAnimale(a)}</h2><span>${voci.length} offerte</span></div><div class="griglia">${voci.map(({ v, i }) => card(v, i)).join("")}</div></section>`;
+    const fasce = { Gatto: ["img/em_gatto_ciotola.jpg", "Per il gatto"], Cane: ["img/em_golden.jpg", "Per il cane"], Pesci: ["img/em_acquario.jpg", "Acquario e tartarughe"] };
+    return `<section class="sez" id="sez-${a}"><div class="fascia"><div class="sf" style="background-image:url(${fasce[a][0]})"></div><h2>${fasce[a][1]}</h2><span>${voci.length} offerte</span></div><div class="griglia">${voci.map(({ v, i }) => card(v, i)).join("")}</div></section>`;
   }).join("");
   $("nLista").textContent = lista.length;
   osserva();
@@ -301,7 +316,7 @@ function disegna(){
 /* animazioni all'ingresso nello schermo: titoli che scivolano, schede che salgono, prezzi che "esplodono" */
 function osserva(){
   const io = new IntersectionObserver((e) => e.forEach((x) => { if (x.isIntersecting) { x.target.classList.add("vis"); if (x.target.classList.contains("card")) { x.target.classList.add("boom"); setTimeout(() => x.target.classList.remove("boom"), 900); } } }), { threshold: .25 });
-  document.querySelectorAll(".card, .sez-h").forEach((el) => io.observe(el));
+  document.querySelectorAll(".card, .sez-h, .fascia").forEach((el) => io.observe(el));
 }
 /* countdown vivo: giorni, ore, minuti, secondi; i numeri "scattano" quando cambiano */
 (function conto(){
@@ -348,8 +363,8 @@ function apriLista(){
 /* storie: una schermata per offerta, prezzo che arriva grande */
 function apriStorie(){
   const scelte = [VOCI.find((v) => v.focus), ...PIU_SCELTI.map((e) => VOCI.find((v) => v.ean === e)), VOCI.find((v) => v.t.includes("Amtra Basic LED")), VOCI.find((v) => v.t.includes("Dog Chow"))].filter(Boolean);
-  const sfondi = ["#1b7a3d", "#c2185b", "#1b4fa8", "#b26a2a", "#0a62a8", "#6b3e1f"];
-  $("rotolo").innerHTML = scelte.map((v, k) => `<div class="storia" style="--sf:${sfondi[k % sfondi.length]}"><div class="sf ${k === 2 ? "foto" : ""}"></div><div class="velo"></div>
+  const fotoPer = (v) => v.focus ? "img/em_cane_osso.jpg" : v.animale === "Cane" ? "img/em_golden.jpg" : v.animale === "Pesci" ? (v.t.includes("Tarvegetal") ? "img/em_tartaruga.jpg" : "img/em_acquario.jpg") : "img/em_gatto_coperta.jpg";
+  $("rotolo").innerHTML = scelte.map((v) => `<div class="storia"><div class="sf foto" style="background-image:url(${fotoPer(v)})"></div><div class="velo"></div>
     <img class="prod" src="${v.foto}" alt=""><span class="k">${v.focus ? v.focus : nomeAnimale(v.animale)}</span><h2>${v.t}</h2>
     <div class="big">${prezzoDi(v).prezzo ? `€ ${prezzoDi(v).prezzo.split(",")[0]}<small>,${prezzoDi(v).prezzo.split(",")[1] || "00"}</small>` : v.mecc}</div>
     ${v.listino ? `<div class="da">anziché € ${v.listino} · risparmi € ${eur(num(v.listino) - num(prezzoDi(v).prezzo))}</div>` : ""}
@@ -374,7 +389,7 @@ $("bNegozio").addEventListener("click", () => toast(`${INSEGNE[insegna].nome} ·
 $("bStorie").addEventListener("click", apriStorie);
 $("chiudiStorie").addEventListener("click", () => { $("storie").classList.remove("on"); document.body.style.overflow = ""; });
 $("banners").addEventListener("scroll", () => { const b = $("banners"); const k = Math.round(b.scrollLeft / b.clientWidth); [...$("dots").children].forEach((d, j) => d.classList.toggle("on", j === k)); }, { passive: true });
-setInterval(() => { const b = $("banners"); if (document.hidden || document.body.classList.contains("ridotte")) return; const k = Math.round(b.scrollLeft / b.clientWidth); b.scrollTo({ left: b.clientWidth * ((k + 1) % 4), behavior: "smooth" }); }, 6000);
+setInterval(() => { const b = $("banners"); if (document.hidden || document.body.classList.contains("ridotte")) return; const k = Math.round(b.scrollLeft / b.clientWidth); b.scrollTo({ left: b.clientWidth * ((k + 1) % 5), behavior: "smooth" }); }, 6000);
 $("toggleAnim").addEventListener("click", (e) => { e.preventDefault(); const on = document.body.classList.toggle("ridotte"); e.target.textContent = on ? "Riattiva le animazioni" : "Riduci le animazioni"; });
 $("insegna").innerHTML = Object.entries(INSEGNE).map(([k, i]) => `<option value="${k}" ${k === insegna ? "selected" : ""}>${i.nome}</option>`).join("");
 $("insegna").addEventListener("change", (e) => { const u = new URL(location.href); u.searchParams.set("insegna", e.target.value); location.href = u.toString(); });
