@@ -46,6 +46,30 @@ const COLORI_TESTO = [
 ];
 
 /** Editor drag & drop del layout cartello: trascina i campi, ridimensionali dall'angolo, si salva da solo. */
+/**
+ * Casella numerica che applica i limiti solo quando si è finito di scrivere
+ * (uscita dal campo o Invio): limitando a ogni tasto, scrivere "120" diventava
+ * "6" al primo "1" e poi "400" — non si riusciva a mettere il numero voluto.
+ */
+function NumeroConLimiti({ valore, min, max, onCommit, style }: {
+  valore: number; min: number; max: number; onCommit: (n: number) => void; style?: React.CSSProperties;
+}) {
+  const [testo, setTesto] = useState(String(valore));
+  useEffect(() => { setTesto(String(valore)); }, [valore]);
+  const conferma = () => {
+    const n = Number(testo.replace(",", "."));
+    const pulito = Number.isFinite(n) ? Math.max(min, Math.min(max, Math.round(n))) : valore;
+    setTesto(String(pulito));
+    if (pulito !== valore) onCommit(pulito);
+  };
+  return (
+    <input type="number" min={min} max={max} step={1} value={testo} style={style}
+      onChange={(e) => setTesto(e.target.value)}
+      onBlur={conferma}
+      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); conferma(); } }} />
+  );
+}
+
 export default function LayoutEditor({
   format,
   fields,
@@ -1017,10 +1041,11 @@ export default function LayoutEditor({
                   style={{ flex: 1 }}
                 />
                 {/* casella accanto al cursore: sui prezzi grandi serve il numero esatto, non la posizione del cursore */}
-                <input
-                  type="number" min={6} max={400} step={1}
-                  value={selItem.size ?? fields.find((f) => f.id === selItem.fieldId)?.size ?? 11}
-                  onChange={(e) => updateSelected({ size: Math.max(6, Math.min(400, Number(e.target.value) || 6)) })}
+                <NumeroConLimiti
+                  key={selected}
+                  valore={selItem.size ?? fields.find((f) => f.id === selItem.fieldId)?.size ?? 11}
+                  min={6} max={400}
+                  onCommit={(n) => updateSelected({ size: n })}
                   style={{ width: 68, marginTop: 0 }}
                 />
               </span>
