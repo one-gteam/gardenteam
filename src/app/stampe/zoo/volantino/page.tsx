@@ -153,6 +153,20 @@ export default async function ZooVolantinoPage({
     }
     return (pid: string) => voci.get(pid)?.size ?? 0;
   })();
+  /*
+   * La pagina "giusta" per un animale: quella col suo nome, oppure quella che
+   * lo raccoglie con altri (Pesci → Acquariologia, Roditori/Uccelli/Rettili →
+   * Piccoli animali). Così la colonna Pagina propone i pulsanti giusti.
+   */
+  const SINONIMI_PAGINA: Record<string, string[]> = {
+    pesci: ["acquari", "pesc"], roditori: ["piccoli animali", "roditor"], uccelli: ["piccoli animali", "uccell"],
+    rettili: ["piccoli animali", "rettil", "terrar"],
+  };
+  const paginaPerAnimale = (nomePagina: string, animale: string) => {
+    const n = nomePagina.toLowerCase();
+    const a = animale.toLowerCase();
+    return n.includes(a) || (SINONIMI_PAGINA[a] ?? []).some((x) => n.includes(x));
+  };
   const hrefPagina = (pid: string) => {
     const params = new URLSearchParams();
     for (const [k, v] of Object.entries(sp)) if (v && k !== "pagina" && k !== "scope") params.set(k, v);
@@ -543,7 +557,7 @@ export default async function ZooVolantinoPage({
                         {consortium && (
                           <td>
                             <PaginaRapida value={first.paginaId ?? ""} tutte={pagineVolantino} noVolantino={NO_VOLANTINO}
-                              suggerite={pagineVolantino.filter((p) => animaliOfferta.some((a) => p.nome.toLowerCase().includes(a.toLowerCase())))}
+                              suggerite={pagineVolantino.filter((p) => animaliOfferta.some((a) => paginaPerAnimale(p.nome, a)))}
                               onSave={updateOfferGroupFieldInline.bind(null, ids, "paginaId")} />
                           </td>
                         )}
