@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Offerte Novembre · Volantino digitale (demo)</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&family=Nunito:wght@400;600;800;900&display=swap">
+<style>
+/* ====== identità dell'insegna: i colori arrivano da JS (--accent ecc.) ====== */
+:root{
+  --bg:#f4f2ec; --fg:#1c1e1a; --muted:#656a60; --card:#fff; --line:#e2dfd6;
+  --accent:#c2185b; --accent-fg:#fff; --accent-soft:#fbe9f0; --price:#d2161e; --save:#1b7a3d; --flash:#f5b400;
+  --display:"Oswald","Arial Narrow",Impact,sans-serif; --body:"Nunito","Segoe UI",system-ui,sans-serif;
+  --raggio:16px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--body);-webkit-font-smoothing:antialiased}
+img{max-width:100%;display:block}
+button{font:inherit;cursor:pointer}
+a{color:inherit}
+.ico{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.app{max-width:560px;margin:0 auto;min-height:100vh;background:var(--card);box-shadow:0 0 40px rgba(0,0,0,.06);position:relative;padding-bottom:84px}
+@media (min-width:900px){ .app{max-width:1100px} }
+
+/* ====== testata insegna ====== */
+.top{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--accent);color:var(--accent-fg);padding-top:calc(10px + env(safe-area-inset-top,0px))}
+.top img{height:32px;max-width:130px;object-fit:contain;background:#fff;border-radius:6px;padding:3px 7px}
+.top .nome{font-family:var(--display);font-size:19px;letter-spacing:.02em;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.top .negozio{display:flex;align-items:center;gap:4px;font-size:12px;opacity:.95;white-space:nowrap}
+.demo-sw{position:absolute;right:14px;top:calc(52px + env(safe-area-inset-top,0px));z-index:21;font-size:11.5px;background:rgba(255,255,255,.92);color:#222;border-radius:999px;padding:3px 8px;border:1px solid rgba(0,0,0,.1);display:flex;gap:6px;align-items:center}
+.demo-sw select{font:inherit;font-size:11.5px;border:none;background:transparent}
+
+/* ====== hero emozionale con foto, Ken Burns e countdown ====== */
+.hero{position:relative;height:min(78vw,440px);overflow:hidden;color:#fff;isolation:isolate}
+.hero .foto{position:absolute;inset:0;background:url(img/hero_zoo.jpg) center 40%/cover;animation:kenburns 18s ease-in-out infinite alternate;z-index:-2}
+.hero .velo{position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.05) 0%,rgba(0,0,0,.15) 35%,rgba(0,0,0,.72) 100%);z-index:-1}
+.hero .testo{position:absolute;left:0;right:0;bottom:0;padding:16px 18px 18px}
+.hero .eyebrow{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;background:var(--accent);color:var(--accent-fg);padding:4px 10px;border-radius:999px;animation:entra .7s .1s both}
+.hero h1{font-family:var(--display);font-size:clamp(30px,8vw,54px);line-height:.98;margin:10px 0 6px;text-wrap:balance;text-shadow:0 4px 18px rgba(0,0,0,.35);animation:entra .7s .25s both}
+.hero p{margin:0 0 12px;font-size:14.5px;max-width:40ch;opacity:.95;animation:entra .7s .4s both}
+.conto{display:flex;gap:6px;align-items:center;animation:entra .7s .55s both}
+.conto .lbl{font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;opacity:.85;margin-right:4px}
+.conto .u{background:rgba(255,255,255,.14);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.25);border-radius:9px;min-width:46px;padding:5px 6px;text-align:center}
+.conto .u b{display:block;font-family:var(--display);font-size:22px;line-height:1;font-variant-numeric:tabular-nums}
+.conto .u span{font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;opacity:.8}
+.conto .u.tick b{animation:tick .5s}
+@keyframes kenburns{from{transform:scale(1) translate(0,0)}to{transform:scale(1.14) translate(-2%,2%)}}
+@keyframes entra{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes tick{0%{transform:translateY(-6px);opacity:.3}100%{transform:none;opacity:1}}
+
+/* ====== navigazione ====== */
+.nav{position:sticky;top:calc(52px + env(safe-area-inset-top,0px));z-index:19;background:var(--card);border-bottom:1px solid var(--line);display:flex;gap:6px;padding:8px 14px;overflow-x:auto;scrollbar-width:none}
+.nav::-webkit-scrollbar{display:none}
+.chip{white-space:nowrap;font-size:12.5px;font-weight:800;border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:999px;padding:6px 12px;display:inline-flex;gap:6px;align-items:center;transition:transform .15s,background .2s}
+.chip.on{background:var(--fg);color:var(--card);border-color:var(--fg)}
+.chip:active{transform:scale(.96)}
+
+/* ====== banner emozionali (carosello) ====== */
+.banner-wrap{position:relative;margin:14px 14px 4px}
+.banners{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:10px;scrollbar-width:none;border-radius:var(--raggio)}
+.banners::-webkit-scrollbar{display:none}
+.banner{flex:0 0 100%;scroll-snap-align:start;position:relative;min-height:190px;border-radius:var(--raggio);overflow:hidden;color:#fff;padding:18px;display:flex;flex-direction:column;justify-content:flex-end;isolation:isolate}
+.banner .sfondo{position:absolute;inset:0;z-index:-1}
+.banner.dentale .sfondo{background:radial-gradient(130% 100% at 100% 0%,rgba(255,255,255,.25),transparent 55%),linear-gradient(135deg,#0d4f30,#1b7a3d 55%,#58b96f)}
+.banner.acqua .sfondo{background:linear-gradient(160deg,#052e5a,#0a62a8 60%,#35b5d8)}
+.banner.piccoli .sfondo{background:linear-gradient(135deg,#6b3e1f,#b26a2a 60%,#e8b25c)}
+.banner.foto .sfondo{background:url(img/hero_zoo.jpg) center/cover}
+.banner.foto .sfondo::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(0,0,0,.7),rgba(0,0,0,.15))}
+.banner .k{font-size:11px;letter-spacing:.14em;text-transform:uppercase;opacity:.9}
+.banner h2{font-family:var(--display);font-size:26px;line-height:1.02;margin:4px 0 6px;text-wrap:balance;max-width:14ch}
+.banner p{margin:0 0 10px;font-size:13px;max-width:32ch;opacity:.95}
+.banner .cta{align-self:flex-start;background:#fff;color:#111;border:none;border-radius:999px;padding:8px 14px;font-weight:900;font-size:13px;display:inline-flex;gap:6px;align-items:center}
+.banner .prod{position:absolute;right:10px;bottom:6px;width:46%;max-width:210px;aspect-ratio:1;object-fit:contain;filter:drop-shadow(0 12px 18px rgba(0,0,0,.4));transform:rotate(-7deg);animation:galleggia 4s ease-in-out infinite}
+@keyframes galleggia{0%,100%{transform:rotate(-7deg) translateY(0)}50%{transform:rotate(-5deg) translateY(-8px)}}
+.bolle{position:absolute;inset:0;overflow:hidden;z-index:0;pointer-events:none}
+.bolle i{position:absolute;bottom:-20px;width:10px;height:10px;border-radius:50%;background:rgba(255,255,255,.35);animation:sale linear infinite}
+@keyframes sale{to{transform:translateY(-260px);opacity:0}}
+.dots{display:flex;justify-content:center;gap:5px;padding:8px 0 2px}
+.dots i{width:6px;height:6px;border-radius:3px;background:var(--line);transition:all .3s}
+.dots i.on{width:18px;background:var(--accent)}
+
+/* ====== sezioni e schede ====== */
+.sez{padding:14px 14px 6px}
+.sez-h{display:flex;align-items:baseline;gap:10px;margin:8px 0 10px;opacity:0;transform:translateX(-18px);transition:opacity .6s,transform .6s}
+.sez-h.vis{opacity:1;transform:none}
+.sez-h h2{font-family:var(--display);font-size:24px;margin:0;letter-spacing:.01em;position:relative;padding-left:14px}
+.sez-h h2::before{content:"";position:absolute;left:0;top:4px;bottom:4px;width:5px;border-radius:3px;background:var(--accent)}
+.sez-h span{font-size:12px;color:var(--muted);font-weight:600}
+.griglia{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+@media (min-width:600px){ .griglia{grid-template-columns:repeat(3,minmax(0,1fr))} }
+@media (min-width:900px){ .griglia{grid-template-columns:repeat(4,minmax(0,1fr))} }
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--raggio);padding:10px;position:relative;display:flex;flex-direction:column;gap:6px;min-width:0;cursor:pointer;overflow:hidden;opacity:0;transform:translateY(18px);transition:opacity .5s,transform .5s,box-shadow .2s}
+.card.vis{opacity:1;transform:none}
+.card:hover{box-shadow:0 10px 24px rgba(0,0,0,.1)}
+.card .img{aspect-ratio:1;border-radius:10px;overflow:hidden;background:#fff}
+.card .img img{width:100%;height:100%;object-fit:contain;transition:transform .5s cubic-bezier(.2,.8,.2,1)}
+.card:hover .img img, .card.vis.boom .img img{transform:scale(1.08)}
+.card .t{font-weight:900;font-size:13.5px;line-height:1.15}
+.card .d{font-size:11.5px;color:var(--muted);line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.prezzo{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap;margin-top:2px}
+.prezzo .p{font-family:var(--display);font-size:28px;color:var(--price);line-height:1;font-weight:700;display:inline-block;transform-origin:left bottom}
+.prezzo .p small{font-size:15px}
+.prezzo .da{font-size:11.5px;color:var(--muted)}
+.prezzo .da s{text-decoration-color:var(--price)}
+.card.vis .p{animation:pop .8s cubic-bezier(.2,1.4,.3,1) both}
+.card.vis .p::after{content:"";position:absolute;inset:-6px -10px;border-radius:12px;background:radial-gradient(closest-side,rgba(210,22,30,.28),transparent);z-index:-1;animation:lucente 1.2s .2s both}
+.card .p{position:relative}
+@keyframes pop{0%{transform:scale(.55);opacity:0}60%{transform:scale(1.12)}100%{transform:scale(1);opacity:1}}
+@keyframes lucente{0%{opacity:0;transform:scale(.6)}50%{opacity:1}100%{opacity:0;transform:scale(1.4)}}
+.badge{position:absolute;top:8px;left:8px;background:var(--price);color:#fff;font-family:var(--display);font-size:13.5px;padding:3px 8px;border-radius:7px;letter-spacing:.03em;z-index:2;box-shadow:0 3px 10px rgba(210,22,30,.35)}
+.badge.mecc{background:#1b4fa8;box-shadow:0 3px 10px rgba(27,79,168,.35)}
+.badge.lampo{animation:lampeggia 1.6s ease-in-out infinite}
+@keyframes lampeggia{0%,100%{box-shadow:0 0 0 0 rgba(210,22,30,.5)}50%{box-shadow:0 0 0 8px rgba(210,22,30,0)}}
+.etich{position:absolute;top:8px;right:8px;background:var(--flash);color:#1c1e1a;font-size:9.5px;font-weight:900;padding:3px 7px;border-radius:6px;letter-spacing:.06em;z-index:2}
+.card.top::before{content:"";position:absolute;inset:0;background:linear-gradient(110deg,transparent 30%,rgba(255,255,255,.55) 50%,transparent 70%);transform:translateX(-120%);animation:shimmer 3.5s 1s infinite;pointer-events:none;z-index:3}
+@keyframes shimmer{to{transform:translateX(120%)}}
+.piuscelto{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:900;color:var(--save)}
+.pv{font-size:10.5px;color:var(--save);font-weight:900}
+.azioni{display:flex;gap:4px;margin-top:auto}
+.azioni button{flex:1;font-size:11.5px;font-weight:800;border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:9px;padding:6px 0;display:inline-flex;justify-content:center;align-items:center;gap:5px;transition:transform .12s}
+.azioni button:active{transform:scale(.94)}
+.azioni button.salvato{background:var(--save);color:#fff;border-color:var(--save)}
+.azioni button.salvato .ico{fill:#fff}
+.hint{font-size:11.5px;color:var(--muted)}
+
+/* ====== storie ====== */
+.storie{position:fixed;inset:0;z-index:40;background:#000;display:none}
+.storie.on{display:block}
+.storie .rotolo{height:100%;overflow-y:auto;scroll-snap-type:y mandatory;scrollbar-width:none}
+.storie .rotolo::-webkit-scrollbar{display:none}
+.storia{height:100%;scroll-snap-align:start;position:relative;color:#fff;display:flex;flex-direction:column;justify-content:flex-end;padding:0 22px calc(28px + env(safe-area-inset-bottom,0px));isolation:isolate;overflow:hidden}
+.storia .sf{position:absolute;inset:0;z-index:-2;background:var(--sf,#1b7a3d)}
+.storia .sf.foto{background:url(img/hero_zoo.jpg) center/cover;filter:brightness(.6)}
+.storia .velo{position:absolute;inset:0;z-index:-1;background:linear-gradient(180deg,rgba(0,0,0,.1),rgba(0,0,0,.55) 75%)}
+.storia .prod{width:min(68vw,320px);aspect-ratio:1;object-fit:contain;margin:0 auto 10px;filter:drop-shadow(0 20px 30px rgba(0,0,0,.5));opacity:0;transform:scale(.7) translateY(30px)}
+.storia.vis .prod{animation:arriva .8s cubic-bezier(.2,1.2,.3,1) .1s both}
+.storia .k{font-size:12px;letter-spacing:.14em;text-transform:uppercase;opacity:.9}
+.storia h2{font-family:var(--display);font-size:clamp(28px,8vw,44px);line-height:1;margin:4px 0 6px;text-wrap:balance}
+.storia .big{font-family:var(--display);font-size:clamp(64px,22vw,120px);line-height:.9;color:#fff;text-shadow:0 8px 30px rgba(0,0,0,.45);opacity:0}
+.storia.vis .big{animation:pop .9s cubic-bezier(.2,1.3,.3,1) .35s both}
+.storia .big small{font-size:.42em;vertical-align:top}
+.storia .da{font-size:14px;opacity:.9}
+.storia .riga{display:flex;gap:8px;margin-top:12px}
+.storia .riga button{flex:1;border:none;border-radius:12px;padding:12px;font-weight:900;font-size:14px;display:inline-flex;justify-content:center;align-items:center;gap:6px;background:#fff;color:#111}
+.storia .riga button.o{background:rgba(255,255,255,.18);color:#fff;border:1px solid rgba(255,255,255,.4)}
+@keyframes arriva{to{opacity:1;transform:none}}
+.storie .barre{position:absolute;top:calc(10px + env(safe-area-inset-top,0px));left:12px;right:12px;display:flex;gap:4px;z-index:2}
+.storie .barre i{flex:1;height:3px;border-radius:2px;background:rgba(255,255,255,.35)}
+.storie .barre i.on{background:#fff}
+.storie .chiudi{position:absolute;top:calc(22px + env(safe-area-inset-top,0px));right:14px;z-index:3;border:none;background:rgba(0,0,0,.4);color:#fff;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center}
+
+/* ====== barra in basso, foglio, toast ====== */
+.barra{position:fixed;left:0;right:0;bottom:0;z-index:30;display:flex;justify-content:center;pointer-events:none;padding:0 12px calc(12px + env(safe-area-inset-bottom,0px))}
+.barra div{pointer-events:auto;display:flex;gap:6px;background:var(--fg);color:var(--card);border-radius:999px;padding:6px;box-shadow:0 10px 30px rgba(0,0,0,.3)}
+.barra button{border:none;background:transparent;color:inherit;font-weight:800;font-size:12.5px;padding:8px 12px;border-radius:999px;display:inline-flex;gap:6px;align-items:center}
+.barra button.acc{background:var(--accent);color:var(--accent-fg)}
+.barra .n{background:#fff;color:#111;border-radius:999px;padding:0 6px;font-size:11px;min-width:18px;text-align:center}
+.velo-f{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:50;display:flex;align-items:flex-end;justify-content:center;animation:fade .2s}
+.foglio{background:var(--card);color:var(--fg);width:100%;max-width:560px;border-radius:20px 20px 0 0;padding:14px 18px calc(22px + env(safe-area-inset-bottom,0px));max-height:90vh;overflow:auto;animation:su .35s cubic-bezier(.2,.9,.3,1)}
+@keyframes su{from{transform:translateY(60px);opacity:0}to{transform:none;opacity:1}}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+.foglio h3{margin:0 0 2px;font-family:var(--display);font-size:24px}
+.foglio .x{float:right;border:none;background:var(--line);border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;color:var(--fg)}
+.foglio .big{width:100%;max-height:230px;object-fit:contain;background:#fff;border-radius:12px;margin:8px 0}
+.riga{display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid var(--line);font-size:13.5px}
+.btn{font-weight:900;border:none;border-radius:12px;padding:11px 14px;background:var(--accent);color:var(--accent-fg);display:inline-flex;gap:6px;align-items:center;text-decoration:none;font-size:14px}
+.btn.o{background:transparent;color:var(--fg);border:1px solid var(--line)}
+.toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:var(--fg);color:var(--card);padding:9px 16px;border-radius:999px;font-size:13px;z-index:60;animation:su .3s}
+.fine{padding:18px 14px 10px;text-align:center;font-size:12px;color:var(--muted)}
+.fine a{color:var(--muted)}
+.ridotte .hero .foto,.ridotte .prod,.ridotte .badge.lampo,.ridotte .card.top::before,.ridotte .bolle i{animation:none!important}
+@media (prefers-reduced-motion:reduce){ *,*::before,*::after{animation:none!important;transition:none!important} .card,.sez-h{opacity:1;transform:none} }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-cuore" viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.5-9.3C1.2 8.4 3.2 5 6.6 5c1.9 0 3.3 1 4.1 2.3C11.5 6 13 5 14.9 5c3.4 0 5.4 3.4 4.1 6.7C17.5 16.4 12 21 12 21z"/></symbol>
+  <symbol id="i-share" viewBox="0 0 24 24"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7"/><path d="M12 15V3"/><path d="m7 8 5-5 5 5"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 22s7-6.5 7-12a7 7 0 0 0-14 0c0 5.5 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/></symbol>
+  <symbol id="i-cart" viewBox="0 0 24 24"><path d="M3 4h2l2.4 11.2a2 2 0 0 0 2 1.6h7.9a2 2 0 0 0 2-1.5L21 8H6.5"/><circle cx="10" cy="20" r="1.3"/><circle cx="17" cy="20" r="1.3"/></symbol>
+  <symbol id="i-lista" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M6 4v16l14-8z"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="i-dx" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></symbol>
+  <symbol id="i-stella" viewBox="0 0 24 24"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></symbol>
+  <symbol id="i-orologio" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="i-zampa" viewBox="0 0 24 24"><circle cx="7" cy="8" r="2"/><circle cx="12" cy="5.5" r="2"/><circle cx="17" cy="8" r="2"/><path d="M12 11c-3 0-6 3-6 5.5S8 20 12 20s6-1 6-3.5S15 11 12 11z"/></symbol>
+  <symbol id="i-pesce" viewBox="0 0 24 24"><path d="M3 12c3-4 7-6 11-6 3 0 5 2 7 6-2 4-4 6-7 6-4 0-8-2-11-6z"/><path d="m3 12-2-4M3 12l-2 4"/><circle cx="15" cy="11" r="1"/></symbol>
+</svg>
+
+<div class="app" id="app">
+  <header class="top">
+    <img id="logo" alt="" src="">
+    <span class="nome" id="nomeInsegna"></span>
+    <span class="negozio"><svg class="ico"><use href="#i-pin"/></svg><span id="negozio"></span></span>
+  </header>
+  <div class="demo-sw" title="Solo per la demo: ogni insegna avrà il suo indirizzo">demo · insegna <select id="insegna" aria-label="Insegna"></select></div>
+
+  <section class="hero">
+    <div class="foto"></div><div class="velo"></div>
+    <div class="testo">
+      <span class="eyebrow"><svg class="ico" style="width:14px;height:14px"><use href="#i-zampa"/></svg> Offerte Novembre</span>
+      <h1>Un mese di coccole, a prezzi da festa</h1>
+      <p>Oltre 100 offerte per cani, gatti, acquario e piccoli amici. Salva quelle che ti servono e portale in negozio.</p>
+      <div class="conto" id="conto"><span class="lbl">Finisce tra</span></div>
+    </div>
+  </section>
+
+  <nav class="nav" id="nav"></nav>
+
+  <div class="banner-wrap">
+    <div class="banners" id="banners"></div>
+    <div class="dots" id="dots"></div>
+  </div>
+
+  <div id="sezioni"></div>
+
+  <p class="fine">Demo con offerte vere del volantino «Offerte Novembre» e tre insegne di prova. Le animazioni si riducono da sole se il telefono lo chiede.<br><a href="#" id="toggleAnim">Riduci le animazioni</a></p>
+</div>
+
+<div class="barra"><div>
+  <button type="button" id="bStorie"><svg class="ico"><use href="#i-play"/></svg> Storie</button>
+  <button type="button" id="bLista" class="acc"><svg class="ico"><use href="#i-cuore"/></svg> Lista <span class="n" id="nLista">0</span></button>
+  <button type="button" id="bNegozio"><svg class="ico"><use href="#i-pin"/></svg> Negozio</button>
+</div></div>
+
+<div class="storie" id="storie">
+  <div class="barre" id="storieBarre"></div>
+  <button type="button" class="chiudi" id="chiudiStorie" aria-label="Chiudi"><svg class="ico"><use href="#i-x"/></svg></button>
+  <div class="rotolo" id="rotolo"></div>
+</div>
+
+<script src="dati.js"></script>
+<script>
+/* ====== insegne: in produzione ognuna ha il suo indirizzo (offerte.rosaflor.it …) o /volantino/<insegna> ====== */
+const INSEGNE = {
+  rosaflor:{ nome:"Rosàflor", logo:"img/logo_t1.png", colore:"#c2185b", soft:"#fbe9f0", negozio:"Bassano del Grappa", webshop:"https://www.rosaflor.it/", prezziPv:{} },
+  flover:{ nome:"Flover", logo:"img/logo_t2.png", colore:"#5a8f1f", soft:"#eef5e4", negozio:"Bussolengo", webshop:"", prezziPv:{ "Dog Chow Classic":"18,90" } },
+  iperverde:{ nome:"Iperverde", logo:"img/logo_t3.png", colore:"#2e7d32", soft:"#e6f1e7", negozio:"Verona", webshop:"https://www.iperverde.it/", prezziPv:{ "Felix Ghiottonerie":"16,99" } },
+};
+const ANIMALI = [["Gatto","i-zampa"],["Cane","i-zampa"],["Pesci","i-pesce"]];
+const nomeAnimale = (a) => a === "Pesci" ? "Acquario e tartarughe" : a;
+const $ = (id) => document.getElementById(id);
+const num = (s) => parseFloat(String(s||"").replace(",", ".")) || 0;
+const eur = (n) => n.toFixed(2).replace(".", ",");
+const ico = (n, cls = "ico") => `<svg class="${cls}"><use href="#${n}"/></svg>`;
+const param = new URLSearchParams(location.search);
+let insegna = INSEGNE[param.get("insegna")] ? param.get("insegna") : "rosaflor";
+let lista = []; try { lista = JSON.parse(localStorage.getItem("vz2-lista") || "[]"); } catch {}
+const VOCI = DATI.voci;
+const scontoDi = (v) => v.prezzo && v.listino ? Math.round((1 - num(v.prezzo)/num(v.listino))*100) : 0;
+const prezzoDi = (v) => { const pv = INSEGNE[insegna].prezziPv[v.t]; return { prezzo: pv || v.prezzo, pv: !!pv }; };
+// "il più scelto": per la demo, i tre con lo sconto più alto
+const PIU_SCELTI = [...VOCI].filter((v) => v.prezzo && v.listino).sort((a, b) => scontoDi(b) - scontoDi(a)).slice(0, 3).map((v) => v.ean);
+
+function applicaInsegna(){
+  const i = INSEGNE[insegna]; const r = document.documentElement.style;
+  r.setProperty("--accent", i.colore); r.setProperty("--accent-soft", i.soft);
+  $("logo").src = i.logo; $("nomeInsegna").textContent = i.nome; $("negozio").textContent = i.negozio;
+  document.title = `Offerte Novembre · ${i.nome}`;
+}
+function prezzoHtml(v, grande){
+  const { prezzo, pv } = prezzoDi(v);
+  if (!prezzo) return `<span class="p" style="font-size:${grande ? 40 : 20}px">${v.mecc || ""}</span>`;
+  const [i, c] = prezzo.split(",");
+  return `<span class="p">€ ${i}<small>,${c || "00"}</small></span>${v.listino && !pv ? `<span class="da">anziché <s>€ ${v.listino}</s></span>` : ""}${pv ? `<span class="pv">prezzo del tuo negozio</span>` : ""}`;
+}
+function card(v, i){
+  const sc = prezzoDi(v).pv ? 0 : scontoDi(v); const salvato = lista.includes(v.ean); const top = PIU_SCELTI.includes(v.ean);
+  return `<article class="card ${top ? "top" : ""}" data-i="${i}">
+    ${v.mecc ? `<span class="badge mecc">${v.mecc}</span>` : sc ? `<span class="badge ${sc >= 30 ? "lampo" : ""}">-${sc}%</span>` : ""}
+    ${v.label ? `<span class="etich">${v.label}</span>` : ""}
+    <div class="img"><img src="${v.foto}" alt="" loading="lazy"></div>
+    <div class="t">${v.t}</div><div class="d">${v.d || ""}</div>
+    <div class="prezzo">${prezzoHtml(v)}</div>
+    ${top ? `<span class="piuscelto">${ico("i-stella", "ico")} il più scelto</span>` : v.n > 1 ? `<span class="hint">${v.n} varianti</span>` : ""}
+    <div class="azioni">
+      <button type="button" data-salva="${v.ean}" class="${salvato ? "salvato" : ""}">${ico("i-cuore")} ${salvato ? "In lista" : "Salva"}</button>
+      <button type="button" data-condividi="${i}" aria-label="Condividi">${ico("i-share")}</button>
+    </div></article>`;
+}
+function disegna(){
+  $("nav").innerHTML = [`<button type="button" class="chip on" data-vai="top">Tutto</button>`, ...ANIMALI.map(([a, ic]) => `<button type="button" class="chip" data-vai="sez-${a}">${ico(ic)} ${nomeAnimale(a)}</button>`)].join("");
+  const focus = VOCI.find((v) => v.focus); const acqua = VOCI.find((v) => v.t.includes("Amtra Basic LED")); const piccoli = VOCI.find((v) => v.t.includes("Tarvegetal"));
+  $("banners").innerHTML = `
+    <div class="banner dentale"><div class="sfondo"></div><span class="k">Focus del mese · dentale</span><h2>Denti sani, alito fresco</h2><p>Un bastoncino al giorno pulisce mentre il cane mastica. In offerta tutto il mese.</p><button type="button" class="cta" data-apri="${VOCI.indexOf(focus)}">Scopri a € ${focus.prezzo} ${ico("i-dx")}</button><img class="prod" src="${focus.foto}" alt=""></div>
+    <div class="banner acqua"><div class="sfondo"></div><div class="bolle">${Array.from({ length: 14 }, (_, k) => `<i style="left:${(k * 7 + 3) % 100}%;width:${6 + (k % 4) * 4}px;height:${6 + (k % 4) * 4}px;animation-duration:${4 + (k % 5)}s;animation-delay:${(k * .7) % 4}s"></i>`).join("")}</div><span class="k">Acquario</span><h2>Luce nuova per l'acquario</h2><p>Plafoniere LED Amtra in offerta: colori vivi e consumi bassi.</p><button type="button" class="cta" data-apri="${VOCI.indexOf(acqua)}">Vedi le luci ${ico("i-dx")}</button><img class="prod" src="${acqua.foto}" alt=""></div>
+    <div class="banner foto"><div class="sfondo"></div><span class="k">Insieme è meglio</span><h2>Porta a casa qualcosa per tutti e due</h2><p>Snack, lettiere e crocchette: il meglio per cane e gatto, con un unico passaggio in negozio.</p><button type="button" class="cta" data-vai="sez-Gatto">Vai alle offerte ${ico("i-dx")}</button></div>
+    <div class="banner piccoli"><div class="sfondo"></div><span class="k">Piccoli amici</span><h2>Tartarughe e roditori, coccolati</h2><p>Mangimi e accessori scelti per chi è piccolo ma conta tanto.</p><button type="button" class="cta" data-apri="${VOCI.indexOf(piccoli)}">Scopri ${ico("i-dx")}</button><img class="prod" src="${piccoli.foto}" alt=""></div>`;
+  $("dots").innerHTML = `<i class="on"></i><i></i><i></i><i></i>`;
+  $("sezioni").innerHTML = ANIMALI.map(([a, ic]) => {
+    const voci = VOCI.map((v, i) => ({ v, i })).filter(({ v }) => v.animale === a);
+    return `<section class="sez" id="sez-${a}"><div class="sez-h"><h2>${nomeAnimale(a)}</h2><span>${voci.length} offerte</span></div><div class="griglia">${voci.map(({ v, i }) => card(v, i)).join("")}</div></section>`;
+  }).join("");
+  $("nLista").textContent = lista.length;
+  osserva();
+}
+/* animazioni all'ingresso nello schermo: titoli che scivolano, schede che salgono, prezzi che "esplodono" */
+function osserva(){
+  const io = new IntersectionObserver((e) => e.forEach((x) => { if (x.isIntersecting) { x.target.classList.add("vis"); if (x.target.classList.contains("card")) { x.target.classList.add("boom"); setTimeout(() => x.target.classList.remove("boom"), 900); } } }), { threshold: .25 });
+  document.querySelectorAll(".card, .sez-h").forEach((el) => io.observe(el));
+}
+/* countdown vivo: giorni, ore, minuti, secondi; i numeri "scattano" quando cambiano */
+(function conto(){
+  const fine = new Date("2026-11-15T23:59:59"); const inizio = new Date("2026-10-22T00:00:00");
+  const unita = [["giorni", 86400], ["ore", 3600], ["min", 60], ["sec", 1]]; const el = $("conto");
+  el.insertAdjacentHTML("beforeend", unita.map(([n]) => `<span class="u" data-u="${n}"><b>0</b><span>${n}</span></span>`).join(""));
+  const tick = () => {
+    const ora = new Date(); const target = ora < inizio ? inizio : fine; let s = Math.max(0, Math.floor((target - ora) / 1000));
+    el.querySelector(".lbl").textContent = ora < inizio ? "Inizia tra" : "Finisce tra";
+    for (const [n, sec] of unita) { const v = Math.floor(s / sec); s -= v * sec; const b = el.querySelector(`[data-u="${n}"] b`); if (b.textContent !== String(v)) { b.textContent = v; b.parentElement.classList.remove("tick"); void b.offsetWidth; b.parentElement.classList.add("tick"); } }
+  };
+  tick(); setInterval(tick, 1000);
+})();
+function toast(t){ const d = document.createElement("div"); d.className = "toast"; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 1800); }
+function foglio(html){ const v = document.createElement("div"); v.className = "velo-f"; v.innerHTML = `<div class="foglio">${html}</div>`; v.addEventListener("click", (e) => { if (e.target === v || e.target.closest(".x")) v.remove(); }); document.body.appendChild(v); return v; }
+function salva(ean){ lista = lista.includes(ean) ? lista.filter((x) => x !== ean) : [...lista, ean]; try { localStorage.setItem("vz2-lista", JSON.stringify(lista)); } catch {}
+  $("nLista").textContent = lista.length; document.querySelectorAll(`[data-salva="${ean}"]`).forEach((b) => { const on = lista.includes(ean); b.classList.toggle("salvato", on); b.innerHTML = `${ico("i-cuore")} ${on ? (b.closest(".foglio") || b.closest(".storia") ? "In lista" : "In lista") : (b.closest(".foglio") || b.closest(".storia") ? "Salva in lista" : "Salva")}`; }); }
+function apriScheda(i){
+  const v = VOCI[i]; const ins = INSEGNE[insegna]; const { prezzo, pv } = prezzoDi(v); const sc = pv ? 0 : scontoDi(v);
+  foglio(`<button type="button" class="x" aria-label="Chiudi">${ico("i-x")}</button><h3>${v.t}</h3><div class="hint">${v.marca || ""} · ${nomeAnimale(v.animale)} · ${v.caratt}${v.n > 1 ? ` · ${v.n} varianti` : ""}</div>
+    <img class="big" src="${v.foto}" alt=""><p style="margin:0 0 8px;font-size:14.5px">${v.d || ""}</p>
+    <div class="prezzo" style="margin-bottom:6px"><span class="p" style="font-size:40px;animation:pop .7s both">${prezzo ? `€ ${prezzo}` : v.mecc}</span>${v.listino && !pv ? `<span class="da">anziché <s>€ ${v.listino}</s> · risparmi € ${eur(num(v.listino) - num(prezzo))}${sc ? ` (-${sc}%)` : ""}</span>` : ""}</div>
+    ${pv ? `<div class="pv">Prezzo riservato di ${ins.nome} ${ins.negozio}</div>` : ""}
+    ${v.focus ? `<div class="riga"><span>Focus</span><strong>${v.focus}</strong></div>` : ""}
+    <div class="riga"><span>Valido</span><strong>dal 22 ottobre al 15 novembre</strong></div>
+    <div class="riga"><span>Lo trovi da</span><strong>${ins.nome} · ${ins.negozio}</strong></div>
+    <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
+      <button class="btn" type="button" data-salva="${v.ean}">${ico("i-cuore")} ${lista.includes(v.ean) ? "In lista" : "Salva in lista"}</button>
+      ${ins.webshop ? `<a class="btn o" href="${ins.webshop}" target="_blank" rel="noopener">${ico("i-cart")} Compra online</a>` : `<button class="btn o" type="button" data-nav="1">${ico("i-pin")} Come arrivare</button>`}
+      <button class="btn o" type="button" data-condividi="${i}">${ico("i-share")} Condividi</button></div>`);
+}
+function apriLista(){
+  const voci = VOCI.filter((v) => lista.includes(v.ean)); const ins = INSEGNE[insegna];
+  const risparmio = voci.reduce((s, v) => s + (v.listino && v.prezzo ? num(v.listino) - num(prezzoDi(v).prezzo) : 0), 0);
+  foglio(`<button type="button" class="x" aria-label="Chiudi">${ico("i-x")}</button><h3>La mia lista</h3>
+    ${voci.length === 0 ? `<p class="hint">Tocca il cuore su un'offerta per metterla qui. La lista resta sul tuo telefono.</p>` : voci.map((v) => `<div class="riga"><span>${v.t}</span><strong>€ ${prezzoDi(v).prezzo || v.mecc}</strong></div>`).join("")}
+    ${voci.length ? `<div class="riga" style="border:none"><span>Risparmio sul listino</span><strong style="color:var(--save)">€ ${eur(risparmio)}</strong></div>` : ""}
+    <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap"><button class="btn" type="button" id="copiaLista" ${voci.length ? "" : "disabled"}>${ico("i-share")} Condividi su WhatsApp</button><button class="btn o" type="button" data-nav="1">${ico("i-pin")} ${ins.nome} ${ins.negozio}</button></div>`);
+  const b = $("copiaLista"); if (b) b.addEventListener("click", () => {
+    const testo = `La mia lista · Offerte Novembre ${ins.nome}\n` + voci.map((v) => `• ${v.t} € ${prezzoDi(v).prezzo || v.mecc}`).join("\n") + `\n${location.href}`;
+    if (navigator.share) navigator.share({ text: testo }).catch(() => {}); else navigator.clipboard.writeText(testo).then(() => toast("Lista copiata: incollala su WhatsApp")).catch(() => toast("Seleziona e copia il testo"));
+  });
+}
+/* storie: una schermata per offerta, prezzo che arriva grande */
+function apriStorie(){
+  const scelte = [VOCI.find((v) => v.focus), ...PIU_SCELTI.map((e) => VOCI.find((v) => v.ean === e)), VOCI.find((v) => v.t.includes("Amtra Basic LED")), VOCI.find((v) => v.t.includes("Dog Chow"))].filter(Boolean);
+  const sfondi = ["#1b7a3d", "#c2185b", "#1b4fa8", "#b26a2a", "#0a62a8", "#6b3e1f"];
+  $("rotolo").innerHTML = scelte.map((v, k) => `<div class="storia" style="--sf:${sfondi[k % sfondi.length]}"><div class="sf ${k === 2 ? "foto" : ""}"></div><div class="velo"></div>
+    <img class="prod" src="${v.foto}" alt=""><span class="k">${v.focus ? v.focus : nomeAnimale(v.animale)}</span><h2>${v.t}</h2>
+    <div class="big">${prezzoDi(v).prezzo ? `€ ${prezzoDi(v).prezzo.split(",")[0]}<small>,${prezzoDi(v).prezzo.split(",")[1] || "00"}</small>` : v.mecc}</div>
+    ${v.listino ? `<div class="da">anziché € ${v.listino} · risparmi € ${eur(num(v.listino) - num(prezzoDi(v).prezzo))}</div>` : ""}
+    <div class="riga"><button type="button" data-salva="${v.ean}">${ico("i-cuore")} ${lista.includes(v.ean) ? "In lista" : "Salva"}</button><button type="button" class="o" data-condividi="${VOCI.indexOf(v)}">${ico("i-share")} Condividi</button></div></div>`).join("");
+  $("storieBarre").innerHTML = scelte.map((_, k) => `<i class="${k === 0 ? "on" : ""}"></i>`).join("");
+  $("storie").classList.add("on"); document.body.style.overflow = "hidden";
+  const io = new IntersectionObserver((e) => e.forEach((x) => { if (x.isIntersecting) { x.target.classList.add("vis"); const k = [...$("rotolo").children].indexOf(x.target); [...$("storieBarre").children].forEach((b, j) => b.classList.toggle("on", j <= k)); } }), { threshold: .6, root: $("rotolo") });
+  document.querySelectorAll(".storia").forEach((s) => io.observe(s));
+}
+document.addEventListener("click", (e) => {
+  const t = e.target.closest("[data-vai],[data-salva],[data-condividi],[data-apri],[data-nav],.card");
+  if (!t) return;
+  if (t.dataset.vai) { document.querySelectorAll(".chip").forEach((c) => c.classList.toggle("on", c === t)); (t.dataset.vai === "top" ? document.querySelector(".hero") : $(t.dataset.vai)).scrollIntoView({ behavior: "smooth", block: "start" }); return; }
+  if (t.dataset.salva) { salva(t.dataset.salva); toast(lista.includes(t.dataset.salva) ? "Salvata nella lista" : "Tolta dalla lista"); e.stopPropagation(); return; }
+  if (t.dataset.condividi) { const v = VOCI[t.dataset.condividi]; const testo = `${v.t} a € ${prezzoDi(v).prezzo || v.mecc} da ${INSEGNE[insegna].nome} · ${location.href}`; if (navigator.share) navigator.share({ text: testo }).catch(() => {}); else navigator.clipboard.writeText(testo).then(() => toast("Link copiato")).catch(() => toast("Link pronto")); e.stopPropagation(); return; }
+  if (t.dataset.apri) { apriScheda(Number(t.dataset.apri)); return; }
+  if (t.dataset.nav) { toast("Qui si aprirebbe la mappa del negozio"); return; }
+  if (t.classList.contains("card")) apriScheda(Number(t.dataset.i));
+});
+$("bLista").addEventListener("click", apriLista);
+$("bNegozio").addEventListener("click", () => toast(`${INSEGNE[insegna].nome} · ${INSEGNE[insegna].negozio}: qui orari e mappa`));
+$("bStorie").addEventListener("click", apriStorie);
+$("chiudiStorie").addEventListener("click", () => { $("storie").classList.remove("on"); document.body.style.overflow = ""; });
+$("banners").addEventListener("scroll", () => { const b = $("banners"); const k = Math.round(b.scrollLeft / b.clientWidth); [...$("dots").children].forEach((d, j) => d.classList.toggle("on", j === k)); }, { passive: true });
+setInterval(() => { const b = $("banners"); if (document.hidden || document.body.classList.contains("ridotte")) return; const k = Math.round(b.scrollLeft / b.clientWidth); b.scrollTo({ left: b.clientWidth * ((k + 1) % 4), behavior: "smooth" }); }, 6000);
+$("toggleAnim").addEventListener("click", (e) => { e.preventDefault(); const on = document.body.classList.toggle("ridotte"); e.target.textContent = on ? "Riattiva le animazioni" : "Riduci le animazioni"; });
+$("insegna").innerHTML = Object.entries(INSEGNE).map(([k, i]) => `<option value="${k}" ${k === insegna ? "selected" : ""}>${i.nome}</option>`).join("");
+$("insegna").addEventListener("change", (e) => { const u = new URL(location.href); u.searchParams.set("insegna", e.target.value); location.href = u.toString(); });
+applicaInsegna(); disegna();
+</script>
+</body>
+</html>
