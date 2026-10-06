@@ -401,7 +401,7 @@ export default async function ZooVolantinoPage({
             {/* le spunte in tabella appartengono a questo form via attributo form="bulkform" */}
             <form id="bulkform" />
             {spunte && (
-              <BarraFissa>
+              <BarraFissa sotto=".contatore-pagine">
                 <VotoSpuntate scopeParam={scopeParam} formId="bulkform" vota={vota} consortium={consortium}
                   focus={consortium ? focusEsistenti : undefined}>
                   {consortium && <UnisciNelVolantino formId="bulkform" />}
