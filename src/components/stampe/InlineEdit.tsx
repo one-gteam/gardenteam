@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useRouter } from "next/navigation";
 
 /**
@@ -32,6 +32,8 @@ export default function InlineEdit({
   const listaId = useId();
   const [v, setV] = useState(value);
   const [stato, setStato] = useState<"" | "salvo" | "ok" | "errore">("");
+  // se il valore cambia da fuori (un'azione in blocco, un router.refresh), la cella lo segue
+  useEffect(() => { setV(value); }, [value]);
 
   const save = async () => {
     if (v === value) return;
