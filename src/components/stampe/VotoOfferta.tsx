@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { selezionaOfferteInline, votaOfferteInline } from "@/lib/zoo-actions";
+import { useRouter } from "next/navigation";
+import { assegnaFocusInline, selezionaOfferteInline, votaOfferteInline } from "@/lib/zoo-actions";
 
 /*
  * Scelta offerte Volantino: "Proponi", "Non tratto" e "Aggiungi al volantino"
@@ -73,9 +74,28 @@ export function VotoOfferta({
 }
 
 /** I pulsanti sopra la tabella: votano le righe spuntate, senza ricaricare. */
-export function VotoSpuntate({ scopeParam, formId }: { scopeParam: string; formId: string }) {
+export function VotoSpuntate({ scopeParam, formId, focus }: {
+  scopeParam: string; formId: string;
+  /** Solo per il Consorzio: i focus già usati nel volantino; attiva «Dai questo focus alle spuntate». */
+  focus?: string[];
+}) {
   const [pending, startTransition] = useTransition();
   const [esito, setEsito] = useState("");
+  const [testoFocus, setTestoFocus] = useState("");
+  const router = useRouter();
+
+  const daiFocus = () => {
+    const spunte = [...document.querySelectorAll<HTMLInputElement>(`input[name="zsel"][form="${formId}"]:checked`)];
+    const ids = spunte.map((c) => c.value);
+    if (ids.length === 0) { setEsito("Spunta prima almeno una riga."); return; }
+    startTransition(async () => {
+      const r = await assegnaFocusInline(ids, testoFocus).catch(() => ({ ok: false, n: 0 }));
+      if (!r.ok) { setEsito("Non sono riuscito a salvare il focus."); return; }
+      for (const c of spunte) c.checked = false;
+      setEsito(testoFocus.trim() ? `✓ Focus «${testoFocus.trim()}» su ${r.n} offerte.` : `✓ Focus tolto a ${r.n} offerte.`);
+      router.refresh();
+    });
+  };
 
   const vota = (tipo: Tipo) => {
     const spunte = [...document.querySelectorAll<HTMLInputElement>(`input[name="zsel"][form="${formId}"]:checked`)];
@@ -98,6 +118,18 @@ export function VotoSpuntate({ scopeParam, formId }: { scopeParam: string; formI
       <button type="button" className="btn btn-outline btn-sm" disabled={pending} onClick={() => vota("nontrattato")}>
         Segna spuntate come non trattate
       </button>
+      {focus && (
+        <span style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
+          <input list="focus-volantino" value={testoFocus} onChange={(e) => setTestoFocus(e.target.value)}
+            placeholder="focus… (anche uno già usato)" style={{ marginTop: 0, fontSize: 12.5, padding: "4px 7px", width: 220 }}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); daiFocus(); } }} />
+          <datalist id="focus-volantino">{focus.map((x) => <option key={x} value={x} />)}</datalist>
+          <button type="button" className="btn btn-outline btn-sm" disabled={pending} onClick={daiFocus}
+            title="Lo stesso focus a tutte le righe spuntate; vuoto = toglie il focus">
+            Dai questo focus alle spuntate
+          </button>
+        </span>
+      )}
       {esito && <span className="hint">{esito}</span>}
     </div>
   );

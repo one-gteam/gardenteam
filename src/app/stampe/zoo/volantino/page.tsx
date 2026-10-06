@@ -41,6 +41,8 @@ export default async function ZooVolantinoPage({
   // solo il volantino IN LAVORAZIONE: su quelli chiusi o archiviati non si sceglie più
   const campaign = campagnaInLavorazione(db);
   const allOffers = campaign ? db.offers.filter((o) => o.campaignId === campaign.id) : [];
+  // i focus già scritti in questo volantino, per riusare lo stesso testo su altri prodotti
+  const focusEsistenti = [...new Set(allOffers.map((o) => (o.focus ?? "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   const schedaFilter = sp.scheda ?? "";
   const baseOffers = schedaFilter
     ? allOffers.filter((o) => o.selezionata && o.schedaId === schedaFilter)
@@ -362,7 +364,7 @@ export default async function ZooVolantinoPage({
             {sp.votate && <div className="alert alert-green">✓ Voto registrato su {sp.votate} offerte.</div>}
             {/* le spunte in tabella appartengono a questo form via attributo form="bulkform" */}
             <form id="bulkform" />
-            <VotoSpuntate scopeParam={scopeParam} formId="bulkform" />
+            <VotoSpuntate scopeParam={scopeParam} formId="bulkform" focus={consortium ? focusEsistenti : undefined} />
             <div className="card table-wrap">
               <table className="data">
                 <thead>
@@ -512,7 +514,7 @@ export default async function ZooVolantinoPage({
                         )}
                         {consortium && (
                           <td style={{ minWidth: 140 }}>
-                            <InlineEdit value={first.focus ?? ""} placeholder="focus…"
+                            <InlineEdit value={first.focus ?? ""} placeholder="focus…" suggerimenti={focusEsistenti}
                               onSave={updateOfferGroupFieldInline.bind(null, ids, "focus")} />
                           </td>
                         )}

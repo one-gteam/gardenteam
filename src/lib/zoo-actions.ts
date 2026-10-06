@@ -1582,6 +1582,35 @@ export async function voteZooOffersBulk(tipo: "preferita" | "nontrattato", scope
   redirect(backUrl("/stampe/zoo/volantino", scopeParam, { votate: String(ids.size) }));
 }
 
+/**
+ * Lo stesso focus a tutte le righe spuntate in Scelta offerte Volantino (e alle
+ * varianti dello stesso padre): un focus è quasi sempre di più prodotti insieme.
+ * Testo vuoto = toglie il focus. Lo Storico focus raggruppa per testo (maiuscole
+ * e spazi ai bordi non contano), quindi le righe finiscono nello stesso gruppo.
+ */
+export async function assegnaFocusInline(offerIds: string[], focus: string): Promise<{ ok: boolean; n: number }> {
+  const user = await requireZooUser();
+  if (!isZooEditor(user)) return { ok: false, n: 0 };
+  const db = await getZooDb();
+  const v = focus.trim().slice(0, 120);
+  const prodById = new Map(db.products.map((p) => [p.id, p]));
+  const ids = new Set<string>();
+  for (const offerId of offerIds) {
+    const o = db.offers.find((x) => x.id === offerId);
+    if (!o) continue;
+    ids.add(o.id);
+    const parentId = prodById.get(o.productId ?? "")?.parentId;
+    if (!parentId) continue;
+    for (const s of db.offers) {
+      if (s.campaignId === o.campaignId && prodById.get(s.productId ?? "")?.parentId === parentId) ids.add(s.id);
+    }
+  }
+  for (const o of db.offers) if (ids.has(o.id)) o.focus = v || undefined;
+  await saveZooDb(db);
+  revalidatePath("/stampe/zoo/volantino");
+  return { ok: true, n: ids.size };
+}
+
 export async function toggleOfferSelected(offerId: string, scopeParam: string) {
   const user = await requireZooUser();
   if (!isZooEditor(user)) redirect(backUrl("/stampe/zoo/volantino", scopeParam));

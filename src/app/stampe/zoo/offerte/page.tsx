@@ -102,6 +102,7 @@ export default async function ZooOffertePage({
   const campaign = campagnaInLavorazione(db);
   const inCorso = campagnaInCorso(db);
   const offers = campaign ? db.offers.filter((o) => o.campaignId === campaign.id) : [];
+  const focusEsistenti = [...new Set(offers.map((o) => (o.focus ?? "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
 
   /*
    * Indici per id: con oltre mille articoli e centinaia di offerte, cercare con
@@ -722,7 +723,7 @@ export default async function ZooOffertePage({
                           </td>
                           <td>
                             {consortium ? (
-                              <InlineEdit value={first.focus ?? ""} placeholder="focus…"
+                              <InlineEdit value={first.focus ?? ""} placeholder="focus…" suggerimenti={focusEsistenti}
                                 onSave={updateOfferGroupFieldInline.bind(null, offIds, "focus")} />
                             ) : (
                               <span style={{ fontSize: 11.5 }}>{first.focus || "—"}</span>
@@ -851,7 +852,7 @@ export default async function ZooOffertePage({
                           </td>
                           <td>
                             {consortium ? (
-                              <InlineEdit value={o.focus ?? ""} placeholder="focus…"
+                              <InlineEdit value={o.focus ?? ""} placeholder="focus…" suggerimenti={focusEsistenti}
                                 onSave={updateOfferFieldInline.bind(null, o.id, "focus")} />
                             ) : (
                               <span style={{ fontSize: 11.5 }}>{o.focus || "—"}</span>

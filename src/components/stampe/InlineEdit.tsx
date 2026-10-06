@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useRouter } from "next/navigation";
 
 /**
@@ -10,7 +10,7 @@ import { useRouter } from "next/navigation";
  * componente resta generico e riusabile per qualunque campo.
  */
 export default function InlineEdit({
-  value, onSave, multiline, placeholder, aggiornaPagina, onSaved,
+  value, onSave, multiline, placeholder, aggiornaPagina, onSaved, suggerimenti,
 }: {
   value: string;
   onSave: (value: string) => Promise<{ ok: boolean }>;
@@ -25,8 +25,11 @@ export default function InlineEdit({
   aggiornaPagina?: boolean;
   /** Chiamato dopo un salvataggio riuscito (per chi ricarica i dati da sé, senza router.refresh). */
   onSaved?: () => void;
+  /** Valori già usati altrove (es. i focus del volantino): compaiono mentre si scrive, per riusare lo stesso testo. */
+  suggerimenti?: string[];
 }) {
   const router = useRouter();
+  const listaId = useId();
   const [v, setV] = useState(value);
   const [stato, setStato] = useState<"" | "salvo" | "ok" | "errore">("");
 
@@ -54,7 +57,11 @@ export default function InlineEdit({
       {multiline ? (
         <textarea rows={2} value={v} placeholder={placeholder} onChange={(e) => setV(e.target.value)} onBlur={save} style={style} />
       ) : (
-        <input value={v} placeholder={placeholder} onChange={(e) => setV(e.target.value)} onBlur={save} style={style} />
+        <input value={v} placeholder={placeholder} onChange={(e) => setV(e.target.value)} onBlur={save} style={style}
+          list={suggerimenti?.length ? listaId : undefined} />
+      )}
+      {suggerimenti && suggerimenti.length > 0 && (
+        <datalist id={listaId}>{suggerimenti.map((x) => <option key={x} value={x} />)}</datalist>
       )}
       {stato === "salvo" && <span style={{ fontSize: 9.5, color: "var(--muted)" }}>salvataggio…</span>}
       {stato === "ok" && <span style={{ fontSize: 9.5, color: "var(--green-700)" }}>✓ salvato</span>}
