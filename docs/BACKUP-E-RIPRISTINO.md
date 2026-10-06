@@ -13,6 +13,22 @@
 - Lo **schema** delle tabelle è in `data/supabase-schema.sql` (non cambia di notte in notte).
 - Il backup prende l'elenco di tabelle e bucket dal database **a ogni esecuzione**: un dominio o un bucket nuovi finiscono nel backup senza toccare nulla.
 
+## Copia completa del sito (codice + chiavi + dati) su `\srvdoci_backup\gtone`
+
+`scripts\copia-sito.ps1` mette in una cartella sola tutto quello che serve per rimettere in piedi il sito da zero:
+`codice.bundle` (tutto il repository git), `segreti\env.local` (le chiavi: **non condividere**), `dati\` (l'ultimo
+backup notturno di database e file), `manifest.json` e un `LEGGIMI.md` con i passi del ripristino. Tiene le ultime 6 copie.
+
+```bash
+powershell -ExecutionPolicy Bypass -File scripts\copia-sito.ps1
+```
+
+Conviene pianificarla una volta a settimana sul server AI (Utilità di pianificazione → nuova attività → Azione
+`powershell.exe`, Argomenti `-ExecutionPolicy Bypass -File "\srvdoci\Progetti AI\Academy GTcademy-gt\scripts\copia-sito.ps1"`),
+dopo il backup notturno, es. alle 05:00 della domenica.
+
+Prima copia fatta: 6 ottobre 2026 (77,7 MB), bundle riaperto con `git clone` per prova.
+
 ## Controllare che il backup stia girando
 
 1. Apri `\\srvdoc\ai\backup` e ordina per data: deve esserci una cartella `academy-gt-backup-…` con la data di **stanotte**.
