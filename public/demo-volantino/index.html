@@ -186,8 +186,69 @@ a{color:inherit}
 .toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:var(--fg);color:var(--card);padding:9px 16px;border-radius:999px;font-size:13px;z-index:60;animation:su .3s}
 .fine{padding:18px 14px 10px;text-align:center;font-size:12px;color:var(--muted)}
 .fine a{color:var(--muted)}
+
+/* ---- barra di avanzamento della pagina (senso di completamento) ---- */
+.avanza{position:fixed;top:0;left:0;height:3px;width:0;background:var(--accent);z-index:60;transition:width .1s linear}
+/* ---- testata: parallasse e pulsante che "respira" ---- */
+.hero .foto{will-change:transform}
+.hero .cta{display:inline-flex;align-items:center;gap:6px;margin-top:12px;background:#fff;color:#111;border:none;border-radius:999px;padding:10px 16px;font-weight:900;font-size:14px;position:relative;overflow:hidden;animation:entra .7s .7s both}
+.hero .cta::after{content:"";position:absolute;inset:0;background:linear-gradient(110deg,transparent 35%,rgba(255,255,255,.9) 50%,transparent 65%);transform:translateX(-120%);animation:shimmer 4s 2s infinite}
+/* ---- mini countdown nel menu, quando la testata è uscita dallo schermo ---- */
+.nav .mini{margin-left:auto;display:none;align-items:center;gap:6px;font-size:12px;font-weight:900;color:var(--price);white-space:nowrap;padding-left:8px;font-variant-numeric:tabular-nums}
+.nav.scorsa .mini{display:inline-flex}
+/* ---- ancoraggio: il prezzo di partenza compare, viene barrato da una linea, poi arriva il promo ---- */
+.prezzo .da s{text-decoration:none;position:relative;display:inline-block}
+.prezzo .da s::after{content:"";position:absolute;left:0;top:52%;height:2px;width:100%;background:var(--price);transform:scaleX(0);transform-origin:left}
+.card.vis .prezzo .da s::after{animation:barra .45s .25s ease-out both}
+.card.vis .p{animation:pop .8s .55s cubic-bezier(.2,1.4,.3,1) both}
+.card.vis .p::after{animation-delay:.75s}
+@keyframes barra{to{transform:scaleX(1)}}
+/* ---- scarsità: ne restano pochi ---- */
+.pochi{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:900;color:#b45309;background:#fff4e0;border-radius:999px;padding:2px 8px;animation:respira 2.2s ease-in-out infinite}
+.pochi i{width:7px;height:7px;border-radius:50%;background:#f59e0b;display:inline-block}
+@keyframes respira{0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,.45)}50%{box-shadow:0 0 0 6px rgba(245,158,11,0)}}
+/* ---- urgenza: offerta lampo con nastro e conto alla rovescia proprio ---- */
+.card.lampo-card{border-color:var(--price)}
+.nastro{position:absolute;top:14px;right:-34px;transform:rotate(45deg);background:var(--price);color:#fff;font-family:var(--display);font-size:11px;letter-spacing:.1em;padding:3px 40px;z-index:3;box-shadow:0 2px 8px rgba(0,0,0,.25)}
+.lampo-conto{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:900;color:var(--price);font-variant-numeric:tabular-nums}
+/* ---- riprova sociale: scelto da N persone (il numero sale) ---- */
+.scelto-da{font-size:10.5px;color:var(--muted)}
+.scelto-da b{color:var(--save);font-variant-numeric:tabular-nums}
+/* ---- cuoricini che esplodono al Salva ---- */
+.cuoricino{position:fixed;width:14px;height:14px;color:var(--price);pointer-events:none;z-index:70;animation:vola .9s ease-out forwards}
+@keyframes vola{to{transform:translate(var(--dx),var(--dy)) scale(.3);opacity:0}}
+/* ---- lista: codice da mostrare in cassa ---- */
+.codice{display:grid;grid-template-columns:repeat(21,1fr);gap:1px;width:150px;aspect-ratio:1;margin:10px auto;background:#fff;padding:6px;border-radius:8px;border:1px solid var(--line)}
+.codice i{display:block;background:#fff}.codice i.n{background:#111}
+/* ---- stile «emozionale con offerte»: scene a tutta pagina con i prodotti dentro la foto ---- */
+.emozionale .hero{height:min(100svh,760px)}
+.emozionale .hero h1{font-size:clamp(38px,11vw,72px)}
+.emozionale .banner-wrap{display:none}
+.scena{position:relative;margin:0 0 18px;min-height:min(120vw,620px);color:#fff;isolation:isolate;display:flex;flex-direction:column;justify-content:flex-end;padding:18px 16px 16px;overflow:hidden}
+.scena .sf{position:absolute;inset:0;z-index:-2;background-size:cover;background-position:center;transform:scale(1.12);transition:transform 2s cubic-bezier(.2,.8,.2,1)}
+.scena.vis .sf{transform:scale(1)}
+.scena::after{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(180deg,rgba(0,0,0,.05) 20%,rgba(0,0,0,.55) 70%,rgba(0,0,0,.8))}
+.scena .k{font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;opacity:.9}
+.scena h2{font-family:var(--display);font-size:clamp(32px,9vw,54px);line-height:.98;margin:4px 0 8px;text-wrap:balance;opacity:0;transform:translateY(16px);transition:opacity .7s .2s,transform .7s .2s}
+.scena p{margin:0 0 12px;font-size:14px;max-width:36ch;opacity:0;transition:opacity .7s .45s}
+.scena.vis h2,.scena.vis p{opacity:1;transform:none}
+.inscena{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding-bottom:4px}
+.inscena::-webkit-scrollbar{display:none}
+.chipprod{flex:0 0 auto;display:flex;gap:8px;align-items:center;background:rgba(255,255,255,.94);color:#111;border-radius:14px;padding:6px 10px 6px 6px;cursor:pointer;opacity:0;transform:translateY(18px);transition:opacity .5s,transform .5s;box-shadow:0 8px 20px rgba(0,0,0,.25)}
+.scena.vis .chipprod{opacity:1;transform:none}
+.scena.vis .chipprod:nth-child(2){transition-delay:.15s}.scena.vis .chipprod:nth-child(3){transition-delay:.3s}
+.chipprod img{width:46px;height:46px;object-fit:contain;background:#fff;border-radius:9px}
+.chipprod .t{font-size:12px;font-weight:900;line-height:1.1;max-width:120px}
+.chipprod .p{font-family:var(--display);font-size:20px;color:var(--price);line-height:1}
+.chipprod small{font-size:10px;color:#666;display:block}
+.scena .tutte{align-self:flex-start;margin-top:10px;background:transparent;color:#fff;border:1px solid rgba(255,255,255,.6);border-radius:999px;padding:8px 14px;font-weight:800;font-size:13px;display:inline-flex;gap:6px;align-items:center}
+.emozionale .sez{padding-top:0}
+.emozionale .sez .fascia{display:none}
+.emozionale .sez .griglia{display:none}
+.emozionale .sez.aperta .griglia{display:grid}
 .ridotte .hero .foto,.ridotte .prod,.ridotte .banner .sfondo,.ridotte .storia .sf,.ridotte .badge.lampo,.ridotte .card.piu::before,.ridotte .bolle i{animation:none!important}
-@media (prefers-reduced-motion:reduce){ *,*::before,*::after{animation:none!important;transition:none!important} .card,.sez-h{opacity:1;transform:none} }
+@media (prefers-reduced-motion:reduce){ *,*::before,*::after{animation:none!important;transition:none!important} .card,.sez-h,.scena h2,.scena p,.chipprod{opacity:1;transform:none} .prezzo .da s::after{transform:none} }
+.ridotte .hero .cta::after,.ridotte .pochi{animation:none!important}
 </style>
 </head>
 <body>
@@ -206,13 +267,14 @@ a{color:inherit}
   <symbol id="i-pesce" viewBox="0 0 24 24"><path d="M3 12c3-4 7-6 11-6 3 0 5 2 7 6-2 4-4 6-7 6-4 0-8-2-11-6z"/><path d="m3 12-2-4M3 12l-2 4"/><circle cx="15" cy="11" r="1"/></symbol>
 </svg>
 
+<div class="avanza" id="avanza"></div>
 <div class="app" id="app">
   <header class="top">
     <img id="logo" alt="" src="">
     <span class="nome" id="nomeInsegna"></span>
     <span class="negozio"><svg class="ico"><use href="#i-pin"/></svg><span id="negozio"></span></span>
   </header>
-  <div class="demo-sw" title="Solo per la demo: ogni insegna avrà il suo indirizzo">demo · insegna <select id="insegna" aria-label="Insegna"></select></div>
+  <div class="demo-sw" title="Solo per la demo: ogni insegna avrà il suo indirizzo">demo <select id="insegna" aria-label="Insegna"></select> <select id="stile" aria-label="Stile"><option value="offerte">offerte + emozionale</option><option value="emozionale">emozionale + offerte</option></select></div>
 
   <section class="hero">
     <div class="foto"></div><div class="velo"></div>
@@ -221,6 +283,7 @@ a{color:inherit}
       <h1>Un mese di coccole, a prezzi da festa</h1>
       <p>Oltre 100 offerte per cani, gatti, acquario e piccoli amici. Salva quelle che ti servono e portale in negozio.</p>
       <div class="conto" id="conto"><span class="lbl">Finisce tra</span></div>
+      <button type="button" class="cta" data-vai="sez-Gatto">Scopri le offerte <svg class="ico"><use href="#i-dx"/></svg></button>
     </div>
   </section>
 
@@ -264,6 +327,12 @@ const eur = (n) => n.toFixed(2).replace(".", ",");
 const ico = (n, cls = "ico") => `<svg class="${cls}"><use href="#${n}"/></svg>`;
 const param = new URLSearchParams(location.search);
 let insegna = INSEGNE[param.get("insegna")] ? param.get("insegna") : "rosaflor";
+const stile = param.get("stile") === "emozionale" ? "emozionale" : "offerte";
+if (stile === "emozionale") document.body.classList.add("emozionale");
+// per la demo: scarsità e "offerta lampo" su alcune voci (in produzione: giacenze vere di GT One e durata scelta dal Consorzio)
+const POCHI = new Set([1, 7, 12, 16]);
+const LAMPO = 2;
+const SCELTO_DA = (v) => 60 + (v.ean.split("").reduce((a, c) => a + Number(c), 0) % 7) * 23;
 let lista = []; try { lista = JSON.parse(localStorage.getItem("vz2-lista") || "[]"); } catch {}
 const VOCI = DATI.voci;
 const scontoDi = (v) => v.prezzo && v.listino ? Math.round((1 - num(v.prezzo)/num(v.listino))*100) : 0;
@@ -285,20 +354,24 @@ function prezzoHtml(v, grande){
 }
 function card(v, i){
   const sc = prezzoDi(v).pv ? 0 : scontoDi(v); const salvato = lista.includes(v.ean); const piu = PIU_SCELTI.includes(v.ean);
-  return `<article class="card ${piu ? "piu" : ""}" data-i="${i}">
+  const lampo = i === LAMPO; const pochi = POCHI.has(i);
+  return `<article class="card ${piu ? "piu" : ""} ${lampo ? "lampo-card" : ""}" data-i="${i}">
+    ${lampo ? `<span class="nastro">OFFERTA LAMPO</span>` : ""}
     ${v.mecc ? `<span class="badge mecc">${v.mecc}</span>` : sc ? `<span class="badge ${sc >= 30 ? "lampo" : ""}">-${sc}%</span>` : ""}
     ${v.label ? `<span class="etich">${v.label}</span>` : ""}
     <div class="img"><img src="${v.foto}" alt="" loading="lazy"></div>
     <div class="t">${v.t}</div><div class="d">${v.d || ""}</div>
     <div class="prezzo">${prezzoHtml(v)}</div>
-    ${piu ? `<span class="piuscelto">${ico("i-stella", "ico")} il più scelto</span>` : v.n > 1 ? `<span class="hint">${v.n} varianti</span>` : ""}
+    ${lampo ? `<span class="lampo-conto">${ico("i-orologio")} finisce tra <span data-lampo></span></span>` : ""}
+    ${pochi ? `<span class="pochi"><i></i> ne restano pochi</span>` : ""}
+    ${piu ? `<span class="piuscelto">${ico("i-stella", "ico")} il più scelto</span><span class="scelto-da">scelto da <b data-conta="${SCELTO_DA(v)}">0</b> persone</span>` : v.n > 1 ? `<span class="hint">${v.n} varianti</span>` : ""}
     <div class="azioni">
       <button type="button" data-salva="${v.ean}" class="${salvato ? "salvato" : ""}">${ico("i-cuore")} ${salvato ? "In lista" : "Salva"}</button>
       <button type="button" data-condividi="${i}" aria-label="Condividi">${ico("i-share")}</button>
     </div></article>`;
 }
 function disegna(){
-  $("nav").innerHTML = [`<button type="button" class="chip on" data-vai="top">Tutto</button>`, ...ANIMALI.map(([a, ic]) => `<button type="button" class="chip" data-vai="sez-${a}">${ico(ic)} ${nomeAnimale(a)}</button>`)].join("");
+  $("nav").innerHTML = [`<button type="button" class="chip on" data-vai="top">Tutto</button>`, ...ANIMALI.map(([a, ic]) => `<button type="button" class="chip" data-vai="sez-${a}">${ico(ic)} ${nomeAnimale(a)}</button>`), `<span class="mini">${ico("i-orologio")} <b>…</b></span>`].join("");
   const focus = VOCI.find((v) => v.focus); const acqua = VOCI.find((v) => v.t.includes("Amtra Basic LED")); const piccoli = VOCI.find((v) => v.t.includes("Tarvegetal"));
   $("banners").innerHTML = `
     <div class="banner dentale"><div class="sfondo"></div><span class="k">Focus del mese · dentale</span><h2>Denti sani, alito fresco</h2><p>Un bastoncino al giorno pulisce mentre il cane mastica. In offerta tutto il mese.</p><button type="button" class="cta" data-apri="${VOCI.indexOf(focus)}">Scopri a € ${focus.prezzo} ${ico("i-dx")}</button><img class="prod" src="${focus.foto}" alt=""></div>
@@ -310,7 +383,15 @@ function disegna(){
   $("sezioni").innerHTML = ANIMALI.map(([a, ic]) => {
     const voci = VOCI.map((v, i) => ({ v, i })).filter(({ v }) => v.animale === a);
     const fasce = { Gatto: ["img/em_gatto_ciotola.jpg", "Per il gatto"], Cane: ["img/em_golden.jpg", "Per il cane"], Pesci: ["img/em_acquario.jpg", "Acquario e tartarughe"] };
-    return `<section class="sez" id="sez-${a}"><div class="fascia"><div class="sf" style="background-image:url(${fasce[a][0]})"></div><h2>${fasce[a][1]}</h2><span>${voci.length} offerte</span></div><div class="griglia">${voci.map(({ v, i }) => card(v, i)).join("")}</div></section>`;
+    // stile emozionale: una scena a tutta pagina per reparto, con 3 prodotti dentro la foto e la griglia a richiesta
+    const scene = {
+      Gatto: ["img/em_gatto_coperta.jpg", "Coccole da divano", "Il gatto sa cosa vuole: umido buono, lettiera pulita, uno snack ogni tanto. Questo mese costa meno dargli ragione."],
+      Cane: ["img/em_golden.jpg", "La sua giornata migliore", "Crocchette per l'energia, bastoncini per i denti, un paté come premio. E la passeggiata è più bella."],
+      Pesci: ["img/em_acquario.jpg", "Un angolo di calma", "Luce nuova, acqua limpida, il pasto giusto per le tartarughe. L'acquario è il quadro che si muove."],
+    };
+    const inScena = voci.slice(0, 3).map(({ v, i }) => `<div class="chipprod" data-apri="${i}"><img src="${v.foto}" alt=""><div><div class="t">${v.t}</div><span class="p">${prezzoDi(v).prezzo ? `€ ${prezzoDi(v).prezzo}` : v.mecc}</span>${v.listino ? `<small>anziché € ${v.listino}</small>` : ""}</div></div>`).join("");
+    const scena = `<div class="scena"><div class="sf" style="background-image:url(${scene[a][0]})"></div><span class="k">${nomeAnimale(a)} · ${voci.length} offerte</span><h2>${scene[a][1]}</h2><p>${scene[a][2]}</p><div class="inscena">${inScena}</div><button type="button" class="tutte" data-tutte="sez-${a}">Vedi tutte le ${voci.length} offerte ${ico("i-dx")}</button></div>`;
+    return `<section class="sez" id="sez-${a}">${stile === "emozionale" ? scena : ""}<div class="fascia"><div class="sf" style="background-image:url(${fasce[a][0]})"></div><h2>${fasce[a][1]}</h2><span>${voci.length} offerte</span></div><div class="griglia">${voci.map(({ v, i }) => card(v, i)).join("")}</div></section>`;
   }).join("");
   $("nLista").textContent = lista.length;
   osserva();
@@ -318,20 +399,56 @@ function disegna(){
 /* animazioni all'ingresso nello schermo: titoli che scivolano, schede che salgono, prezzi che "esplodono" */
 function osserva(){
   const io = new IntersectionObserver((e) => e.forEach((x) => { if (x.isIntersecting) { x.target.classList.add("vis"); if (x.target.classList.contains("card")) { x.target.classList.add("boom"); setTimeout(() => x.target.classList.remove("boom"), 900); } } }), { threshold: .25 });
-  document.querySelectorAll(".card, .sez-h, .fascia").forEach((el) => io.observe(el));
+  document.querySelectorAll(".card, .sez-h, .fascia, .scena").forEach((el) => io.observe(el));
+  // i numeri "scelto da N persone" salgono da zero quando entrano nello schermo
+  const ioN = new IntersectionObserver((e) => e.forEach((x) => { if (!x.isIntersecting) return; ioN.unobserve(x.target); const fine = Number(x.target.dataset.conta); const t0 = performance.now(); const passo = (t) => { const k = Math.min(1, (t - t0) / 1200); x.target.textContent = Math.round(fine * (1 - Math.pow(1 - k, 3))); if (k < 1) requestAnimationFrame(passo); }; requestAnimationFrame(passo); }), { threshold: .5 });
+  document.querySelectorAll("[data-conta]").forEach((el) => ioN.observe(el));
 }
 /* countdown vivo: giorni, ore, minuti, secondi; i numeri "scattano" quando cambiano */
 (function conto(){
   const fine = new Date("2026-11-15T23:59:59"); const inizio = new Date("2026-10-22T00:00:00");
   const unita = [["giorni", 86400], ["ore", 3600], ["min", 60], ["sec", 1]]; const el = $("conto");
   el.insertAdjacentHTML("beforeend", unita.map(([n]) => `<span class="u" data-u="${n}"><b>0</b><span>${n}</span></span>`).join(""));
+  const fineLampo = new Date(); fineLampo.setHours(23, 59, 59, 0);
   const tick = () => {
     const ora = new Date(); const target = ora < inizio ? inizio : fine; let s = Math.max(0, Math.floor((target - ora) / 1000));
     el.querySelector(".lbl").textContent = ora < inizio ? "Inizia tra" : "Finisce tra";
-    for (const [n, sec] of unita) { const v = Math.floor(s / sec); s -= v * sec; const b = el.querySelector(`[data-u="${n}"] b`); if (b.textContent !== String(v)) { b.textContent = v; b.parentElement.classList.remove("tick"); void b.offsetWidth; b.parentElement.classList.add("tick"); } }
+    const valori = {};
+    for (const [n, sec] of unita) { const v = Math.floor(s / sec); s -= v * sec; valori[n] = v; const b = el.querySelector(`[data-u="${n}"] b`); if (b.textContent !== String(v)) { b.textContent = v; b.parentElement.classList.remove("tick"); void b.offsetWidth; b.parentElement.classList.add("tick"); } }
+    const mini = document.querySelector(".nav .mini b"); if (mini) mini.textContent = `${valori.giorni}g ${String(valori.ore).padStart(2, "0")}:${String(valori.min).padStart(2, "0")}:${String(valori.sec).padStart(2, "0")}`;
+    let l = Math.max(0, Math.floor((fineLampo - ora) / 1000)); const lh = Math.floor(l / 3600); l -= lh * 3600; const lm = Math.floor(l / 60); l -= lm * 60;
+    document.querySelectorAll("[data-lampo]").forEach((x) => { x.textContent = `${String(lh).padStart(2, "0")}:${String(lm).padStart(2, "0")}:${String(l).padStart(2, "0")}`; });
   };
   tick(); setInterval(tick, 1000);
 })();
+/* scorrimento: barra di avanzamento, parallasse della foto in testa, menu che segue la sezione, mini countdown */
+(function scorrimento(){
+  const hero = document.querySelector(".hero"); const foto = hero.querySelector(".foto"); const nav = $("nav");
+  const su = () => {
+    const h = document.documentElement; const tot = h.scrollHeight - innerHeight; $("avanza").style.width = `${tot > 0 ? (scrollY / tot) * 100 : 0}%`;
+    const r = hero.getBoundingClientRect();
+    if (r.bottom > 0 && !document.body.classList.contains("ridotte")) foto.style.transform = `translateY(${Math.round(-r.top * .35)}px)`;
+    nav.classList.toggle("scorsa", r.bottom < 60);
+    // la sezione a metà schermo accende la sua linguetta
+    let attiva = "top";
+    for (const sez of document.querySelectorAll(".sez")) { const q = sez.getBoundingClientRect(); if (q.top < innerHeight * .45 && q.bottom > innerHeight * .45) attiva = sez.id; }
+    nav.querySelectorAll(".chip").forEach((c) => c.classList.toggle("on", c.dataset.vai === attiva));
+  };
+  addEventListener("scroll", su, { passive: true }); su();
+})();
+/* cuoricini che partono dal pulsante Salva */
+function cuoricini(btn){
+  if (document.body.classList.contains("ridotte")) return;
+  const r = btn.getBoundingClientRect();
+  for (let k = 0; k < 7; k++) {
+    const c = document.createElement("div"); c.className = "cuoricino"; c.innerHTML = `<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><use href="#i-cuore"/></svg>`;
+    const ang = (-90 + (k - 3) * 28) * Math.PI / 180; const d = 50 + Math.random() * 40;
+    c.style.left = `${r.left + r.width / 2 - 7}px`; c.style.top = `${r.top + r.height / 2 - 7}px`;
+    c.style.setProperty("--dx", `${Math.cos(ang) * d}px`); c.style.setProperty("--dy", `${Math.sin(ang) * d}px`);
+    document.body.appendChild(c); setTimeout(() => c.remove(), 900);
+  }
+}
+function risparmioLista(){ return VOCI.filter((v) => lista.includes(v.ean)).reduce((t, v) => t + (v.listino && v.prezzo ? num(v.listino) - num(prezzoDi(v).prezzo) : 0), 0); }
 function toast(t){ const d = document.createElement("div"); d.className = "toast"; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 1800); }
 function foglio(html){ const v = document.createElement("div"); v.className = "velo-f"; v.innerHTML = `<div class="foglio">${html}</div>`; v.addEventListener("click", (e) => { if (e.target === v || e.target.closest(".x")) v.remove(); }); document.body.appendChild(v); return v; }
 function salva(ean){ lista = lista.includes(ean) ? lista.filter((x) => x !== ean) : [...lista, ean]; try { localStorage.setItem("vz2-lista", JSON.stringify(lista)); } catch {}
@@ -340,7 +457,7 @@ function apriScheda(i){
   const v = VOCI[i]; const ins = INSEGNE[insegna]; const { prezzo, pv } = prezzoDi(v); const sc = pv ? 0 : scontoDi(v);
   foglio(`<button type="button" class="x" aria-label="Chiudi">${ico("i-x")}</button><h3>${v.t}</h3><div class="hint">${v.marca || ""} · ${nomeAnimale(v.animale)} · ${v.caratt}${v.n > 1 ? ` · ${v.n} varianti` : ""}</div>
     <img class="big" src="${v.foto}" alt=""><p style="margin:0 0 8px;font-size:14.5px">${v.d || ""}</p>
-    <div class="prezzo" style="margin-bottom:6px"><span class="p" style="font-size:40px;animation:pop .7s both">${prezzo ? `€ ${prezzo}` : v.mecc}</span>${v.listino && !pv ? `<span class="da">anziché <s>€ ${v.listino}</s> · risparmi € ${eur(num(v.listino) - num(prezzo))}${sc ? ` (-${sc}%)` : ""}</span>` : ""}</div>
+    <div class="prezzo" style="margin-bottom:6px"><span class="p" style="font-size:40px;animation:pop .7s both">${prezzo ? `€ ${prezzo}` : v.mecc}</span>${v.listino && !pv ? `<span class="da">anziché <s>€ ${v.listino}</s> · risparmi € <b data-risparmio="${num(v.listino) - num(prezzo)}">0,00</b>${sc ? ` (-${sc}%)` : ""}</span>` : ""}</div>
     ${pv ? `<div class="pv">Prezzo riservato di ${ins.nome} ${ins.negozio}</div>` : ""}
     ${v.focus ? `<div class="riga"><span>Focus</span><strong>${v.focus}</strong></div>` : ""}
     <div class="riga"><span>Valido</span><strong>dal 22 ottobre al 15 novembre</strong></div>
@@ -349,13 +466,29 @@ function apriScheda(i){
       <button class="btn" type="button" data-salva="${v.ean}">${ico("i-cuore")} ${lista.includes(v.ean) ? "In lista" : "Salva in lista"}</button>
       ${ins.webshop ? `<a class="btn o" href="${ins.webshop}" target="_blank" rel="noopener">${ico("i-cart")} Compra online</a>` : `<button class="btn o" type="button" data-nav="1">${ico("i-pin")} Come arrivare</button>`}
       <button class="btn o" type="button" data-condividi="${i}">${ico("i-share")} Condividi</button></div>`);
+  const b = document.querySelector("[data-risparmio]"); if (b) { const fine = Number(b.dataset.risparmio); const t0 = performance.now(); const passo = (t) => { const k = Math.min(1, (t - t0) / 900); b.textContent = eur(fine * (1 - Math.pow(1 - k, 3))); if (k < 1) requestAnimationFrame(passo); }; requestAnimationFrame(passo); }
+}
+/** Un codice a punti ricavato dalla lista (nella demo è solo grafico; in produzione sarebbe un vero QR). */
+function codiceLista(voci){
+  let seme = voci.reduce((a, v) => a + Number(v.ean.slice(-6)), 7);
+  const r = () => { seme = (seme * 9301 + 49297) % 233280; return seme / 233280; };
+  const occhio = (x, y) => (x < 7 && y < 7) || (x > 13 && y < 7) || (x < 7 && y > 13);
+  let h = "";
+  for (let y = 0; y < 21; y++) for (let x = 0; x < 21; x++) {
+    let n;
+    if (occhio(x, y)) { const ox = x % 14 < 7 ? x % 14 : x - 14, oy = y % 14 < 7 ? y % 14 : y - 14; n = ox === 0 || ox === 6 || oy === 0 || oy === 6 || (ox >= 2 && ox <= 4 && oy >= 2 && oy <= 4); }
+    else n = r() < .45;
+    h += `<i class="${n ? "n" : ""}"></i>`;
+  }
+  return h;
 }
 function apriLista(){
   const voci = VOCI.filter((v) => lista.includes(v.ean)); const ins = INSEGNE[insegna];
   const risparmio = voci.reduce((s, v) => s + (v.listino && v.prezzo ? num(v.listino) - num(prezzoDi(v).prezzo) : 0), 0);
   foglio(`<button type="button" class="x" aria-label="Chiudi">${ico("i-x")}</button><h3>La mia lista</h3>
     ${voci.length === 0 ? `<p class="hint">Tocca il cuore su un'offerta per metterla qui. La lista resta sul tuo telefono.</p>` : voci.map((v) => `<div class="riga"><span>${v.t}</span><strong>€ ${prezzoDi(v).prezzo || v.mecc}</strong></div>`).join("")}
-    ${voci.length ? `<div class="riga" style="border:none"><span>Risparmio sul listino</span><strong style="color:var(--save)">€ ${eur(risparmio)}</strong></div>` : ""}
+    ${voci.length ? `<div class="riga" style="border:none"><span>Risparmio sul listino</span><strong style="color:var(--save)">€ ${eur(risparmio)}</strong></div>
+    <div class="codice" aria-hidden="true">${codiceLista(voci)}</div><p class="hint" style="text-align:center;margin:0 0 6px">Mostra questo codice in cassa: il negozio ritrova la tua lista</p>` : ""}
     <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap"><button class="btn" type="button" id="copiaLista" ${voci.length ? "" : "disabled"}>${ico("i-share")} Condividi su WhatsApp</button><button class="btn o" type="button" data-nav="1">${ico("i-pin")} ${ins.nome} ${ins.negozio}</button></div>`);
   const b = $("copiaLista"); if (b) b.addEventListener("click", () => {
     const testo = `La mia lista · Offerte Novembre ${ins.nome}\n` + voci.map((v) => `• ${v.t} € ${prezzoDi(v).prezzo || v.mecc}`).join("\n") + `\n${location.href}`;
@@ -387,10 +520,15 @@ function apriStorie(){
   $("rotolo").onclick = (e) => { if (e.target.closest("button")) return; const r = $("rotolo"); const k = Math.round(r.scrollTop / r.clientHeight); const dir = e.clientX > innerWidth / 2 ? 1 : -1; r.scrollTo({ top: r.clientHeight * Math.max(0, Math.min(storie.length - 1, k + dir)), behavior: "smooth" }); };
 }
 document.addEventListener("click", (e) => {
-  const t = e.target.closest("[data-vai],[data-salva],[data-condividi],[data-apri],[data-nav],.card");
+  const t = e.target.closest("[data-vai],[data-salva],[data-condividi],[data-apri],[data-nav],[data-tutte],.card");
   if (!t) return;
   if (t.dataset.vai) { document.querySelectorAll(".chip").forEach((c) => c.classList.toggle("on", c === t)); (t.dataset.vai === "top" ? document.querySelector(".hero") : $(t.dataset.vai)).scrollIntoView({ behavior: "smooth", block: "start" }); return; }
-  if (t.dataset.salva) { salva(t.dataset.salva); toast(lista.includes(t.dataset.salva) ? "Salvata nella lista" : "Tolta dalla lista"); e.stopPropagation(); return; }
+  if (t.dataset.salva) {
+    const era = lista.includes(t.dataset.salva); salva(t.dataset.salva); e.stopPropagation();
+    if (!era) { cuoricini(t); toast(lista.length >= 3 ? `Hai già messo da parte € ${eur(risparmioLista())}` : "Salvata nella lista"); } else toast("Tolta dalla lista");
+    return;
+  }
+  if (t.dataset.tutte) { const sez = $(t.dataset.tutte); sez.classList.toggle("aperta"); t.innerHTML = sez.classList.contains("aperta") ? `Nascondi le offerte ${ico("i-dx")}` : `Vedi tutte le offerte ${ico("i-dx")}`; if (sez.classList.contains("aperta")) sez.querySelectorAll(".card").forEach((c) => c.classList.add("vis")); return; }
   if (t.dataset.condividi) { const v = VOCI[t.dataset.condividi]; const testo = `${v.t} a € ${prezzoDi(v).prezzo || v.mecc} da ${INSEGNE[insegna].nome} · ${location.href}`; if (navigator.share) navigator.share({ text: testo }).catch(() => {}); else navigator.clipboard.writeText(testo).then(() => toast("Link copiato")).catch(() => toast("Link pronto")); e.stopPropagation(); return; }
   if (t.dataset.apri) { apriScheda(Number(t.dataset.apri)); return; }
   if (t.dataset.nav) { toast("Qui si aprirebbe la mappa del negozio"); return; }
@@ -405,6 +543,8 @@ setInterval(() => { const b = $("banners"); if (document.hidden || document.body
 $("toggleAnim").addEventListener("click", (e) => { e.preventDefault(); const on = document.body.classList.toggle("ridotte"); e.target.textContent = on ? "Riattiva le animazioni" : "Riduci le animazioni"; });
 $("insegna").innerHTML = Object.entries(INSEGNE).map(([k, i]) => `<option value="${k}" ${k === insegna ? "selected" : ""}>${i.nome}</option>`).join("");
 $("insegna").addEventListener("change", (e) => { const u = new URL(location.href); u.searchParams.set("insegna", e.target.value); location.href = u.toString(); });
+$("stile").value = stile;
+$("stile").addEventListener("change", (e) => { const u = new URL(location.href); u.searchParams.set("stile", e.target.value); location.href = u.toString(); });
 applicaInsegna(); disegna();
 </script>
 </body>
