@@ -126,15 +126,29 @@ export default function VolantinoBuilder({
   const [sel, setSel] = useState<{ pi: number; id: string } | null>(null);
   const [dettaglio, setDettaglio] = useState<string | null>(null);
   // si riparte dalla scheda su cui si stava lavorando (ricordata su questo computer)
-  const [spread, setSpread] = useState(() => { try { return Number(localStorage.getItem(`vol-scheda-${campaignId}`) ?? 0) || 0; } catch { return 0; } });
-  useEffect(() => { try { localStorage.setItem(`vol-scheda-${campaignId}`, String(spread)); } catch { /* niente */ } }, [spread, campaignId]);
+  const [spread, setSpread] = useState(0);
   // schede affiancate, oppure tutte le pagine una sotto l'altra (si scorre con la rotellina)
-  const [vista, setVista] = useState<"schede" | "verticale">(() => { try { return localStorage.getItem(`vol-vista-${campaignId}`) === "verticale" ? "verticale" : "schede"; } catch { return "schede"; } });
-  useEffect(() => { try { localStorage.setItem(`vol-vista-${campaignId}`, vista); } catch { /* niente */ } }, [vista, campaignId]);
+  const [vista, setVista] = useState<"schede" | "verticale">("schede");
+  /*
+   * Le preferenze ricordate si leggono DOPO il primo disegno: il server disegna
+   * con i valori di partenza, e leggerle subito faceva disegnare al browser una
+   * pagina diversa (errore di React, la pagina si ridisegnava da capo).
+   */
+  const [preferenzeLette, setPreferenzeLette] = useState(false);
+  useEffect(() => {
+    try {
+      setSpread(Number(localStorage.getItem(`vol-scheda-${campaignId}`) ?? 0) || 0);
+      if (localStorage.getItem(`vol-vista-${campaignId}`) === "verticale") setVista("verticale");
+      const w = Number(localStorage.getItem("vol-larghezza-sx")); if (w) setLarghezzaSx(w);
+    } catch { /* niente */ }
+    setPreferenzeLette(true);
+  }, [campaignId]);
+  useEffect(() => { if (preferenzeLette) try { localStorage.setItem(`vol-scheda-${campaignId}`, String(spread)); } catch { /* niente */ } }, [spread, campaignId, preferenzeLette]);
+  useEffect(() => { if (preferenzeLette) try { localStorage.setItem(`vol-vista-${campaignId}`, vista); } catch { /* niente */ } }, [vista, campaignId, preferenzeLette]);
   const [avviso, setAvviso] = useState("");
   // larghezza dell'elenco a sinistra, trascinando il suo bordo (ricordata su questo computer)
-  const [larghezzaSx, setLarghezzaSx] = useState(() => { try { return Number(localStorage.getItem("vol-larghezza-sx")) || 320; } catch { return 320; } });
-  useEffect(() => { try { localStorage.setItem("vol-larghezza-sx", String(larghezzaSx)); } catch { /* niente */ } }, [larghezzaSx]);
+  const [larghezzaSx, setLarghezzaSx] = useState(320);
+  useEffect(() => { if (larghezzaSx !== 320) try { localStorage.setItem("vol-larghezza-sx", String(larghezzaSx)); } catch { /* niente */ } }, [larghezzaSx]);
   const [f, setF] = useState({ animale: "", caratt: "", label: "", minVoti: "", minNon: "", marca: "", fornitore: "", pagina: "" });
   const [filtroChiuso, setFiltroChiuso] = useState(true);
   const [mostraScartate, setMostraScartate] = useState(false);
