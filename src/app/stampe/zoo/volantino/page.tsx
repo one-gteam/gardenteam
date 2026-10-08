@@ -102,8 +102,15 @@ export default async function ZooVolantinoPage({
   const inPagine = (o: { paginaId?: string }) =>
     filtriPagina.some((f) => (f === "_nessuna" ? !o.paginaId : f === "_volantino" ? aVolantino(o) : o.paginaId === f));
   const storico = storicoOfferteByEan(db);
+  const q = (sp.q ?? "").trim().toLowerCase();
   const offers = baseOffers.filter((o) => {
     if (filtriPagina.length > 0 && !inPagine(o)) return false;
+    if (q) {
+      // descrizione dell'offerta e dell'articolo, EAN, nome e descrizione del padre, marca
+      const prod = prodOf(o); const parent = parentOf(o);
+      const testo = `${o.descrizione} ${o.ean} ${prod?.descrizione ?? ""} ${prod?.codice ?? ""} ${parent?.nome ?? ""} ${parent?.descVolantino ?? ""} ${prod?.marca ?? ""}`.toLowerCase();
+      if (!q.split(/\s+/).every((parola) => testo.includes(parola))) return false;
+    }
     if (animale && !caratteristicheOf(o).includes(animale)) return false;
     if (caratt && !caratteristicheOf(o).includes(caratt)) return false;
     if (sp.marca && prodOf(o)?.marca !== sp.marca) return false;
@@ -344,20 +351,23 @@ export default async function ZooVolantinoPage({
             )}
 
             {/* filtri in alto: una riga, il modulo si apre solo quando serve */}
-            <details className="card filtri-compatti" style={{ marginBottom: 10, padding: "8px 12px" }} open={Boolean(animale || caratt || sp.marca || sp.fornitore || filtroPagina)}>
+            <details className="card filtri-compatti" style={{ marginBottom: 10, padding: "8px 12px" }} open={Boolean(animale || caratt || sp.marca || sp.fornitore || filtroPagina || sp.q)}>
               <summary style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", cursor: "pointer", listStyle: "none" }}>
                 <span className="hint" style={{ flex: 1, fontSize: 12 }}>
                   {offers.length} offerte in {gruppi.length} voci{gruppi.length > RIGHE_MAX ? ` (mostrate le prime ${RIGHE_MAX}: restringi con i filtri)` : ""}
                   {spunte ? " · spunta più righe (anche Shift+clic) per agire in blocco" : ""} · clic sulle intestazioni per ordinare
                 </span>
-                <span className="btn btn-outline btn-sm">⚲ Filtri{Boolean(animale || caratt || sp.marca || sp.fornitore || filtroPagina) ? " (attivi)" : ""}</span>
+                <span className="btn btn-outline btn-sm">⚲ Filtri{Boolean(animale || caratt || sp.marca || sp.fornitore || filtroPagina || sp.q) ? " (attivi)" : ""}</span>
               </summary>
               <div style={{ marginTop: 10 }}>
-              <FiltriMobile id="filtri-volantino" scelte={[animale, caratt, sp.marca, sp.fornitore,
+              <FiltriMobile id="filtri-volantino" scelte={[sp.q && `«${sp.q}»`, animale, caratt, sp.marca, sp.fornitore,
                 filtriPagina.length > 0 && filtriPagina.map(nomeFiltroPagina).join(" + ")]}>
-              <form method="get" style={{ display: "grid", gridTemplateColumns: `repeat(${consortium ? 5 : 4}, minmax(0, 1fr)) auto`, gap: 10, alignItems: "end" }}>
+              <form method="get" style={{ display: "grid", gridTemplateColumns: `repeat(${consortium ? 6 : 5}, minmax(0, 1fr)) auto`, gap: 10, alignItems: "end" }}>
                 <input type="hidden" name="scope" value={scopeParam} />
                 {schedaFilter && <input type="hidden" name="scheda" value={schedaFilter} />}
+                <label className="field" style={{ marginBottom: 0 }}>Cerca
+                  <input type="text" name="q" defaultValue={sp.q ?? ""} placeholder="descrizione o EAN" />
+                </label>
                 <label className="field" style={{ marginBottom: 0 }}>Animale
                   <select name="animale" defaultValue={animale}>
                     <option value="">Tutti</option>

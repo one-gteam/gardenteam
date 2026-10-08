@@ -116,6 +116,8 @@ export interface ZooCampaign {
   svuotataIl?: string;
   /** Nota libera nello Storico focus (com'è andato, cosa ripetere o evitare). */
   focusNote?: string;
+  /** I focus di questo volantino sono archiviati: nello Storico non si vedono (si possono riaprire). */
+  focusArchiviato?: boolean;
   /** Passi del volantino segnati a mano (fatto/riaperto): vincono sul calcolo automatico. */
   passi?: Partial<Record<PassoVolantinoId, { fatto: boolean; da: string; il: string }>>;
 }
@@ -154,6 +156,34 @@ export interface PassoVolantino {
  * Un volantino uscito prima del sito (o fuori dal sito), riportato a mano
  * nello Storico focus: per ogni animale i temi e le offerte, una per riga.
  */
+/**
+ * Un focus del volantino come oggetto: nome (lo stesso testo scritto sulle
+ * offerte, campo `focus`), descrizione e colore. Le offerte restano legate per
+ * nome; un focus scritto su un'offerta senza scheda qui vale comunque, solo
+ * senza descrizione e colore.
+ */
+export interface ZooFocusDef {
+  id: string;
+  campaignId: string;
+  nome: string;
+  descrizione?: string;
+  colore?: string;
+}
+
+/** I focus di un volantino: quelli con la scheda più quelli scritti solo sulle offerte. */
+export function focusDelVolantino(db: ZooDB, campaignId: string): ZooFocusDef[] {
+  const defs = db.focusDef.filter((f) => f.campaignId === campaignId);
+  const visti = new Set(defs.map((f) => f.nome.trim().toLowerCase()));
+  const extra: ZooFocusDef[] = [];
+  for (const o of db.offers) {
+    const n = (o.focus ?? "").trim();
+    if (o.campaignId !== campaignId || !n || visti.has(n.toLowerCase())) continue;
+    visti.add(n.toLowerCase());
+    extra.push({ id: `auto_${n.toLowerCase()}`, campaignId, nome: n });
+  }
+  return [...defs, ...extra].sort((a, b) => a.nome.localeCompare(b.nome, "it"));
+}
+
 export interface ZooFocusVolantino {
   id: string;
   nome: string;
@@ -498,6 +528,7 @@ export interface VolBlock {
   imageUrl?: string;
   label?: string; // etichetta grafica (SOTTOCOSTO, NOVITÀ…)
   commento?: string; // nota per chi impagina, non stampata
+  bg?: string; // colore di sfondo della cella (es. quello del focus)
   // modifiche "solo per questo volantino" sulla prima offerta: non toccano il database
   descrizione?: string;
   prezzo?: string;
@@ -775,6 +806,7 @@ export interface ZooDB {
   testate: ZooTestataScopo[];
   focusManuali: ZooFocusVolantino[];
   unioniVolantino: ZooUnioneVolantino[];
+  focusDef: ZooFocusDef[];
 }
 
 /* ================== Persistenza ================== */
@@ -803,11 +835,11 @@ export async function getZooDb(): Promise<ZooDB> {
     products: [], parents: [], textOverrides: [], tagOverrides: [], offerOverrides: [], printed: [],
     campaigns: [], offers: [],
     votes: [], hidden: [], pvPrices: [], suggestions: [], volantinoLayouts: [], zooLayouts: [],
-    noPrint: [], layoutImages: [], pvPromoCodes: [], pvPromos: [], scopeApiKeys: [], noteBozza: [], coda: [], giacenze: [], nonConformi: [], condizioniScopo: [], testate: [], focusManuali: [], unioniVolantino: [],
+    noPrint: [], layoutImages: [], pvPromoCodes: [], pvPromos: [], scopeApiKeys: [], noteBozza: [], coda: [], giacenze: [], nonConformi: [], condizioniScopo: [], testate: [], focusManuali: [], unioniVolantino: [], focusDef: [],
   };
   const db = await readDomain<ZooDB>("zoo", empty);
   db.settings = { ...DEFAULT_SETTINGS, ...(db.settings ?? {}) };
-  for (const k of ["products", "parents", "textOverrides", "tagOverrides", "offerOverrides", "printed", "campaigns", "offers", "votes", "hidden", "pvPrices", "suggestions", "volantinoLayouts", "zooLayouts", "noPrint", "layoutImages", "pvPromoCodes", "pvPromos", "scopeApiKeys", "noteBozza", "coda", "giacenze", "nonConformi", "condizioniScopo", "testate", "focusManuali", "unioniVolantino"] as const) {
+  for (const k of ["products", "parents", "textOverrides", "tagOverrides", "offerOverrides", "printed", "campaigns", "offers", "votes", "hidden", "pvPrices", "suggestions", "volantinoLayouts", "zooLayouts", "noPrint", "layoutImages", "pvPromoCodes", "pvPromos", "scopeApiKeys", "noteBozza", "coda", "giacenze", "nonConformi", "condizioniScopo", "testate", "focusManuali", "unioniVolantino", "focusDef"] as const) {
     if (!db[k]) (db as unknown as Record<string, unknown>)[k] = [];
   }
   // i layout salvati prima delle tipologie non hanno il campo: senza questo la

@@ -6,14 +6,16 @@ import ModuloAutoSalva from "@/components/ModuloAutoSalva";
 import { ModuloInvio, PulsanteAzione } from "@/components/AzioneSenzaRicarica";
 import { canAccessArea, isZooEditor, resolveScope } from "@/lib/stampe";
 import { gestisce } from "@/lib/types";
-import { getZooDb, effectiveParentText, campaignStato, animaleFocus } from "@/lib/zoo";
+import { getZooDb, effectiveParentText, campaignStato, animaleFocus, campagnaInLavorazione, focusDelVolantino, zooImageUrl, NO_VOLANTINO } from "@/lib/zoo";
 import {
   modificaFocus, togliDalFocus, aggiungiAlFocus, notaFocusCampagna,
   creaVolantinoFocus, salvaVolantinoFocus, eliminaVolantinoFocus, salvaGruppoFocus, eliminaGruppoFocus,
+  eliminaFocus, eliminaTuttiIFocus, archiviaFocusVolantino,
 } from "@/lib/zoo-focus-actions";
+import FocusBacheca, { type VoceBacheca, type FocusBachecaDef } from "@/components/stampe/FocusBacheca";
 
 interface VoceFocus { nome: string; descrizione: string; prezzo: string; inVolantino: boolean; offerId?: string }
-interface GruppoFocus { chiave: string; focus: string; animale: string; offerte: VoceFocus[]; gruppoId?: string; righe?: string }
+interface GruppoFocus { chiave: string; focus: string; animale: string; offerte: VoceFocus[]; gruppoId?: string; righe?: string; descrizione?: string; colore?: string }
 interface VolantinoFocus {
   id: string;
   nome: string;
@@ -22,6 +24,7 @@ interface VolantinoFocus {
   note?: string;
   manuale: boolean;
   inLavorazione: boolean;
+  archiviato?: boolean;
   gruppi: GruppoFocus[];
   /** Offerte del volantino ancora senza focus: si possono aggiungere a un focus. */
   liberi: { id: string; nome: string }[];
@@ -86,8 +89,13 @@ export default async function ZooFocusPage({
         }
         gruppi.set(chiave, g);
       }
+      const defs = focusDelVolantino(db, c.id);
+      for (const g of gruppi.values()) {
+        const d = defs.find((x) => x.nome.trim().toLowerCase() === g.focus.trim().toLowerCase());
+        g.descrizione = d?.descrizione; g.colore = d?.colore;
+      }
       return {
-        id: c.id, nome: c.nome, dal: c.dal, al: c.al, note: c.focusNote, manuale: false,
+        id: c.id, nome: c.nome, dal: c.dal, al: c.al, note: c.focusNote, manuale: false, archiviato: c.focusArchiviato,
         inLavorazione: campaignStato(c) === "lavorazione",
         gruppi: [...gruppi.values()],
         liberi: [...liberi.values()].sort((a, b) => a.nome.localeCompare(b.nome)),
@@ -103,9 +111,35 @@ export default async function ZooFocusPage({
     })),
   }));
 
+  const archiviati = dalSito.filter((v) => v.archiviato && v.gruppi.length > 0).length;
   const volantini = [...dalSito, ...aMano]
     .filter((v) => v.gruppi.length > 0 || v.manuale || sp.tutti === "1")
+    .filter((v) => sp.archiviati === "1" || !v.archiviato)
     .sort((a, b) => (b.dal ?? "").localeCompare(a.dal ?? ""));
+
+  /*
+   * Focus del volantino in lavorazione, come bacheca: le offerte a volantino
+   * (una voce per padre) divise per focus, da trascinare dall'uno all'altro.
+   */
+  const inLavorazione = campagnaInLavorazione(db);
+  const bacheca = (() => {
+    if (!inLavorazione || !puoModificare) return null;
+    const defs = focusDelVolantino(db, inLavorazione.id);
+    const voci = new Map<string, VoceBacheca & { focus: string }>();
+    for (const o of db.offers) {
+      if (o.campaignId !== inLavorazione.id || o.scopeType || !(o.selezionata || o.paginaId) || o.paginaId === NO_VOLANTINO) continue;
+      const product = prodById.get(o.productId ?? "");
+      const parent = product?.parentId ? parentById.get(product.parentId) : undefined;
+      const focus = (o.focus ?? "").trim();
+      const chiave = `${focus.toLowerCase()}|${parent?.id ?? o.id}`;
+      const v = voci.get(chiave) ?? { id: chiave, offerIds: [], nome: nomeOfferta(o).nome, animale: animaleFocus(db, o), foto: zooImageUrl(product, parent), prezzo: o.prezzoPromo, focus };
+      v.offerIds.push(o.id);
+      voci.set(chiave, v);
+    }
+    const tutte = [...voci.values()].sort((a, b) => a.nome.localeCompare(b.nome, "it"));
+    const focus: FocusBachecaDef[] = defs.map((d) => ({ nome: d.nome, descrizione: d.descrizione, colore: d.colore, voci: tutte.filter((v) => v.focus.toLowerCase() === d.nome.trim().toLowerCase()) }));
+    return { campaignId: inLavorazione.id, nome: inLavorazione.nome, focus, senzaFocus: tutte.filter((v) => !v.focus) };
+  })();
 
   const filtroAnimale = sp.animale ?? "";
   const selettoreAnimale = (valore: string) => (
@@ -121,10 +155,10 @@ export default async function ZooFocusPage({
       <div className="container">
         <div style={{ display: "flex", gap: 14, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 14 }}>
           <div style={{ flex: 1 }}>
-            <h1 style={{ margin: 0 }}>Storico dei focus</h1>
+            <h1 style={{ margin: 0 }}>Focus</h1>
             <p className="subtitle" style={{ margin: "4px 0 0" }}>
-              I temi di comunicazione di ogni volantino, per animale e data di uscita: cosa si è messo in evidenza e quando.
-              {puoModificare && " Puoi correggerli con «✎ Modifica» e aggiungere i volantini fatti fuori dal sito."}
+              I temi di comunicazione: in alto quelli del volantino in lavorazione, da gestire; sotto lo storico di ogni volantino, per animale e data di uscita.
+              {puoModificare && " Lo storico si corregge con «✎ Modifica»; i focus di prova si eliminano o si archiviano."}
             </p>
           </div>
           <form method="get" style={{ display: "flex", gap: 8, alignItems: "end" }}>
@@ -138,9 +172,22 @@ export default async function ZooFocusPage({
             <label className="hint" style={{ display: "flex", gap: 4, alignItems: "center", paddingBottom: 6 }}>
               <input type="checkbox" name="tutti" value="1" defaultChecked={sp.tutti === "1"} /> anche i volantini senza focus
             </label>
+            {archiviati > 0 && (
+              <label className="hint" style={{ display: "flex", gap: 4, alignItems: "center", paddingBottom: 6 }}>
+                <input type="checkbox" name="archiviati" value="1" defaultChecked={sp.archiviati === "1"} /> anche gli archiviati ({archiviati})
+              </label>
+            )}
             <button className="btn btn-sm" type="submit">Filtra</button>
           </form>
         </div>
+
+        {bacheca && (
+          <div className="card" style={{ padding: 14, marginBottom: 18 }}>
+            <h2 style={{ marginTop: 0 }}>Focus di «{bacheca.nome}» <span className="hint" style={{ fontWeight: 400, fontSize: 13 }}>· il volantino in lavorazione</span></h2>
+            <FocusBacheca campaignId={bacheca.campaignId} focus={bacheca.focus} senzaFocus={bacheca.senzaFocus} />
+          </div>
+        )}
+        <h2 style={{ margin: "6px 0 10px" }}>Storico</h2>
 
         {puoModificare && (
           <details className="card" style={{ padding: 14, marginBottom: 14, background: "var(--green-50)" }}>
@@ -175,6 +222,19 @@ export default async function ZooFocusPage({
                 <span className="pill pill-blue">{v.gruppi.length} focus</span>
                 {v.manuale && <span className="pill pill-gray">aggiunto a mano</span>}
                 {v.inLavorazione && <span className="pill pill-orange">in lavorazione</span>}
+                {v.archiviato && <span className="pill pill-gray">archiviato</span>}
+                {puoModificare && !v.manuale && v.gruppi.length > 0 && (
+                  <span style={{ marginLeft: "auto", display: "inline-flex", gap: 6 }}>
+                    <PulsanteAzione azione={archiviaFocusVolantino.bind(null, v.id, !v.archiviato)}
+                      title={v.archiviato ? "Torna a vederli nello storico" : "Restano salvati ma non si vedono più nello storico"}>
+                      {v.archiviato ? "Riapri i focus" : "Archivia i focus"}
+                    </PulsanteAzione>
+                    <PulsanteAzione azione={eliminaTuttiIFocus.bind(null, v.id)} style={rosso}
+                      conferma={`Eliminare tutti i ${v.gruppi.length} focus di «${v.nome}»? Le offerte restano, senza focus. Non si torna indietro.`}>
+                      Elimina tutti i focus
+                    </PulsanteAzione>
+                  </span>
+                )}
               </div>
               {v.note && <p style={{ margin: "0 0 10px", fontSize: 13, whiteSpace: "pre-line", background: "#faf8f2", padding: "6px 10px", borderRadius: 6 }}>📝 {v.note}</p>}
               {animali.length === 0 && <p className="hint" style={{ margin: 0 }}>Nessun focus su questo volantino.</p>}
@@ -183,8 +243,9 @@ export default async function ZooFocusPage({
                   <div key={animale} style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 10 }}>
                     <div style={{ fontWeight: 800, marginBottom: 6 }}>{animale}</div>
                     {perAnimale.get(animale)!.map((g) => (
-                      <div key={g.chiave} style={{ marginBottom: 8 }}>
+                      <div key={g.chiave} style={{ marginBottom: 8, borderLeft: g.colore ? `4px solid ${g.colore}` : undefined, paddingLeft: g.colore ? 6 : 0 }}>
                         <div style={{ fontWeight: 700, fontSize: 13.5, color: "#274b7a" }}>{g.focus}</div>
+                        {g.descrizione && <p style={{ margin: "2px 0 4px", fontSize: 12.5, whiteSpace: "pre-line" }}>{g.descrizione}</p>}
                         <ul style={{ margin: "2px 0 0", paddingLeft: 16, fontSize: 12.5 }}>
                           {g.offerte.map((o) => (
                             <li key={o.offerId ?? o.nome}>
@@ -268,6 +329,10 @@ export default async function ZooFocusPage({
                               <label className="field" style={{ marginBottom: 0, flex: 1, minWidth: 200 }}>Focus<input type="text" name="focus" defaultValue={g.focus} required /></label>
                               <button className="btn btn-outline btn-sm" type="submit">Salva</button>
                             </ModuloInvio>
+                            <div style={{ marginTop: 6 }}>
+                              <PulsanteAzione azione={eliminaFocus.bind(null, v.id, g.focus)} style={rosso}
+                                conferma={`Eliminare il focus «${g.focus}»? Le offerte restano nel volantino, senza focus.`}>Elimina questo focus</PulsanteAzione>
+                            </div>
                             <ul style={{ margin: "8px 0 0", paddingLeft: 0, listStyle: "none", fontSize: 12.5, display: "grid", gap: 4 }}>
                               {g.offerte.map((o) => (
                                 <li key={o.offerId} style={{ display: "flex", gap: 8, alignItems: "center" }}>

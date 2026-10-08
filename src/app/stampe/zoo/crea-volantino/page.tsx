@@ -7,8 +7,11 @@ import { getDb } from "@/lib/db";
 import {
   getZooDb, campagnaInLavorazione, zooImageUrl, migraVolantinoPages, effectiveParentText, datiPrezzoOfferta,
   chiavePrezzo, padreDaChiave, prezzoMinimo, pvPriceFor,
-  unioneDi, animaliDi, caratteristicheProdottoDi,
+  unioneDi, animaliDi, caratteristicheProdottoDi, focusDelVolantino,
 } from "@/lib/zoo";
+import IncontroVolantino from "@/components/stampe/IncontroVolantino";
+import { statoIncontro } from "@/lib/zoo-incontri";
+import { userSites } from "@/lib/types";
 import { saveVolantinoEditors } from "@/lib/zoo-actions";
 
 /**
@@ -118,6 +121,12 @@ export default async function CreaVolantinoPage({
       })()
     : [];
   const ANIMALI = db.settings.categorieAnimali;
+  // incontri di lavoro: stato attuale e colleghi da spuntare come partecipanti
+  const statoIniziale = campaign ? await statoIncontro(campaign.id) : undefined;
+  const colleghiIncontro = academyDb.users
+    .filter((u) => u.active !== false && (u.role === "system_admin" || userSites(u).includes("zoo")) && u.role !== "student")
+    .map((u) => ({ id: u.id, nome: `${u.firstName} ${u.lastName}` }))
+    .sort((a, b) => a.nome.localeCompare(b.nome, "it"));
   const carattsProdotto = db.settings.caratteristicheProdotto;
   const fmtData = (d: string) => (d ? new Date(`${d}T00:00:00`).toLocaleDateString("it-IT") : "—");
   const layout = campaign ? db.volantinoLayouts.find((l) => l.campaignId === campaign.id) : undefined;
@@ -139,6 +148,7 @@ export default async function CreaVolantinoPage({
                 Valide dal {fmtData(campaign.dal)} al {fmtData(campaign.al)}
               </span>
             )}
+            {campaign && <IncontroVolantino campaignId={campaign.id} iniziale={statoIniziale!} colleghi={colleghiIncontro} />}
 
           </div>
           {editor && (
@@ -177,7 +187,7 @@ export default async function CreaVolantinoPage({
             animali={ANIMALI}
             caratts={carattsProdotto}
             labels={db.settings.labels}
-            focusDisponibili={[...new Set(offers.map((o) => (o.focus ?? "").trim()).filter(Boolean))].sort()}
+            focusDisponibili={focusDelVolantino(db, campaign.id).map((f) => ({ nome: f.nome, colore: f.colore, descrizione: f.descrizione }))}
             marche={[...new Set(offers.map((o) => o.marca).filter(Boolean))].sort()}
             fornitori={[...new Set(offers.map((o) => o.fornitore).filter(Boolean))].sort()}
           />

@@ -175,7 +175,7 @@ export default async function ZooBozzaPage({
                       return (
                         <div key={b.id} className="vol-cell" style={{
                           gridColumn: `${b.c + 1} / span ${b.cs}`, gridRow: `${b.r + 1} / span ${b.rs}`,
-                          background: b.imageUrl ? `center/cover no-repeat url(${b.imageUrl})` : dentroSezione ? "transparent" : "#fff",
+                          background: b.imageUrl ? `center/cover no-repeat url(${b.imageUrl})` : b.bg ? b.bg : dentroSezione ? "transparent" : "#fff",
                           border: dentroSezione ? "1px dashed rgba(0,0,0,.12)" : "1px solid #e6e6e6",
                         }}>
                           {b.commento && <span className="nota-cella no-print" title={b.commento}>nota: {b.commento}</span>}

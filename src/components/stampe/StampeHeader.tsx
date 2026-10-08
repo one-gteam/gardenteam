@@ -28,6 +28,7 @@ export default async function StampeHeader({
 
   const links = area === "zoo"
     ? [
+        ...(gestZoo ? [{ href: "/stampe/zoo/dashboard", label: "Dashboard", key: "dashboard" }] : []),
         { href: "/stampe/zoo/prodotti", label: "Prodotti", key: "prodotti" },
         { href: "/stampe/zoo/volantino", label: "Scelta offerte Volantino", key: "volantino" },
         ...(isZooEditor(user)
@@ -38,7 +39,7 @@ export default async function StampeHeader({
         { href: "/stampe/zoo/stampa", label: "Stampa cartelli", key: "stampa" },
         { href: "/stampe/zoo/reparto", label: "📱 In reparto", key: "reparto" },
         ...(isZooEditor(user) ? [{ href: "/stampe/zoo/archivio", label: "Archivio volantini", key: "archivio" }] : []),
-        ...(gestZoo ? [{ href: "/stampe/zoo/focus", label: "Storico focus", key: "focus" }] : []),
+        ...(gestZoo ? [{ href: "/stampe/zoo/focus", label: "Focus", key: "focus" }] : []),
         ...(gestZoo ? [{ href: "/stampe/zoo/impostazioni", label: "Impostazioni", key: "impostazioni" }] : []),
         // una voce sola per uscire: la scelta dell'area si fa in /scegli, non dal menu
       ]

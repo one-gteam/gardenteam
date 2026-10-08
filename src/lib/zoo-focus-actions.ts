@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireUser } from "./auth";
 import { canAccessArea, isZooEditor } from "./stampe";
-import { getZooDb, saveZooDb, animaleFocus, fotoDaAbbinare } from "./zoo";
+import { getZooDb, saveZooDb, animaleFocus, fotoDaAbbinare, type ZooDB } from "./zoo";
 import { listStorageFiles } from "./supabase";
 
 /*
@@ -26,6 +26,134 @@ const nuovoId = (p: string) => `${p}_${Date.now().toString(36)}${Math.random().t
 
 function aggiorna() {
   revalidatePath("/stampe/zoo/focus");
+  revalidatePath("/stampe/zoo/crea-volantino");
+  revalidatePath("/stampe/zoo/dashboard");
+}
+
+const stesso = (a?: string, b?: string) => (a ?? "").trim().toLowerCase() === (b ?? "").trim().toLowerCase();
+const COLORI_FOCUS = ["#e8f3ea", "#fde8ef", "#e6eefb", "#fff3d6", "#efe6fb", "#e0f4f4", "#fbe9df"];
+function defDi(db: ZooDB, campaignId: string, nome: string) {
+  return db.focusDef.find((f) => f.campaignId === campaignId && stesso(f.nome, nome));
+}
+
+/* ================== Focus del volantino in lavorazione (pagina Focus, Crea Volantino) ================== */
+
+/**
+ * Crea un focus (nomePrima null) o ne cambia nome, descrizione e colore. Il
+ * nome nuovo si riporta su tutte le offerte che avevano quello vecchio.
+ */
+export async function salvaFocusDef(campaignId: string, nomePrima: string | null, fd: FormData): Promise<Esito> {
+  if (!(await editorZoo())) return { ok: false, error: "Solo chi cura lo Zoo per il Consorzio." };
+  const db = await getZooDb();
+  const nome = testo(fd, "nome", 120);
+  if (!nome) return { ok: false, error: "Scrivi il nome del focus." };
+  const descrizione = String(fd.get("descrizione") ?? "").trim().slice(0, 2000);
+  const libero = String(fd.get("coloreLibero") ?? "");
+  const scelto = String(fd.get("colore") ?? "");
+  const colore = /^#[0-9a-f]{6}$/i.test(scelto) ? scelto : /^#[0-9a-f]{6}$/i.test(libero) ? libero : undefined;
+  if (nomePrima === null) {
+    if (defDi(db, campaignId, nome) || db.offers.some((o) => o.campaignId === campaignId && stesso(o.focus, nome))) return { ok: false, error: "C'è già un focus con questo nome." };
+    const n = db.focusDef.filter((f) => f.campaignId === campaignId).length;
+    db.focusDef.push({ id: nuovoId("fd"), campaignId, nome, descrizione: descrizione || undefined, colore: colore ?? COLORI_FOCUS[n % COLORI_FOCUS.length] });
+  } else {
+    let def = defDi(db, campaignId, nomePrima);
+    if (!def) { def = { id: nuovoId("fd"), campaignId, nome: nomePrima }; db.focusDef.push(def); }
+    if (!stesso(nome, nomePrima)) {
+      if (defDi(db, campaignId, nome)) return { ok: false, error: "C'è già un focus con questo nome: per metterli insieme trascina l'intestazione sull'altro." };
+      for (const o of db.offers) if (o.campaignId === campaignId && stesso(o.focus, nomePrima)) o.focus = nome;
+    }
+    def.nome = nome;
+    def.descrizione = descrizione || undefined;
+    if (colore) def.colore = colore;
+  }
+  await saveZooDb(db);
+  aggiorna();
+  return { ok: true };
+}
+
+/** Sposta offerte in un focus (nome vuoto = senza focus). */
+export async function spostaInFocus(campaignId: string, offerIds: string[], nome: string): Promise<Esito> {
+  if (!(await editorZoo())) return { ok: false, error: "Non autorizzato." };
+  const db = await getZooDb();
+  const def = nome ? defDi(db, campaignId, nome) : undefined;
+  let n = 0;
+  for (const o of db.offers) {
+    if (o.campaignId !== campaignId || !offerIds.includes(o.id)) continue;
+    o.focus = nome ? (def?.nome ?? nome) : undefined;
+    if (!nome) o.focusAnimale = undefined;
+    n++;
+  }
+  if (!n) return { ok: false, error: "Offerte non trovate: ricarica la pagina." };
+  await saveZooDb(db);
+  aggiorna();
+  return { ok: true };
+}
+
+/** Assegna un focus (anche nuovo) alle offerte di una o più celle di Crea Volantino; risponde col colore. */
+export async function assegnaFocusOfferte(campaignId: string, offerIds: string[], nome: string): Promise<{ ok: boolean; colore?: string; error?: string }> {
+  if (!(await editorZoo())) return { ok: false, error: "Non autorizzato." };
+  const db = await getZooDb();
+  const n = nome.trim().slice(0, 120);
+  let def = n ? defDi(db, campaignId, n) : undefined;
+  if (n && !def) {
+    const quanti = db.focusDef.filter((f) => f.campaignId === campaignId).length;
+    def = { id: nuovoId("fd"), campaignId, nome: n, colore: COLORI_FOCUS[quanti % COLORI_FOCUS.length] };
+    db.focusDef.push(def);
+  }
+  for (const o of db.offers) if (o.campaignId === campaignId && offerIds.includes(o.id)) o.focus = def?.nome || undefined;
+  await saveZooDb(db);
+  aggiorna();
+  return { ok: true, colore: def?.colore };
+}
+
+/** Unisce il focus «da» dentro «in»: le offerte passano tutte in «in», la descrizione si accoda. */
+export async function unisciFocus(campaignId: string, da: string, dentro: string): Promise<Esito> {
+  if (!(await editorZoo())) return { ok: false, error: "Non autorizzato." };
+  const db = await getZooDb();
+  const dest = defDi(db, campaignId, dentro);
+  const orig = defDi(db, campaignId, da);
+  for (const o of db.offers) if (o.campaignId === campaignId && stesso(o.focus, da)) o.focus = dest?.nome ?? dentro;
+  if (dest && orig?.descrizione) dest.descrizione = [dest.descrizione, orig.descrizione].filter(Boolean).join("\n\n");
+  if (orig) db.focusDef = db.focusDef.filter((f) => f !== orig);
+  await saveZooDb(db);
+  aggiorna();
+  return { ok: true };
+}
+
+/** Elimina un focus: le offerte restano nel volantino, senza focus. */
+export async function eliminaFocus(campaignId: string, nome: string): Promise<Esito> {
+  if (!(await editorZoo())) return { ok: false, error: "Non autorizzato." };
+  const db = await getZooDb();
+  for (const o of db.offers) if (o.campaignId === campaignId && stesso(o.focus, nome)) { o.focus = undefined; o.focusAnimale = undefined; }
+  db.focusDef = db.focusDef.filter((f) => !(f.campaignId === campaignId && stesso(f.nome, nome)));
+  await saveZooDb(db);
+  aggiorna();
+  return { ok: true };
+}
+
+/** Storico: elimina TUTTI i focus di un volantino (es. quelli di prova). */
+export async function eliminaTuttiIFocus(campaignId: string): Promise<Esito> {
+  if (!(await editorZoo())) return { ok: false, error: "Non autorizzato." };
+  const db = await getZooDb();
+  for (const o of db.offers) if (o.campaignId === campaignId) { o.focus = undefined; o.focusAnimale = undefined; }
+  db.focusDef = db.focusDef.filter((f) => f.campaignId !== campaignId);
+  const c = db.campaigns.find((x) => x.id === campaignId);
+  if (c) c.focusNote = undefined;
+  await saveZooDb(db);
+  aggiorna();
+  return { ok: true };
+}
+
+/** Storico: archivia (o riapre) i focus di un volantino: restano salvati ma non si vedono più. */
+export async function archiviaFocusVolantino(campaignId: string, archivia: boolean): Promise<Esito> {
+  if (!(await editorZoo())) return { ok: false, error: "Non autorizzato." };
+  const db = await getZooDb();
+  const c = db.campaigns.find((x) => x.id === campaignId);
+  if (!c) return { ok: false, error: "Volantino non trovato." };
+  c.focusArchiviato = archivia || undefined;
+  await saveZooDb(db);
+  aggiorna();
+  return { ok: true };
 }
 
 /* ================== Focus dei volantini fatti col sito ================== */
