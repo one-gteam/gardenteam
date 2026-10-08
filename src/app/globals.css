@@ -1267,3 +1267,6 @@ th.ordinata[data-ordine="desc"]::after { content: " ▼"; font-size: 9px; }
 .foto-drop.sopra { border: 2px dashed var(--green-600); box-shadow: 0 0 0 4px var(--green-100); }
 /* Bozza: note per il grafico ben visibili */
 .nota-grafico { margin: 0 0 6px; font-size: 12px; background: #fff8e1; border: 1px solid #f3d77a; border-radius: 6px; padding: 4px 8px; }
+/* Bozza: nota per il grafico su una cella, in fondo e su due righe al massimo (passandoci sopra si legge tutta) */
+.nota-cella { position: absolute; left: 2px; right: 2px; bottom: 2px; z-index: 3; background: #fff8e1; border: 1px solid #f3d77a; border-radius: 4px;
+  font-size: 8px; line-height: 1.2; padding: 1px 3px; color: #7a5a00; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }

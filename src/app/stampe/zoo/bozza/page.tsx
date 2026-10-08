@@ -178,7 +178,7 @@ export default async function ZooBozzaPage({
                           background: b.imageUrl ? `center/cover no-repeat url(${b.imageUrl})` : dentroSezione ? "transparent" : "#fff",
                           border: dentroSezione ? "1px dashed rgba(0,0,0,.12)" : "1px solid #e6e6e6",
                         }}>
-                          {b.commento && <span className="vol-nota no-print" title={b.commento}>nota: {b.commento}</span>}
+                          {b.commento && <span className="nota-cella no-print" title={b.commento}>nota: {b.commento}</span>}
                           {b.label && <span className="vol-label">{b.label}</span>}
                           {b.testo && <div className="vol-testo">{b.testo}</div>}
                           <div style={{ display: "grid", gap: 2, gridTemplateColumns: offerte.length > 1 ? "1fr 1fr" : "1fr", textAlign: "center" }}>
