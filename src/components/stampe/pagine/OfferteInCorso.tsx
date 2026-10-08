@@ -16,6 +16,7 @@ import { lavoroAttivo } from "@/lib/zoo-ai-lavoro";
 import BulkCheckbox from "@/components/stampe/BulkCheckbox";
 import InlineEdit from "@/components/stampe/InlineEdit";
 import InlineSelect from "@/components/stampe/InlineSelect";
+import InlineMulti from "@/components/stampe/InlineMulti";
 import ColumnTools from "@/components/stampe/ColumnTools";
 import AvvisaColleghi from "@/components/stampe/AvvisaColleghi";
 import AvanzamentoVolantino from "@/components/stampe/AvanzamentoVolantino";
@@ -33,8 +34,7 @@ import {
   toggleParentCaratteristica, scioglieParent, chiudiVolantino, riapriVolantino, nuovoVolantino,
   svuotaOfferteVolantino, rimuoviOfferteMarginiamo, updateParentFieldInline, updateOfferFieldInline,
   updateOfferGroupFieldInline, setParentTagInline, moveProductToParent, setParentImageFromFile,
-  mergeParentsForm, archiviaOfferteSelezionate, aggiungiOffertaAMano, dividiPadrePerPrezzo, dividiTuttiIPadriPerPrezzo, setTipologiaInline,
-} from "@/lib/zoo-actions";
+  mergeParentsForm, archiviaOfferteSelezionate, aggiungiOffertaAMano, dividiPadrePerPrezzo, dividiTuttiIPadriPerPrezzo, setTipologiaInline, setParentAnimaliInline } from "@/lib/zoo-actions";
 
 // "Associa con AI" può richiedere più dei 10s di default per un lotto di articoli:
 // alza il limite dove la piattaforma lo consente (vale anche per le server action
@@ -348,6 +348,7 @@ export default async function OfferteInCorso({ user, sp }: { user: User; sp: Rec
             ✓ Importate {sp.importate} offerte ({sp.nuovi ?? 0} prodotti nuovi aggiunti al database base).
             {sp.senzaprezzo && ` ${sp.senzaprezzo} senza prezzo promo (vedi condizioni): da completare a mano.`}
             {sp.esclusemarginiamo && ` ${sp.esclusemarginiamo} righe "marginiamo" escluse dalle offerte.`}
+            {sp.aggiornate && ` ${sp.aggiornate} erano già in offerta (anche a mano): aggiornate, non duplicate.`}
           </div>
         )}
         {sp.padri !== undefined && (
@@ -780,8 +781,8 @@ export default async function OfferteInCorso({ user, sp }: { user: User; sp: Rec
                           <td style={{ fontSize: 12.5 }}>{product?.fornitore || "—"}</td>
                           <td>
                             {consortium && parent ? (
-                              <InlineSelect value={animali[0] ?? ""} options={db.settings.categorieAnimali}
-                                onSave={setParentTagInline.bind(null, parent.id, "animale")} />
+                              <InlineMulti values={animali} options={db.settings.categorieAnimali}
+                                onSave={setParentAnimaliInline.bind(null, parent.id)} />
                             ) : (
                               <span style={{ fontSize: 11.5, color: "var(--muted)" }}>{animali.join(", ") || "—"}</span>
                             )}
@@ -919,8 +920,8 @@ export default async function OfferteInCorso({ user, sp }: { user: User; sp: Rec
                           <td style={{ fontSize: 12.5 }}>{product?.fornitore || "—"}</td>
                           <td>
                             {consortium && parent ? (
-                              <InlineSelect value={animali[0] ?? ""} options={db.settings.categorieAnimali}
-                                onSave={setParentTagInline.bind(null, parent.id, "animale")} />
+                              <InlineMulti values={animali} options={db.settings.categorieAnimali}
+                                onSave={setParentAnimaliInline.bind(null, parent.id)} />
                             ) : (
                               <span style={{ fontSize: 11.5, color: "var(--muted)" }}>{animali.join(", ") || "—"}</span>
                             )}

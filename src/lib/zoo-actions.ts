@@ -165,10 +165,12 @@ function parseListinoBlocchi(XLSX: typeof import("xlsx"), wb: import("xlsx").Wor
   if (!cols || cols.fornitore < 0 || cols.ean < 0) return [];
   const rows: ListinoRow[] = [];
   for (const [r, row] of grid.entries()) {
-    const fornitoreCell = norm(row[cols.fornitore]);
-    if (!fornitoreCell || fornitoreCell === want.fornitore) continue; // riga di intestazione ripetuta o vuota
-    const ean = String(row[cols.ean] ?? "").trim().replace(/\.0$/, "");
-    if (!ean) continue;
+    // riga che ripete l'intestazione: si salta. Il fornitore vuoto invece NON basta a scartarla:
+    // succede (es. Happy Hay di novembre) e le offerte sparivano senza avviso
+    if (norm(row[cols.fornitore]) === want.fornitore || norm(row[cols.ean]) === want.ean) continue;
+    // l'apostrofo davanti è il modo di Excel per tenere l'EAN come testo: non fa parte del codice
+    const ean = String(row[cols.ean] ?? "").trim().replace(/^'+/, "").replace(/\.0$/, "");
+    if (!/^\d{6,14}$/.test(ean)) continue; // righe vuote, titoli di blocco, totali
     const promoVisto = String(vista[r]?.[cols.prezzoPromo] ?? "").trim();
     const promoRaw = promoVisto.endsWith("%") ? promoVisto : String(row[cols.prezzoPromo] ?? "").trim();
     const promoNum = Number(priceStr(promoRaw).replace(",", "."));
@@ -551,6 +553,44 @@ export async function updateParentFieldInline(
  * quindi si sostituiscono solo i valori della dimensione scelta lasciando
  * intatta l'altra. Valore vuoto = nessun tag per quella dimensione.
  */
+/** Gli animali di un padre: anche più d'uno (una ciotola è per cane e gatto). */
+export async function setParentAnimaliInline(parentId: string, values: string[]): Promise<{ ok: boolean }> {
+  const user = await requireZooUser();
+  if (!isZooEditor(user)) return { ok: false };
+  const db = await getZooDb();
+  const parent = db.parents.find((p) => p.id === parentId);
+  if (!parent) return { ok: false };
+  const dominio = db.settings.categorieAnimali;
+  const scelti = dominio.filter((a) => values.includes(a)); // nell'ordine delle impostazioni
+  parent.caratteristiche = [...parent.caratteristiche.filter((c) => !dominio.includes(c)), ...scelti];
+  await saveZooDb(db);
+  return { ok: true };
+}
+
+/**
+ * Raccolta foto: un'immagine trascinata su un'offerta diventa la foto del suo
+ * prodotto padre (o dell'articolo, se non ha padre).
+ */
+export async function caricaFotoOfferta(offerId: string, formData: FormData): Promise<{ ok: boolean; url?: string; error?: string }> {
+  const user = await requireZooUser();
+  if (!isZooEditor(user)) return { ok: false, error: "Solo chi cura lo Zoo per il Consorzio." };
+  const file = formData.get("file") as File | null;
+  if (!file || file.size === 0 || !file.type.startsWith("image/")) return { ok: false, error: "Serve un'immagine." };
+  if (file.size > 15 * 1024 * 1024) return { ok: false, error: "Immagine troppo grande (massimo 15 MB)." };
+  const db = await getZooDb();
+  const o = db.offers.find((x) => x.id === offerId);
+  const prod = o ? db.products.find((p) => p.id === o.productId) : undefined;
+  if (!o || !prod) return { ok: false, error: "Offerta non trovata." };
+  const parent = prod.parentId ? db.parents.find((p) => p.id === prod.parentId) : undefined;
+  const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+  const nome = `${parent ? `padre_${parent.id}` : `art_${prod.ean}`}_${Date.now()}.${ext}`;
+  const url = await uploadPublicFile(`zoo-foto/${nome}`, Buffer.from(await file.arrayBuffer()), file.type);
+  if (parent) parent.image = url; else prod.image = url;
+  await saveZooDb(db);
+  after(() => creaMiniature([nome]).catch(() => undefined));
+  return { ok: true, url };
+}
+
 /** Tipologia (Multipack, Giochi…) del padre, o dell'articolo se non ha un padre. */
 export async function setTipologiaInline(id: string, padre: boolean, value: string): Promise<{ ok: boolean }> {
   const user = await requireZooUser();
@@ -909,6 +949,12 @@ export async function aggiungiOffertaAMano(scopeParam: string, formData: FormDat
   if (!ean || (!prezzoPromo && !meccanica)) redirect(backUrl(BACK, scopeParam, { aggiunta: "dati" }));
 
   let prodotto = db.products.find((p) => p.ean === ean && !p.scopeType);
+  // articolo che esiste solo come articolo proprio di un'insegna: si parte da quello (descrizione, marca, fornitore)
+  const diInsegna = db.products.find((p) => p.ean === ean && p.scopeType);
+  if (!prodotto && diInsegna) {
+    prodotto = { ...diInsegna, id: `z_${ean}`, scopeType: undefined, scopeId: undefined, parentId: undefined };
+    db.products.push(prodotto);
+  }
   if (!prodotto) {
     if (!descrizione) redirect(backUrl(BACK, scopeParam, { aggiunta: "descrizione" }));
     prodotto = {
@@ -1222,6 +1268,7 @@ export async function importZooOffers(scopeParam: string, formData: FormData) {
   let nNew = 0;
   let nSenzaPrezzo = 0;
   let nMarginiamo = 0;
+  let nAggiornate = 0;
   for (const row of rows) {
     const { ean, descrizione } = row;
     if (!ean) continue;
@@ -1253,6 +1300,20 @@ export async function importZooOffers(scopeParam: string, formData: FormData) {
       nMarginiamo++;
       continue;
     }
+    /*
+     * L'articolo è già in offerta in questo volantino (caricato prima, o aggiunto
+     * a mano): si completa quella offerta invece di crearne una seconda. Restano
+     * le scelte già fatte (pagina, focus, etichetta).
+     */
+    const esistente = db.offers.find((o) => o.campaignId === campaignId && !o.scopeType && o.productId === product!.id);
+    if (esistente) {
+      if (row.prezzoPromo) esistente.prezzoPromo = row.prezzoPromo;
+      if (row.prezzoListino) esistente.prezzoListino = row.prezzoListino;
+      if (row.condizioni && !esistente.condizioni) esistente.condizioni = row.condizioni;
+      if (!esistente.prezzoPromo && esistente.condizioni) applicaPromoTesto(esistente, esistente.condizioni);
+      nAggiornate++;
+      continue;
+    }
     const offerta: ZooOffer = {
       id: `zo_${Date.now()}_${nOffers}`,
       campaignId, ean, productId: product.id,
@@ -1272,6 +1333,7 @@ export async function importZooOffers(scopeParam: string, formData: FormData) {
   redirect(backUrl("/stampe/zoo/prodotti", scopeParam, {
     ...(nMarginiamo ? { esclusemarginiamo: String(nMarginiamo) } : {}),
     importate: String(nOffers), nuovi: String(nNew), ...(nSenzaPrezzo ? { senzaprezzo: String(nSenzaPrezzo) } : {}),
+    ...(nAggiornate ? { aggiornate: String(nAggiornate) } : {}),
   }));
 }
 
@@ -1526,7 +1588,7 @@ export async function eliminaVolantino(campaignId: string, scopeParam: string) {
  */
 export async function unisciVociVolantino(
   offerIds: string[],
-  dettagli?: { titolo?: string; descrizione?: string; prezzo?: "minimo" | "sconto" | "testo"; prezzoTesto?: string },
+  dettagli?: { titolo?: string; descrizione?: string; prezzo?: "minimo" | "sconto" | "testo"; prezzoTesto?: string; foto?: string[] },
   /** Da Scelta offerte Volantino la spunta porta una sola offerta per riga: si estende a tutta la riga (padre + prezzo). */
   estendi = false,
 ): Promise<{ ok: boolean; error?: string }> {
@@ -1557,6 +1619,7 @@ export async function unisciVociVolantino(
   if (dettagli) {
     if (dettagli.titolo !== undefined) meta.titolo = dettagli.titolo.slice(0, 80) || undefined;
     if (dettagli.descrizione !== undefined) meta.descrizione = dettagli.descrizione.slice(0, 200) || undefined;
+    if (dettagli.foto !== undefined) meta.foto = dettagli.foto.filter((u) => typeof u === "string" && u.length < 500).slice(0, 6);
     meta.prezzo = dettagli.prezzo ?? "minimo";
     meta.prezzoTesto = meta.prezzo === "minimo" ? undefined : (dettagli.prezzoTesto ?? "").slice(0, 60) || undefined;
   }

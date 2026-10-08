@@ -11,9 +11,9 @@ import {
 import {
   updateOfferVolantino,
   renameScheda, addScheda, resolveZooSuggestion, sendZooSuggestion,
-  updateOfferGroupFieldInline, setParentTagInline, updateParentFieldInline, updateOfferFieldInline,
-} from "@/lib/zoo-actions";
+  updateOfferGroupFieldInline, setParentTagInline, updateParentFieldInline, updateOfferFieldInline, setParentAnimaliInline } from "@/lib/zoo-actions";
 import InlineSelect from "@/components/stampe/InlineSelect";
+import InlineMulti from "@/components/stampe/InlineMulti";
 import InlineEdit from "@/components/stampe/InlineEdit";
 import FiltriMobile from "@/components/FiltriMobile";
 import ShiftChecks from "@/components/stampe/ShiftChecks";
@@ -222,7 +222,6 @@ export default async function ZooVolantinoPage({
           </span>
           {consortium && campaign && (
             <>
-              <a className="btn btn-outline btn-sm" href={`/stampe/zoo/excel?volantino=1&campagna=${campaign.id}&scope=${scopeParam}`}>Excel per il grafico</a>
               <a className="btn btn-outline btn-sm" href={`/stampe/zoo/foto?campagna=${campaign.id}&scope=${scopeParam}`}>Raccolta foto</a>
             </>
           )}
@@ -462,7 +461,7 @@ export default async function ZooVolantinoPage({
                           <td>
                             {/* la spunta porta l'id della prima offerta: l'azione in blocco estende
                                 il voto a tutte le varianti dello stesso padre */}
-                            <input type="checkbox" name="zsel" value={first.id} form="bulkform"
+                            <input type="checkbox" name="zsel" value={first.id} form="bulkform" data-foto={zooImageUrl(product, parent)}
                               title={isGroup
                                 ? `Spunta per agire in blocco su tutte le ${offs.length} varianti (Shift+clic per intervalli)`
                                 : "Spunta per agire in blocco (Shift+clic per intervalli)"} />
@@ -550,8 +549,8 @@ export default async function ZooVolantinoPage({
                         <td className="col-opz" style={{ fontSize: 12.5 }}>{product?.marca || "—"}</td>
                         <td>
                           {consortium && parent ? (
-                            <InlineSelect value={animaliOfferta[0] ?? ""} options={db.settings.categorieAnimali}
-                              onSave={setParentTagInline.bind(null, parent.id, "animale")} />
+                            <InlineMulti values={animaliOfferta} options={db.settings.categorieAnimali}
+                              onSave={setParentAnimaliInline.bind(null, parent.id)} />
                           ) : (
                             <span style={{ fontSize: 11.5, color: "var(--muted)" }}>{animaliOfferta.join(", ") || "—"}</span>
                           )}

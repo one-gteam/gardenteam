@@ -668,12 +668,12 @@ table.data td { overflow-wrap: anywhere; }
 /* ---------- Crea Volantino ---------- */
 /* tre colonne: offerte da collocare · pagine · modifica della cella scelta */
 .vol-layout {
-  display: grid; grid-template-columns: 300px minmax(0, 1fr) 320px; gap: 16px; align-items: start;
+  display: grid; grid-template-columns: var(--vol-sx, 320px) minmax(0, 1fr) 320px; gap: 16px; align-items: start;
 }
-@media (max-width: 1400px) { .vol-layout { grid-template-columns: 270px minmax(0, 1fr) 290px; gap: 12px; } }
+@media (max-width: 1400px) { .vol-layout { grid-template-columns: var(--vol-sx, 270px) minmax(0, 1fr) 290px; gap: 12px; } }
 @media (max-width: 1100px) { .vol-layout { grid-template-columns: 1fr; } }
 /* schermi larghi: colonna offerte più ampia, due colonne di prodotti da collocare */
-@media (min-width: 1800px) { .vol-layout { grid-template-columns: 480px minmax(0, 1fr) 320px; } }
+@media (min-width: 1800px) { .vol-layout { grid-template-columns: var(--vol-sx, 480px) minmax(0, 1fr) 320px; } }
 
 /* intestazione della pagina: una riga sola, resta visibile scorrendo */
 .vol-head {
@@ -703,7 +703,7 @@ table.data td { overflow-wrap: anywhere; }
 .vol-filtro-head button { margin-left: auto; }
 .vol-filtro-body { padding: 10px 12px 12px; }
 .vol-filtro-lista { padding: 10px 12px 14px; display: grid; grid-template-columns: 1fr; gap: 8px; }
-@media (min-width: 1800px) { .vol-filtro-lista { grid-template-columns: 1fr 1fr; } }
+.vol-filtro-lista { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
 .vol-filtro .field { margin-bottom: 8px; font-size: 12px; }
 .vol-filtro .field select, .vol-filtro .field input { margin-top: 2px; font-size: 12px; padding: 5px 8px; }
 /* `min-width: 0` è indispensabile: senza, la scheda non scende sotto la larghezza
@@ -1249,3 +1249,21 @@ th.ordinata[data-ordine="desc"]::after { content: " ▼"; font-size: 9px; }
 .vol-dest.vuota { border-color: #f0b35b; color: #92400e; background: #fff8ec; }
 .vol-dest.animale { border-color: #9fc9a8; color: var(--green-700); background: #f1f8f2; }
 .vol-dest.no { color: #a33; }
+
+/* Crea Volantino: maniglia per allargare l'elenco, tessera compatta, pannello di unione */
+.vol-maniglia { position: absolute; top: 0; right: -6px; width: 10px; height: 100%; cursor: col-resize; z-index: 5; }
+.vol-maniglia:hover { background: linear-gradient(90deg, transparent 3px, var(--green-500) 3px, var(--green-500) 5px, transparent 5px); }
+.vol-off-corpo { display: grid; grid-template-columns: auto 52px minmax(0, 1fr); gap: 8px; align-items: start; }
+.vol-off-foto { width: 52px; height: 52px; object-fit: contain; background: #fff; border-radius: 6px; border: 1px solid var(--line); align-self: start; }
+.vol-off-pagine { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
+.vol-unione { margin: 8px 12px 0; padding: 10px; border: 2px solid var(--green-500); border-radius: 10px; background: #f6fbf6; }
+/* scelta di più valori in una cella (InlineMulti) */
+.multi-btn { font: inherit; font-size: 12px; background: transparent; border: 1px solid transparent; border-radius: 6px; padding: 3px 6px; cursor: pointer; text-align: left; color: inherit; }
+.multi-btn:hover { border-color: var(--line); background: #fff; }
+.multi-menu { position: absolute; z-index: 40; top: 100%; left: 0; background: #fff; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 22px rgba(0,0,0,.14); padding: 6px 8px; min-width: 150px; display: grid; gap: 2px; }
+.multi-menu label { display: flex; gap: 6px; align-items: center; font-size: 12.5px; white-space: nowrap; cursor: pointer; }
+/* Raccolta foto: scheda su cui si trascina un'immagine */
+.foto-drop { transition: box-shadow .15s, border-color .15s; }
+.foto-drop.sopra { border: 2px dashed var(--green-600); box-shadow: 0 0 0 4px var(--green-100); }
+/* Bozza: note per il grafico ben visibili */
+.nota-grafico { margin: 0 0 6px; font-size: 12px; background: #fff8e1; border: 1px solid #f3d77a; border-radius: 6px; padding: 4px 8px; }

@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import StampeHeader from "@/components/stampe/StampeHeader";
-import { canAccessArea, resolveScope } from "@/lib/stampe";
+import { canAccessArea, isZooEditor, resolveScope } from "@/lib/stampe";
+import FotoTrascinabile from "@/components/stampe/FotoTrascinabile";
 import { getDb } from "@/lib/db";
 import { getZooDb, activeCampaign, zooImageUrl } from "@/lib/zoo";
 
@@ -22,6 +23,7 @@ export default async function ZooFotoPage({
   const scopeParam = `${scope.type}:${scope.id}`;
 
   const campaign = db.campaigns.find((c) => c.id === sp.campagna) ?? activeCampaign(db);
+  const editor = isZooEditor(user);
   const offers = campaign ? db.offers.filter((o) => o.campaignId === campaign.id && o.selezionata) : [];
 
   return (
@@ -33,6 +35,7 @@ export default async function ZooFotoPage({
             <h1 style={{ margin: 0 }}>Raccolta foto — {campaign?.nome ?? "volantino"}</h1>
             <p className="subtitle" style={{ margin: "4px 0 0" }}>
               Foto delle {offers.length} offerte selezionate. Clic destro → &quot;Salva immagine&quot; oppure stampa/salva in PDF per il grafico.
+              {editor && <> Per cambiare una foto <strong>trascina un&apos;immagine dal computer sopra la scheda</strong>: vale per il prodotto padre.</>}
             </p>
           </div>
           <a className="btn btn-outline btn-sm" href={`/stampe/zoo/volantino?scope=${scopeParam}`}>← Torna al volantino</a>
@@ -43,13 +46,8 @@ export default async function ZooFotoPage({
             const parent = p?.parentId ? db.parents.find((x) => x.id === p.parentId) : undefined;
             const src = zooImageUrl(p, parent);
             return (
-              <div key={o.id} className="card" style={{ padding: 10, textAlign: "center" }}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img loading="lazy" decoding="async" src={src} alt={o.descrizione} style={{ width: "100%", height: 150, objectFit: "contain", background: "#fff" }} />
-                <div style={{ fontSize: 11.5, marginTop: 6, fontWeight: 700 }}>{o.descrizione}</div>
-                <div style={{ fontSize: 10.5, color: "var(--muted)" }}>EAN {o.ean} · {src.split("/").pop()}</div>
-                {src === "/immagini/mancante.jpg" && <span className="pill pill-orange" style={{ marginTop: 4 }}>foto mancante</span>}
-              </div>
+              <FotoTrascinabile key={o.id} offerId={o.id} src={src} puoCaricare={editor}
+                titolo={parent ? `${parent.nome} · ${o.descrizione}` : o.descrizione} sottotitolo={`EAN ${o.ean}`} />
             );
           })}
           {offers.length === 0 && <p style={{ color: "var(--muted)" }}>Nessuna offerta selezionata per il volantino.</p>}

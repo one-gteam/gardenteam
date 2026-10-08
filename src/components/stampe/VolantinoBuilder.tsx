@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Save, FileDown, Sheet, Plus, ImageDown, ChevronDown, ChevronUp, ArrowLeft, Rows3, Columns2 } from "lucide-react";
+import { Save, Plus, ChevronDown, ChevronUp, ArrowLeft, Rows3, Columns2 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { SceltaFoto } from "./UnisciNelVolantino";
 import {
   saveVolantinoLayout, updateZooOfferQuick, uploadVolantinoImage, updateParentFieldInline,
   unisciVociVolantino, separaUnioneVolantino, updateOfferGroupFieldInline,
@@ -34,6 +35,9 @@ export interface OffLite {
   paginaId?: string; // pagina decisa in Scelta offerte / Offerte in corso (NO_VOLANTINO = scartata; "animale:Cane" = animale, pagina da decidere qui)
   focus?: string;
   animale?: string; // primo animale del padre
+  animali?: string[]; // tutti gli animali del padre (per proporre le pagine giuste)
+  /** Voce unita: le foto scelte da mostrare (una o più). */
+  fotoUnione?: string[];
   caratt?: string; // prima caratteristica di prodotto del padre
   gruppoGrafico?: string; // stesso valore = da impaginare vicine
 }
@@ -95,10 +99,10 @@ const ANIMALE_PREFISSO = "animale:";
 const animaleDi = (paginaId?: string) => (paginaId?.startsWith(ANIMALE_PREFISSO) ? paginaId.slice(ANIMALE_PREFISSO.length) : undefined);
 
 export default function VolantinoBuilder({
-  campaignId, offers: offersProp, initialPages, excelHref, fotoZipHref, animali, caratts, labels, marche, fornitori, scopeParam,
+  campaignId, offers: offersProp, initialPages, animali, caratts, labels, marche, fornitori, scopeParam,
   focusDisponibili = [],
 }: {
-  campaignId: string; offers: OffLite[]; initialPages: VolPage[]; excelHref: string; fotoZipHref: string;
+  campaignId: string; offers: OffLite[]; initialPages: VolPage[]; excelHref?: string; fotoZipHref?: string;
   animali: string[]; caratts: string[]; labels: string[]; marche: string[]; fornitori: string[];
   scopeParam: string;
   /** I focus già scritti sulle offerte: si inseriscono nelle celle come testo. */
@@ -128,6 +132,9 @@ export default function VolantinoBuilder({
   const [vista, setVista] = useState<"schede" | "verticale">(() => { try { return localStorage.getItem(`vol-vista-${campaignId}`) === "verticale" ? "verticale" : "schede"; } catch { return "schede"; } });
   useEffect(() => { try { localStorage.setItem(`vol-vista-${campaignId}`, vista); } catch { /* niente */ } }, [vista, campaignId]);
   const [avviso, setAvviso] = useState("");
+  // larghezza dell'elenco a sinistra, trascinando il suo bordo (ricordata su questo computer)
+  const [larghezzaSx, setLarghezzaSx] = useState(() => { try { return Number(localStorage.getItem("vol-larghezza-sx")) || 320; } catch { return 320; } });
+  useEffect(() => { try { localStorage.setItem("vol-larghezza-sx", String(larghezzaSx)); } catch { /* niente */ } }, [larghezzaSx]);
   const [f, setF] = useState({ animale: "", caratt: "", label: "", minVoti: "", minNon: "", marca: "", fornitore: "", pagina: "" });
   const [filtroChiuso, setFiltroChiuso] = useState(true);
   const [mostraScartate, setMostraScartate] = useState(false);
@@ -135,7 +142,6 @@ export default function VolantinoBuilder({
   // le offerte senza pagina (non scelte in Scelta offerte Volantino) non si propongono, salvo richiesta
   const [ancheSenzaPagina, setAncheSenzaPagina] = useState(false);
   const [vociDaUnire, setVociDaUnire] = useState<string[]>([]); // id delle voci spuntate
-  const [pdfPending, setPdfPending] = useState(false);
   const primoRender = useRef(true);
 
   /* --- schede: copertina da sola, poi coppie 2-3, 4-5, 6-7… --- */
@@ -279,68 +285,28 @@ export default function VolantinoBuilder({
    * sono `display: none` fuori stampa: le si rende visibili solo per la
    * cattura, poi si torna come prima.
    */
-  const generaEScaricaZip = async () => {
-    setPdfPending(true);
-    try {
-      const [{ jsPDF }, { default: html2canvas }] = await Promise.all([
-        import("jspdf"),
-        import("html2canvas"),
-      ]);
-      const container = document.querySelector<HTMLElement>(".solo-stampa");
-      if (!container) throw new Error("pagine non trovate");
-      const primaDisplay = container.style.display;
-      container.style.display = "block";
-      try {
-        const pageEls = Array.from(container.querySelectorAll<HTMLElement>(".vol-page-wrap"));
-        const doc = new jsPDF({ unit: "mm", format: "a4" });
-        for (let i = 0; i < pageEls.length; i++) {
-          const canvas = await html2canvas(pageEls[i], {
-            scale: 2,
-            backgroundColor: "#ffffff",
-            useCORS: true,
-            onclone: (clonedDoc: Document) => {
-              clonedDoc.querySelectorAll(".no-print").forEach((el) => el.remove());
-            },
-          });
-          const img = canvas.toDataURL("image/jpeg", 0.92);
-          if (i > 0) doc.addPage();
-          const pageW = doc.internal.pageSize.getWidth();
-          const pageH = (canvas.height * pageW) / canvas.width;
-          doc.addImage(img, "JPEG", 0, 0, pageW, pageH);
-        }
-        const blob = doc.output("blob");
-        const firma = await fetch("/api/zoo-volantino/sign-pdf", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ campaignId }),
-        });
-        if (!firma.ok) throw new Error("firma non riuscita");
-        const { signedUrl } = (await firma.json()) as { signedUrl: string };
-        const put = await fetch(signedUrl, { method: "PUT", headers: { "content-type": "application/pdf" }, body: blob });
-        if (!put.ok) throw new Error("caricamento non riuscito");
-      } finally {
-        container.style.display = primaDisplay;
-      }
-    } catch {
-      flash("PDF non generato (proseguo comunque): lo ZIP conterrà solo Excel e foto.");
-    } finally {
-      setPdfPending(false);
-      window.location.href = fotoZipHref;
-    }
-  };
+
 
   /*
    * Unisce le voci spuntate in una sola voce del volantino, "a partire da" il
    * prezzo più basso. Solo volantino: i padri restano quelli, e in stampa
    * ogni prezzo ha il suo cartello.
    */
-  const unisciVoci = async () => {
+  // pannello di unione: titolo e foto da tenere
+  const [unione, setUnione] = useState<{ titolo: string; foto: string[]; disponibili: string[] } | null>(null);
+  const unisciVoci = () => {
     if (vociDaUnire.length < 2) return;
     const scelte = offers.filter((o) => vociDaUnire.includes(o.id));
-    const titolo = prompt(`Unire ${scelte.length} voci in una sola voce del volantino? Vale solo per il volantino: i cartelli restano separati.\n\nTitolo della voce unita (vuoto = il nome della prima):`, scelte[0].padre ?? scelte[0].descrizione);
-    if (titolo === null) return;
-    const res = await unisciVociVolantino(scelte.flatMap((o) => o.offerIds ?? [o.id]), { titolo: titolo.trim() || undefined, prezzo: "minimo" });
-    if (res.ok) { setVociDaUnire([]); router.refresh(); flash("Voci unite: una sola voce nel volantino, «a partire da» il prezzo più basso."); }
+    const disponibili = [...new Set(scelte.flatMap((o) => o.fotoUnione ?? [o.foto]).filter((u) => u && !u.endsWith("/mancante.jpg")))];
+    setUnione({ titolo: scelte[0].padre ?? scelte[0].descrizione, foto: disponibili.slice(0, 1), disponibili });
+  };
+  const confermaUnione = async () => {
+    if (!unione) return;
+    const scelte = offers.filter((o) => vociDaUnire.includes(o.id));
+    const res = await unisciVociVolantino(scelte.flatMap((o) => o.offerIds ?? [o.id]), {
+      titolo: unione.titolo.trim() || undefined, prezzo: "minimo", foto: unione.foto.length ? unione.foto : undefined,
+    });
+    if (res.ok) { setVociDaUnire([]); setUnione(null); router.refresh(); flash("Voci unite: una sola voce nel volantino, «a partire da» il prezzo più basso."); }
     else flash(res.error ?? "Unione non riuscita.");
   };
   const separaVoce = async (unione: string) => {
@@ -626,7 +592,9 @@ export default function VolantinoBuilder({
             {offs.map((o, i) => (
               <div key={`${o.id}_${i}`} style={{ minWidth: 0 }}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={o.foto} alt="" style={{ maxWidth: "100%", height: b.rs > 1 ? 58 : 32, objectFit: "contain" }} />
+                {o.fotoUnione && o.fotoUnione.length > 1
+                  ? <div style={{ display: "flex", gap: 2, justifyContent: "center" }}>{o.fotoUnione.map((u) => <img key={u} src={u} alt="" style={{ maxWidth: `${100 / o.fotoUnione!.length}%`, height: b.rs > 1 ? 58 : 32, objectFit: "contain" }} />)}</div>
+                  : <img src={o.fotoUnione?.[0] ?? o.foto} alt="" style={{ maxWidth: "100%", height: b.rs > 1 ? 58 : 32, objectFit: "contain" }} />}
                 {o.padre && <div style={{ fontWeight: 800, fontSize: 9.5, lineHeight: 1.15 }}>{o.padre}</div>}
                 <div style={{ fontWeight: o.padre ? 500 : 600, fontSize: o.padre ? 8.5 : 9.5, lineHeight: 1.15, color: o.padre ? "#555" : undefined }}>
                   {(i === 0 ? b.descrizione : undefined) ?? o.descrizione}
@@ -719,9 +687,17 @@ export default function VolantinoBuilder({
   };
 
   return (
-    <div className="vol-layout">
+    <div className="vol-layout" style={{ ["--vol-sx" as string]: `${larghezzaSx}px` }}>
       {/* ---------- colonna sinistra: filtro + offerte disponibili ---------- */}
-      <aside className="vol-filtro no-print" onDragOver={(e) => e.preventDefault()} onDrop={dropSuElenco}>
+      <aside className="vol-filtro no-print" onDragOver={(e) => e.preventDefault()} onDrop={dropSuElenco} style={{ position: "relative" }}>
+        <span className="vol-maniglia" title="Trascina per allargare o stringere l'elenco"
+          onPointerDown={(e) => {
+            e.preventDefault();
+            const x0 = e.clientX; const w0 = larghezzaSx;
+            const muovi = (m: PointerEvent) => setLarghezzaSx(Math.max(220, Math.min(760, w0 + m.clientX - x0)));
+            const su = () => { document.removeEventListener("pointermove", muovi); document.removeEventListener("pointerup", su); };
+            document.addEventListener("pointermove", muovi); document.addEventListener("pointerup", su);
+          }} />
         <div className="vol-filtro-fissa">
           <div className="vol-filtro-head">
             Filtra le offerte
@@ -811,6 +787,20 @@ export default function VolantinoBuilder({
             Unisci nel volantino{vociDaUnire.length >= 2 ? ` (${vociDaUnire.length})` : ""}
           </button>
         </div>
+        {unione && (
+          <div className="vol-unione">
+            <strong style={{ fontSize: 12.5 }}>Unisci {vociDaUnire.length} voci nel volantino</strong>
+            <p className="hint" style={{ margin: "2px 0 6px", fontSize: 11 }}>Solo per il volantino: i cartelli restano separati per prezzo.</p>
+            <label className="field" style={{ marginBottom: 6 }}>Titolo della voce unita
+              <input value={unione.titolo} onChange={(e) => setUnione({ ...unione, titolo: e.target.value })} />
+            </label>
+            <SceltaFoto disponibili={unione.disponibili} scelte={unione.foto} onChange={(foto) => setUnione({ ...unione, foto })} />
+            <div style={{ display: "flex", gap: 6 }}>
+              <button type="button" className="btn btn-sm" onClick={confermaUnione}>Unisci</button>
+              <button type="button" className="btn btn-outline btn-sm" onClick={() => setUnione(null)}>Annulla</button>
+            </div>
+          </div>
+        )}
         <div className="vol-filtro-lista">
           {disponibili.length === 0 && (
             <p className="empty" style={{ fontSize: 12 }}>
@@ -822,13 +812,13 @@ export default function VolantinoBuilder({
             return (
             <div key={o.id} className="vol-off" draggable onDragStart={() => setDrag({ kind: "offer", id: o.id })}
               style={usata ? { opacity: 0.45 } : undefined}>
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <div className="vol-off-corpo">
                 <input type="checkbox" title="Spunta due o più voci per unirle nel volantino («a partire da»)"
                   checked={vociDaUnire.includes(o.id)}
                   onChange={(e) => setVociDaUnire((prev) =>
                     e.target.checked ? [...prev, o.id] : prev.filter((id) => id !== o.id))} />
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={o.foto} alt="" style={{ width: 32, height: 32, objectFit: "contain" }} />
+                <img className="vol-off-foto" src={o.foto} alt="" />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 11.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {o.padre ?? o.descrizione}
@@ -851,19 +841,37 @@ export default function VolantinoBuilder({
                     {usata && <span className="pill pill-gray">già usata</span>}
                     {o.animale && <span className="pill pill-green" title="animale">{o.animale}</span>}
                     {o.caratt && <span className="pill pill-gray" title="caratteristica">{o.caratt}</span>}
-                    {/* la destinazione si cambia da qui: pagina precisa, animale, no volantino */}
-                    <select value={o.paginaId ?? ""} onChange={(e) => cambiaDestinazione(o, e.target.value)} onClick={(e) => e.stopPropagation()}
-                      className={`vol-dest${!o.paginaId ? " vuota" : o.paginaId === NO_VOLANTINO ? " no" : animaleDi(o.paginaId) ? " animale" : ""}`}
-                      title={`Destinazione: ${nomeDestinazione(o.paginaId)}. Cambiala da qui.`}>
-                      <option value="">da assegnare</option>
-                      {animali.map((a) => <option key={a} value={`${ANIMALE_PREFISSO}${a}`}>{a} · da collocare</option>)}
-                      {pages.map((p, i) => <option key={p.id} value={p.id}>Pag. {i + 1}{p.titolo ? ` ${p.titolo}` : ""}</option>)}
-                      <option value={NO_VOLANTINO}>no volantino</option>
-                    </select>
                     {o.voti > 0 && <span className="pill pill-green">{o.voti} voti</span>}
                     {o.nonTrattati > 0 && <span className="pill pill-red">{o.nonTrattati} n.t.</span>}
                     {o.label && <span className="pill pill-blue">{o.label}</span>}
                     {o.focus && <span className="pill pill-gray" title="focus">{o.focus}</span>}
+                  </div>
+                  {/* destinazione: le pagine dell'animale come pulsanti, «no», e la tendina per le altre */}
+                  <div className="vol-off-pagine" onClick={(e) => e.stopPropagation()}>
+                    {(() => {
+                      const proposte = pages.map((p, i) => ({ p, i })).filter(({ p }) => p.animale && (o.animali ?? (o.animale ? [o.animale] : [])).includes(p.animale));
+                      const altre = pages.map((p, i) => ({ p, i })).filter(({ p }) => !proposte.some((x) => x.p.id === p.id));
+                      return (
+                        <>
+                          {animaleDi(o.paginaId) && <span className="pill pill-green" title="Scelta per animale in Scelta offerte: scegli qui la pagina precisa">{animaleDi(o.paginaId)} · da collocare</span>}
+                          {proposte.map(({ p, i }) => (
+                            <button key={p.id} type="button" className={`pagina-btn${o.paginaId === p.id ? " attiva" : ""}`}
+                              onClick={() => cambiaDestinazione(o, o.paginaId === p.id ? (o.animale ? `${ANIMALE_PREFISSO}${o.animale}` : "") : p.id)}
+                              title={`Pag. ${i + 1}${p.titolo ? ` ${p.titolo}` : ""}`}>
+                              {o.paginaId === p.id ? "✓ " : ""}{i + 1}{p.titolo ? ` ${p.titolo}` : ""}
+                            </button>
+                          ))}
+                          <button type="button" className={`pagina-btn no${o.paginaId === NO_VOLANTINO ? " attiva" : ""}`}
+                            onClick={() => cambiaDestinazione(o, o.paginaId === NO_VOLANTINO ? "" : NO_VOLANTINO)}>✕ no</button>
+                          <select value={altre.some(({ p }) => p.id === o.paginaId) ? o.paginaId : ""} onChange={(e) => cambiaDestinazione(o, e.target.value)}
+                            className="vol-dest" title="Un'altra pagina">
+                            <option value="">altra…</option>
+                            {altre.map(({ p, i }) => <option key={p.id} value={p.id}>Pag. {i + 1}{p.titolo ? ` ${p.titolo}` : ""}</option>)}
+                            {animali.map((a) => <option key={a} value={`${ANIMALE_PREFISSO}${a}`}>{a} · da collocare</option>)}
+                          </select>
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>
@@ -917,22 +925,8 @@ export default function VolantinoBuilder({
             <button className="btn btn-sm" title="Salva volantino" aria-label="Salva volantino" onClick={() => salva()}>
               <Save size={14} style={{ verticalAlign: -2, marginRight: 5 }} />Salva
             </button>
-            <button className="btn btn-outline btn-sm" title="Esporta PDF" aria-label="Esporta PDF" onClick={() => window.print()}>
-              <FileDown size={14} style={{ verticalAlign: -2 }} />
-            </button>
-            <a className="btn btn-outline btn-sm" title="Excel per il grafico" aria-label="Excel per il grafico" href={excelHref}>
-              <Sheet size={14} style={{ verticalAlign: -2 }} />
-            </a>
-            <button
-              className="btn btn-outline btn-sm"
-              type="button"
-              title="ZIP per il grafico: Excel + foto in alta risoluzione + PDF di anteprima"
-              aria-label="ZIP per il grafico: Excel + foto in alta risoluzione + PDF di anteprima"
-              disabled={pdfPending}
-              onClick={generaEScaricaZip}
-            >
-              {pdfPending ? "Genero il PDF…" : <ImageDown size={14} style={{ verticalAlign: -2 }} />}
-            </button>
+            <a className="btn btn-outline btn-sm" href={`/stampe/zoo/bozza?scope=${scopeParam}`}
+              title="Excel, PDF e ZIP per il grafico, e l'avviso ai colleghi, stanno nella Bozza volantino">Bozza ed esportazioni →</a>
             {daDisporre.length > 0 && (
               <button className="btn btn-sm" type="button" onClick={disponiPerPagina}
                 title="Colloca nelle pagine le offerte a cui è già stata assegnata una pagina in Offerte in corso">

@@ -133,6 +133,8 @@ export interface ZooUnioneVolantino {
   /** "minimo" = «a partire da» il prezzo più basso (predefinito); "sconto"/"testo" = si stampa `prezzoTesto`. */
   prezzo?: "minimo" | "sconto" | "testo";
   prezzoTesto?: string;
+  /** Le foto da mostrare nella voce unita (una o più); assente = la foto della prima voce. */
+  foto?: string[];
 }
 
 export type PassoVolantinoId = "offerte" | "scelta" | "foto" | "testi" | "focus" | "impaginazione";

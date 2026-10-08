@@ -11,6 +11,9 @@ import {
 } from "@/lib/zoo";
 import { aggiungiNotaBozza, risolviNotaBozza } from "@/lib/zoo-actions";
 import TabellaVolantino from "@/components/stampe/TabellaVolantino";
+import EsportaVolantino from "@/components/stampe/EsportaVolantino";
+import AvvisaColleghi from "@/components/stampe/AvvisaColleghi";
+import { userSites } from "@/lib/types";
 
 /**
  * Bozza del volantino in sola lettura, con le note di chi la rivede.
@@ -44,6 +47,14 @@ export default async function ZooBozzaPage({
   const spreads: number[][] = pages.length > 0 ? [[0]] : [];
   for (let i = 1; i < pages.length; i += 2) spreads.push(pages[i + 1] ? [i, i + 1] : [i]);
 
+  /* destinatari proposti per l'avviso: chi ha accesso alle Offerte Zoo */
+  const colleghiZoo = academyDb.users
+    .filter((u) => u.active !== false && u.email && userSites(u).includes("zoo"))
+    .map((u) => ({
+      email: u.email,
+      nome: `${u.firstName} ${u.lastName}`,
+      ambito: academyDb.stores.find((x) => x.id === u.storeId)?.name ?? academyDb.tenants.find((t) => t.id === u.tenantId)?.name ?? "Consorzio",
+    }));
   const note = campaign ? db.noteBozza.filter((n) => n.campaignId === campaign.id) : [];
   const noteAperte = note.filter((n) => !n.risolta);
   const notePerPagina = (pageId: string) => note.filter((n) => n.pageId === pageId);
@@ -66,6 +77,15 @@ export default async function ZooBozzaPage({
             <div className="sottoschede-prodotti">
               <a className={`pill ${sp.vista !== "tabella" ? "pill-blue" : "pill-gray"}`} href={`/stampe/zoo/bozza?scope=${scopeParam}`}>Pagine</a>
               <a className={`pill ${sp.vista === "tabella" ? "pill-blue" : "pill-gray"}`} href={`/stampe/zoo/bozza?vista=tabella&scope=${scopeParam}`}>Tabella delle offerte</a>
+            </div>
+          )}
+          {campaign && (
+            <div className="no-print" style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", width: "100%" }}>
+              <EsportaVolantino campaignId={campaign.id}
+                excelHref={`/stampe/zoo/crea-volantino/excel?campagna=${campaign.id}`}
+                fotoZipHref={`/stampe/zoo/crea-volantino/foto?campagna=${campaign.id}`}
+                selettorePagine=".bozza-pagine .vol-page" />
+              <AvvisaColleghi tipo="bozza" scopeParam={scopeParam} colleghi={colleghiZoo} />
             </div>
           )}
           <form method="get" style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -120,6 +140,7 @@ export default async function ZooBozzaPage({
           * Prima erano una sotto l'altra a tutta larghezza e non si capiva cosa
           * sarebbe finito accanto a cosa.
           */}
+        <div className="bozza-pagine">
         {sp.vista !== "tabella" && spreads.map((gruppo, gi) => (
           <div key={gi} className="vol-spread" style={{ marginBottom: 22 }}>
             {gruppo.map((i) => {
@@ -134,28 +155,30 @@ export default async function ZooBozzaPage({
                     {page.animale && <span className="pill pill-blue">{page.animale}</span>}
                     {aperte > 0 && <span className="pill pill-orange">{aperte} note</span>}
                   </div>
-                  {page.note && <p className="hint" style={{ margin: "0 0 6px" }}>Per il grafico: {page.note}</p>}
+                  {page.note && <p className="nota-grafico">Note per il grafico: {page.note}</p>}
 
                   <div className="vol-page" style={{
                     gridTemplateColumns: `repeat(${page.cols}, 1fr)`,
                     gridTemplateRows: `repeat(${page.rows}, 1fr)`,
                   }}>
                     {(page.sezioni ?? []).map((sz) => (
-                      <div key={sz.id} style={{
-                        gridColumn: `${sz.c + 1} / span ${sz.cs}`, gridRow: `${sz.r + 1} / span ${sz.rs}`,
-                        background: sz.bg, borderRadius: 6, padding: 4, fontSize: 10, fontWeight: 700, opacity: 0.9,
-                      }}>
-                        {sz.titolo}
-                        {sz.testo && <div style={{ fontWeight: 400, fontSize: 9.5 }}>{sz.testo}</div>}
+                      <div key={sz.id} className="vol-sezione"
+                        style={{ gridColumn: `${sz.c + 1} / span ${sz.cs}`, gridRow: `${sz.r + 1} / span ${sz.rs}`, background: sz.bg }}>
+                        {sz.testo && <div className="vol-sezione-testo">{sz.testo}</div>}
+                        {sz.titolo && <div className="vol-sezione-titolo">{sz.titolo}</div>}
                       </div>
                     ))}
                     {page.blocks.filter((b) => (b.offerIds?.length ?? 0) > 0 || b.testo || b.imageUrl).map((b) => {
                       const offerte = (b.offerIds ?? []).map((id) => offerById.get(id)).filter(Boolean);
+                      // dentro uno sfondo di sezione la cella è trasparente: prima il bianco copriva la sezione
+                      const dentroSezione = (page.sezioni ?? []).some((sz) => b.r >= sz.r && b.r < sz.r + sz.rs && b.c >= sz.c && b.c < sz.c + sz.cs);
                       return (
                         <div key={b.id} className="vol-cell" style={{
                           gridColumn: `${b.c + 1} / span ${b.cs}`, gridRow: `${b.r + 1} / span ${b.rs}`,
-                          background: "#fff", border: "1px solid #e6e6e6",
+                          background: b.imageUrl ? `center/cover no-repeat url(${b.imageUrl})` : dentroSezione ? "transparent" : "#fff",
+                          border: dentroSezione ? "1px dashed rgba(0,0,0,.12)" : "1px solid #e6e6e6",
                         }}>
+                          {b.commento && <span className="vol-nota no-print" title={b.commento}>nota: {b.commento}</span>}
                           {b.label && <span className="vol-label">{b.label}</span>}
                           {b.testo && <div className="vol-testo">{b.testo}</div>}
                           <div style={{ display: "grid", gap: 2, gridTemplateColumns: offerte.length > 1 ? "1fr 1fr" : "1fr", textAlign: "center" }}>
@@ -183,11 +206,16 @@ export default async function ZooBozzaPage({
                               const unione = unioneDi(db, o!);
                               const prezzoTestoUnione = !b.prezzo && unione?.prezzo && unione.prezzo !== "minimo" ? unione.prezzoTesto : undefined;
                               const nomeVoce = unione?.titolo || nome;
+                              const fotoVoce = unione?.foto?.length ? unione.foto : [foto];
                               return (
                                 <div key={o!.id} style={{ minWidth: 0 }}>
-                                  {foto !== "/immagini/mancante.jpg" && (
-                                    // eslint-disable-next-line @next/next/no-img-element
-                                    <img src={foto} alt="" style={{ maxWidth: "100%", height: b.rs > 1 ? 56 : 30, objectFit: "contain" }} />
+                                  {fotoVoce[0] !== "/immagini/mancante.jpg" && (
+                                    <div style={{ display: "flex", gap: 2, justifyContent: "center" }}>
+                                      {fotoVoce.map((u) => (
+                                        // eslint-disable-next-line @next/next/no-img-element
+                                        <img key={u} src={u} alt="" style={{ maxWidth: `${100 / fotoVoce.length}%`, height: b.rs > 1 ? 56 : 30, objectFit: "contain" }} />
+                                      ))}
+                                    </div>
                                   )}
                                   <div style={{ fontSize: 9.5, fontWeight: 700, lineHeight: 1.15 }}>{nomeVoce}</div>
                                   <div style={{ display: "flex", gap: 3, justifyContent: "center", alignItems: "baseline", flexWrap: "wrap" }}>
@@ -215,7 +243,7 @@ export default async function ZooBozzaPage({
                     })}
                   </div>
 
-                  <form action={aggiungiNotaBozza.bind(null, campaign!.id, scopeParam)}
+                  <form action={aggiungiNotaBozza.bind(null, campaign!.id, scopeParam)} className="no-print"
                     style={{ display: "flex", gap: 6, marginTop: 8 }}>
                     <input type="hidden" name="pageId" value={page.id} />
                     <input type="text" name="testo" required placeholder={`Nota su «${page.titolo || `pagina ${i + 1}`}»…`}
@@ -243,6 +271,7 @@ export default async function ZooBozzaPage({
             })}
           </div>
         ))}
+        </div>
       </div>
     </div>
   );

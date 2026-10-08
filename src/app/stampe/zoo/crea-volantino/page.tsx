@@ -10,8 +10,6 @@ import {
   unioneDi, animaliDi, caratteristicheProdottoDi,
 } from "@/lib/zoo";
 import { saveVolantinoEditors } from "@/lib/zoo-actions";
-import AvvisaColleghi from "@/components/stampe/AvvisaColleghi";
-import { userSites } from "@/lib/types";
 
 /**
  * Crea Volantino: composizione delle pagine trascinando le offerte scelte.
@@ -35,16 +33,6 @@ export default async function CreaVolantinoPage({
   const academyDb = await getDb();
   const scope = resolveScope(user, sp.scope, academyDb);
   const scopeParam = `${scope.type}:${scope.id}`;
-  /* destinatari proposti per l'avviso: chi ha accesso alle Offerte Zoo */
-  const colleghiZoo = academyDb.users
-    .filter((u) => u.active !== false && u.email && userSites(u).includes("zoo"))
-    .map((u) => ({
-      email: u.email,
-      nome: `${u.firstName} ${u.lastName}`,
-      ambito: academyDb.stores.find((x) => x.id === u.storeId)?.name
-        ?? academyDb.tenants.find((t) => t.id === u.tenantId)?.name
-        ?? "Consorzio",
-    }));
   void scopesForUser; // scope unico: il volantino è del Consorzio
 
   // solo il volantino IN LAVORAZIONE: si compone su pagine pulite
@@ -109,6 +97,8 @@ export default async function CreaVolantinoPage({
               unione: primo.unioneVolantino,
               tipi: dati.tipi,
               foto: zooImageUrl(product, parent),
+              fotoUnione: unione?.foto?.length ? unione.foto : undefined,
+              animali: animaliDi(db, parent?.caratteristiche ?? []),
               voti: votes.filter((v) => v.tipo === "preferita").length,
               nonTrattati: votes.filter((v) => v.tipo === "nontrattato").length,
               scheda: campaign.schede.find((s) => s.id === primo.schedaId)?.nome,
@@ -149,14 +139,7 @@ export default async function CreaVolantinoPage({
                 Valide dal {fmtData(campaign.dal)} al {fmtData(campaign.al)}
               </span>
             )}
-            {campaign && (
-              <>
-                <a className="btn btn-outline btn-sm" href={`/stampe/zoo/bozza?scope=${scopeParam}`}>
-                  Vedi la bozza come la vedono i colleghi
-                </a>
-                <AvvisaColleghi tipo="bozza" scopeParam={scopeParam} colleghi={colleghiZoo} />
-              </>
-            )}
+
           </div>
           {editor && (
             <details>

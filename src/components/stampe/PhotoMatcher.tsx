@@ -27,7 +27,8 @@ export default function PhotoMatcher({
   onIgnora?: (files: string[]) => Promise<{ ok: boolean; error?: string }>;
 }) {
   const [nascoste, setNascoste] = useState<Set<string>>(new Set());
-  const [ingrandita, setIngrandita] = useState<string | null>(null);
+  // anteprima grande al passaggio del mouse sulla miniatura
+  const [ingrandita, setIngrandita] = useState<{ url: string; x: number; y: number } | null>(null);
   const foto = fotoIniziali.filter((f) => !nascoste.has(f.file));
   const ignora = async (file: string) => {
     if (!onIgnora) return;
@@ -94,11 +95,13 @@ export default function PhotoMatcher({
   return (
     <div>
       {ingrandita && (
-        <div onClick={() => setIngrandita(null)} title="Clic per chiudere"
-          style={{ position: "fixed", inset: 0, zIndex: 100, background: "rgba(0,0,0,.75)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "zoom-out" }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={ingrandita} alt="" style={{ maxWidth: "92vw", maxHeight: "92vh", background: "#fff", borderRadius: 10, padding: 8 }} />
-        </div>
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={ingrandita.url} alt="" style={{
+          position: "fixed", zIndex: 100, pointerEvents: "none",
+          left: Math.min(ingrandita.x, window.innerWidth - 340), top: Math.max(8, Math.min(ingrandita.y - 60, window.innerHeight - 340)),
+          width: 320, height: 320, objectFit: "contain", background: "#fff", borderRadius: 10, padding: 6,
+          border: "1px solid var(--line)", boxShadow: "0 12px 30px rgba(0,0,0,.25)",
+        }} />
       )}
       <div className="table-wrap">
         <table className="data">
@@ -113,9 +116,10 @@ export default function PhotoMatcher({
                 <tr key={f.file}>
                   <td>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img loading="lazy" decoding="async" src={f.url} alt="" title="Clic per ingrandire"
+                    <img loading="lazy" decoding="async" src={f.url} alt=""
                       style={{ width: 44, height: 44, objectFit: "contain", background: "#fff", borderRadius: 6, border: "1px solid #eee", cursor: "zoom-in" }}
-                      onClick={() => setIngrandita(f.url)} />
+                      onMouseEnter={(e) => { const r = e.currentTarget.getBoundingClientRect(); setIngrandita({ url: f.url, x: r.right + 12, y: r.top }); }}
+                      onMouseLeave={() => setIngrandita(null)} />
                   </td>
                   <td style={{ fontSize: 12 }}>{f.file}</td>
                   <td>
