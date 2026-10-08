@@ -25,8 +25,7 @@ import {
   importZooProducts, finalizeZooPhotoUpload, confirmZooPhotoTargets, createZooParent, associaConAI,
   rigeneraTestiAI, saveParentTexts, setParentImage, toggleParentCaratteristica, scioglieParent, toggleZooHidden,
   toggleZooHiddenBulk, updateParentFieldInline, updateProductFieldInline, setParentTagInline, moveProductToParent,
-  setParentImageFromFile, mergeParentsForm, promuoviProdottoAConsorzio, adottaProdotto, staccaZooFoto,
-} from "@/lib/zoo-actions";
+  setParentImageFromFile, mergeParentsForm, promuoviProdottoAConsorzio, adottaProdotto, staccaZooFoto, setTipologiaInline } from "@/lib/zoo-actions";
 
 // "Associa con AI" può richiedere più dei 10s di default per un lotto di articoli.
 export const maxDuration = 60;
@@ -174,7 +173,7 @@ export default async function CatalogoProdotti({ user, sp }: { user: User; sp: R
   const RIGHE_MAX = 400;
   const gruppiVisibili = gruppi.slice(0, RIGHE_MAX);
   const productsVisibili = products.slice(0, RIGHE_MAX);
-  const nCols = (consortium || scope.type !== "system" ? 1 : 0) + (vistaArticoli ? 10 : 9)
+  const nCols = (consortium || scope.type !== "system" ? 1 : 0) + (vistaArticoli ? 11 : 10)
     + (scope.type !== "system" ? 1 : 0);
 
   /*
@@ -525,6 +524,7 @@ export default async function CatalogoProdotti({ user, sp }: { user: User; sp: R
                   <th className="col-wide">Descrizione</th>
                   <ColonnaOrdinabile campo="animale">Animale</ColonnaOrdinabile>
                   <ColonnaOrdinabile campo="caratt">Caratteristica</ColonnaOrdinabile>
+                  <th title="Tipo di prodotto (elenco in Impostazioni)">Tipologia</th>
                   <th>{vistaArticoli ? "EAN" : "Articoli"}</th>
                   <ColonnaOrdinabile campo="marca">Marca · Fornitore</ColonnaOrdinabile>
                   <th title="Volantini su cui l'articolo è stato stampato">Volantino</th>
@@ -598,6 +598,14 @@ export default async function CatalogoProdotti({ user, sp }: { user: User; sp: R
                             onSave={setParentTagInline.bind(null, parent.id, "prodotto")} />
                         ) : (
                           <span style={{ fontSize: 11.5, color: "var(--muted)" }}>{prodottoCarat.join(", ") || "—"}</span>
+                        )}
+                      </td>
+                      <td>
+                        {consortium ? (
+                          <InlineSelect value={(parent ? parent.tipologia : first.tipologia) ?? ""} options={db.settings.tipologieProdotto}
+                            onSave={setTipologiaInline.bind(null, parent ? parent.id : first.id, Boolean(parent))} />
+                        ) : (
+                          <span style={{ fontSize: 11.5, color: "var(--muted)" }}>{(parent ? parent.tipologia : first.tipologia) || "—"}</span>
                         )}
                       </td>
                       <td style={{ fontSize: 12 }}>
@@ -709,6 +717,14 @@ export default async function CatalogoProdotti({ user, sp }: { user: User; sp: R
                             onSave={setParentTagInline.bind(null, parent.id, "prodotto")} />
                         ) : (
                           <span style={{ fontSize: 11.5, color: "var(--muted)" }}>{prodottoCarat.join(", ") || "—"}</span>
+                        )}
+                      </td>
+                      <td>
+                        {consortium ? (
+                          <InlineSelect value={(parent ? parent.tipologia : p.tipologia) ?? ""} options={db.settings.tipologieProdotto}
+                            onSave={setTipologiaInline.bind(null, parent ? parent.id : p.id, Boolean(parent))} />
+                        ) : (
+                          <span style={{ fontSize: 11.5, color: "var(--muted)" }}>{(parent ? parent.tipologia : p.tipologia) || "—"}</span>
                         )}
                       </td>
                       <td style={{ fontSize: 12 }}>{p.ean}<div style={{ color: "var(--muted)" }}>{p.codice}</div></td>

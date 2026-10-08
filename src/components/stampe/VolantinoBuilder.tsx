@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Save, FileDown, Sheet, Plus, ImageDown, ChevronDown, ChevronUp } from "lucide-react";
+import { Save, FileDown, Sheet, Plus, ImageDown, ChevronDown, ChevronUp, ArrowLeft, Rows3, Columns2 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import {
   saveVolantinoLayout, updateZooOfferQuick, uploadVolantinoImage, updateParentFieldInline,
-  unisciVociVolantino, separaUnioneVolantino,
+  unisciVociVolantino, separaUnioneVolantino, updateOfferGroupFieldInline,
 } from "@/lib/zoo-actions";
 import type { VolPage, VolBlock, VolSection } from "@/lib/zoo";
 
@@ -30,8 +31,10 @@ export interface OffLite {
   prezzoTesto?: string;
   offerIds?: string[]; // offerte racchiuse dalla voce (assente = solo `id`)
   articoli: ArtLite[]; // articoli (gusti/formati) racchiusi dalla voce
-  paginaId?: string; // pagina decisa in Offerte in corso (NO_VOLANTINO = scartata)
+  paginaId?: string; // pagina decisa in Scelta offerte / Offerte in corso (NO_VOLANTINO = scartata; "animale:Cane" = animale, pagina da decidere qui)
   focus?: string;
+  animale?: string; // primo animale del padre
+  caratt?: string; // prima caratteristica di prodotto del padre
   gruppoGrafico?: string; // stesso valore = da impaginare vicine
 }
 
@@ -88,13 +91,28 @@ function normalizza(page: VolPage): VolPage {
   };
 }
 
+const ANIMALE_PREFISSO = "animale:";
+const animaleDi = (paginaId?: string) => (paginaId?.startsWith(ANIMALE_PREFISSO) ? paginaId.slice(ANIMALE_PREFISSO.length) : undefined);
+
 export default function VolantinoBuilder({
-  campaignId, offers, initialPages, excelHref, fotoZipHref, animali, caratts, labels, marche, fornitori, scopeParam,
+  campaignId, offers: offersProp, initialPages, excelHref, fotoZipHref, animali, caratts, labels, marche, fornitori, scopeParam,
+  focusDisponibili = [],
 }: {
   campaignId: string; offers: OffLite[]; initialPages: VolPage[]; excelHref: string; fotoZipHref: string;
   animali: string[]; caratts: string[]; labels: string[]; marche: string[]; fornitori: string[];
   scopeParam: string;
+  /** I focus già scritti sulle offerte: si inseriscono nelle celle come testo. */
+  focusDisponibili?: string[];
 }) {
+  const router = useRouter();
+  /*
+   * Modifiche fatte da qui (titolo del padre, descrizione/prezzo salvati nel
+   * database, pagina assegnata) si applicano subito all'elenco senza ricaricare
+   * la pagina: prima ogni salvataggio ricaricava tutto e si perdeva il punto.
+   */
+  const [sovr, setSovr] = useState<Record<string, Partial<OffLite>>>({});
+  const offers = useMemo(() => offersProp.map((o) => (sovr[o.id] ? { ...o, ...sovr[o.id] } : o)), [offersProp, sovr]);
+  const sovrascrivi = (id: string, campi: Partial<OffLite>) => setSovr((p) => ({ ...p, [id]: { ...(p[id] ?? {}), ...campi } }));
   const [pages, setPages] = useState<VolPage[]>(() =>
     (initialPages.length ? initialPages : PAGINE_DEFAULT()).map(normalizza)
   );
@@ -103,10 +121,15 @@ export default function VolantinoBuilder({
   const [clip, setClip] = useState<VolBlock | null>(null);
   const [sel, setSel] = useState<{ pi: number; id: string } | null>(null);
   const [dettaglio, setDettaglio] = useState<string | null>(null);
-  const [spread, setSpread] = useState(0);
+  // si riparte dalla scheda su cui si stava lavorando (ricordata su questo computer)
+  const [spread, setSpread] = useState(() => { try { return Number(localStorage.getItem(`vol-scheda-${campaignId}`) ?? 0) || 0; } catch { return 0; } });
+  useEffect(() => { try { localStorage.setItem(`vol-scheda-${campaignId}`, String(spread)); } catch { /* niente */ } }, [spread, campaignId]);
+  // schede affiancate, oppure tutte le pagine una sotto l'altra (si scorre con la rotellina)
+  const [vista, setVista] = useState<"schede" | "verticale">(() => { try { return localStorage.getItem(`vol-vista-${campaignId}`) === "verticale" ? "verticale" : "schede"; } catch { return "schede"; } });
+  useEffect(() => { try { localStorage.setItem(`vol-vista-${campaignId}`, vista); } catch { /* niente */ } }, [vista, campaignId]);
   const [avviso, setAvviso] = useState("");
-  const [f, setF] = useState({ animale: "", caratt: "", label: "", minVoti: "", minNon: "", marca: "", fornitore: "" });
-  const [filtroChiuso, setFiltroChiuso] = useState(false);
+  const [f, setF] = useState({ animale: "", caratt: "", label: "", minVoti: "", minNon: "", marca: "", fornitore: "", pagina: "" });
+  const [filtroChiuso, setFiltroChiuso] = useState(true);
   const [mostraScartate, setMostraScartate] = useState(false);
   const [soloQuestaPagina, setSoloQuestaPagina] = useState(true);
   // le offerte senza pagina (non scelte in Scelta offerte Volantino) non si propongono, salvo richiesta
@@ -147,16 +170,25 @@ export default function VolantinoBuilder({
    * che sono le uniche che ha senso collocare qui e ora.
    */
   const idPagineVisibili = useMemo(
-    () => new Set(spreadCorrente.map((pi) => pages[pi]?.id).filter(Boolean) as string[]),
-    [spreadCorrente, pages]
+    () => new Set((vista === "verticale" ? pages.map((_, i) => i) : spreadCorrente).map((pi) => pages[pi]?.id).filter(Boolean) as string[]),
+    [spreadCorrente, pages, vista]
   );
+  /** Le pagine visibili coprono questa destinazione? Una pagina precisa, oppure un animale di una delle pagine. */
+  const destinazioneVisibile = (paginaId: string) => {
+    const a = animaleDi(paginaId);
+    if (a) return pages.some((p) => idPagineVisibili.has(p.id) && p.animale === a);
+    return idPagineVisibili.has(paginaId);
+  };
 
   const disponibili = useMemo(() => offers.filter((o) => {
     // le offerte marcate "no volantino" restano fuori, salvo richiesta esplicita
     if (o.paginaId === NO_VOLANTINO && !mostraScartate) return false;
-    if (soloQuestaPagina) {
-      // solo le offerte assegnate a queste pagine in Scelta offerte Volantino; quelle senza pagina solo se richieste
-      if (o.paginaId && o.paginaId !== NO_VOLANTINO ? !idPagineVisibili.has(o.paginaId) : !ancheSenzaPagina) return false;
+    if (f.pagina) {
+      // filtro per destinazione: una pagina precisa, un animale («Cane, da collocare»), senza pagina
+      if (f.pagina === "_nessuna" ? Boolean(o.paginaId) : o.paginaId !== f.pagina) return false;
+    } else if (soloQuestaPagina) {
+      // solo le offerte destinate a queste pagine (pagina precisa o animale della pagina); quelle senza pagina solo se richieste
+      if (o.paginaId && o.paginaId !== NO_VOLANTINO ? !destinazioneVisibile(o.paginaId) : !ancheSenzaPagina) return false;
     }
     if (f.animale && !o.caratts.includes(f.animale)) return false;
     if (f.caratt && !o.caratts.includes(f.caratt)) return false;
@@ -167,7 +199,8 @@ export default function VolantinoBuilder({
     if (f.fornitore && o.fornitore !== f.fornitore) return false;
     return true;
   }).sort((a, b) => Number(inserite.has(a.id)) - Number(inserite.has(b.id))),
-  [offers, f, inserite, mostraScartate, soloQuestaPagina, ancheSenzaPagina, idPagineVisibili]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  [offers, f, inserite, mostraScartate, soloQuestaPagina, ancheSenzaPagina, idPagineVisibili, pages]);
   const daCollocare = disponibili.filter((o) => !inserite.has(o.id)).length;
 
   /*
@@ -191,8 +224,10 @@ export default function VolantinoBuilder({
     for (const p of pages) libere.set(p.id, p.blocks.filter(vuoto).length);
     const fuori: OffLite[] = [];
     for (const o of daDisporre) {
-      const n = libere.get(o.paginaId!) ?? 0;
-      if (n > 0) libere.set(o.paginaId!, n - 1);
+      const a = animaleDi(o.paginaId);
+      const candidate = a ? pages.filter((p) => p.animale === a).map((p) => p.id) : [o.paginaId!];
+      const id = candidate.find((pid) => (libere.get(pid) ?? 0) > 0);
+      if (id) libere.set(id, (libere.get(id) ?? 1) - 1);
       else fuori.push(o);
     }
     return fuori;
@@ -220,6 +255,21 @@ export default function VolantinoBuilder({
   }, [pages, salva]);
 
   const flash = (m: string) => { setAvviso(m); setTimeout(() => setAvviso(""), 3500); };
+  /** Dalla tessera a sinistra: cambia la destinazione (pagina precisa, animale, no volantino) e la applica subito. */
+  const cambiaDestinazione = async (o: OffLite, v: string) => {
+    const prima = o.paginaId;
+    sovrascrivi(o.id, { paginaId: v || undefined });
+    const r = await updateOfferGroupFieldInline(o.offerIds ?? [o.id], "paginaId", v).catch(() => ({ ok: false }));
+    if (!r.ok) { sovrascrivi(o.id, { paginaId: prima }); flash("Pagina non salvata."); }
+  };
+  const nomeDestinazione = (paginaId?: string) => {
+    if (!paginaId) return "da assegnare";
+    if (paginaId === NO_VOLANTINO) return "no volantino";
+    const a = animaleDi(paginaId);
+    if (a) return `${a} · da collocare`;
+    const i = pages.findIndex((p) => p.id === paginaId);
+    return i >= 0 ? `Pag. ${i + 1}${pages[i].titolo ? ` ${pages[i].titolo}` : ""}` : "?";
+  };
 
   /**
    * Genera il PDF del volantino (una pagina per foglio, come "Esporta PDF" ma
@@ -287,15 +337,16 @@ export default function VolantinoBuilder({
   const unisciVoci = async () => {
     if (vociDaUnire.length < 2) return;
     const scelte = offers.filter((o) => vociDaUnire.includes(o.id));
-    if (!confirm(`Unire ${scelte.length} voci in una sola voce del volantino («a partire da» il prezzo più basso)? Vale solo per il volantino: i cartelli restano separati per prezzo.`)) return;
-    const res = await unisciVociVolantino(scelte.flatMap((o) => o.offerIds ?? [o.id]));
-    if (res.ok) window.location.reload();
+    const titolo = prompt(`Unire ${scelte.length} voci in una sola voce del volantino? Vale solo per il volantino: i cartelli restano separati.\n\nTitolo della voce unita (vuoto = il nome della prima):`, scelte[0].padre ?? scelte[0].descrizione);
+    if (titolo === null) return;
+    const res = await unisciVociVolantino(scelte.flatMap((o) => o.offerIds ?? [o.id]), { titolo: titolo.trim() || undefined, prezzo: "minimo" });
+    if (res.ok) { setVociDaUnire([]); router.refresh(); flash("Voci unite: una sola voce nel volantino, «a partire da» il prezzo più basso."); }
     else flash(res.error ?? "Unione non riuscita.");
   };
   const separaVoce = async (unione: string) => {
     if (!confirm("Separare di nuovo le voci unite?")) return;
     const res = await separaUnioneVolantino(unione);
-    if (res.ok) window.location.reload();
+    if (res.ok) router.refresh();
     else flash(res.error ?? "Non riuscito.");
   };
 
@@ -328,8 +379,10 @@ export default function VolantinoBuilder({
     if (daDisporre.length === 0) return flash("Nessuna offerta con una pagina assegnata da collocare.");
     let messe = 0;
     upd((ps) => {
+      const gia = new Set<string>();
       for (const page of ps) {
-        let perQuesta = ordinaPerVicinanza(daDisporre.filter((o) => o.paginaId === page.id));
+        // la pagina precisa, oppure l'animale della pagina («animale:Cane» va su tutte le pagine Cane, in ordine)
+        let perQuesta = ordinaPerVicinanza(daDisporre.filter((o) => !gia.has(o.id) && (o.paginaId === page.id || (page.animale !== undefined && animaleDi(o.paginaId) === page.animale))));
         if (page.animale || page.caratt) {
           const corrisponde = (o: OffLite) =>
             (!page.animale || o.caratts.includes(page.animale)) && (!page.caratt || o.caratts.includes(page.caratt));
@@ -340,6 +393,7 @@ export default function VolantinoBuilder({
         const libere = page.blocks.filter(vuoto).sort((a, b) => a.r - b.r || a.c - b.c);
         for (let i = 0; i < Math.min(libere.length, perQuesta.length); i++) {
           libere[i].offerIds = [perQuesta[i].id];
+          gia.add(perQuesta[i].id);
           messe++;
         }
       }
@@ -603,7 +657,7 @@ export default function VolantinoBuilder({
     const page = pages[pi];
     if (!page) return null;
     return (
-      <div key={page.id} className="vol-page-wrap">
+      <div key={page.id} className="vol-page-wrap" id={`vol-pag-${pi}`}>
         {/* due righe volute: sopra numero + nome, sotto tipologia e griglia — così
             i controlli non vanno mai a capo a metà su una colonna da 430px */}
         <div className="no-print vol-page-tools">
@@ -716,6 +770,15 @@ export default function VolantinoBuilder({
                   {fornitori.map((x) => <option key={x} value={x}>{x}</option>)}
                 </select>
               </label>
+              <label className="field">Destinazione
+                <select value={f.pagina} onChange={(e) => setF({ ...f, pagina: e.target.value })}>
+                  <option value="">Tutte (secondo la scheda aperta)</option>
+                  {animali.map((a) => <option key={a} value={`${ANIMALE_PREFISSO}${a}`}>{a} · da collocare</option>)}
+                  {pages.map((p, i) => <option key={p.id} value={p.id}>Pag. {i + 1}{p.titolo ? ` ${p.titolo}` : ""}</option>)}
+                  <option value="_nessuna">senza pagina</option>
+                  <option value={NO_VOLANTINO}>no volantino</option>
+                </select>
+              </label>
               <label style={{ fontSize: 11.5, display: "block", marginBottom: 4 }}>
                 <input type="checkbox" checked={soloQuestaPagina} onChange={(e) => setSoloQuestaPagina(e.target.checked)} />{" "}
                 solo le offerte scelte per queste pagine (in Scelta offerte Volantino)
@@ -731,7 +794,7 @@ export default function VolantinoBuilder({
                 mostra offerte non selezionate (&quot;no volantino&quot;)
               </label>
               <button className="btn btn-outline btn-sm" type="button" style={{ width: "100%" }}
-                onClick={() => setF({ animale: "", caratt: "", label: "", minVoti: "", minNon: "", marca: "", fornitore: "" })}>
+                onClick={() => setF({ animale: "", caratt: "", label: "", minVoti: "", minNon: "", marca: "", fornitore: "", pagina: "" })}>
                 Azzera filtri
               </button>
             </div>
@@ -742,12 +805,11 @@ export default function VolantinoBuilder({
         <div className="vol-filtro-head">
           Da collocare ({daCollocare})
           {inserite.size > 0 && <span className="pill pill-green" style={{ marginLeft: 6 }}>{inserite.size} già nel volantino</span>}
-          {vociDaUnire.length >= 2 && (
-            <button type="button" className="btn btn-sm" style={{ marginLeft: "auto" }} onClick={unisciVoci}
-              title="Una voce sola nel volantino, «a partire da» il prezzo più basso. I cartelli restano separati.">
-              Unisci {vociDaUnire.length} voci (solo volantino)
-            </button>
-          )}
+          <button type="button" className={`btn btn-sm${vociDaUnire.length >= 2 ? "" : " btn-outline"}`} style={{ marginLeft: "auto" }} onClick={unisciVoci}
+            disabled={vociDaUnire.length < 2}
+            title="Spunta due o più tessere: diventano una voce sola nel volantino, «a partire da» il prezzo più basso. I cartelli restano separati.">
+            Unisci nel volantino{vociDaUnire.length >= 2 ? ` (${vociDaUnire.length})` : ""}
+          </button>
         </div>
         <div className="vol-filtro-lista">
           {disponibili.length === 0 && (
@@ -787,12 +849,17 @@ export default function VolantinoBuilder({
                     {o.sconto && <span className="pill pill-green">{o.sconto}</span>}
                     {(o.tipi ?? []).map((t) => <span key={t} className="pill pill-blue">{t}</span>)}
                     {usata && <span className="pill pill-gray">già usata</span>}
-                    {o.paginaId === NO_VOLANTINO && <span className="pill pill-red">no volantino</span>}
-                    {o.paginaId && o.paginaId !== NO_VOLANTINO && !usata && (
-                      <span className="pill pill-amber" title="pagina assegnata da Offerte in corso">
-                        → {pages.findIndex((p) => p.id === o.paginaId) + 1 || "?"}
-                      </span>
-                    )}
+                    {o.animale && <span className="pill pill-green" title="animale">{o.animale}</span>}
+                    {o.caratt && <span className="pill pill-gray" title="caratteristica">{o.caratt}</span>}
+                    {/* la destinazione si cambia da qui: pagina precisa, animale, no volantino */}
+                    <select value={o.paginaId ?? ""} onChange={(e) => cambiaDestinazione(o, e.target.value)} onClick={(e) => e.stopPropagation()}
+                      className={`vol-dest${!o.paginaId ? " vuota" : o.paginaId === NO_VOLANTINO ? " no" : animaleDi(o.paginaId) ? " animale" : ""}`}
+                      title={`Destinazione: ${nomeDestinazione(o.paginaId)}. Cambiala da qui.`}>
+                      <option value="">da assegnare</option>
+                      {animali.map((a) => <option key={a} value={`${ANIMALE_PREFISSO}${a}`}>{a} · da collocare</option>)}
+                      {pages.map((p, i) => <option key={p.id} value={p.id}>Pag. {i + 1}{p.titolo ? ` ${p.titolo}` : ""}</option>)}
+                      <option value={NO_VOLANTINO}>no volantino</option>
+                    </select>
                     {o.voti > 0 && <span className="pill pill-green">{o.voti} voti</span>}
                     {o.nonTrattati > 0 && <span className="pill pill-red">{o.nonTrattati} n.t.</span>}
                     {o.label && <span className="pill pill-blue">{o.label}</span>}
@@ -824,8 +891,17 @@ export default function VolantinoBuilder({
       <div>
         <div className="vol-toolbar no-print">
           <div className="vol-tabs">
+            <button type="button" className="btn btn-outline btn-sm" title="Torna alla pagina precedente" onClick={() => history.back()}>
+              <ArrowLeft size={14} style={{ verticalAlign: -2 }} /> Indietro
+            </button>
+            <button type="button" className="btn btn-outline btn-sm" onClick={() => setVista(vista === "schede" ? "verticale" : "schede")}
+              title={vista === "schede" ? "Tutte le pagine una sotto l'altra: si scorre con la rotellina" : "Torna alle schede affiancate"}>
+              {vista === "schede" ? <Rows3 size={14} style={{ verticalAlign: -2 }} /> : <Columns2 size={14} style={{ verticalAlign: -2 }} />}
+              {" "}{vista === "schede" ? "Pagine in verticale" : "Schede affiancate"}
+            </button>
             {spreads.map((g, i) => (
-              <button key={i} type="button" className={`vol-tab${i === spread ? " attiva" : ""}`} onClick={() => { setSpread(i); setSel(null); }}>
+              <button key={i} type="button" className={`vol-tab${i === spread ? " attiva" : ""}`}
+                onClick={() => { setSpread(i); setSel(null); if (vista === "verticale") document.getElementById(`vol-pag-${g[0]}`)?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>
                 {etichettaSpread(g)}
                 {g.map((pi) => pages[pi]?.titolo).filter(Boolean).length > 0 && (
                   <span className="vol-tab-nome">{[...new Set(g.map((pi) => pages[pi]?.titolo).filter(Boolean))].join(" · ")}</span>
@@ -896,7 +972,9 @@ export default function VolantinoBuilder({
           </div>
         )}
 
-        <div className="vol-spread">{spreadCorrente.map((pi) => renderPage(pi))}</div>
+        {vista === "verticale"
+          ? <div className="vol-verticale">{pages.map((_, pi) => renderPage(pi))}</div>
+          : <div className="vol-spread">{spreadCorrente.map((pi) => renderPage(pi))}</div>}
 
         {/* in stampa escono tutte le pagine, non solo la scheda aperta */}
         <div className="solo-stampa">{pages.map((_, pi) => renderPage(pi))}</div>
@@ -968,7 +1046,7 @@ export default function VolantinoBuilder({
                         const v = e.target.value.trim();
                         if (!v || v === selOffs[0].padre) return;
                         const res = await updateParentFieldInline(selOffs[0].padreId!, "nome", scopeParam, v);
-                        if (res.ok) window.location.reload();
+                        if (res.ok) { for (const o of offers) if (o.padreId === selOffs[0].padreId) sovrascrivi(o.id, { padre: v }); flash("Titolo salvato."); }
                         else flash("Titolo non salvato.");
                       }} />
                   </label>
@@ -984,9 +1062,11 @@ export default function VolantinoBuilder({
                   </label>
                   <button className="btn btn-outline btn-sm" style={{ marginBottom: 12 }}
                     onClick={async () => {
-                      await updateZooOfferQuick(selOffs[0].id, selBlock.descrizione ?? selOffs[0].descrizione, selBlock.prezzo ?? selOffs[0].prezzo);
+                      const d = selBlock.descrizione ?? selOffs[0].descrizione; const p = selBlock.prezzo ?? selOffs[0].prezzo;
+                      await updateZooOfferQuick(selOffs[0].id, d, p);
+                      sovrascrivi(selOffs[0].id, { descrizione: d, prezzo: p });
                       patch(sel!.pi, selBlock.id, { descrizione: undefined, prezzo: undefined });
-                      window.location.reload();
+                      flash("Salvato nel database: la descrizione e il prezzo valgono ovunque.");
                     }}>Salva nel database</button>
                 </div>
               </>
@@ -1000,8 +1080,16 @@ export default function VolantinoBuilder({
                 {labels.map((l) => <option key={l} value={l}>{l}</option>)}
               </select>
             </label>
+            {focusDisponibili.length > 0 && (
+              <label className="field">Inserisci un focus nella cella
+                <select key={`f_${selBlock.id}`} value="" onChange={(e) => { if (e.target.value) patch(sel!.pi, selBlock.id, { testo: e.target.value, label: selBlock.label ?? undefined }); }}>
+                  <option value="">— scegli un focus già creato —</option>
+                  {focusDisponibili.map((x) => <option key={x} value={x}>{x}</option>)}
+                </select>
+              </label>
+            )}
             <label className="field">Testo (anche sopra l&apos;immagine)
-              <textarea key={`t_${selBlock.id}`} rows={2} defaultValue={selBlock.testo ?? ""}
+              <textarea key={`t_${selBlock.id}_${selBlock.testo ?? ""}`} rows={2} defaultValue={selBlock.testo ?? ""}
                 onBlur={(e) => patch(sel!.pi, selBlock.id, { testo: e.target.value || undefined })} />
             </label>
             <label className="field">Commento per il grafico

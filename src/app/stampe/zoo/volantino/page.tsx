@@ -6,7 +6,7 @@ import { canAccessArea, isZooEditor, scopesForUser, resolveScope } from "@/lib/s
 import { getDb } from "@/lib/db";
 import {
   getZooDb, campagnaInLavorazione, zooImageUrl, effectiveParentText, animaliDi, caratteristicheProdottoDi,
-  chiavePrezzo, datiPrezzoOfferta, migraVolantinoPages, storicoOfferteByEan, periodoBreve, NO_VOLANTINO,
+  chiavePrezzo, datiPrezzoOfferta, migraVolantinoPages, storicoOfferteByEan, periodoBreve, NO_VOLANTINO, nomeDestinazione,
 } from "@/lib/zoo";
 import {
   updateOfferVolantino,
@@ -183,7 +183,7 @@ export default async function ZooVolantinoPage({
     if (prossime.length) params.set("pagina", prossime.join(","));
     return `?${params.toString()}`;
   };
-  const nomeFiltroPagina = (f: string) => (f === "_nessuna" ? "da assegnare" : f === "_volantino" ? "a volantino" : f === NO_VOLANTINO ? "no volantino" : nomePagina.get(f) ?? f);
+  const nomeFiltroPagina = (f: string) => (f === "_nessuna" ? "da assegnare" : f === "_volantino" ? "a volantino" : nomeDestinazione(f, nomePagina) || f);
   /** Pillola del filtro pagine: scelta = blu con ✓, non scelta = grigia (il colore non deve sembrare uno stato). */
   const pillPagina = (f: string, testo: string, n: number | null, titolo?: string) => (
     <a key={f || "tutte"} className={`pill pill-filtro${(f ? filtriPagina.includes(f) : filtriPagina.length === 0) ? " scelta" : ""}`}
@@ -335,6 +335,7 @@ export default async function ZooVolantinoPage({
                 <strong style={{ fontSize: 12.5 }}>Voci per pagina:</strong>
                 {pillPagina("", "tutte", null, "Tutte le offerte")}
                 {pillPagina("_volantino", "Volantino", vociPerPagina("_volantino"), "Solo le voci che vanno sul volantino (con una pagina)")}
+                {ANIMALI.filter((a) => vociPerPagina(`animale:${a}`) > 0).map((a) => pillPagina(`animale:${a}`, `${a} · da collocare`, vociPerPagina(`animale:${a}`), "Scelte per questo animale: la pagina precisa si decide in Crea Volantino"))}
                 {pagineVolantino.map((p) => pillPagina(p.id, p.nome, vociPerPagina(p.id), "Clic per vedere solo questa pagina; clic su più pagine per vederle insieme"))}
                 {pillPagina("_nessuna", "da assegnare", vociPerPagina("_nessuna"), "Voci senza pagina")}
                 {pillPagina(NO_VOLANTINO, "no volantino", vociPerPagina(NO_VOLANTINO), "Voci escluse dal volantino")}
@@ -386,6 +387,7 @@ export default async function ZooVolantinoPage({
                   <label className="field" style={{ marginBottom: 0 }}>Pagina
                     <select name="pagina" defaultValue={filtroPagina}>
                       <option value="">Tutte</option>
+                      {ANIMALI.map((a) => <option key={a} value={`animale:${a}`}>{a} (da collocare)</option>)}
                       {pagineVolantino.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
                       <option value="_nessuna">da assegnare</option>
                       <option value={NO_VOLANTINO}>no volantino</option>
@@ -573,7 +575,7 @@ export default async function ZooVolantinoPage({
                             {first.paginaId === NO_VOLANTINO
                               ? <span className="pill pill-gray">✕ no volantino</span>
                               : first.paginaId
-                                ? <span className="pill pill-green">✓ {nomePagina.get(first.paginaId) ?? first.paginaId}</span>
+                                ? <span className="pill pill-green">✓ {nomeDestinazione(first.paginaId, nomePagina)}</span>
                                 : <span className="pill pill-amber">da assegnare</span>}
                           </td>
                         )}
@@ -619,8 +621,9 @@ export default async function ZooVolantinoPage({
                         {consortium && (
                           <td>
                             {/* la pagina scelta mette l'offerta nel volantino; «✕ no» la toglie */}
+                            {/* si assegna l'animale («Cane»): la pagina precisa si sceglie in Crea Volantino, fra quelle di quell'animale */}
                             <PaginaRapida value={first.paginaId ?? ""} tutte={pagineVolantino} noVolantino={NO_VOLANTINO}
-                              suggerite={pagineVolantino.filter((p) => animaliOfferta.some((a) => paginaPerAnimale(p.nome, a)))}
+                              suggerite={(animaliOfferta.length ? animaliOfferta : ANIMALI).map((a) => ({ id: `animale:${a}`, nome: a }))}
                               onSave={updateOfferGroupFieldInline.bind(null, ids, "paginaId")} />
                             {!isGroup && (
                               <a className="hint" style={{ display: "inline-block", marginTop: 3 }}

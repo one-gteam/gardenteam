@@ -28,6 +28,8 @@ export interface ZooProduct {
    * o scritto a mano. Assente = non si sa, niente prezzo all'unità.
    */
   contenuto?: { quantita: number; unita: "kg" | "l" };
+  /** Tipo di prodotto per gli articoli senza padre (per quelli col padre vale la tipologia del padre). */
+  tipologia?: string;
 }
 
 /** Prodotto padre: raggruppa articoli simili, con testi per volantino e cartello. */
@@ -38,6 +40,8 @@ export interface ZooParent {
   descCartello: string;
   image?: string; // immagine di riferimento (di un figlio o caricata)
   caratteristiche: string[]; // es. umido, secco, cane, gatto...
+  /** Tipo di prodotto (Multipack, Giochi, Tappetini…): elenco in Impostazioni. */
+  tipologia?: string;
   aiGenerated?: boolean;
   note?: string;
 }
@@ -231,6 +235,25 @@ export interface ZooOffer {
   layoutId?: string;
   /** Contenuto della confezione per il prezzo al kg/litro, quando non c'è un articolo in catalogo. */
   contenuto?: { quantita: number; unita: "kg" | "l" };
+}
+
+/**
+ * `paginaId` può anche dire solo l'animale ("animale:Cane"): l'offerta va sul
+ * volantino, nelle pagine di quell'animale, e la pagina precisa si decide in
+ * Crea Volantino. Scelta offerte Volantino assegna così; Crea Volantino affina.
+ */
+export const ANIMALE_PREFISSO = "animale:";
+export function destinazioneAnimale(paginaId?: string): string | undefined {
+  return paginaId?.startsWith(ANIMALE_PREFISSO) ? paginaId.slice(ANIMALE_PREFISSO.length) : undefined;
+}
+/** Come si legge una destinazione: il nome della pagina, oppure «Cane (da collocare)». */
+export function nomeDestinazione(paginaId: string | undefined, nomePagina: Map<string, string> | ((id: string) => string | undefined)): string {
+  if (!paginaId) return "";
+  if (paginaId === NO_VOLANTINO) return "no volantino";
+  const a = destinazioneAnimale(paginaId);
+  if (a) return `${a} (da collocare)`;
+  const n = typeof nomePagina === "function" ? nomePagina(paginaId) : nomePagina.get(paginaId);
+  return n ?? paginaId;
 }
 
 /** Valore di `paginaId` per le offerte escluse dal volantino. */
@@ -544,6 +567,7 @@ export interface ZooSettings {
   caratteristicheProdotto: string[]; // sottoinsieme di "caratteristiche": umido, secco, snack...
   volantinoEditors?: string[]; // utenti (oltre a sistema/Gestore Zoo) che possono usare Crea Volantino
   labels: string[]; // etichette assegnabili alle offerte (es. SOTTOCOSTO, NOVITÀ)
+  tipologieProdotto: string[]; // tipi di prodotto (Multipack, Giochi, Tappetini…): colonna «Tipologia» in Prodotti
   schedeDefault: string[]; // struttura standard delle schede del volantino
   istruzioniVolantino: string; // regole di scrittura testi volantino (guida anche l'AI)
   istruzioniCartello: string; // regole di scrittura testi cartelli
@@ -761,6 +785,7 @@ const DEFAULT_SETTINGS: ZooSettings = {
   categorieAnimali: CATEGORIE_ANIMALI_DEFAULT,
   caratteristicheProdotto: CARATTERISTICHE_PRODOTTO_DEFAULT,
   labels: ["SOTTOCOSTO", "NOVITÀ", "ESCLUSIVA", "FORMATO CONVENIENZA", "PREZZO WOW"],
+  tipologieProdotto: ["Multipack", "Giochi", "Tappetini", "Guinzagli e collari", "Ciotole", "Cucce e trasportini"],
   schedeDefault: ["Copertina", "Cane", "Gatto", "Altri animali", "Accessori e igiene", "Retro"],
   istruzioniVolantino:
     "Testi brevi e commerciali (max 2 righe). Evidenziare il vantaggio per l'animale e il risparmio. Niente punto finale. Es: \"Croccantini ricchi di pollo fresco per cani adulti di taglia media\".",
@@ -1197,7 +1222,7 @@ export function storicoOfferteByEan(db: ZooDB): Map<string, ZooStoricoProdotto> 
       chiaviViste.add(`p_${o.campaignId}`);
     }
     if (o.selezionata && !chiaviViste.has(`v_${o.campaignId}`)) {
-      const pagina = o.paginaId && o.paginaId !== NO_VOLANTINO ? titoloPagina.get(o.paginaId) : undefined;
+      const pagina = o.paginaId && o.paginaId !== NO_VOLANTINO ? nomeDestinazione(o.paginaId, titoloPagina) : undefined;
       storico.volantino.push({ campaign, pagina });
       chiaviViste.add(`v_${o.campaignId}`);
     }
@@ -1898,7 +1923,7 @@ export function offerteExportRows(
       if (tipo === "volantino") {
         return {
           ...base,
-          PAGINA: o.paginaId && o.paginaId !== NO_VOLANTINO ? (pagine.get(o.paginaId) ?? "") : "",
+          PAGINA: o.paginaId && o.paginaId !== NO_VOLANTINO ? nomeDestinazione(o.paginaId, pagine) : "",
           SCHEDA: campaign.schede.find((s) => s.id === o.schedaId)?.nome ?? "",
           ETICHETTA: o.label ?? "",
           "AREA TEMATICA": o.gruppo ?? "",

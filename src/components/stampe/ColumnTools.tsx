@@ -185,9 +185,43 @@ export default function ColumnTools({ tableId }: { tableId: string }) {
       };
       grip.addEventListener("pointerdown", giu);
 
+      /*
+       * Doppio clic sull'intestazione: ordina le righe per quella colonna (testo o
+       * numero, anche "€ 3,99"); un secondo doppio clic inverte. Le righe senza
+       * tutte le celle (pannelli aperti sotto una riga) seguono la riga che le precede.
+       */
+      const ordina = () => {
+        const tb = table.tBodies[0];
+        if (!tb) return;
+        const dir = th.dataset.ordine === "asc" ? -1 : 1;
+        Array.from(headRow.cells).forEach((c) => { delete c.dataset.ordine; c.classList.remove("ordinata"); });
+        th.dataset.ordine = dir === 1 ? "asc" : "desc";
+        th.classList.add("ordinata");
+        const gruppi: HTMLTableRowElement[][] = [];
+        for (const r of Array.from(tb.rows)) {
+          if (r.cells.length === nCols || gruppi.length === 0) gruppi.push([r]); else gruppi[gruppi.length - 1].push(r);
+        }
+        const testo = (g: HTMLTableRowElement[]) => {
+          const cella = Array.from(g[0].cells).find((c) => c.dataset.col === chiave);
+          const inp = cella?.querySelector("input, select, textarea") as HTMLInputElement | HTMLSelectElement | null;
+          return (inp ? (inp instanceof HTMLSelectElement ? inp.options[inp.selectedIndex]?.text : inp.value) : cella?.textContent) ?? "";
+        };
+        const numero = (t: string) => { const m = t.replace(/\./g, "").replace(",", ".").match(/-?\d+(\.\d+)?/); return m ? parseFloat(m[0]) : NaN; };
+        gruppi.sort((a, b) => {
+          const ta = testo(a).trim(), tb2 = testo(b).trim();
+          const na = numero(ta), nb = numero(tb2);
+          const cmp = !Number.isNaN(na) && !Number.isNaN(nb) && /^[€\s\d.,%-]+$/.test(ta) && /^[€\s\d.,%-]+$/.test(tb2)
+            ? na - nb : ta.localeCompare(tb2, "it", { numeric: true, sensitivity: "base" });
+          return cmp * dir;
+        });
+        for (const g of gruppi) for (const r of g) tb.appendChild(r);
+      };
+      th.addEventListener("dblclick", ordina);
+      pulizie.push(() => th.removeEventListener("dblclick", ordina));
+      if (!th.title) th.title = "Doppio clic per ordinare";
       th.draggable = true;
       th.style.cursor = "grab";
-      if (!th.title) th.title = "Trascina l'intestazione per spostare la colonna";
+      if (th.title === "Doppio clic per ordinare") th.title = "Doppio clic per ordinare · trascina per spostare la colonna";
       const inizio = (e: DragEvent) => { e.dataTransfer?.setData("text/plain", chiave); th.style.opacity = "0.4"; };
       const sopra = (e: DragEvent) => e.preventDefault();
       const rilascio = (e: DragEvent) => {

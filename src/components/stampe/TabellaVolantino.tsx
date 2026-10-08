@@ -5,7 +5,7 @@ import type { DB } from "@/lib/types";
 import type { Scope } from "@/lib/stampe";
 import {
   type ZooDB, type ZooCampaign, type ZooOffer, zooImageUrl, effectiveParentText, animaliDi, caratteristicheProdottoDi,
-  chiavePrezzo, datiPrezzoOfferta, migraVolantinoPages, NO_VOLANTINO, marcaEffettiva,
+  chiavePrezzo, datiPrezzoOfferta, migraVolantinoPages, NO_VOLANTINO, marcaEffettiva, nomeDestinazione,
 } from "@/lib/zoo";
 
 /**
@@ -84,7 +84,7 @@ export default function TabellaVolantino({
       case "focus": return (o.focus ?? "").toLowerCase();
       case "etichetta": return (o.label ?? "").toLowerCase();
       case "voti": return new Set(db.votes.filter((v) => v.tipo === "preferita" && g.offs.some((x) => x.id === v.offerId)).map((v) => v.userId)).size;
-      default: return nomePagina.get(o.paginaId ?? "") ?? "zzz";
+      default: return nomeDestinazione(o.paginaId, nomePagina) || "zzz";
     }
   };
   gruppi.sort((a, b) => {
@@ -213,7 +213,7 @@ export default function TabellaVolantino({
                     {dati.tipi.length > 0 && <div style={{ fontSize: 10.5, color: "#274b7a", fontWeight: 700 }}>{dati.tipi.join(" · ")}</div>}
                   </td>
                   <td style={{ whiteSpace: "nowrap" }}>
-                    {first.paginaId ? <span className="pill pill-green">{nomePagina.get(first.paginaId) ?? first.paginaId}</span> : <span className="pill pill-amber">da assegnare</span>}
+                    {first.paginaId ? <span className="pill pill-green">{nomeDestinazione(first.paginaId, nomePagina)}</span> : <span className="pill pill-amber">da assegnare</span>}
                   </td>
                   <td style={{ fontSize: 12 }}>{first.focus || "—"}</td>
                   <td>{first.label ? <span className="pill pill-orange">{first.label}</span> : "—"}</td>

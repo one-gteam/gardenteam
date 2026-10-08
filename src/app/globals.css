@@ -1236,3 +1236,16 @@ form[aria-busy="true"] { opacity: .6; }
 .pill-filtro:hover { background: #f1f3f1; }
 .pill-filtro.scelta { background: #274b7a; color: #fff; border-color: #274b7a; }
 .pill-filtro strong { font-weight: 800; }
+
+/* intestazione ordinata col doppio clic (ColumnTools) */
+th.ordinata { background: #eef4ef; }
+th.ordinata[data-ordine="asc"]::after { content: " ▲"; font-size: 9px; }
+th.ordinata[data-ordine="desc"]::after { content: " ▼"; font-size: 9px; }
+
+/* Crea Volantino: pagine una sotto l'altra, destinazione nella tessera */
+.vol-verticale { display: flex; flex-direction: column; gap: 22px; align-items: center; }
+.vol-verticale .vol-page-wrap { width: min(560px, 100%); }
+.vol-dest { font-size: 10.5px; padding: 1px 4px; margin-top: 0; border-radius: 6px; border: 1px solid var(--line); background: #fff; max-width: 150px; }
+.vol-dest.vuota { border-color: #f0b35b; color: #92400e; background: #fff8ec; }
+.vol-dest.animale { border-color: #9fc9a8; color: var(--green-700); background: #f1f8f2; }
+.vol-dest.no { color: #a33; }

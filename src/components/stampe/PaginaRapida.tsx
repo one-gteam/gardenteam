@@ -45,7 +45,7 @@ export default function PaginaRapida({
 
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center", minWidth: 150 }}>
-      {suggerite.map((p) => pill(p.id, p.nome, v === p.id ? "È in questa pagina (clic per toglierla)" : "Metti in questa pagina"))}
+      {suggerite.map((p) => pill(p.id, p.nome, v === p.id ? "Va sul volantino, fra le pagine di questo animale (clic per togliere)" : "Mettila sul volantino, nelle pagine di questo animale"))}
       {pill(noVolantino, "✕ no", "Non va sul volantino")}
       {/* pagina scelta fuori dalle proposte: si vede comunque */}
       {v && v !== noVolantino && !suggerite.some((s) => s.id === v) && (
@@ -54,7 +54,7 @@ export default function PaginaRapida({
       {altre.length > 0 && (
         <select value={altre.some((p) => p.id === v) ? v : ""} onChange={(e) => scegli(e.target.value)} disabled={pending}
           style={{ marginTop: 0, fontSize: 11, padding: "2px 4px", maxWidth: 120 }} aria-label="Altra pagina">
-          <option value="">altra…</option>
+          <option value="">pagina precisa…</option>
           {altre.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
         </select>
       )}

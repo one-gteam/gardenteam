@@ -88,7 +88,10 @@ export default async function ZooImpostazioniPage({
                   Etichette per le offerte del volantino (una per riga)
                   <textarea name="labels" rows={5} defaultValue={db.settings.labels.join("\n")} />
                 </label>
-                <div />
+                <label className="field" style={{ marginBottom: 0 }}>
+                  Tipologie di prodotto (una per riga: Multipack, Giochi, Tappetini…) — colonna «Tipologia» in Prodotti
+                  <textarea name="tipologieProdotto" rows={5} defaultValue={db.settings.tipologieProdotto.join("\n")} />
+                </label>
                 <label className="field" style={{ marginBottom: 0 }}>
                   Schede standard del volantino (struttura di partenza per ogni campagna)
                   <textarea name="schedeDefault" rows={4} defaultValue={db.settings.schedeDefault.join("\n")} />

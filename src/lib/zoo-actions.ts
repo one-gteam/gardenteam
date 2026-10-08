@@ -551,6 +551,20 @@ export async function updateParentFieldInline(
  * quindi si sostituiscono solo i valori della dimensione scelta lasciando
  * intatta l'altra. Valore vuoto = nessun tag per quella dimensione.
  */
+/** Tipologia (Multipack, Giochi…) del padre, o dell'articolo se non ha un padre. */
+export async function setTipologiaInline(id: string, padre: boolean, value: string): Promise<{ ok: boolean }> {
+  const user = await requireZooUser();
+  if (!isZooEditor(user)) return { ok: false };
+  const db = await getZooDb();
+  const v = value.trim();
+  if (v && !db.settings.tipologieProdotto.includes(v)) return { ok: false };
+  const x = padre ? db.parents.find((p) => p.id === id) : db.products.find((p) => p.id === id);
+  if (!x) return { ok: false };
+  x.tipologia = v || undefined;
+  await saveZooDb(db);
+  return { ok: true };
+}
+
 export async function setParentTagInline(
   parentId: string, kind: "animale" | "prodotto", value: string
 ): Promise<{ ok: boolean }> {
@@ -2218,6 +2232,7 @@ export async function saveZooSettings(scopeParam: string, formData: FormData) {
   db.settings.caratteristicheProdotto = list("caratteristicheProdotto");
   db.settings.caratteristiche = [...db.settings.categorieAnimali, ...db.settings.caratteristicheProdotto];
   db.settings.labels = list("labels");
+  db.settings.tipologieProdotto = list("tipologieProdotto");
   db.settings.schedeDefault = list("schedeDefault");
   db.settings.condizioniStandard = String(formData.get("condizioniStandard") ?? "")
     .split(/\r?\n/).map((s) => s.trim()).filter(Boolean);

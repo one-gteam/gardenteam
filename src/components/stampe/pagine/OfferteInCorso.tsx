@@ -24,7 +24,7 @@ import { DettagliPadre, PannelloPadre } from "@/components/stampe/DettagliPadre"
 import {
   getZooDb, zooImageUrl, effectiveParentText, campagnaInLavorazione, campagnaInCorso, campaignStato,
   fotoDaAbbinare, promoDaTesto, chiavePrezzo, animaliDi, caratteristicheProdottoDi, migraVolantinoPages, prezzoUnitaDi,
-  NO_VOLANTINO, marcaEffettiva, prezziDelPadre, passiVolantino, type ZooProduct, type ZooOffer, type ZooParent,
+  NO_VOLANTINO, marcaEffettiva, prezziDelPadre, passiVolantino, nomeDestinazione, type ZooProduct, type ZooOffer, type ZooParent,
 } from "@/lib/zoo";
 import {
   interpretaPromoScritte, avviaAssociaConAI, chiudiAvvisoAssocia,
@@ -33,7 +33,7 @@ import {
   toggleParentCaratteristica, scioglieParent, chiudiVolantino, riapriVolantino, nuovoVolantino,
   svuotaOfferteVolantino, rimuoviOfferteMarginiamo, updateParentFieldInline, updateOfferFieldInline,
   updateOfferGroupFieldInline, setParentTagInline, moveProductToParent, setParentImageFromFile,
-  mergeParentsForm, archiviaOfferteSelezionate, aggiungiOffertaAMano, dividiPadrePerPrezzo, dividiTuttiIPadriPerPrezzo,
+  mergeParentsForm, archiviaOfferteSelezionate, aggiungiOffertaAMano, dividiPadrePerPrezzo, dividiTuttiIPadriPerPrezzo, setTipologiaInline,
 } from "@/lib/zoo-actions";
 
 // "Associa con AI" può richiedere più dei 10s di default per un lotto di articoli:
@@ -209,7 +209,7 @@ export default async function OfferteInCorso({ user, sp }: { user: User; sp: Rec
   const padriSenzaAnimale = padriInOfferta.filter((p) => animaliDi(db, p.caratteristiche).length === 0);
   const offerteSenzaPadre = offers.filter((o) => !parentOf(o)).length;
   const visibiliCap = visibili.slice(0, RIGHE_MAX);
-  const nCols = ((consortium ? 1 : 0) + (vistaArticoli ? 16 : 15)) + 1;
+  const nCols = ((consortium ? 1 : 0) + (vistaArticoli ? 17 : 16)) + 1;
 
 
   return (
@@ -695,6 +695,7 @@ export default async function OfferteInCorso({ user, sp }: { user: User; sp: Rec
                       <th>Fornitore</th>
                       <ColonnaOrdinabile campo="animale">Animale</ColonnaOrdinabile>
                       <ColonnaOrdinabile campo="caratt">Caratteristica</ColonnaOrdinabile>
+                      <th title="Tipo di prodotto (elenco in Impostazioni)">Tipologia</th>
                       <th>Pagina</th>
                       <th>Etichetta</th>
                       <ColonnaOrdinabile campo="meccanica">Meccanica</ColonnaOrdinabile>
@@ -794,15 +795,23 @@ export default async function OfferteInCorso({ user, sp }: { user: User; sp: Rec
                             )}
                           </td>
                           <td>
+                            {consortium && (parent || product) ? (
+                              <InlineSelect value={(parent ? parent.tipologia : product?.tipologia) ?? ""} options={db.settings.tipologieProdotto}
+                                onSave={setTipologiaInline.bind(null, parent ? parent.id : product!.id, Boolean(parent))} />
+                            ) : (
+                              <span style={{ fontSize: 11.5, color: "var(--muted)" }}>{(parent ? parent.tipologia : product?.tipologia) || "—"}</span>
+                            )}
+                          </td>
+                          <td>
                             {consortium ? (
                               <InlineSelect value={first.paginaId ?? ""}
-                                options={[...pagineVolantino.map((p) => p.id), NO_VOLANTINO]}
-                                etichette={{ ...Object.fromEntries(pagineVolantino.map((p) => [p.id, p.nome])), [NO_VOLANTINO]: "✕ no volantino" }}
+                                options={[...db.settings.categorieAnimali.map((a) => `animale:${a}`), ...pagineVolantino.map((p) => p.id), NO_VOLANTINO]}
+                                etichette={{ ...Object.fromEntries(db.settings.categorieAnimali.map((a) => [`animale:${a}`, `${a} (da collocare)`])), ...Object.fromEntries(pagineVolantino.map((p) => [p.id, p.nome])), [NO_VOLANTINO]: "✕ no volantino" }}
                                 vuoto="— da assegnare —"
                                 onSave={updateOfferGroupFieldInline.bind(null, offIds, "paginaId")} />
                             ) : (
                               <span style={{ fontSize: 11.5 }}>
-                                {first.paginaId === NO_VOLANTINO ? "no volantino" : (nomePagina.get(first.paginaId ?? "") ?? "—")}
+                                {nomeDestinazione(first.paginaId, nomePagina) || "—"}
                               </span>
                             )}
                           </td>
@@ -925,15 +934,23 @@ export default async function OfferteInCorso({ user, sp }: { user: User; sp: Rec
                             )}
                           </td>
                           <td>
+                            {consortium && (parent || product) ? (
+                              <InlineSelect value={(parent ? parent.tipologia : product?.tipologia) ?? ""} options={db.settings.tipologieProdotto}
+                                onSave={setTipologiaInline.bind(null, parent ? parent.id : product!.id, Boolean(parent))} />
+                            ) : (
+                              <span style={{ fontSize: 11.5, color: "var(--muted)" }}>{(parent ? parent.tipologia : product?.tipologia) || "—"}</span>
+                            )}
+                          </td>
+                          <td>
                             {consortium ? (
                               <InlineSelect value={o.paginaId ?? ""}
-                                options={[...pagineVolantino.map((p) => p.id), NO_VOLANTINO]}
-                                etichette={{ ...Object.fromEntries(pagineVolantino.map((p) => [p.id, p.nome])), [NO_VOLANTINO]: "✕ no volantino" }}
+                                options={[...db.settings.categorieAnimali.map((a) => `animale:${a}`), ...pagineVolantino.map((p) => p.id), NO_VOLANTINO]}
+                                etichette={{ ...Object.fromEntries(db.settings.categorieAnimali.map((a) => [`animale:${a}`, `${a} (da collocare)`])), ...Object.fromEntries(pagineVolantino.map((p) => [p.id, p.nome])), [NO_VOLANTINO]: "✕ no volantino" }}
                                 vuoto="— da assegnare —"
                                 onSave={updateOfferFieldInline.bind(null, o.id, "paginaId")} />
                             ) : (
                               <span style={{ fontSize: 11.5 }}>
-                                {o.paginaId === NO_VOLANTINO ? "no volantino" : (nomePagina.get(o.paginaId ?? "") ?? "—")}
+                                {nomeDestinazione(o.paginaId, nomePagina) || "—"}
                               </span>
                             )}
                           </td>

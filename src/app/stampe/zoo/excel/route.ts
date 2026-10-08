@@ -5,7 +5,7 @@ import { canAccessArea, resolveScope } from "@/lib/stampe";
 import { getDb } from "@/lib/db";
 import {
   getZooDb, activeCampaign, pvPriceFor, volantinoExportRows, offerteExportRows, noPrintSets,
-  campagnaInLavorazione, datiPrezzoOfferta, animaliDi, caratteristicheProdottoDi, migraVolantinoPages, marcaEffettiva, NO_VOLANTINO,
+  campagnaInLavorazione, datiPrezzoOfferta, animaliDi, caratteristicheProdottoDi, migraVolantinoPages, marcaEffettiva, NO_VOLANTINO, nomeDestinazione,
 } from "@/lib/zoo";
 
 export async function GET(req: NextRequest) {
@@ -106,7 +106,7 @@ export async function GET(req: NextRequest) {
           "PREZZO PROMO": dati.prezzo, "PREZZO DI PARTENZA": dati.listino, SCONTO: dati.sconto, "TIPO PROMO": dati.tipi.join(" · "),
           MECCANICA: o.meccanica ?? "", CONDIZIONI: o.condizioni ?? "", "PROMO SCRITTA": o.promoTesto ?? "",
           "A VOLANTINO": aVolantino ? "sì" : o.paginaId === NO_VOLANTINO ? "no" : "",
-          PAGINA: o.paginaId && o.paginaId !== NO_VOLANTINO ? (nomePagina.get(o.paginaId) ?? "") : "",
+          PAGINA: o.paginaId && o.paginaId !== NO_VOLANTINO ? nomeDestinazione(o.paginaId, nomePagina) : "",
           FOCUS: o.focus ?? "", ETICHETTA: o.label ?? "", FOTO: p?.image ?? parent?.image ?? "",
         };
       });

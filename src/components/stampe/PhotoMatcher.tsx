@@ -27,6 +27,7 @@ export default function PhotoMatcher({
   onIgnora?: (files: string[]) => Promise<{ ok: boolean; error?: string }>;
 }) {
   const [nascoste, setNascoste] = useState<Set<string>>(new Set());
+  const [ingrandita, setIngrandita] = useState<string | null>(null);
   const foto = fotoIniziali.filter((f) => !nascoste.has(f.file));
   const ignora = async (file: string) => {
     if (!onIgnora) return;
@@ -92,6 +93,13 @@ export default function PhotoMatcher({
 
   return (
     <div>
+      {ingrandita && (
+        <div onClick={() => setIngrandita(null)} title="Clic per chiudere"
+          style={{ position: "fixed", inset: 0, zIndex: 100, background: "rgba(0,0,0,.75)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "zoom-out" }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={ingrandita} alt="" style={{ maxWidth: "92vw", maxHeight: "92vh", background: "#fff", borderRadius: 10, padding: 8 }} />
+        </div>
+      )}
       <div className="table-wrap">
         <table className="data">
           <thead>
@@ -105,7 +113,9 @@ export default function PhotoMatcher({
                 <tr key={f.file}>
                   <td>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img loading="lazy" decoding="async" src={f.url} alt="" style={{ width: 44, height: 44, objectFit: "contain", background: "#fff", borderRadius: 6, border: "1px solid #eee" }} />
+                    <img loading="lazy" decoding="async" src={f.url} alt="" title="Clic per ingrandire"
+                      style={{ width: 44, height: 44, objectFit: "contain", background: "#fff", borderRadius: 6, border: "1px solid #eee", cursor: "zoom-in" }}
+                      onClick={() => setIngrandita(f.url)} />
                   </td>
                   <td style={{ fontSize: 12 }}>{f.file}</td>
                   <td>

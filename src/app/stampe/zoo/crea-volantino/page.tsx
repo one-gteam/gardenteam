@@ -7,7 +7,7 @@ import { getDb } from "@/lib/db";
 import {
   getZooDb, campagnaInLavorazione, zooImageUrl, migraVolantinoPages, effectiveParentText, datiPrezzoOfferta,
   chiavePrezzo, padreDaChiave, prezzoMinimo, pvPriceFor,
-  unioneDi,
+  unioneDi, animaliDi, caratteristicheProdottoDi,
 } from "@/lib/zoo";
 import { saveVolantinoEditors } from "@/lib/zoo-actions";
 import AvvisaColleghi from "@/components/stampe/AvvisaColleghi";
@@ -116,6 +116,8 @@ export default async function CreaVolantinoPage({
               fornitore: product?.fornitore ?? "",
               caratts: parent?.caratteristiche ?? [],
               label: primo.label,
+              animale: animaliDi(db, parent?.caratteristiche ?? [])[0],
+              caratt: caratteristicheProdottoDi(db, parent?.caratteristiche ?? [])[0],
               padre: unione?.titolo || (parent ? effectiveParentText(db, scope, parent, "nome", academyDb).value : undefined),
               padreId: parent?.id,
               articoli,
@@ -192,6 +194,7 @@ export default async function CreaVolantinoPage({
             animali={ANIMALI}
             caratts={carattsProdotto}
             labels={db.settings.labels}
+            focusDisponibili={[...new Set(offers.map((o) => (o.focus ?? "").trim()).filter(Boolean))].sort()}
             marche={[...new Set(offers.map((o) => o.marca).filter(Boolean))].sort()}
             fornitori={[...new Set(offers.map((o) => o.fornitore).filter(Boolean))].sort()}
           />
