@@ -170,6 +170,25 @@ export interface ZooFocusDef {
   colore?: string;
 }
 
+/**
+ * Le voci (una per padre, o l'offerta senza padre) che non hanno nessuna foto:
+ * né il padre né alcuno dei suoi articoli in offerta. È la regola unica usata
+ * da «A che punto siamo» e dalla Dashboard.
+ */
+export function vociSenzaFoto<T extends ZooOffer>(db: ZooDB, offerte: T[]): T[] {
+  const prodById = new Map(db.products.map((p) => [p.id, p]));
+  const parentById = new Map(db.parents.map((p) => [p.id, p]));
+  const gruppi = new Map<string, T[]>();
+  for (const o of offerte) { const k = prodById.get(o.productId ?? "")?.parentId ?? o.id; gruppi.set(k, [...(gruppi.get(k) ?? []), o]); }
+  const fuori: T[] = [];
+  for (const [k, g] of gruppi) {
+    if (parentById.get(k)?.image) continue;
+    if (g.some((o) => prodById.get(o.productId ?? "")?.image)) continue;
+    fuori.push(g[0]);
+  }
+  return fuori;
+}
+
 /** I focus di un volantino: quelli con la scheda più quelli scritti solo sulle offerte. */
 export function focusDelVolantino(db: ZooDB, campaignId: string): ZooFocusDef[] {
   const defs = db.focusDef.filter((f) => f.campaignId === campaignId);
@@ -2126,11 +2145,7 @@ export function passiVolantino(db: ZooDB, campaign: ZooCampaign): PassoVolantino
   const daAssegnare = offerte.filter((o) => !o.paginaId).length;
   const prodById = new Map(db.products.map((p) => [p.id, p]));
   const parentById = new Map(db.parents.map((p) => [p.id, p]));
-  const senzaFoto = new Set(scelte.filter((o) => {
-    const p = prodById.get(o.productId ?? "");
-    const parent = p?.parentId ? parentById.get(p.parentId) : undefined;
-    return !(parent?.image || p?.image);
-  }).map((o) => prodById.get(o.productId ?? "")?.parentId ?? o.id)).size;
+  const senzaFoto = vociSenzaFoto(db, scelte).length;
   const senzaFocus = new Set(scelte.filter((o) => !(o.focus ?? "").trim()).map((o) => prodById.get(o.productId ?? "")?.parentId ?? o.id)).size;
   const layout = db.volantinoLayouts.find((l) => l.campaignId === campaign.id);
   const pagine = layout ? migraVolantinoPages(layout.pages) : [];

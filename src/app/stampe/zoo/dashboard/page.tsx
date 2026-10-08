@@ -8,8 +8,8 @@ import { canAccessArea, isZooEditor } from "@/lib/stampe";
 import { gestisce } from "@/lib/types";
 import { listStorageFilesConData } from "@/lib/supabase";
 import {
-  getZooDb, campagnaInLavorazione, campagnaInCorso, passiVolantino, animaliDi, prezziDelPadre, zooImageUrl,
-  fotoDaAbbinare, volantinoDiFoto, focusDelVolantino, migraVolantinoPages, NO_VOLANTINO, destinazioneAnimale,
+  getZooDb, campagnaInLavorazione, campagnaInCorso, passiVolantino, animaliDi, prezziDelPadre,
+  fotoDaAbbinare, volantinoDiFoto, focusDelVolantino, migraVolantinoPages, NO_VOLANTINO, destinazioneAnimale, vociSenzaFoto,
 } from "@/lib/zoo";
 import { incontriDelVolantino, correggiIncontro } from "@/lib/zoo-incontri";
 
@@ -44,7 +44,7 @@ export default async function ZooDashboardPage() {
   const parentById = new Map(db.parents.map((p) => [p.id, p]));
   const offerte = db.offers.filter((o) => o.campaignId === campaign.id && !o.scopeType);
   const parentOf = (o: (typeof offerte)[number]) => { const p = prodById.get(o.productId ?? ""); return p?.parentId ? parentById.get(p.parentId) : undefined; };
-  const aVolantino = offerte.filter((o) => o.paginaId && o.paginaId !== NO_VOLANTINO);
+  const aVolantino = offerte.filter((o) => o.selezionata && o.paginaId !== NO_VOLANTINO);
   /** Una voce per padre (o per offerta senza padre), come si ragiona sul volantino. */
   const voci = <T extends { productId?: string; id: string }>(lista: T[]) => {
     const m = new Map<string, T>();
@@ -66,7 +66,7 @@ export default async function ZooDashboardPage() {
   const senzaAnimale = padriInOfferta.filter((p) => animaliDi(db, p.caratteristiche).length === 0);
   const senzaPadre = offerte.filter((o) => !parentOf(o));
   const piuPrezzi = padriInOfferta.filter((p) => prezziDelPadre(db, p.id, campaign.id).length > 1);
-  const senzaFoto = voci(aVolantino).filter((o) => zooImageUrl(prodById.get(o.productId ?? ""), parentOf(o)) === "/immagini/mancante.jpg");
+  const senzaFoto = vociSenzaFoto(db, aVolantino);
   const senzaFocus = voci(aVolantino).filter((o) => !(o.focus ?? "").trim());
   const senzaPrezzo = offerte.filter((o) => !o.prezzoPromo && !o.meccanica && !o.scontoPerc);
   const caricate = new Map(foto.map((f) => [f.nome, f.caricato]));
