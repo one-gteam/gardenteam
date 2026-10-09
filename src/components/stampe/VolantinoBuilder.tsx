@@ -773,7 +773,7 @@ export default function VolantinoBuilder({
   return (
     <div className="vol-layout" style={{ ["--vol-sx" as string]: `${larghezzaSx}px` }}>
       {/* ---------- colonna sinistra: filtro + offerte disponibili ---------- */}
-      <aside className="vol-filtro no-print" onDragOver={(e) => e.preventDefault()} onDrop={dropSuElenco} style={{ position: "relative" }}>
+      <aside className="vol-filtro no-print" onDragOver={(e) => e.preventDefault()} onDrop={dropSuElenco}>
         <span className="vol-maniglia" title="Trascina per allargare o stringere l'elenco"
           onPointerDown={(e) => {
             e.preventDefault();
