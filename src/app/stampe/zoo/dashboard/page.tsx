@@ -11,7 +11,7 @@ import {
   getZooDb, campagnaInLavorazione, campagnaInCorso, passiVolantino, animaliDi,
   fotoDaAbbinare, volantinoDiFoto, focusDelVolantino, migraVolantinoPages, NO_VOLANTINO, destinazioneAnimale, vociSenzaFoto,
 } from "@/lib/zoo";
-import { incontriDelVolantino, correggiIncontro, incontriProgrammati, eliminaProgrammato } from "@/lib/zoo-incontri";
+import { incontriDelVolantino, correggiIncontro, incontriProgrammati, eliminaProgrammato, spostaProgrammato } from "@/lib/zoo-incontri";
 
 /** Le squadre che si incontrano sul volantino: di solito persone diverse. */
 const SQUADRE = ["Zoo", "Comunicazione"];
@@ -98,6 +98,12 @@ export default async function ZooDashboardPage() {
   for (const i of incontri) for (const p of i.partecipanti) ore.set(p, (ore.get(p) ?? 0) + minuti(i));
 
   const gInizio = giorniA(campaign.dal), gFine = giorniA(campaign.al);
+  /** ISO → valore di un campo datetime-local, in ora italiana. */
+  const perCampo = (iso: string) => {
+    const x = Object.fromEntries(new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Rome", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+      .formatToParts(new Date(iso)).map((q) => [q.type, q.value]));
+    return `${x.year}-${x.month}-${x.day}T${x.hour}:${x.minute}`;
+  };
 
   /* le cose da sistemare: una riga per voce, solo quelle che hanno qualcosa; si aprono per vedere i nomi */
   const daFare = [
@@ -175,8 +181,29 @@ export default async function ZooDashboardPage() {
                 <li key={p.id}>
                   <strong>{p.squadra}</strong> · {oraIt(p.quando)} · {p.durataMin} min
                   {editor && <> <PulsanteAzione azione={eliminaProgrammato.bind(null, p.id)} className="mini-btn" conferma="Togliere questo incontro? Chi ha ricevuto la mail non viene avvisato.">togli</PulsanteAzione></>}
-                  <div className="hint" style={{ fontSize: 11.5 }}>{p.partecipanti.map((id) => nomeUtente.get(id) ?? "?").join(", ")}{p.mailInviateIl ? " · mail mandata" : ""}</div>
+                  <div className="hint" style={{ fontSize: 11.5 }}>
+                    {p.partecipanti.map((id) => nomeUtente.get(id) ?? "?").join(", ")}{p.mailInviateIl ? " · mail mandata" : ""}
+                    {p.quandoPrima && <> · spostato (era {oraIt(p.quandoPrima)}){p.mailVariazioneIl ? ", variazione mandata" : ""}</>}
+                  </div>
                   {p.testo && <div style={{ fontSize: 12, whiteSpace: "pre-line" }}>{p.testo}</div>}
+                  {editor && (
+                    <details className="dash-sposta">
+                      <summary className="mini-btn">sposta</summary>
+                      <ModuloInvio azione={spostaProgrammato.bind(null, p.id)} svuota={false} style={{ display: "grid", gap: 6, marginTop: 6 }}>
+                        <span style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                          <label className="field" style={{ marginBottom: 0 }}>Nuova data e ora<input type="datetime-local" name="quando" defaultValue={perCampo(p.quando)} required /></label>
+                          <label className="field" style={{ marginBottom: 0 }}>Durata
+                            <select name="durata" defaultValue={String(p.durataMin)}>
+                              {[...new Set([30, 45, 60, 90, 120, p.durataMin])].sort((a, b) => a - b).map((m) => <option key={m} value={m}>{m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60}` : ""}`}</option>)}
+                            </select>
+                          </label>
+                        </span>
+                        <label className="field" style={{ marginBottom: 0 }}>Nota per i partecipanti (facoltativa)<textarea name="nota" rows={2} placeholder="es. spostato per la consegna merce" /></label>
+                        <label style={{ fontSize: 12.5, display: "flex", gap: 5, alignItems: "center" }}><input type="checkbox" name="invia" value="1" defaultChecked /> manda la mail di variazione ai partecipanti</label>
+                        <button className="btn btn-sm" type="submit" style={{ justifySelf: "start" }}>Sposta l&apos;incontro</button>
+                      </ModuloInvio>
+                    </details>
+                  )}
                 </li>
               ))}
             </ul>

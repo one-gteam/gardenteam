@@ -1375,3 +1375,13 @@ input:checked + .fb-colore { box-shadow: 0 0 0 2px var(--green-700); }
 .nuovo-ruoli { display: grid; gap: 4px; }
 .nuovo-ruolo-altro { display: flex; gap: 4px; align-items: center; }
 .nuovo-ruolo-altro select { flex: 1; }
+
+/* «A che punto siamo»: il dettaglio del passo cliccato */
+.avanzamento-passi li.aperto { box-shadow: 0 0 0 2px var(--green-500); }
+.avanzamento-dettaglio { border-top: 1px solid var(--line); margin-top: 8px; padding-top: 8px; }
+.avanzamento-dettaglio ul { margin: 6px 0 0; padding-left: 18px; font-size: 12.5px; columns: 2 320px; column-gap: 24px; max-height: 420px; overflow-y: auto; }
+.avanzamento-dettaglio li { break-inside: avoid; margin: 1px 0; }
+.dash-sposta { display: inline-block; margin-left: 6px; }
+.dash-sposta > summary { list-style: none; display: inline-block; cursor: pointer; }
+.dash-sposta > summary::-webkit-details-marker { display: none; }
+.dash-sposta[open] { display: block; margin: 6px 0 0; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: #fafbf9; }

@@ -25,6 +25,14 @@ function marchioDi(user: User): Marchio {
 function renderText(s: string, user: User, vars: Record<string, string>): string {
   // {{piattaforma}} nei modelli: "Academy GT" o "GT One" a seconda delle aree della persona
   const all: Record<string, string> = { nome: user.firstName, cognome: user.lastName, piattaforma: nomeMarchio(marchioDi(user)), ...vars };
+  /*
+   * Un elenco su più righe dentro una frase («…questa formazione: {{elenco}}.»,
+   * come nei modelli salvati prima) faceva partire il primo punto attaccato
+   * alla frase e lasciava un punto da solo in fondo: lo si stacca con una riga vuota.
+   */
+  if ((all.elenco ?? "").includes("\n")) {
+    s = s.replace(/[ \t]*\{\{elenco\}\}\.?[ \t]*/g, "\n\n{{elenco}}\n\n").replace(/\n{3,}/g, "\n\n").trim();
+  }
   return s
     .replace(/\{\{(\w+)\}\}/g, (_, k: string) => all[k] ?? "")
     .replace(/\[([^\[\]|]+)\|([^\[\]|]+)\]/g, (_, m: string, f: string) => (user.gender === "f" ? f : m));
@@ -122,6 +130,14 @@ async function queueEmail(db: DB, user: User, type: EmailType, vars: Record<stri
  */
 async function notifyNewAssignments(db: DB, user: User): Promise<boolean> {
   if (!userSites(user).includes("academy")) return false; // non fa formazione: niente corsi né avvisi
+  /*
+   * Le assegnazioni automatiche sono per chi fa la formazione (corsisti e capi
+   * reparto), come i promemoria di runReminders. Agli amministratori e ai
+   * gestori arrivava «Nuova formazione assegnata» con l'onboarding dei
+   * neoassunti appena si salvava la loro scheda o li si creava. Non si segnano
+   * come avvisati: se un giorno diventano corsisti, la mail parte allora.
+   */
+  if (user.role !== "student" && user.role !== "dept_head") return false;
   const newCourses = coursesForUser(db, user).filter(
     (c) => c.mandatory && !(user.notifiedCourseIds ?? []).includes(c.id)
   );
@@ -131,7 +147,8 @@ async function notifyNewAssignments(db: DB, user: User): Promise<boolean> {
   // uno per riga: in un elenco di cinque corsi la riga unica separata da virgole era illeggibile
   const elenco = [
     ...newCourses.map((c) => `• ${c.title}`),
-    ...newPaths.map((p) => `• Percorso ${p.title}`),
+    // «Percorso Percorso Reparto Verde»: il titolo spesso comincia già con «Percorso»
+    ...newPaths.map((p) => (/^percorso\b/i.test(p.title.trim()) ? `• ${p.title}` : `• Percorso ${p.title}`)),
   ].join("\n");
   await queueEmail(db, user, "assegnazione", { corso: newCourses[0]?.title ?? newPaths[0]?.title ?? "", elenco });
   user.notifiedCourseIds = [...(user.notifiedCourseIds ?? []), ...newCourses.map((c) => c.id)];

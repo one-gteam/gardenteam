@@ -44,6 +44,10 @@ export interface IncontroProgrammato {
   testo?: string;
   creatoDa: string;
   mailInviateIl?: string;
+  /** Spostato: quando era prima, quando lo si è spostato, se è partita la mail di variazione. */
+  quandoPrima?: string;
+  variatoIl?: string;
+  mailVariazioneIl?: string;
 }
 interface DbIncontri { incontri: Incontro[]; programmati?: IncontroProgrammato[]; squadre?: Record<string, string[]> }
 
@@ -216,6 +220,63 @@ export async function programmaIncontro(campaignId: string, fd: FormData): Promi
   await writeDomain("zoo_incontri", db);
   revalidatePath("/stampe/zoo/dashboard");
   return { ok: true, error: esito };
+}
+
+/**
+ * Sposta un incontro fissato (data, ora, durata) e, se richiesto, manda a ogni
+ * partecipante una mail di variazione con la data vecchia e quella nuova.
+ */
+export async function spostaProgrammato(id: string, fd: FormData): Promise<{ ok: boolean; error?: string }> {
+  const user = await requireUser();
+  if (!isZooEditor(user)) return { ok: false, error: "Solo chi cura lo Zoo per il Consorzio." };
+  const quando = String(fd.get("quando") ?? "");
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(quando)) return { ok: false, error: "Scegli la nuova data e ora." };
+  const durataMin = Math.max(15, Math.min(480, Number(fd.get("durata")) || 60));
+  const nota = String(fd.get("nota") ?? "").trim().slice(0, 1000);
+  const db = await readDomain<DbIncontri>("zoo_incontri", vuoto);
+  const p = (db.programmati ?? []).find((x) => x.id === id);
+  if (!p) return { ok: false, error: "Incontro non trovato: ricarica la pagina." };
+  const nuovo = romaInIso(quando);
+  if (nuovo === p.quando && durataMin === p.durataMin) return { ok: false, error: "Data, ora e durata sono le stesse di prima." };
+  const prima = p.quando;
+  p.quandoPrima = prima;
+  p.quando = nuovo;
+  p.durataMin = durataMin;
+  p.variatoIl = new Date().toISOString();
+
+  if (fd.get("invia") === "1") {
+    const [academy, zoo] = await Promise.all([getDb(), getZooDb()]);
+    const volantino = zoo.campaigns.find((c) => c.id === p.campaignId)?.nome ?? "volantino Zoo";
+    const testoData = (iso: string) => new Date(iso).toLocaleString("it-IT", { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" });
+    const sito = (process.env.SITE_URL || "https://gardenteam.vercel.app").replace(/\/$/, "");
+    let inviate = 0;
+    for (const pid of p.partecipanti) {
+      const u = academy.users.find((x) => x.id === pid);
+      if (!u?.email) continue;
+      const corpo = [
+        `Ciao ${u.firstName},`,
+        "",
+        `l'incontro della squadra ${p.squadra} per «${volantino}» è stato spostato.`,
+        "",
+        `Prima: ${testoData(prima)}`,
+        `Ora: ${testoData(nuovo)}, durata ${durataMin} minuti.`,
+        nota ? `\n${nota}\n` : "",
+        p.testo ? `${p.testo}\n` : "",
+        `Per lavorare sul volantino: ${sito}/stampe/zoo/crea-volantino`,
+        "",
+        `${user.firstName} ${user.lastName}`,
+      ].join("\n");
+      const r = await sendMail(u.email, `Variazione: incontro ${p.squadra} · ${volantino} · ${testoData(nuovo)}`, corpo, { marchio: "gtone" }).catch(() => ({ sent: false as const }));
+      if (r.sent === true) inviate++;
+    }
+    if (inviate > 0) p.mailVariazioneIl = new Date().toISOString();
+    await writeDomain("zoo_incontri", db);
+    revalidatePath("/stampe/zoo/dashboard");
+    return inviate > 0 ? { ok: true } : { ok: false, error: "Spostato, ma nessuna mail è partita (invio non configurato o indirizzi mancanti)." };
+  }
+  await writeDomain("zoo_incontri", db);
+  revalidatePath("/stampe/zoo/dashboard");
+  return { ok: true };
 }
 
 export async function eliminaProgrammato(id: string): Promise<{ ok: boolean; error?: string }> {

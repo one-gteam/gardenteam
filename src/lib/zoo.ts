@@ -152,6 +152,10 @@ export interface PassoVolantino {
   /** Il primo passo non fatto: quello su cui lavorare. */
   prossimo?: boolean;
   segnato?: { da: string; il: string };
+  /** Il dettaglio che si apre cliccando il passo: cosa manca, una voce per riga. */
+  voci?: string[];
+  /** Dove si sistema. */
+  link?: { href: string; testo: string };
 }
 
 /**
@@ -2153,7 +2157,35 @@ export function passiVolantino(db: ZooDB, campaign: ZooCampaign): PassoVolantino
   const senzaFocus = new Set(scelte.filter((o) => !(o.focus ?? "").trim()).map((o) => prodById.get(o.productId ?? "")?.parentId ?? o.id)).size;
   const layout = db.volantinoLayouts.find((l) => l.campaignId === campaign.id);
   const pagine = layout ? migraVolantinoPages(layout.pages) : [];
-  const collocate = new Set(pagine.flatMap((p) => p.blocks.flatMap((b) => b.offerIds ?? []))).size;
+  const collocateIds = new Set(pagine.flatMap((p) => p.blocks.flatMap((b) => b.offerIds ?? [])));
+  const collocate = collocateIds.size;
+  // il dettaglio dei passi: una voce per padre (o per offerta senza padre), come si ragiona sul volantino
+  const nomeVoce = (o: ZooOffer) => parentById.get(prodById.get(o.productId ?? "")?.parentId ?? "")?.nome ?? o.descrizione;
+  const perVoce = (lista: ZooOffer[]) => {
+    const m = new Map<string, ZooOffer>();
+    for (const o of lista) { const k = prodById.get(o.productId ?? "")?.parentId ?? o.id; if (!m.has(k)) m.set(k, o); }
+    return [...m.values()];
+  };
+  const elenco = (lista: ZooOffer[], riga: (o: ZooOffer) => string = nomeVoce) =>
+    perVoce(lista).map(riga).sort((a, b) => a.localeCompare(b, "it"));
+  const nomePagina = new Map(pagine.map((p, i) => [p.id, p.titolo?.trim() || `Pagina ${i + 1}`]));
+  const perDestinazione = new Map<string, number>();
+  for (const o of perVoce(scelte)) { const d = nomeDestinazione(o.paginaId, nomePagina) || "senza destinazione"; perDestinazione.set(d, (perDestinazione.get(d) ?? 0) + 1); }
+  const perFornitore = new Map<string, number>();
+  for (const o of offerte) { const f = String((o as { fornitore?: string }).fornitore ?? "").trim() || "fornitore non indicato"; perFornitore.set(f, (perFornitore.get(f) ?? 0) + 1); }
+  const testo = (o: ZooOffer) => {
+    const par = parentById.get(prodById.get(o.productId ?? "")?.parentId ?? "");
+    const d = (par?.descVolantino || o.descrizione || "").trim();
+    return `${nomeVoce(o)}${d && d !== nomeVoce(o) ? ` — ${d.length > 140 ? `${d.slice(0, 140)}…` : d}` : ""}`;
+  };
+  const dettagli: Record<PassoVolantinoId, { voci: string[]; link: { href: string; testo: string } }> = {
+    offerte: { voci: [...perFornitore].sort((a, b) => b[1] - a[1]).map(([f, n]) => `${f}: ${n}`), link: { href: "/stampe/zoo/prodotti", testo: "Prodotti" } },
+    scelta: { voci: [...perDestinazione].sort((a, b) => b[1] - a[1]).map(([d, n]) => `${d}: ${n} ${n === 1 ? "voce" : "voci"}`), link: { href: "/stampe/zoo/volantino", testo: "Scelta offerte" } },
+    foto: { voci: elenco(vociSenzaFoto(db, scelte)), link: { href: `/stampe/zoo/foto?campagna=${campaign.id}`, testo: "Raccolta foto" } },
+    testi: { voci: elenco(scelte, testo), link: { href: "/stampe/zoo/bozza", testo: "Bozza volantino" } },
+    focus: { voci: elenco(scelte.filter((o) => !(o.focus ?? "").trim())), link: { href: "/stampe/zoo/focus", testo: "Focus" } },
+    impaginazione: { voci: elenco(scelte.filter((o) => !collocateIds.has(o.id))), link: { href: "/stampe/zoo/crea-volantino", testo: "Crea Volantino" } },
+  } as Record<PassoVolantinoId, { voci: string[]; link: { href: string; testo: string } }>;
   // "scelta" guarda solo quello che è a volantino: le offerte non scelte restano semplicemente senza pagina
   const auto: { id: PassoVolantinoId; nome: string; nomeFatto: string; dettaglio: string; fatto: boolean }[] = [
     { id: "offerte", nome: "Offerte", nomeFatto: "Offerte caricate", dettaglio: offerte.length ? `${offerte.length} offerte nel volantino` : "nessuna offerta: carica l'Excel", fatto: offerte.length > 0 },
@@ -2165,7 +2197,7 @@ export function passiVolantino(db: ZooDB, campaign: ZooCampaign): PassoVolantino
   ];
   const passi: PassoVolantino[] = auto.map((p) => {
     const mano = campaign.passi?.[p.id];
-    return { ...p, fatto: mano ? mano.fatto : p.fatto, segnato: mano ? { da: mano.da, il: mano.il } : undefined };
+    return { ...p, fatto: mano ? mano.fatto : p.fatto, segnato: mano ? { da: mano.da, il: mano.il } : undefined, voci: dettagli[p.id]?.voci, link: dettagli[p.id]?.link };
   });
   const primo = passi.find((p) => !p.fatto);
   if (primo) primo.prossimo = true;
