@@ -1385,3 +1385,12 @@ input:checked + .fb-colore { box-shadow: 0 0 0 2px var(--green-700); }
 .dash-sposta > summary { list-style: none; display: inline-block; cursor: pointer; }
 .dash-sposta > summary::-webkit-details-marker { display: none; }
 .dash-sposta[open] { display: block; margin: 6px 0 0; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: #fafbf9; }
+
+/* Crea Volantino: ricerca nell'elenco e inserimento fra due celle */
+.vol-cerca { display: grid; gap: 2px; margin: 4px 0 6px; }
+.vol-cerca input { margin-top: 0; width: 100%; }
+.vol-ins { position: absolute; top: 0; bottom: 0; left: 0; width: 14px; z-index: 4; pointer-events: none; border-radius: 4px; }
+.vol-ins.dx { left: auto; right: 0; }
+.vol-ins.on { pointer-events: auto; background: linear-gradient(90deg, rgba(47, 143, 78, .18), transparent); }
+.vol-ins.dx.on { background: linear-gradient(270deg, rgba(47, 143, 78, .18), transparent); }
+.vol-ins.on.sopra { background: var(--green-600, #2f8f4e); box-shadow: 0 0 0 2px rgba(47, 143, 78, .35); }

@@ -159,6 +159,11 @@ export default function VolantinoBuilder({
   useEffect(() => { if (larghezzaSx !== 320) try { localStorage.setItem("vol-larghezza-sx", String(larghezzaSx)); } catch { /* niente */ } }, [larghezzaSx]);
   const [f, setF] = useState({ animale: "", caratt: "", label: "", minVoti: "", minNon: "", marca: "", fornitore: "", pagina: "" });
   const [filtroChiuso, setFiltroChiuso] = useState(true);
+  /** Ricerca libera: nome del padre, descrizione, marca, fornitore, nome o EAN degli articoli. */
+  const [cerca, setCerca] = useState("");
+  const termini = cerca.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const testoRicerca = (o: OffLite) => [o.padre, o.descrizione, o.marca, o.fornitore, ...o.articoli.flatMap((a) => [a.descrizione, a.ean, a.marca])]
+    .filter(Boolean).join(" ").toLowerCase();
   const [mostraScartate, setMostraScartate] = useState(false);
   const [soloQuestaPagina, setSoloQuestaPagina] = useState(true);
   // le offerte senza pagina (non scelte in Scelta offerte Volantino) non si propongono, salvo richiesta
@@ -211,10 +216,17 @@ export default function VolantinoBuilder({
   const disponibili = useMemo(() => offers.filter((o) => {
     // le offerte marcate "no volantino" restano fuori, salvo richiesta esplicita
     if (o.paginaId === NO_VOLANTINO && !mostraScartate) return false;
+    if (termini.length) {
+      // l'EAN si cerca anche senza zeri iniziali e con o senza spazi
+      const t = testoRicerca(o);
+      const eans = o.articoli.map((a) => a.ean.replace(/^0+/, ""));
+      if (!termini.every((q) => t.includes(q) || (/^\d{4,}$/.test(q) && eans.some((e) => e.includes(q.replace(/^0+/, "")))))) return false;
+    }
     if (f.pagina) {
       // filtro per destinazione: una pagina precisa, un animale («Cane, da collocare»), senza pagina
       if (f.pagina === "_nessuna" ? Boolean(o.paginaId) : o.paginaId !== f.pagina) return false;
-    } else if (soloQuestaPagina) {
+    } else if (soloQuestaPagina && !termini.length) {
+      // cercando si guarda in tutte le pagine: chi cerca un prodotto per nome o EAN lo vuole trovare
       // solo le offerte destinate a queste pagine (pagina precisa o animale della pagina); quelle senza pagina solo se richieste
       if (o.paginaId && o.paginaId !== NO_VOLANTINO ? !destinazioneVisibile(o.paginaId) : !ancheSenzaPagina) return false;
     }
@@ -228,7 +240,7 @@ export default function VolantinoBuilder({
     return true;
   }).sort((a, b) => Number(inserite.has(a.id)) - Number(inserite.has(b.id))),
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  [offers, f, inserite, mostraScartate, soloQuestaPagina, ancheSenzaPagina, idPagineVisibili, pages]);
+  [offers, f, inserite, mostraScartate, soloQuestaPagina, ancheSenzaPagina, idPagineVisibili, pages, cerca]);
   const daCollocare = disponibili.filter((o) => !inserite.has(o.id)).length;
 
   /*
@@ -571,6 +583,55 @@ export default function VolantinoBuilder({
     setDrag(null);
   };
 
+  /*
+   * Rilascio sul bordo fra due celle: la riga prende una cella in più, lì in
+   * mezzo, con l'offerta dentro (le altre si stringono). Trascinando una cella
+   * della pagina, il suo contenuto si sposta lì e la cella di partenza si toglie
+   * (se non si può, perché la riga ha una cella alta o è l'unica, resta vuota).
+   */
+  const [sopraIns, setSopraIns] = useState<string | null>(null);
+  const inserisciInRiga = (pi: number, r: number, k: number) => {
+    const d = drag;
+    setDrag(null); setSopraIns(null);
+    if (!d) return;
+    const page = pages[pi];
+    if (righeBloccate(page).has(r)) return flash("Questa riga ha una cella alta (unita in verticale): separala prima.");
+    const n = colonneRiga(page, r);
+    let contenuto: Partial<VolBlock> = {};
+    let sorgente: VolBlock | undefined;
+    if (d.kind === "offer") contenuto = { offerIds: [d.id] };
+    else {
+      if (d.pi !== pi) return flash("Per ora si sposta solo all'interno della stessa pagina: usa copia e incolla fra pagine diverse.");
+      sorgente = page.blocks.find((x) => x.id === d.id);
+      if (!sorgente) return;
+      contenuto = contenutoDi(sorgente);
+    }
+    const siTogliSorgente = (pg: VolPage, x?: VolBlock) => !!x && x.rs === 1 && !righeBloccate(pg).has(x.r) && colonneRiga(pg, x.r) - x.cs >= 1;
+    const restaUguale = sorgente && sorgente.r === r && siTogliSorgente(page, sorgente);
+    if (!restaUguale && n >= 6) return flash("Al massimo 6 celle per riga: togline una o mettila in una cella libera.");
+    upd((ps) => {
+      const pg = ps[pi];
+      let kk = k;
+      if (sorgente) {
+        const x = pg.blocks.find((y) => y.id === sorgente!.id);
+        if (x && siTogliSorgente(pg, x)) {
+          const nS = colonneRiga(pg, x.r);
+          pg.blocks = pg.blocks.filter((y) => y.id !== x.id);
+          let c = 0;
+          for (const y of pg.blocks.filter((y) => y.r === x.r).sort((a, z) => a.c - z.c)) { y.c = c; c += y.cs; }
+          pg.colsRiga = { ...(pg.colsRiga ?? {}), [String(x.r)]: nS - x.cs };
+          if (x.r === r && x.c < kk) kk -= x.cs;
+        } else if (x) Object.assign(x, VUOTO);
+      }
+      const nR = colonneRiga(pg, r);
+      for (const y of pg.blocks) if (y.r === r && y.c >= kk) y.c += 1;
+      pg.blocks.push({ id: uid("vb"), r, c: kk, rs: 1, cs: 1, ...VUOTO, ...contenuto });
+      pg.colsRiga = { ...(pg.colsRiga ?? {}), [String(r)]: nR + 1 };
+      return ps;
+    });
+    setSel(null); setExtra([]);
+  };
+
   /** Trascinando una cella sull'elenco a sinistra, le offerte tornano disponibili. */
   const dropSuElenco = () => {
     if (drag?.kind === "block" && drag.pi !== undefined) {
@@ -636,6 +697,7 @@ export default function VolantinoBuilder({
         key={b.id}
         draggable={!isVuoto}
         onDragStart={(e) => { e.stopPropagation(); setDrag({ kind: "block", id: b.id, pi }); }}
+        onDragEnd={() => { setDrag(null); setSopraIns(null); }}
         onDragOver={(e) => e.preventDefault()}
         onDrop={() => drop(pi, b.id)}
         onClick={(e) => {
@@ -656,6 +718,19 @@ export default function VolantinoBuilder({
         }}
       >
         <span className="vol-rif no-print">{riferimento(pi, b)}</span>
+        {/* i bordi della cella: rilasciando qui l'offerta entra fra le due celle, in una cella nuova */}
+        {b.rs === 1 && !righeBloccate(pages[pi]).has(b.r) && [b.c, b.c + b.cs].map((k, j) => {
+          const ultima = b.c + b.cs === colonneRiga(pages[pi], b.r);
+          if (j === 1 && !ultima) return null; // il bordo destro conta solo in fondo alla riga
+          const chiave = `${pi}_${b.r}_${k}`;
+          return (
+            <span key={j} className={`vol-ins${j === 1 ? " dx" : ""}${drag ? " on" : ""}${sopraIns === chiave ? " sopra" : ""}`}
+              title="Rilascia qui per inserire l'offerta fra le due celle"
+              onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); if (sopraIns !== chiave) setSopraIns(chiave); }}
+              onDragLeave={() => setSopraIns((x) => (x === chiave ? null : x))}
+              onDrop={(e) => { e.preventDefault(); e.stopPropagation(); inserisciInRiga(pi, b.r, k); }} />
+          );
+        })}
         {b.label && <span className="vol-label">{b.label}</span>}
         {offs.length > 0 && (
           <div style={{ display: "grid", gap: 2, gridTemplateColumns: offs.length > 1 ? "1fr 1fr" : "1fr", textAlign: "center" }}>
@@ -776,6 +851,11 @@ export default function VolantinoBuilder({
               {filtroChiuso ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
             </button>
           </div>
+          <div className="vol-cerca">
+            <input type="search" value={cerca} onChange={(e) => setCerca(e.target.value)}
+              placeholder="cerca nome, marca o EAN…" aria-label="Cerca un prodotto per nome o EAN" />
+            {termini.length > 0 && <span className="hint" style={{ fontSize: 10.5 }}>la ricerca guarda tutte le pagine</span>}
+          </div>
           {!filtroChiuso && (
             <div className="vol-filtro-body">
               <label className="field">Tipologia di animale
@@ -880,7 +960,7 @@ export default function VolantinoBuilder({
           {disponibili.map((o) => {
             const usata = inserite.has(o.id);
             return (
-            <div key={o.id} className="vol-off" draggable onDragStart={() => setDrag({ kind: "offer", id: o.id })}
+            <div key={o.id} className="vol-off" draggable onDragStart={() => setDrag({ kind: "offer", id: o.id })} onDragEnd={() => { setDrag(null); setSopraIns(null); }}
               style={usata ? { opacity: 0.45 } : undefined}>
               <div className="vol-off-corpo">
                 <input type="checkbox" title="Spunta due o più voci per unirle nel volantino («a partire da»)"
