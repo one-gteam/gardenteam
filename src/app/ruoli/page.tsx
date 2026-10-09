@@ -48,7 +48,7 @@ export default async function RuoliPage({
       // i ruoli in più (stessa collocazione), con le loro aree
       extra: (u.ruoliExtra ?? []).map((p) => {
         const come = { ...u, role: p.role, sites: p.sites ?? [], manages: p.manages };
-        return { id: p.id, etichetta: ruoloEsteso(come), aree: userSites(come), togliibile: assignableRolesFor(user).includes(p.role) };
+        return { id: p.id, ruolo: p.role, manages: p.manages ?? [], etichetta: ruoloEsteso(come), aree: userSites(come), togliibile: assignableRolesFor(user).includes(p.role) };
       }),
       gestioneUtenti: !!u.gestioneUtenti,
       amministratore: RUOLI_AMMINISTRATORE.includes(u.role),

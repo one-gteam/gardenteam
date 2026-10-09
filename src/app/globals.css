@@ -1369,3 +1369,9 @@ input:checked + .fb-colore { box-shadow: 0 0 0 2px var(--green-700); }
 .ruoli-extra-x { border: 0; background: transparent; cursor: pointer; padding: 0 0 0 2px; font-size: 13px; line-height: 1; color: inherit; opacity: .6; }
 .ruoli-extra-x:hover { opacity: 1; }
 .ruolo-extra-form { display: grid; gap: 6px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: #fafbf9; min-width: 240px; }
+
+.ruolo-extra-riga { display: inline-flex; flex-wrap: wrap; gap: 3px; align-items: center; }
+.ruoli-extra { flex-direction: column; align-items: flex-start; gap: 5px; }
+.nuovo-ruoli { display: grid; gap: 4px; }
+.nuovo-ruolo-altro { display: flex; gap: 4px; align-items: center; }
+.nuovo-ruolo-altro select { flex: 1; }

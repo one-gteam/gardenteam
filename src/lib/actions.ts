@@ -1452,6 +1452,40 @@ export async function aggiungiRuoloExtra(userId: string, role: Role, sites: Site
   return { ok: true as const };
 }
 
+/**
+ * Cambia un ruolo in più dalla tabella: il ruolo (dal menu a tendina) e, per
+ * il gestore, quali delle sue aree gestisce. Stesse regole dell'aggiunta.
+ */
+export async function aggiornaRuoloExtra(userId: string, profiloId: string, modifica: { role?: Role; manages?: SiteId[] }) {
+  const admin = await requireUser();
+  const db = await getDb();
+  const target = db.users.find((u) => u.id === userId);
+  if (!target) return { ok: false as const, error: "Utente non trovato" };
+  if (target.id === admin.id && admin.role !== "system_admin") return { ok: false as const, error: "I tuoi ruoli li cambia chi ti gestisce" };
+  if (!canTouchUser(db, admin, target)) return { ok: false as const, error: "Fuori dal tuo ambito" };
+  const p = (target.ruoliExtra ?? []).find((x) => x.id === profiloId);
+  if (!p) return { ok: false as const, error: "Ruolo non trovato: ricarica la pagina" };
+  const assegnabili = assignableRolesFor(admin);
+  if (!assegnabili.includes(p.role)) return { ok: false as const, error: "Questo ruolo lo cambia chi lo può assegnare" };
+  if (modifica.role && modifica.role !== p.role) {
+    if (!assegnabili.includes(modifica.role)) return { ok: false as const, error: "Ruolo non assegnabile dal tuo profilo" };
+    if (modifica.role === target.role || (target.ruoliExtra ?? []).some((x) => x.id !== p.id && x.role === modifica.role && modifica.role !== "manager")) {
+      return { ok: false as const, error: "Ha già questo ruolo" };
+    }
+    p.role = modifica.role;
+    if (p.role === "system_admin") p.sites = [];
+    else if (!(p.sites ?? []).length) p.sites = [...(target.sites ?? [])];
+    // diventato gestore: gestisce le sue aree, finché non si tolgono
+    p.manages = p.role === "manager" ? gestioniAssegnabili(admin, { ...target, manages: [] }, p.sites ?? []) : undefined;
+  }
+  if (modifica.manages && p.role === "manager") {
+    p.manages = gestioniAssegnabili(admin, { ...target, manages: p.manages ?? [] }, modifica.manages).filter((x) => (p.sites ?? []).includes(x));
+  }
+  await saveDb(db);
+  revalidatePath("/ruoli");
+  return { ok: true as const };
+}
+
 /** Toglie un ruolo in più: chi lo toglie deve poterlo assegnare. */
 export async function togliRuoloExtra(userId: string, profiloId: string) {
   const admin = await requireUser();
@@ -1578,6 +1612,20 @@ export async function creaUtente(formData: FormData) {
       ? { manages: (formData.getAll("manages") as SiteId[]).filter((x) => sites.includes(x) && (admin.role === "system_admin" || gestisce(admin, x))) }
       : {}),
   };
+  // i ruoli in più scelti nel modulo: stesse aree del principale; il gestore gestisce
+  // le aree spuntate in «Aree che gestisce», o se non ce ne sono tutte le sue aree
+  const gestibili = (aree: SiteId[]) => aree.filter((x) => admin.role === "system_admin" || gestisce(admin, x));
+  const spuntateGestite = (formData.getAll("manages") as SiteId[]).filter((x) => (newUser.sites ?? []).includes(x));
+  const altri = [...new Set((formData.getAll("ruoliExtra") as string[]).filter(Boolean) as Role[])]
+    .filter((r) => r !== role && assignableRolesFor(admin).includes(r));
+  if (altri.length) {
+    newUser.ruoliExtra = altri.map((r, i) => ({
+      id: `r${Date.now().toString(36)}${i}${randomBytes(2).toString("hex")}`,
+      role: r,
+      sites: r === "system_admin" ? [] : [...(newUser.sites ?? [])],
+      manages: r === "manager" ? gestibili(spuntateGestite.length ? spuntateGestite : newUser.sites ?? []) : undefined,
+    }));
+  }
   db.users.push(newUser);
   await queueEmail(db, newUser, "benvenuto");
   await notifyNewAssignments(db, newUser);

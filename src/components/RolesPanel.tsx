@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition, type MouseEvent, type ReactNode } from "react";
-import { aggiungiRuoloExtra, togliRuoloExtra, deleteUsers, quickSetGestioneUtenti, quickSetManages, quickSetRole, quickSetSites, quickToggleActive, setTenantUserDelegation } from "@/lib/actions";
+import { aggiungiRuoloExtra, aggiornaRuoloExtra, togliRuoloExtra, deleteUsers, quickSetGestioneUtenti, quickSetManages, quickSetRole, quickSetSites, quickToggleActive, setTenantUserDelegation } from "@/lib/actions";
 import { ROLE_LABELS, Role, SITE_LABELS_BREVI, SiteId } from "@/lib/types";
 
 const SITES: SiteId[] = ["academy", "arredo", "zoo", "piante"];
@@ -21,49 +21,7 @@ interface RowUser {
   gestioneUtenti: boolean; // incarico "gestisce utenti e ruoli"
   amministratore: boolean; // ruolo da amministratore: l'incarico non serve
   /** Ruoli in più della persona: all'ingresso sceglie con quale operare. */
-  extra: { id: string; etichetta: string; aree: SiteId[]; togliibile: boolean }[];
-}
-
-/** Il piccolo modulo «＋ ruolo»: ruolo, aree e, per il gestore, quali gestisce. */
-function AggiungiRuolo({ ruoli, onAggiungi, pending }: {
-  ruoli: Role[];
-  onAggiungi: (r: Role, aree: SiteId[], gestite: SiteId[]) => void;
-  pending: boolean;
-}) {
-  const [aperto, setAperto] = useState(false);
-  const [ruolo, setRuolo] = useState<Role>(ruoli.includes("manager") ? "manager" : ruoli[0]);
-  const [aree, setAree] = useState<SiteId[]>([]);
-  const [gestite, setGestite] = useState<SiteId[]>([]);
-  if (!aperto) {
-    return <button type="button" className="mini-btn" onClick={() => setAperto(true)} title="Un altro ruolo per la stessa persona: all'ingresso sceglie con quale lavorare">＋ ruolo</button>;
-  }
-  const alterna = (l: SiteId[], x: SiteId) => (l.includes(x) ? l.filter((y) => y !== x) : [...l, x]);
-  return (
-    <div className="ruolo-extra-form">
-      <select value={ruolo} onChange={(e) => setRuolo(e.target.value as Role)} style={{ marginTop: 0 }}>
-        {ruoli.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
-      </select>
-      {ruolo !== "system_admin" && (
-        <span style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-          {SITES.map((site) => (
-            <label key={site} style={{ fontSize: 12, display: "inline-flex", gap: 3, alignItems: "center" }}>
-              <input type="checkbox" checked={aree.includes(site)} onChange={() => { setAree(alterna(aree, site)); if (aree.includes(site)) setGestite(gestite.filter((g) => g !== site)); }} />
-              {SITE_LABELS_BREVI[site]}
-              {ruolo === "manager" && aree.includes(site) && (
-                <button type="button" className={`pill ${gestite.includes(site) ? "pill-green" : "pill-gray"}`}
-                  style={{ border: "none", fontSize: 10, padding: "0 6px", cursor: "pointer" }}
-                  onClick={() => setGestite(alterna(gestite, site))}>{gestite.includes(site) ? "gestisce" : "operativo"}</button>
-              )}
-            </label>
-          ))}
-        </span>
-      )}
-      <span style={{ display: "flex", gap: 6 }}>
-        <button type="button" className="btn btn-sm" disabled={pending} onClick={() => { onAggiungi(ruolo, aree, gestite); setAperto(false); setAree([]); setGestite([]); }}>Aggiungi</button>
-        <button type="button" className="btn btn-outline btn-sm" onClick={() => setAperto(false)}>Annulla</button>
-      </span>
-    </div>
-  );
+  extra: { id: string; ruolo: Role; manages: SiteId[]; etichetta: string; aree: SiteId[]; togliibile: boolean }[];
 }
 
 interface DelegaTenant {
@@ -184,23 +142,60 @@ export default function RolesPanel({
       {
         key: "ruoliExtra",
         label: "Altri ruoli",
-        cell: (u) => (
-          <span className="ruoli-extra">
-            {u.extra.map((x) => (
-              <span key={x.id} className="pill pill-blue" title={x.aree.length ? `Aree: ${x.aree.map((a) => SITE_LABELS_BREVI[a]).join(", ")}` : "nessuna area"}>
-                {x.etichetta}
-                {u.editabile && x.togliibile && (
-                  <button type="button" className="ruoli-extra-x" title="Togli questo ruolo"
-                    onClick={() => window.confirm(`Togliere a ${u.nome} il ruolo «${x.etichetta}»?`) && run(() => togliRuoloExtra(u.id, x.id))}>×</button>
-                )}
-              </span>
-            ))}
-            {u.editabile && assignableRoles.length > 0 && (
-              <AggiungiRuolo ruoli={assignableRoles} pending={pending} onAggiungi={(r, a, g) => run(() => aggiungiRuoloExtra(u.id, r, a, g))} />
-            )}
-            {!u.editabile && u.extra.length === 0 && <span className="hint">—</span>}
-          </span>
-        ),
+        cell: (u) => {
+          const liberi = (attuale?: Role) => assignableRoles.filter((r) => r === attuale || (r !== u.ruolo && (r === "manager" || !u.extra.some((x) => x.ruolo === r))));
+          return (
+            <span className="ruoli-extra">
+              {u.extra.map((x) => (
+                <span key={x.id} className="ruolo-extra-riga">
+                  {u.editabile && x.togliibile ? (
+                    <select value={x.ruolo} style={{ marginTop: 0, minWidth: 170 }}
+                      onChange={(e) => { const r = e.target.value as Role; run(() => aggiornaRuoloExtra(u.id, x.id, { role: r })); }}>
+                      {liberi(x.ruolo).map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                    </select>
+                  ) : (
+                    <span className="pill pill-blue">{x.etichetta}</span>
+                  )}
+                  {u.editabile && x.togliibile && (
+                    <button type="button" className="ruoli-extra-x" title="Togli questo ruolo"
+                      onClick={() => window.confirm(`Togliere a ${u.nome} il ruolo «${x.etichetta}»?`) && run(() => togliRuoloExtra(u.id, x.id))}>×</button>
+                  )}
+                  {/* il gestore in più: quali delle sue aree gestisce */}
+                  {x.ruolo === "manager" && (
+                    <span style={{ display: "flex", flexWrap: "wrap", gap: 3, width: "100%" }}>
+                      {x.aree.map((site) => (
+                        <button key={site} type="button" disabled={!u.editabile || !x.togliibile || pending}
+                          className={`pill ${x.manages.includes(site) ? "pill-green" : "pill-gray"}`}
+                          style={{ border: "none", fontSize: 10, padding: "0 6px", cursor: u.editabile ? "pointer" : "default" }}
+                          title={x.manages.includes(site) ? "Gestisce quest'area con questo ruolo: clic per renderlo operativo" : "Operativo: clic per dargli la gestione"}
+                          onClick={() => {
+                            const next = x.manages.includes(site) ? x.manages.filter((m) => m !== site) : [...x.manages, site];
+                            run(() => aggiornaRuoloExtra(u.id, x.id, { manages: next }));
+                          }}>
+                          {SITE_LABELS_BREVI[site]} {x.manages.includes(site) ? "gestisce" : "operativo"}
+                        </button>
+                      ))}
+                    </span>
+                  )}
+                </span>
+              ))}
+              {u.editabile && liberi().length > 0 && (
+                <select value="" style={{ marginTop: 0, minWidth: 150 }} disabled={pending}
+                  title="Un altro ruolo per la stessa persona, con le stesse aree: quando entra sceglie con quale lavorare"
+                  onChange={(e) => {
+                    const r = e.target.value as Role;
+                    if (!r) return;
+                    // stesse aree del ruolo principale; il gestore le gestisce tutte, finché non si tolgono
+                    run(() => aggiungiRuoloExtra(u.id, r, u.sites, r === "manager" ? u.sites : []));
+                  }}>
+                  <option value="">＋ altro ruolo…</option>
+                  {liberi().map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                </select>
+              )}
+              {!u.editabile && u.extra.length === 0 && <span className="hint">—</span>}
+            </span>
+          );
+        },
       },
       {
         key: "aree",

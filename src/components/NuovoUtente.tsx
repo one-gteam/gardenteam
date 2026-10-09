@@ -28,6 +28,9 @@ export default function NuovoUtente({
   const [errore, setErrore] = useState("");
   const [fatto, setFatto] = useState("");
   const [ruolo, setRuolo] = useState<Role>("student");
+  /** I ruoli in più: un menu a tendina ciascuno, «＋ altro ruolo» ne aggiunge uno. */
+  const [altri, setAltri] = useState<Role[]>([]);
+  const liberi = (attuale?: Role) => ruoli.filter((r) => r === attuale || (r !== ruolo && !altri.includes(r)));
   const [pending, startTransition] = useTransition();
 
   const invia = (formData: FormData) =>
@@ -36,6 +39,7 @@ export default function NuovoUtente({
       setFatto("");
       const res = await creaUtente(formData);
       if (res.ok) {
+        setAltri([]);
         setFatto(`${formData.get("firstName")} ${formData.get("lastName")} è stato aggiunto: riceverà la mail di benvenuto e attiverà l'account da «Attiva utente».`);
         router.refresh();
       } else {
@@ -66,12 +70,26 @@ export default function NuovoUtente({
         <label className="field" style={{ marginBottom: 0 }}>Nome<input type="text" name="firstName" required /></label>
         <label className="field" style={{ marginBottom: 0 }}>Cognome<input type="text" name="lastName" required /></label>
         <label className="field" style={{ marginBottom: 0 }}>Email<input type="email" name="email" required placeholder="nome@insegna.it" /></label>
-        <label className="field" style={{ marginBottom: 0 }}>
-          Ruolo
-          <select name="role" value={ruolo} onChange={(e) => setRuolo(e.target.value as Role)}>
+        <div className="field nuovo-ruoli" style={{ marginBottom: 0 }}>
+          Ruolo{altri.length > 0 ? " principale" : ""}
+          <select name="role" value={ruolo} onChange={(e) => { const r = e.target.value as Role; setRuolo(r); setAltri(altri.filter((x) => x !== r)); }}>
             {ruoli.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
           </select>
-        </label>
+          {altri.map((a, i) => (
+            <span key={i} className="nuovo-ruolo-altro">
+              <select name="ruoliExtra" value={a} onChange={(e) => setAltri(altri.map((x, k) => (k === i ? (e.target.value as Role) : x)))}>
+                {liberi(a).map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+              </select>
+              <button type="button" className="ruoli-extra-x" title="Togli questo ruolo" onClick={() => setAltri(altri.filter((_, k) => k !== i))}>×</button>
+            </span>
+          ))}
+          {liberi().length > 0 && (
+            <button type="button" className="mini-btn" style={{ justifySelf: "start", marginTop: 4 }}
+              onClick={() => setAltri([...altri, liberi()[0]])}
+              title="Un altro ruolo per la stessa persona: quando entra sceglie con quale lavorare">＋ altro ruolo</button>
+          )}
+          {altri.length > 0 && <span className="hint">Quando entra sceglie con quale ruolo lavorare. Gli altri ruoli hanno le stesse aree.</span>}
+        </div>
         {mostraInsegna && (
           <label className="field" style={{ marginBottom: 0 }}>
             Insegna
@@ -119,7 +137,7 @@ export default function NuovoUtente({
               </label>
             ))}
           </div>
-          {ruolo === "manager" && (
+          {(ruolo === "manager" || altri.includes("manager")) && (
             <div style={{ marginTop: 8 }}>
               <strong style={{ fontSize: 12.5 }}>Aree che gestisce</strong>
               <span className="hint" style={{ marginLeft: 8 }}>le altre a cui accede le usa da operativo</span>
