@@ -73,7 +73,7 @@ export default async function StampeHeader({
             {tenant ? ` ${tenant.name}` : " Consorzio Garden Team"}
           </span>
           {/* il cambio di area sta qui in alto, non fra le voci del menu: lascia spazio alle pagine */}
-          {sites.length > 1 && <Link href="/scegli" className="cambia-area">⇄ Cambia area</Link>}
+          {(sites.length > 1 || (user.ruoliExtra?.length ?? 0) > 0) && <Link href="/scegli" className="cambia-area">{user.ruoliExtra?.length ? "⇄ Cambia ruolo o area" : "⇄ Cambia area"}</Link>}
           <div className="user-chip">
             <div className="avatar">
               {user.firstName[0]}

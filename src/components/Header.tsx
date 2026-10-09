@@ -52,7 +52,7 @@ export default async function Header({ user, active }: { user: User; active: str
             {store?.city ? ` · ${store.city}` : ""}
           </span>
           {/* il cambio di area sta qui in alto, come nelle altre aree: lascia spazio alle voci del menu */}
-          {userSites(user).length > 1 && <Link href="/scegli" className="cambia-area">⇄ Cambia area</Link>}
+          {(userSites(user).length > 1 || (user.ruoliExtra?.length ?? 0) > 0) && <Link href="/scegli" className="cambia-area">{user.ruoliExtra?.length ? "⇄ Cambia ruolo o area" : "⇄ Cambia area"}</Link>}
           <div className="user-chip">
             <div className="avatar">
               {user.firstName[0]}

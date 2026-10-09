@@ -2,10 +2,10 @@ import { redirect } from "next/navigation";
 import { GraduationCap, Armchair, PawPrint, Flower2, Users, HardDrive, ArrowRight, Newspaper } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
-import { userSites, postLoginPath, SITE_NAME, isAcademyAdmin } from "@/lib/types";
+import { userSites, postLoginPath, SITE_NAME, isAcademyAdmin, ruoloEsteso, RUOLO_PRINCIPALE, SITE_LABELS_BREVI } from "@/lib/types";
 import { canManageUsers } from "@/lib/logic";
 import { puoVedereArchivio } from "@/lib/storage-audit";
-import { logout } from "@/lib/actions";
+import { logout, scegliRuolo } from "@/lib/actions";
 import CambiaFotoArea from "@/components/CambiaFotoArea";
 import { getArticoliDb, vedeArticoli, articoliVisibili } from "@/lib/articoli";
 
@@ -15,6 +15,22 @@ export default async function ScegliPage() {
   if (!user) redirect("/login");
   const db = await getDb();
   const sites = userSites(user);
+
+  // più ruoli: prima si sceglie con quale operare, poi le aree di quel ruolo
+  const base = db.users.find((u) => u.id === user.id) ?? user;
+  const insegna = db.tenants.find((t) => t.id === base.tenantId)?.name;
+  const pv = db.stores.find((x) => x.id === base.storeId)?.name;
+  const dove = pv ?? insegna ?? "Consorzio";
+  const ruoli = (base.ruoliExtra?.length ?? 0) > 0
+    ? [
+        { id: RUOLO_PRINCIPALE, etichetta: ruoloEsteso(base), aree: userSites(base), attivo: user.ruoloScelto && !user.ruoloAttivo },
+        ...(base.ruoliExtra ?? []).map((p) => {
+          const come = { ...base, role: p.role, sites: p.sites ?? [], manages: p.manages };
+          return { id: p.id, etichetta: ruoloEsteso(come), aree: userSites(come), attivo: user.ruoloAttivo === p.id };
+        }),
+      ]
+    : [];
+  const daScegliere = ruoli.length > 0 && !user.ruoloScelto;
 
   // la Gestione Ruoli è un'area a sé: sistema e insegna sempre; PV solo se delegato
   const showRuoli = canManageUsers(db, user);
@@ -27,7 +43,7 @@ export default async function ScegliPage() {
   // con una sola area si entra dritti, ma non se la sua destinazione è questa pagina
   // (è il caso di "piante", ancora in preparazione): si finirebbe in un rimbalzo infinito
   const casa = postLoginPath(user);
-  if (sites.length === 1 && !showRuoli && !showArchivio && !showArticoli && casa !== "/scegli") redirect(casa);
+  if (!daScegliere && sites.length === 1 && !showRuoli && !showArchivio && !showArticoli && casa !== "/scegli") redirect(casa);
 
   // chi non gestisce la formazione entra dalla parte del corsista, non dal pannello
   const academyHome = isAcademyAdmin(user) ? "/admin" : "/studente";
@@ -35,7 +51,7 @@ export default async function ScegliPage() {
   const foto = (chiave: string, diSerie: string) => db.settings.fotoAree?.[chiave] || diSerie;
   const amministratore = user.role === "system_admin";
 
-  const aree = [
+  const aree = daScegliere ? [] : [
     ...(sites.includes("academy")
       ? [{
           chiave: "academy", href: academyHome, foto: foto("academy", "/immagini/aree/formazione.jpg"), icona: <GraduationCap size={18} />,
@@ -91,18 +107,36 @@ export default async function ScegliPage() {
           <span style={{ color: "var(--green-700)", fontWeight: 800, fontSize: 24 }}>{SITE_NAME}</span>
         </div>
         <p>
-          {aree.length > 0
-            ? `Ciao ${user.firstName}! Dove vuoi andare oggi?`
-            : `Ciao ${user.firstName}! Non hai ancora nessuna area abilitata.`}
+          {daScegliere
+            ? `Ciao ${user.firstName}! Con che ruolo lavori oggi?`
+            : aree.length > 0
+              ? `Ciao ${user.firstName}! Dove vuoi andare oggi?`
+              : `Ciao ${user.firstName}! Non hai ancora nessuna area abilitata.`}
         </p>
       </div>
       <div className="login-cards" style={{ maxWidth: 1180 }}>
+        {ruoli.length > 0 && (
+          <div className="card scelta-ruolo">
+            <strong>{daScegliere ? "Scegli il ruolo" : "Stai lavorando come"}</strong>
+            <span className="hint">{dove} · puoi cambiarlo quando vuoi da «Cambia ruolo o area», in alto in ogni pagina</span>
+            <div className="scelta-ruolo-opzioni">
+              {ruoli.map((r) => (
+                <form key={r.id} action={scegliRuolo.bind(null, r.id)}>
+                  <button type="submit" className={`scelta-ruolo-btn${r.attivo ? " attivo" : ""}`}>
+                    <span className="scelta-ruolo-nome">{r.attivo ? "✓ " : ""}{r.etichetta}</span>
+                    <span className="hint">{r.aree.length ? r.aree.map((a) => SITE_LABELS_BREVI[a]).join(" · ") : "nessuna area"}</span>
+                  </button>
+                </form>
+              ))}
+            </div>
+          </div>
+        )}
         {/*
           * Nessuna area assegnata: si dice cosa fare, invece di lasciare una
           * pagina vuota. Capita a chi è appena stato creato senza spuntare le
           * aree, che per sicurezza non entra da nessuna parte.
           */}
-        {aree.length === 0 && (
+        {aree.length === 0 && !daScegliere && (
           <div className="card" style={{ padding: 18 }}>
             <strong>Il tuo accesso non è ancora abilitato</strong>
             <p style={{ fontSize: 13.5, color: "var(--muted)", margin: "6px 0 0" }}>

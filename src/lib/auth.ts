@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from "crypto";
 import { getDb } from "./db";
-import { postLoginPath, SiteId, User, userSites } from "./types";
+import { conRuoloScelto, postLoginPath, SiteId, User, userSites } from "./types";
 
 const COOKIE = "agt_user";
 
@@ -178,7 +178,8 @@ export async function getCurrentUser(): Promise<User | null> {
   if (!id) return null;
   const user = db.users.find((u) => u.id === id) ?? null;
   if (user && user.active === false) return null; // cessato: sessione non più valida
-  return user;
+  // chi ha più ruoli opera con quello scelto all'ingresso (solo fra i suoi)
+  return user ? conRuoloScelto(user, store.get(RUOLO_COOKIE)?.value) : null;
 }
 
 export async function requireUser(): Promise<User> {
@@ -203,3 +204,8 @@ export async function requireAreaUser(site: SiteId): Promise<User> {
 }
 
 export const AUTH_COOKIE = COOKIE;
+/**
+ * Il ruolo scelto da chi ne ha più d'uno. Non serve firmarlo: vale solo se è
+ * uno dei ruoli della persona collegata, e i ruoli li assegna chi la gestisce.
+ */
+export const RUOLO_COOKIE = "agt_ruolo";

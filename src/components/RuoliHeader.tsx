@@ -39,7 +39,7 @@ export default async function RuoliHeader({ user, active }: { user: User; active
               <Users size={16} /> Utenti e ruoli
             </span>
           </Link>
-          <Link href="/scegli" className="cambia-area">⇄ Cambia area</Link>
+          <Link href="/scegli" className="cambia-area">{user.ruoliExtra?.length ? "⇄ Cambia ruolo o area" : "⇄ Cambia area"}</Link>
           <div className="user-chip">
             <div className="avatar">{user.firstName[0]}{user.lastName[0]}</div>
             <div>

@@ -34,7 +34,7 @@ export default async function ArticoliHeader({
               <Newspaper size={16} /> Articoli
             </span>
           </Link>
-          <Link href="/scegli" className="cambia-area">⇄ Cambia area</Link>
+          <Link href="/scegli" className="cambia-area">{user.ruoliExtra?.length ? "⇄ Cambia ruolo o area" : "⇄ Cambia area"}</Link>
           <div className="user-chip">
             <div className="avatar">{user.firstName[0]}{user.lastName[0]}</div>
             <div>

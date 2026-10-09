@@ -8,12 +8,12 @@ import { getDb, saveDb } from "./db";
 import { uploadPublicFile } from "./supabase";
 import { mailerConfig, sendMail, nomeMarchio, type Marchio } from "./mailer";
 import { verifySsoToken } from "./sso";
-import { AUTH_COOKIE, OPZIONI_SESSIONE, requireUser, valoreSessione, tokenReimposta, idDaTokenReimposta } from "./auth";
+import { AUTH_COOKIE, RUOLO_COOKIE, OPZIONI_SESSIONE, requireUser, valoreSessione, tokenReimposta, idDaTokenReimposta } from "./auth";
 import { attesaMinuti, azzera, ipChiamante, Regola, segnaErrore } from "./tentativi";
 import { assignableRolesFor, canManageUsers, delegatoUtenti, livelloGestioneUtenti, RUOLI_AMMINISTRATORE, coursesForUser, courseVisibleTo, dueDate, getProgress, hasStartedCourse, isCourseCompleted, pathsForUser } from "./logic";
 import {
   Course, CourseLevel, CourseSession, DB, DEFAULT_HOME_BLOCKS, DEFAULT_REMINDER_RULES, DEFAULT_WATCH_THRESHOLD,
-  EmailType, Lesson, LessonAttachment, LessonType, ReminderRule, ReminderStage, Role, SiteId, User, postLoginPath, userSites, gestisce, gestisceConsorzio, livelloDi, isAcademyAdmin, permessoRuolo, PermessoRuolo, PERMESSI_RUOLO, PERMESSI_PREDEFINITI, ROLE_LABELS, PERMESSI_AREA, DEFAULT_TEMPLATES } from "./types";
+  EmailType, Lesson, LessonAttachment, LessonType, ReminderRule, ReminderStage, Role, SiteId, User, postLoginPath, ruoliDi, RUOLO_PRINCIPALE, ruoloEsteso, userSites, gestisce, gestisceConsorzio, livelloDi, isAcademyAdmin, permessoRuolo, PermessoRuolo, PERMESSI_RUOLO, PERMESSI_PREDEFINITI, ROLE_LABELS, PERMESSI_AREA, DEFAULT_TEMPLATES } from "./types";
 
 /** Sostituisce variabili {{...}} e declina il genere: [maschile|femminile]. */
 /** Solo formazione → "Academy GT"; qualsiasi altra area → "GT One". */
@@ -277,6 +277,7 @@ export async function provisionSsoUser(
 export async function logout() {
   const store = await cookies();
   store.delete(AUTH_COOKIE);
+  store.delete(RUOLO_COOKIE);
   redirect("/login");
 }
 
@@ -1378,9 +1379,11 @@ function gestioniAssegnabili(admin: User, target: User, scelte: SiteId[]): SiteI
 function canTouchUser(db: DB, admin: User, target: User): boolean {
   const livello = livelloGestioneUtenti(db, admin);
   if (!livello) return false;
-  if (target.role === "system_admin" && admin.role !== "system_admin") return false;
+  // contano anche i ruoli in più: un amministratore resta tale anche se oggi opera da gestore
+  const ruoli = ruoliDi(target);
+  if (ruoli.includes("system_admin") && admin.role !== "system_admin") return false;
   // chi ha solo l'incarico non tocca gli amministratori (nemmeno per cessarli)
-  if (delegatoUtenti(admin) && RUOLI_AMMINISTRATORE.includes(target.role)) return false;
+  if (delegatoUtenti(admin) && ruoli.some((r) => RUOLI_AMMINISTRATORE.includes(r))) return false;
   if (livello === "consorzio") return true;
   if (livello === "insegna") return target.tenantId === admin.tenantId;
   return target.storeId === admin.storeId;
@@ -1416,6 +1419,71 @@ export async function quickSetRole(userId: string, role: Role) {
   await saveDb(db);
   revalidatePath("/admin/ruoli");
   return { ok: true as const };
+}
+
+/* ================== Più ruoli per la stessa persona ================== */
+
+/**
+ * Aggiunge un ruolo in più (con le sue aree) a una persona. Valgono le stesse
+ * regole del ruolo principale: solo nel proprio ambito, solo i ruoli che si
+ * possono assegnare, solo le aree che si hanno e le gestioni che si hanno.
+ * Nessuno, salvo l'amministratore di sistema, si aggiunge ruoli da solo.
+ */
+export async function aggiungiRuoloExtra(userId: string, role: Role, sites: SiteId[], manages: SiteId[]) {
+  const admin = await requireUser();
+  const db = await getDb();
+  const target = db.users.find((u) => u.id === userId);
+  if (!target) return { ok: false as const, error: "Utente non trovato" };
+  if (target.id === admin.id && admin.role !== "system_admin") return { ok: false as const, error: "I tuoi ruoli li cambia chi ti gestisce" };
+  if (!canTouchUser(db, admin, target)) return { ok: false as const, error: "Fuori dal tuo ambito" };
+  if (!assignableRolesFor(admin).includes(role)) return { ok: false as const, error: "Ruolo non assegnabile dal tuo profilo" };
+  const vuoto = { ...target, sites: [], manages: [] } as User;
+  const aree = role === "system_admin" ? [] : sitesAssegnabili(admin, vuoto, sites);
+  const gestite = role === "manager" ? gestioniAssegnabili(admin, vuoto, manages).filter((x) => aree.includes(x)) : undefined;
+  if (role !== "system_admin" && role !== "grafico" && aree.length === 0) return { ok: false as const, error: "Spunta almeno un'area per questo ruolo" };
+  const uguale = (r: Role, a: SiteId[] = [], g: SiteId[] = []) =>
+    r === role && [...a].sort().join() === [...aree].sort().join() && [...g].sort().join() === [...(gestite ?? [])].sort().join();
+  if (uguale(target.role, target.sites, target.manages) || (target.ruoliExtra ?? []).some((x) => uguale(x.role, x.sites, x.manages))) {
+    return { ok: false as const, error: "Ha già questo ruolo con queste aree" };
+  }
+  target.ruoliExtra = [...(target.ruoliExtra ?? []), { id: `r${Date.now().toString(36)}${randomBytes(2).toString("hex")}`, role, sites: aree, manages: gestite }];
+  await saveDb(db);
+  revalidatePath("/ruoli");
+  return { ok: true as const };
+}
+
+/** Toglie un ruolo in più: chi lo toglie deve poterlo assegnare. */
+export async function togliRuoloExtra(userId: string, profiloId: string) {
+  const admin = await requireUser();
+  const db = await getDb();
+  const target = db.users.find((u) => u.id === userId);
+  if (!target) return { ok: false as const, error: "Utente non trovato" };
+  if (target.id === admin.id && admin.role !== "system_admin") return { ok: false as const, error: "I tuoi ruoli li cambia chi ti gestisce" };
+  if (!canTouchUser(db, admin, target)) return { ok: false as const, error: "Fuori dal tuo ambito" };
+  const p = (target.ruoliExtra ?? []).find((x) => x.id === profiloId);
+  if (!p) return { ok: true as const };
+  if (!assignableRolesFor(admin).includes(p.role)) return { ok: false as const, error: `Il ruolo «${ruoloEsteso({ ...target, role: p.role, manages: p.manages })}» lo toglie chi lo può assegnare` };
+  target.ruoliExtra = (target.ruoliExtra ?? []).filter((x) => x.id !== profiloId);
+  if (target.ruoliExtra.length === 0) target.ruoliExtra = undefined;
+  await saveDb(db);
+  revalidatePath("/ruoli");
+  return { ok: true as const };
+}
+
+/**
+ * Sceglie con che ruolo operare (il principale o uno dei propri ruoli in più)
+ * e torna alla scelta delle aree, che ora mostra quelle di quel ruolo.
+ */
+export async function scegliRuolo(scelta: string): Promise<void> {
+  const user = await requireUser();
+  const db = await getDb();
+  const base = db.users.find((u) => u.id === user.id);
+  const valida = scelta === RUOLO_PRINCIPALE || (base?.ruoliExtra ?? []).some((p) => p.id === scelta);
+  if (!valida) redirect("/scegli");
+  const store = await cookies();
+  // dura quanto la sessione: al prossimo ingresso si sceglie di nuovo
+  store.set(RUOLO_COOKIE, scelta, OPZIONI_SESSIONE);
+  redirect("/scegli?ruolo=1");
 }
 
 export async function quickSetSites(userId: string, sites: SiteId[]) {
@@ -1566,7 +1634,7 @@ export async function updateUser(userId: string, formData: FormData): Promise<{ 
   const target = db.users.find((u) => u.id === userId);
   if (!target) return { ok: false, error: "Utente non trovato" };
   const allowed = canTouchUser(db, admin, target) || (admin.id === target.id && admin.role === "system_admin");
-  if (!allowed || (target.role === "system_admin" && admin.id !== target.id)) return { ok: false, error: "Fuori dal tuo ambito" };
+  if (!allowed || (ruoliDi(target).includes("system_admin") && admin.id !== target.id)) return { ok: false, error: "Fuori dal tuo ambito" };
   // chi ha solo l'incarico non si cambia da sé ruolo e aree
   const suSeStesso = admin.id === target.id && delegatoUtenti(admin);
 
@@ -2063,6 +2131,7 @@ export async function loginWithPassword(formData: FormData) {
   if (user!.active === false) redirect("/login?disattivato=1");
   const store = await cookies();
   store.set(AUTH_COOKIE, valoreSessione(user!.id, user!.passwordHash), OPZIONI_SESSIONE);
+  store.delete(RUOLO_COOKIE); // a ogni ingresso si sceglie di nuovo il ruolo
   redirect(postLoginPath(user!));
 }
 

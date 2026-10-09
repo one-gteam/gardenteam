@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { AUTH_COOKIE, OPZIONI_SESSIONE, valoreSessione } from "@/lib/auth";
+import { AUTH_COOKIE, RUOLO_COOKIE, OPZIONI_SESSIONE, valoreSessione } from "@/lib/auth";
 import { verifySsoToken } from "@/lib/sso";
 import { provisionSsoUser } from "@/lib/actions";
 import { getDb } from "@/lib/db";
@@ -25,5 +25,6 @@ export async function GET(req: NextRequest) {
 
   const store = await cookies();
   store.set(AUTH_COOKIE, valoreSessione(user.id, user.passwordHash), OPZIONI_SESSIONE);
+  store.delete(RUOLO_COOKIE); // a ogni ingresso si sceglie di nuovo il ruolo
   return NextResponse.redirect(new URL(postLoginPath(user), req.url));
 }

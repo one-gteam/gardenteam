@@ -183,11 +183,60 @@ export interface User {
   sites?: SiteId[]; // macroaree accessibili (nessuna = nessun accesso)
   /** Per il gestore: le aree su cui ha la gestione (le altre in `sites` le usa da operativo). */
   manages?: SiteId[];
+  /**
+   * Ruoli in più della stessa persona (es. l'amministratore di un'insegna che a
+   * volte lavora da gestore dei contenuti). Valgono nella stessa collocazione
+   * del ruolo principale; all'ingresso si sceglie con quale operare.
+   */
+  ruoliExtra?: ProfiloRuolo[];
+  /** Solo in memoria, mai salvato: il ruolo in più con cui sta operando ora. */
+  ruoloAttivo?: string;
+  /** Solo in memoria: ha già scelto con che ruolo operare in questa sessione. */
+  ruoloScelto?: boolean;
   notifiedCourseIds?: string[]; // corsi obbligatori per cui è già partita la mail di assegnazione
   notifiedPathIds?: string[]; // percorsi per cui è già partita la mail di assegnazione
 }
 
 export type SiteId = "academy" | "arredo" | "zoo" | "piante";
+
+/** Un ruolo in più: ruolo, aree a cui accede e (per il gestore) aree che gestisce. */
+export interface ProfiloRuolo {
+  id: string;
+  role: Role;
+  sites?: SiteId[];
+  manages?: SiteId[];
+}
+
+/** Valore del biscotto per «opero col ruolo principale». */
+export const RUOLO_PRINCIPALE = "principale";
+
+/**
+ * La persona come opera adesso: col ruolo principale, o con quello in più
+ * scelto all'ingresso. Ritorna una copia (la scelta non si salva mai sul
+ * profilo). Un ruolo in più non porta con sé l'incarico personale «gestisce
+ * utenti»: vale solo per il ruolo principale.
+ */
+export function conRuoloScelto(user: User, scelta?: string): User {
+  const extra = user.ruoliExtra ?? [];
+  if (extra.length === 0) return user;
+  if (scelta === RUOLO_PRINCIPALE) return { ...user, ruoloScelto: true };
+  const p = extra.find((x) => x.id === scelta);
+  if (!p) return user;
+  return {
+    ...user,
+    role: p.role,
+    sites: p.sites ?? [],
+    manages: p.role === "manager" ? p.manages ?? [] : undefined,
+    gestioneUtenti: undefined,
+    ruoloAttivo: p.id,
+    ruoloScelto: true,
+  };
+}
+
+/** Tutti i ruoli della persona (principale e in più): per chi può toccare chi. */
+export function ruoliDi(user: User): Role[] {
+  return [user.role, ...(user.ruoliExtra ?? []).map((p) => p.role)];
+}
 
 /**
  * Nome dell'intero portale, quello che si legge fuori dalle aree (login, scelta
@@ -278,6 +327,8 @@ export function isAcademyAdmin(user: User): boolean {
 
 /** Destinazione dopo il login: diretta se una sola macroarea, pagina di scelta se più di una. */
 export function postLoginPath(user: User): string {
+  // con più ruoli si sceglie prima con quale operare
+  if ((user.ruoliExtra?.length ?? 0) > 0 && !user.ruoloScelto) return "/scegli";
   const sites = userSites(user);
   // nessuna area: la pagina di scelta lo dice, invece di rimbalzare all'infinito
   if (sites.length === 0) return "/scegli";

@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition, type MouseEvent, type ReactNode } from "react";
-import { deleteUsers, quickSetGestioneUtenti, quickSetManages, quickSetRole, quickSetSites, quickToggleActive, setTenantUserDelegation } from "@/lib/actions";
+import { aggiungiRuoloExtra, togliRuoloExtra, deleteUsers, quickSetGestioneUtenti, quickSetManages, quickSetRole, quickSetSites, quickToggleActive, setTenantUserDelegation } from "@/lib/actions";
 import { ROLE_LABELS, Role, SITE_LABELS_BREVI, SiteId } from "@/lib/types";
 
 const SITES: SiteId[] = ["academy", "arredo", "zoo", "piante"];
@@ -20,6 +20,50 @@ interface RowUser {
   editabile: boolean; // dentro il perimetro di chi guarda (e non se stesso)
   gestioneUtenti: boolean; // incarico "gestisce utenti e ruoli"
   amministratore: boolean; // ruolo da amministratore: l'incarico non serve
+  /** Ruoli in più della persona: all'ingresso sceglie con quale operare. */
+  extra: { id: string; etichetta: string; aree: SiteId[]; togliibile: boolean }[];
+}
+
+/** Il piccolo modulo «＋ ruolo»: ruolo, aree e, per il gestore, quali gestisce. */
+function AggiungiRuolo({ ruoli, onAggiungi, pending }: {
+  ruoli: Role[];
+  onAggiungi: (r: Role, aree: SiteId[], gestite: SiteId[]) => void;
+  pending: boolean;
+}) {
+  const [aperto, setAperto] = useState(false);
+  const [ruolo, setRuolo] = useState<Role>(ruoli.includes("manager") ? "manager" : ruoli[0]);
+  const [aree, setAree] = useState<SiteId[]>([]);
+  const [gestite, setGestite] = useState<SiteId[]>([]);
+  if (!aperto) {
+    return <button type="button" className="mini-btn" onClick={() => setAperto(true)} title="Un altro ruolo per la stessa persona: all'ingresso sceglie con quale lavorare">＋ ruolo</button>;
+  }
+  const alterna = (l: SiteId[], x: SiteId) => (l.includes(x) ? l.filter((y) => y !== x) : [...l, x]);
+  return (
+    <div className="ruolo-extra-form">
+      <select value={ruolo} onChange={(e) => setRuolo(e.target.value as Role)} style={{ marginTop: 0 }}>
+        {ruoli.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+      </select>
+      {ruolo !== "system_admin" && (
+        <span style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          {SITES.map((site) => (
+            <label key={site} style={{ fontSize: 12, display: "inline-flex", gap: 3, alignItems: "center" }}>
+              <input type="checkbox" checked={aree.includes(site)} onChange={() => { setAree(alterna(aree, site)); if (aree.includes(site)) setGestite(gestite.filter((g) => g !== site)); }} />
+              {SITE_LABELS_BREVI[site]}
+              {ruolo === "manager" && aree.includes(site) && (
+                <button type="button" className={`pill ${gestite.includes(site) ? "pill-green" : "pill-gray"}`}
+                  style={{ border: "none", fontSize: 10, padding: "0 6px", cursor: "pointer" }}
+                  onClick={() => setGestite(alterna(gestite, site))}>{gestite.includes(site) ? "gestisce" : "operativo"}</button>
+              )}
+            </label>
+          ))}
+        </span>
+      )}
+      <span style={{ display: "flex", gap: 6 }}>
+        <button type="button" className="btn btn-sm" disabled={pending} onClick={() => { onAggiungi(ruolo, aree, gestite); setAperto(false); setAree([]); setGestite([]); }}>Aggiungi</button>
+        <button type="button" className="btn btn-outline btn-sm" onClick={() => setAperto(false)}>Annulla</button>
+      </span>
+    </div>
+  );
 }
 
 interface DelegaTenant {
@@ -138,6 +182,27 @@ export default function RolesPanel({
           ),
       },
       {
+        key: "ruoliExtra",
+        label: "Altri ruoli",
+        cell: (u) => (
+          <span className="ruoli-extra">
+            {u.extra.map((x) => (
+              <span key={x.id} className="pill pill-blue" title={x.aree.length ? `Aree: ${x.aree.map((a) => SITE_LABELS_BREVI[a]).join(", ")}` : "nessuna area"}>
+                {x.etichetta}
+                {u.editabile && x.togliibile && (
+                  <button type="button" className="ruoli-extra-x" title="Togli questo ruolo"
+                    onClick={() => window.confirm(`Togliere a ${u.nome} il ruolo «${x.etichetta}»?`) && run(() => togliRuoloExtra(u.id, x.id))}>×</button>
+                )}
+              </span>
+            ))}
+            {u.editabile && assignableRoles.length > 0 && (
+              <AggiungiRuolo ruoli={assignableRoles} pending={pending} onAggiungi={(r, a, g) => run(() => aggiungiRuoloExtra(u.id, r, a, g))} />
+            )}
+            {!u.editabile && u.extra.length === 0 && <span className="hint">—</span>}
+          </span>
+        ),
+      },
+      {
         key: "aree",
         label: "Aree",
         cell: (u) => (
@@ -211,7 +276,7 @@ export default function RolesPanel({
     });
     return cols;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showInsegna, assignableRoles, puoDelegare, modifiche]);
+  }, [showInsegna, assignableRoles, puoDelegare, modifiche, pending]);
 
   const [order, setOrder] = useState<string[]>(baseColumns.map((c) => c.key));
 

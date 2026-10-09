@@ -5,7 +5,7 @@ import RolesPanel from "@/components/RolesPanel";
 import RuoliHeader from "@/components/RuoliHeader";
 import NuovoUtente from "@/components/NuovoUtente";
 import { assignableRolesFor, canManageUsers, livelloGestioneUtenti, RUOLI_AMMINISTRATORE, scopeUsers } from "@/lib/logic";
-import { userSites } from "@/lib/types";
+import { userSites, ruoliDi, ruoloEsteso } from "@/lib/types";
 
 /**
  * Gestione Ruoli: area a sé, raggiunta dalla scelta area. A cascata:
@@ -43,8 +43,13 @@ export default async function RuoliPage({
       attivo: u.active !== false,
       sites: userSites(u),
       manages: u.manages ?? [],
-      editabile: canManage && u.id !== user.id && (u.role !== "system_admin" || user.role === "system_admin")
-        && (puoDelegare || !RUOLI_AMMINISTRATORE.includes(u.role)),
+      editabile: canManage && u.id !== user.id && (!ruoliDi(u).includes("system_admin") || user.role === "system_admin")
+        && (puoDelegare || !ruoliDi(u).some((r) => RUOLI_AMMINISTRATORE.includes(r))),
+      // i ruoli in più (stessa collocazione), con le loro aree
+      extra: (u.ruoliExtra ?? []).map((p) => {
+        const come = { ...u, role: p.role, sites: p.sites ?? [], manages: p.manages };
+        return { id: p.id, etichetta: ruoloEsteso(come), aree: userSites(come), togliibile: assignableRolesFor(user).includes(p.role) };
+      }),
       gestioneUtenti: !!u.gestioneUtenti,
       amministratore: RUOLI_AMMINISTRATORE.includes(u.role),
     }));

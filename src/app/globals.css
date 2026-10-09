@@ -1355,3 +1355,17 @@ input:checked + .fb-colore { box-shadow: 0 0 0 2px var(--green-700); }
 .fb-togli:hover { color: var(--red, #c0392b); }
 .fb-trovate { border: 1px dashed var(--line); border-radius: 10px; padding: 8px 10px; margin-bottom: 10px; background: #fff; }
 .fb-trovate-voci { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 4px; margin-top: 6px; }
+
+/* Più ruoli: la scelta all'ingresso e la colonna in Utenti e ruoli */
+.scelta-ruolo { padding: 14px 16px; margin-bottom: 16px; display: grid; gap: 6px; }
+.scelta-ruolo-opzioni { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 4px; }
+.scelta-ruolo-opzioni form { margin: 0; }
+.scelta-ruolo-btn { display: grid; gap: 2px; text-align: left; min-width: 230px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 12px; background: #fff; cursor: pointer; font: inherit; }
+.scelta-ruolo-btn:hover { border-color: var(--green-500); box-shadow: 0 0 0 2px rgba(60, 140, 80, .15); }
+.scelta-ruolo-btn.attivo { border-color: var(--green-700); background: #eef7f0; }
+.scelta-ruolo-nome { font-weight: 800; font-size: 14px; }
+.ruoli-extra { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.ruoli-extra .pill { display: inline-flex; gap: 4px; align-items: center; }
+.ruoli-extra-x { border: 0; background: transparent; cursor: pointer; padding: 0 0 0 2px; font-size: 13px; line-height: 1; color: inherit; opacity: .6; }
+.ruoli-extra-x:hover { opacity: 1; }
+.ruolo-extra-form { display: grid; gap: 6px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: #fafbf9; min-width: 240px; }
