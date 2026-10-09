@@ -8,10 +8,18 @@ import { canAccessArea, isZooEditor } from "@/lib/stampe";
 import { gestisce } from "@/lib/types";
 import { listStorageFilesConData } from "@/lib/supabase";
 import {
-  getZooDb, campagnaInLavorazione, campagnaInCorso, passiVolantino, animaliDi, prezziDelPadre,
+  getZooDb, campagnaInLavorazione, campagnaInCorso, passiVolantino, animaliDi,
   fotoDaAbbinare, volantinoDiFoto, focusDelVolantino, migraVolantinoPages, NO_VOLANTINO, destinazioneAnimale, vociSenzaFoto,
 } from "@/lib/zoo";
-import { incontriDelVolantino, correggiIncontro } from "@/lib/zoo-incontri";
+import { incontriDelVolantino, correggiIncontro, incontriProgrammati, eliminaProgrammato } from "@/lib/zoo-incontri";
+
+/** Le squadre che si incontrano sul volantino: di solito persone diverse. */
+const SQUADRE = ["Zoo", "Comunicazione"];
+import { salvaDeadlineGrafico } from "@/lib/zoo-actions";
+import ProgrammaIncontro from "@/components/stampe/ProgrammaIncontro";
+import ModuloAutoSalva from "@/components/ModuloAutoSalva";
+import { PulsanteAzione } from "@/components/AzioneSenzaRicarica";
+import { userSites } from "@/lib/types";
 
 /*
  * Dashboard delle Offerte Zoo per chi gestisce: a che punto è il volantino in
@@ -40,6 +48,8 @@ export default async function ZooDashboardPage() {
     );
   }
 
+  const oggi = new Date(new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Rome" }) + "T00:00:00");
+  const giorniA = (d?: string) => (d ? Math.round((Date.parse(`${d}T00:00:00`) - oggi.getTime()) / 86400000) : undefined);
   const prodById = new Map(db.products.map((p) => [p.id, p]));
   const parentById = new Map(db.parents.map((p) => [p.id, p]));
   const offerte = db.offers.filter((o) => o.campaignId === campaign.id && !o.scopeType);
@@ -65,9 +75,7 @@ export default async function ZooDashboardPage() {
   const padriInOfferta = [...new Set(offerte.map(parentOf).filter(Boolean))] as NonNullable<ReturnType<typeof parentOf>>[];
   const senzaAnimale = padriInOfferta.filter((p) => animaliDi(db, p.caratteristiche).length === 0);
   const senzaPadre = offerte.filter((o) => !parentOf(o));
-  const piuPrezzi = padriInOfferta.filter((p) => prezziDelPadre(db, p.id, campaign.id).length > 1);
   const senzaFoto = vociSenzaFoto(db, aVolantino);
-  const senzaFocus = voci(aVolantino).filter((o) => !(o.focus ?? "").trim());
   const senzaPrezzo = offerte.filter((o) => !o.prezzoPromo && !o.meccanica && !o.scontoPerc);
   const caricate = new Map(foto.map((f) => [f.nome, f.caricato]));
   const fotoLibere = fotoDaAbbinare(db, foto.map((f) => f.nome)).daAbbinare.filter((f) => volantinoDiFoto(db, caricate.get(f) ?? "")?.id === campaign.id);
@@ -75,16 +83,20 @@ export default async function ZooDashboardPage() {
   const noteAperte = db.noteBozza.filter((n) => n.campaignId === campaign.id && !n.risolta);
   const focus = focusDelVolantino(db, campaign.id);
 
-  // incontri
-  const incontri = await incontriDelVolantino(campaign.id);
+  // incontri: quelli fatti e quelli fissati
+  const [incontri, { programmati, squadre }] = await Promise.all([incontriDelVolantino(campaign.id), incontriProgrammati(campaign.id)]);
+  const colleghi = academyDb.users
+    .filter((u) => u.active !== false && u.email && u.role !== "student" && (u.role === "system_admin" || userSites(u).includes("zoo")))
+    .map((u) => ({ id: u.id, nome: `${u.firstName} ${u.lastName}`, email: u.email }))
+    .sort((a, b) => a.nome.localeCompare(b.nome, "it"));
+  const prossimi = programmati.filter((p) => Date.parse(p.quando) + p.durataMin * 60000 > Date.now());
+  const gDeadline = giorniA(campaign.deadlineGrafico);
   const minuti = (i: { inizio: string; fine?: string; ultimo: string }) => Math.max(0, Math.round((Date.parse(i.fine ?? i.ultimo) - Date.parse(i.inizio)) / 60000));
   const totaleMin = incontri.reduce((t, i) => t + minuti(i), 0);
   const durata = (m: number) => (m >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")} min` : `${m} min`);
   const ore = new Map<string, number>();
   for (const i of incontri) for (const p of i.partecipanti) ore.set(p, (ore.get(p) ?? 0) + minuti(i));
 
-  const oggi = new Date(new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Rome" }) + "T00:00:00");
-  const giorniA = (d?: string) => (d ? Math.round((Date.parse(`${d}T00:00:00`) - oggi.getTime()) / 86400000) : undefined);
   const gInizio = giorniA(campaign.dal), gFine = giorniA(campaign.al);
 
   const Lista = ({ titolo, n, href, cta, righe, tono = "amber" }: { titolo: string; n: number; href: string; cta: string; righe: string[]; tono?: "amber" | "red" | "green" }) => (
@@ -112,6 +124,21 @@ export default async function ZooDashboardPage() {
           </span>
         </div>
 
+        {/* consegna al grafico: la data e quanto manca */}
+        <div className={`card dash-deadline${gDeadline !== undefined && gDeadline <= 3 ? " vicina" : ""}`}>
+          <strong>Invio al grafico</strong>
+          {editor ? (
+            <ModuloAutoSalva azione={salvaDeadlineGrafico.bind(null, campaign.id)} style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+              <input type="date" name="deadline" defaultValue={campaign.deadlineGrafico ?? ""} style={{ marginTop: 0 }} />
+            </ModuloAutoSalva>
+          ) : <span>{campaign.deadlineGrafico ? dataIt(campaign.deadlineGrafico) : "non fissato"}</span>}
+          <span className="hint">
+            {gDeadline === undefined ? "Fissa la data entro cui mandare il volantino al grafico."
+              : gDeadline > 0 ? `mancano ${gDeadline} ${gDeadline === 1 ? "giorno" : "giorni"}`
+              : gDeadline === 0 ? "è oggi" : `scaduta da ${-gDeadline} ${gDeadline === -1 ? "giorno" : "giorni"}`}
+          </span>
+        </div>
+
         <AvanzamentoVolantino passi={passiVolantino(db, campaign)} campaignId={campaign.id} puoSegnare={editor} />
 
         <div className="dash-numeri">
@@ -128,13 +155,30 @@ export default async function ZooDashboardPage() {
         <div className="dash-griglia">
           <Lista titolo="Senza animale" n={senzaAnimale.length} href="/stampe/zoo/prodotti?vista=catalogo&senzaanimale=1" cta="Assegna l'animale" righe={senzaAnimale.map((p) => p.nome)} />
           <Lista titolo="Offerte senza padre" n={senzaPadre.length} href="/stampe/zoo/prodotti?senzapadre=1" cta="Raggruppa" righe={senzaPadre.map((o) => o.descrizione)} />
-          <Lista titolo="Padri con più prezzi" n={piuPrezzi.length} href="/stampe/zoo/prodotti" cta="Dividi per prezzo" righe={piuPrezzi.map((p) => p.nome)} />
           <Lista titolo="A volantino senza foto" n={senzaFoto.length} href={`/stampe/zoo/foto?campagna=${campaign.id}`} cta="Raccolta foto" righe={senzaFoto.map(nome)} tono="red" />
           <Lista titolo="Foto caricate da abbinare" n={fotoLibere.length} href="/stampe/zoo/prodotti?vista=catalogo&abbina=1" cta="Abbina le foto" righe={fotoLibere} />
-          <Lista titolo="A volantino senza focus" n={senzaFocus.length} href="/stampe/zoo/focus" cta="Pagina Focus" righe={senzaFocus.map(nome)} />
           <Lista titolo="Offerte senza prezzo" n={senzaPrezzo.length} href="/stampe/zoo/prodotti" cta="Completa i prezzi" righe={senzaPrezzo.map((o) => o.descrizione)} tono="red" />
           <Lista titolo="Segnalazioni aperte" n={segnalazioni.length} href="/stampe/zoo/volantino" cta="Vedi le offerte" righe={segnalazioni.map((s) => `${s.message} — ${s.userName}`)} />
           <Lista titolo="Note sulla bozza da risolvere" n={noteAperte.length} href="/stampe/zoo/bozza" cta="Bozza volantino" righe={noteAperte.map((n) => `${n.testo} — ${n.userName}`)} />
+        </div>
+
+        <h2 style={{ margin: "18px 0 8px" }}>Incontri fissati</h2>
+        <div className="dash-incontri">
+          {editor && <ProgrammaIncontro campaignId={campaign.id} squadre={SQUADRE} ricordati={squadre} colleghi={colleghi} />}
+          <div className="card" style={{ padding: 10 }}>
+            <strong style={{ fontSize: 13.5 }}>Prossimi</strong>
+            {prossimi.length === 0 && <p className="hint" style={{ margin: "6px 0 0" }}>Nessun incontro fissato.</p>}
+            <ul style={{ listStyle: "none", padding: 0, margin: "6px 0 0", display: "grid", gap: 6 }}>
+              {prossimi.map((p) => (
+                <li key={p.id} style={{ borderLeft: "3px solid var(--green-500)", paddingLeft: 8 }}>
+                  <strong style={{ fontSize: 13 }}>{p.squadra}</strong> · {oraIt(p.quando)} · {p.durataMin} min
+                  <div className="hint" style={{ fontSize: 11.5 }}>{p.partecipanti.map((id) => nomeUtente.get(id) ?? "?").join(", ")}{p.mailInviateIl ? " · mail mandata" : ""}</div>
+                  {p.testo && <div style={{ fontSize: 12, whiteSpace: "pre-line" }}>{p.testo}</div>}
+                  {editor && <PulsanteAzione azione={eliminaProgrammato.bind(null, p.id)} className="mini-btn" conferma="Togliere questo incontro? Chi ha ricevuto la mail non viene avvisato.">togli</PulsanteAzione>}
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
 
         <h2 style={{ margin: "18px 0 8px" }}>Incontri di lavoro</h2>

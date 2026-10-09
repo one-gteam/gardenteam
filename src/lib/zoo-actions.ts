@@ -1629,6 +1629,20 @@ export async function unisciVociVolantino(
   return { ok: true };
 }
 
+/** La data entro cui mandare il volantino al grafico (Dashboard). */
+export async function salvaDeadlineGrafico(campaignId: string, fd: FormData): Promise<{ ok: boolean; error?: string }> {
+  const user = await requireZooUser();
+  if (!isZooEditor(user)) return { ok: false, error: "Non autorizzato." };
+  const db = await getZooDb();
+  const c = db.campaigns.find((x) => x.id === campaignId);
+  if (!c) return { ok: false, error: "Volantino non trovato." };
+  const d = String(fd.get("deadline") ?? "");
+  c.deadlineGrafico = /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : undefined;
+  await saveZooDb(db);
+  revalidatePath("/stampe/zoo/dashboard");
+  return { ok: true };
+}
+
 /** I passi del volantino segnati a mano da Offerte in corso ("fatto" / "riapri"). */
 export async function segnaPassoVolantino(campaignId: string, passo: PassoVolantinoId, fatto: boolean): Promise<{ ok: boolean; error?: string }> {
   const user = await requireZooUser();

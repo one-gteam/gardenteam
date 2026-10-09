@@ -118,6 +118,8 @@ export interface ZooCampaign {
   focusNote?: string;
   /** I focus di questo volantino sono archiviati: nello Storico non si vedono (si possono riaprire). */
   focusArchiviato?: boolean;
+  /** Entro quando il volantino va mandato al grafico (yyyy-mm-dd). */
+  deadlineGrafico?: string;
   /** Passi del volantino segnati a mano (fatto/riaperto): vincono sul calcolo automatico. */
   passi?: Partial<Record<PassoVolantinoId, { fatto: boolean; da: string; il: string }>>;
 }
@@ -568,6 +570,8 @@ export interface VolPage {
   note?: string; // indicazioni per chi impagina, valide per tutta la pagina
   cols: number;
   rows: number;
+  /** Righe con un numero di celle loro (es. 3 sopra, 5 sotto): vedi lib/volantino-griglia. */
+  colsRiga?: Record<string, number>;
   blocks: VolBlock[];
   sezioni?: VolSection[];
   /** A chi è dedicata la pagina: guida la disposizione automatica delle offerte. */

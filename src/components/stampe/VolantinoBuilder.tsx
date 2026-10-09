@@ -9,6 +9,7 @@ import {
   unisciVociVolantino, separaUnioneVolantino, updateOfferGroupFieldInline,
 } from "@/lib/zoo-actions";
 import { assegnaFocusOfferte } from "@/lib/zoo-focus-actions";
+import { colonneGriglia, colonnaGriglia, colonnaSezione, colonneRiga, righeBloccate } from "@/lib/volantino-griglia";
 import type { VolPage, VolBlock, VolSection } from "@/lib/zoo";
 
 export interface ArtLite { ean: string; descrizione: string; marca: string }
@@ -70,9 +71,14 @@ const vuoto = (b: VolBlock) => !b.offerIds?.length && !b.testo && !b.imageUrl &&
 function normalizza(page: VolPage): VolPage {
   const occupato = new Map<string, string>();
   const blocks: VolBlock[] = [];
+  // celle per riga: le righe attraversate da una cella alta restano a page.cols
+  const bloccate = righeBloccate(page);
+  const colsRiga = Object.fromEntries(Object.entries(page.colsRiga ?? {}).filter(([r, n]) => Number(r) < page.rows && !bloccate.has(Number(r)) && n > 0 && n !== page.cols));
+  const pg = { ...page, colsRiga };
+  const nDi = (b: VolBlock) => (b.rs > 1 ? page.cols : colonneRiga(pg, b.r));
   for (const b of page.blocks) {
-    if (b.r >= page.rows || b.c >= page.cols) continue;
-    const cs = Math.max(1, Math.min(b.cs, page.cols - b.c));
+    if (b.r >= page.rows || b.c >= nDi(b)) continue;
+    const cs = Math.max(1, Math.min(b.cs, nDi(b) - b.c));
     const rs = Math.max(1, Math.min(b.rs, page.rows - b.r));
     let libero = true;
     for (let r = b.r; r < b.r + rs; r++) for (let c = b.c; c < b.c + cs; c++) if (occupato.has(`${r}_${c}`)) libero = false;
@@ -81,7 +87,7 @@ function normalizza(page: VolPage): VolPage {
     blocks.push({ ...b, rs, cs });
   }
   for (let r = 0; r < page.rows; r++) {
-    for (let c = 0; c < page.cols; c++) {
+    for (let c = 0; c < colonneRiga(pg, r); c++) {
       if (!occupato.has(`${r}_${c}`)) {
         const nb = { id: uid("vb"), r, c, rs: 1, cs: 1 };
         occupato.set(`${r}_${c}`, nb.id);
@@ -91,6 +97,7 @@ function normalizza(page: VolPage): VolPage {
   }
   return {
     ...page,
+    colsRiga: Object.keys(colsRiga).length ? colsRiga : undefined,
     blocks: blocks.sort((a, b) => a.r - b.r || a.c - b.c),
     sezioni: (page.sezioni ?? []).filter((s) => s.r < page.rows && s.c < page.cols),
   };
@@ -488,7 +495,7 @@ export default function VolantinoBuilder({
     if (!b) return;
     const target: VolBlock[] = [];
     if (verso === "destra") {
-      if (b.c + b.cs >= page.cols) return flash("Non c'è spazio a destra: la cella tocca già il bordo della pagina.");
+      if (b.c + b.cs >= (b.rs > 1 ? page.cols : colonneRiga(page, b.r))) return flash("Non c'è spazio a destra: la cella tocca già il bordo della pagina.");
       for (let r = b.r; r < b.r + b.rs; r++) {
         const t = page.blocks.find((x) => x.r === r && x.c === b.c + b.cs);
         if (!t || t.rs > 1 || t.cs > 1) return flash("A destra c'è una cella già unita: separala prima.");
@@ -496,6 +503,7 @@ export default function VolantinoBuilder({
       }
     } else {
       if (b.r + b.rs >= page.rows) return flash("Non c'è spazio sotto: la cella tocca già il fondo della pagina.");
+      if (colonneRiga(page, b.r) !== page.cols || colonneRiga(page, b.r + b.rs) !== page.cols) return flash("In verticale si uniscono solo righe con il numero di celle della pagina: rimetti le celle della riga come le altre.");
       for (let c = b.c; c < b.c + b.cs; c++) {
         const t = page.blocks.find((x) => x.c === c && x.r === b.r + b.rs);
         if (!t || t.rs > 1 || t.cs > 1) return flash("Sotto c'è una cella già unita: separala prima.");
@@ -512,14 +520,42 @@ export default function VolantinoBuilder({
     });
   };
 
+  /** Toglie una cella dalla riga: le altre della riga si allargano e si rinumerano. */
+  const eliminaCella = (pi: number, id: string) => {
+    const page = pages[pi];
+    const b = page.blocks.find((x) => x.id === id);
+    if (!b) return;
+    if (b.rs > 1 || righeBloccate(page).has(b.r)) return flash("Questa riga ha una cella alta (unita in verticale): separala prima.");
+    const n = colonneRiga(page, b.r);
+    if (n - b.cs < 1) return flash("È l'unica cella della riga.");
+    if (!vuoto(b) && !confirm("La cella non è vuota: il suo contenuto torna nell'elenco a sinistra. Toglierla?")) return;
+    upd((ps) => {
+      const p = ps[pi];
+      p.blocks = p.blocks.filter((x) => x.id !== id);
+      let c = 0;
+      for (const x of p.blocks.filter((x) => x.r === b.r).sort((a, z) => a.c - z.c)) { x.c = c; c += x.cs; }
+      p.colsRiga = { ...(p.colsRiga ?? {}), [String(b.r)]: n - b.cs };
+      return ps;
+    });
+    setSel(null); setExtra([]);
+  };
+  /** Aggiunge una cella in fondo alla riga (se se n'è tolta una per sbaglio). */
+  const aggiungiCella = (pi: number, r: number) => {
+    const page = pages[pi];
+    if (righeBloccate(page).has(r)) return flash("Questa riga ha una cella alta (unita in verticale): separala prima.");
+    const n = colonneRiga(page, r);
+    if (n >= 6) return flash("Al massimo 6 celle per riga.");
+    upd((ps) => { ps[pi].colsRiga = { ...(ps[pi].colsRiga ?? {}), [String(r)]: n + 1 }; return ps; });
+  };
+
   const separa = (pi: number, id: string, verso: "destra" | "giu") =>
     upd((ps) => { const b = blockOf(ps, pi, id)!; if (verso === "destra") b.cs = 1; else b.rs = 1; return ps; });
 
   const contenutoDi = (x: VolBlock) => ({
     offerIds: x.offerIds, testo: x.testo, imageUrl: x.imageUrl, label: x.label,
-    commento: x.commento, descrizione: x.descrizione, prezzo: x.prezzo,
+    commento: x.commento, descrizione: x.descrizione, prezzo: x.prezzo, bg: x.bg,
   });
-  const VUOTO = { offerIds: undefined, testo: undefined, imageUrl: undefined, label: undefined, commento: undefined, descrizione: undefined, prezzo: undefined };
+  const VUOTO = { offerIds: undefined, testo: undefined, imageUrl: undefined, label: undefined, commento: undefined, descrizione: undefined, prezzo: undefined, bg: undefined };
 
   const spostaContenuto = (pi: number, fromId: string, toId: string) => upd((ps) => {
     if (fromId === toId) return ps;
@@ -626,7 +662,7 @@ export default function VolantinoBuilder({
         }}
         className={`vol-cell${attiva ? " attiva" : ""}`}
         style={{
-          gridColumn: `${b.c + 1} / span ${b.cs}`, gridRow: `${b.r + 1} / span ${b.rs}`,
+          gridColumn: colonnaGriglia(pages[pi], b), gridRow: `${b.r + 1} / span ${b.rs}`,
           border: isVuoto ? "1.5px dashed var(--line)" : "1px solid var(--line)",
           background: b.imageUrl
             ? `center/cover no-repeat url(${b.imageUrl})`
@@ -714,10 +750,10 @@ export default function VolantinoBuilder({
           </div>
         </div>
 
-        <div className="vol-page" style={{ gridTemplateColumns: `repeat(${page.cols}, 1fr)`, gridTemplateRows: `repeat(${page.rows}, 1fr)` }}>
+        <div className="vol-page" style={{ gridTemplateColumns: colonneGriglia(), gridTemplateRows: `repeat(${page.rows}, 1fr)` }}>
           {(page.sezioni ?? []).map((s) => (
             <div key={s.id} className="vol-sezione"
-              style={{ gridColumn: `${s.c + 1} / span ${s.cs}`, gridRow: `${s.r + 1} / span ${s.rs}`, background: s.bg }}>
+              style={{ gridColumn: colonnaSezione(page, s), gridRow: `${s.r + 1} / span ${s.rs}`, background: s.bg }}>
               {s.testo && <div className="vol-sezione-testo">{s.testo}</div>}
               {s.titolo && <div className="vol-sezione-titolo">{s.titolo}</div>}
             </div>
@@ -867,70 +903,63 @@ export default function VolantinoBuilder({
                     e.target.checked ? [...prev, o.id] : prev.filter((id) => id !== o.id))} />
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img className="vol-off-foto" src={o.foto} alt="" />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 11.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {o.padre ?? o.descrizione}
-                  </div>
-                  {o.padre && (
-                    <div style={{ fontSize: 10.5, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {o.descrizione}
-                    </div>
-                  )}
-                  <div style={{ fontSize: 10.5, color: "var(--muted)", display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
-                    {o.prezzoTesto ? <strong>{o.prezzoTesto}</strong> : o.prezzo ? `${o.aPartireDa ? "a partire da " : ""}€ ${o.prezzo}` : <span className="pill pill-amber">prezzo da definire</span>}
-                    {o.unione && (
-                      <button type="button" className="mini-btn" title="Voci unite solo per il volantino" onClick={() => separaVoce(o.unione!)}>
-                        unite · separa
-                      </button>
-                    )}
+                <div style={{ minWidth: 0 }}>
+                  <div className="vol-off-titolo">{o.padre ?? o.descrizione}</div>
+                  {o.padre && <div className="vol-off-descr">{o.descrizione}</div>}
+                  <div className="vol-off-prezzo">
+                    {o.prezzoTesto ? <strong>{o.prezzoTesto}</strong> : o.prezzo ? <strong>{`${o.aPartireDa ? "a partire da " : ""}€ ${o.prezzo}`}</strong> : <span className="pill pill-amber">prezzo da definire</span>}
                     {o.prezzoListino && <span style={{ textDecoration: "line-through" }}>€ {o.prezzoListino}</span>}
                     {o.sconto && <span className="pill pill-green">{o.sconto}</span>}
-                    {(o.tipi ?? []).map((t) => <span key={t} className="pill pill-blue">{t}</span>)}
-                    {usata && <span className="pill pill-gray">già usata</span>}
-                    {o.animale && <span className="pill pill-green" title="animale">{o.animale}</span>}
-                    {o.caratt && <span className="pill pill-gray" title="caratteristica">{o.caratt}</span>}
-                    {o.voti > 0 && <span className="pill pill-green">{o.voti} voti</span>}
-                    {o.nonTrattati > 0 && <span className="pill pill-red">{o.nonTrattati} n.t.</span>}
-                    {o.label && <span className="pill pill-blue">{o.label}</span>}
-                    {o.focus && <span className="pill pill-gray" title="focus">{o.focus}</span>}
-                  </div>
-                  {/* destinazione: le pagine dell'animale come pulsanti, «no», e la tendina per le altre */}
-                  <div className="vol-off-pagine" onClick={(e) => e.stopPropagation()}>
-                    {(() => {
-                      const proposte = pages.map((p, i) => ({ p, i })).filter(({ p }) => p.animale && (o.animali ?? (o.animale ? [o.animale] : [])).includes(p.animale));
-                      const altre = pages.map((p, i) => ({ p, i })).filter(({ p }) => !proposte.some((x) => x.p.id === p.id));
-                      return (
-                        <>
-                          {animaleDi(o.paginaId) && <span className="pill pill-green" title="Scelta per animale in Scelta offerte: scegli qui la pagina precisa">{animaleDi(o.paginaId)} · da collocare</span>}
-                          {proposte.map(({ p, i }) => (
-                            <button key={p.id} type="button" className={`pagina-btn${o.paginaId === p.id ? " attiva" : ""}`}
-                              onClick={() => cambiaDestinazione(o, o.paginaId === p.id ? (o.animale ? `${ANIMALE_PREFISSO}${o.animale}` : "") : p.id)}
-                              title={`Pag. ${i + 1}${p.titolo ? ` ${p.titolo}` : ""}`}>
-                              {o.paginaId === p.id ? "✓ " : ""}{i + 1}{p.titolo ? ` ${p.titolo}` : ""}
-                            </button>
-                          ))}
-                          <button type="button" className={`pagina-btn no${o.paginaId === NO_VOLANTINO ? " attiva" : ""}`}
-                            onClick={() => cambiaDestinazione(o, o.paginaId === NO_VOLANTINO ? "" : NO_VOLANTINO)}>✕ no</button>
-                          <select value={altre.some(({ p }) => p.id === o.paginaId) ? o.paginaId : ""} onChange={(e) => cambiaDestinazione(o, e.target.value)}
-                            className="vol-dest" title="Un'altra pagina">
-                            <option value="">altra…</option>
-                            {altre.map(({ p, i }) => <option key={p.id} value={p.id}>Pag. {i + 1}{p.titolo ? ` ${p.titolo}` : ""}</option>)}
-                            {animali.map((a) => <option key={a} value={`${ANIMALE_PREFISSO}${a}`}>{a} · da collocare</option>)}
-                          </select>
-                        </>
-                      );
-                    })()}
                   </div>
                 </div>
               </div>
-              {o.articoli.length > 0 && (
-                <button type="button" className="mini-btn" style={{ marginTop: 4 }}
-                  onClick={() => setDettaglio(dettaglio === o.id ? null : o.id)}>
-                  {dettaglio === o.id
-                    ? "Nascondi articoli"
-                    : o.padre ? `Vedi i ${o.articoli.length} articoli contenuti` : "Vedi l'articolo"}
-                </button>
-              )}
+              {/* sotto, a tutta larghezza: niente spazio vuoto sotto la foto */}
+              <div className="vol-off-meta">
+                {/* «prezzo barrato» non serve: si vede dal prezzo; restano 3x2 e le altre tipologie */}
+                {(o.tipi ?? []).filter((t) => t !== "prezzo barrato").map((t) => <span key={t} className="pill pill-blue">{t}</span>)}
+                {o.unione && (
+                  <button type="button" className="mini-btn" title="Voci unite solo per il volantino" onClick={() => separaVoce(o.unione!)}>unite · separa</button>
+                )}
+                {usata && <span className="pill pill-gray">già usata</span>}
+                {o.animale && <span className="pill pill-green" title="animale">{o.animale}</span>}
+                {o.caratt && <span className="pill pill-gray" title="caratteristica">{o.caratt}</span>}
+                {o.voti > 0 && <span className="pill pill-green">{o.voti} voti</span>}
+                {o.nonTrattati > 0 && <span className="pill pill-red">{o.nonTrattati} n.t.</span>}
+                {o.label && <span className="pill pill-blue">{o.label}</span>}
+                {o.focus && <span className="pill pill-gray" title="focus">{o.focus}</span>}
+                {o.articoli.length > 0 && (
+                  <button type="button" className="mini-btn" onClick={() => setDettaglio(dettaglio === o.id ? null : o.id)}>
+                    {dettaglio === o.id ? "nascondi" : o.articoli.length === 1 ? "1 articolo" : `${o.articoli.length} articoli`}
+                  </button>
+                )}
+              </div>
+              {/* destinazione: le pagine dell'animale come pulsanti, «no», e la tendina per le altre */}
+              <div className="vol-off-pagine" onClick={(e) => e.stopPropagation()}>
+                {(() => {
+                  const proposte = pages.map((p, i) => ({ p, i })).filter(({ p }) => p.animale && (o.animali ?? (o.animale ? [o.animale] : [])).includes(p.animale));
+                  const altre = pages.map((p, i) => ({ p, i })).filter(({ p }) => !proposte.some((x) => x.p.id === p.id));
+                  return (
+                    <>
+                      {animaleDi(o.paginaId) && <span className="pill pill-green" title="Scelta per animale in Scelta offerte: scegli qui la pagina precisa">{animaleDi(o.paginaId)} · da collocare</span>}
+                      {proposte.map(({ p, i }) => (
+                        <button key={p.id} type="button" className={`pagina-btn${o.paginaId === p.id ? " attiva" : ""}`}
+                          onClick={() => cambiaDestinazione(o, o.paginaId === p.id ? (o.animale ? `${ANIMALE_PREFISSO}${o.animale}` : "") : p.id)}
+                          title={`Pag. ${i + 1}${p.titolo ? ` ${p.titolo}` : ""}`}>
+                          {o.paginaId === p.id ? "✓ " : ""}{i + 1}{p.titolo ? ` ${p.titolo}` : ""}
+                        </button>
+                      ))}
+                      <button type="button" className={`pagina-btn no${o.paginaId === NO_VOLANTINO ? " attiva" : ""}`}
+                        onClick={() => cambiaDestinazione(o, o.paginaId === NO_VOLANTINO ? "" : NO_VOLANTINO)}>✕ no</button>
+                      <select value={altre.some(({ p }) => p.id === o.paginaId) ? o.paginaId : ""} onChange={(e) => cambiaDestinazione(o, e.target.value)}
+                        className="vol-dest" title="Un'altra pagina">
+                        <option value="">altra…</option>
+                        {altre.map(({ p, i }) => <option key={p.id} value={p.id}>Pag. {i + 1}{p.titolo ? ` ${p.titolo}` : ""}</option>)}
+                        {animali.map((a) => <option key={a} value={`${ANIMALE_PREFISSO}${a}`}>{a} · da collocare</option>)}
+                      </select>
+                    </>
+                  );
+                })()}
+              </div>
               {dettaglio === o.id && (
                 <ul style={{ margin: "4px 0 0", paddingLeft: 16, fontSize: 10.5, color: "var(--muted)" }}>
                   {o.articoli.map((a) => <li key={a.ean}>{a.descrizione} <span style={{ opacity: 0.7 }}>· {a.ean}</span></li>)}
@@ -973,8 +1002,6 @@ export default function VolantinoBuilder({
             <button className="btn btn-sm" title="Salva volantino" aria-label="Salva volantino" onClick={() => salva()}>
               <Save size={14} style={{ verticalAlign: -2, marginRight: 5 }} />Salva
             </button>
-            <a className="btn btn-outline btn-sm" href={`/stampe/zoo/bozza?scope=${scopeParam}`}
-              title="Excel, PDF e ZIP per il grafico, e l'avviso ai colleghi, stanno nella Bozza volantino">Bozza ed esportazioni →</a>
             {daDisporre.length > 0 && (
               <button className="btn btn-sm" type="button" onClick={disponiPerPagina}
                 title="Colloca nelle pagine le offerte a cui è già stata assegnata una pagina in Offerte in corso">
@@ -1051,7 +1078,26 @@ export default function VolantinoBuilder({
               {clip && <button className="btn btn-outline btn-sm" onClick={() => patch(sel!.pi, selBlock.id, contenutoDi(clip))}>Incolla</button>}
               {!vuoto(selBlock) && <button className="btn btn-outline btn-sm danger" onClick={() => svuota(sel!.pi, selBlock.id)}>Svuota</button>}
             </div>
+            <div className="vol-side-riga" title="Righe con un numero di celle diverso: le celle che restano si allargano da sole">
+              <span style={{ fontSize: 11.5 }}>Riga: {colonneRiga(selPage, selBlock.r)} celle</span>
+              <button className="btn btn-outline btn-sm" onClick={() => eliminaCella(sel!.pi, selBlock.id)}>− Togli questa cella</button>
+              <button className="btn btn-outline btn-sm" onClick={() => aggiungiCella(sel!.pi, selBlock.r)}>+ Cella sulla riga</button>
+            </div>
 
+            {/* un'altra offerta nello stesso riquadro: solo per il volantino, i padri non cambiano */}
+            <label className="field" style={{ marginTop: 8 }}>
+              {selOffs.length ? "Aggiungi un'altra offerta in questo riquadro" : "Metti un'offerta in questo riquadro"}
+              <select key={`agg_${selBlock.id}_${(selBlock.offerIds ?? []).length}`} defaultValue="" onChange={(e) => {
+                const id = e.target.value; if (!id) return;
+                patch(sel!.pi, selBlock.id, { offerIds: [...(selBlock.offerIds ?? []), id] });
+              }}>
+                <option value="">— scegli un'offerta —</option>
+                {offers.filter((o) => !inserite.has(o.id) && o.paginaId !== NO_VOLANTINO).map((o) => (
+                  <option key={o.id} value={o.id}>{o.padre ?? o.descrizione}{o.prezzo ? ` · € ${o.prezzo}` : ""}</option>
+                ))}
+              </select>
+              <span className="hint" style={{ fontSize: 10.5 }}>oppure trascina un&apos;offerta dall&apos;elenco sopra questa cella</span>
+            </label>
             {selOffs.length > 0 && (
               <>
                 <hr style={{ border: "none", borderTop: "1px solid var(--line)", margin: "10px 0" }} />

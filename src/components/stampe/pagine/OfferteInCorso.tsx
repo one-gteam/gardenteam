@@ -19,13 +19,12 @@ import InlineSelect from "@/components/stampe/InlineSelect";
 import InlineMulti from "@/components/stampe/InlineMulti";
 import ColumnTools from "@/components/stampe/ColumnTools";
 import AvvisaColleghi from "@/components/stampe/AvvisaColleghi";
-import AvanzamentoVolantino from "@/components/stampe/AvanzamentoVolantino";
 import ParentQuickEdit from "@/components/stampe/ParentQuickEdit";
 import { DettagliPadre, PannelloPadre } from "@/components/stampe/DettagliPadre";
 import {
   getZooDb, zooImageUrl, effectiveParentText, campagnaInLavorazione, campagnaInCorso, campaignStato,
   fotoDaAbbinare, promoDaTesto, chiavePrezzo, animaliDi, caratteristicheProdottoDi, migraVolantinoPages, prezzoUnitaDi,
-  NO_VOLANTINO, marcaEffettiva, prezziDelPadre, passiVolantino, nomeDestinazione, type ZooProduct, type ZooOffer, type ZooParent,
+  NO_VOLANTINO, marcaEffettiva, prezziDelPadre, nomeDestinazione, type ZooProduct, type ZooOffer, type ZooParent,
 } from "@/lib/zoo";
 import {
   interpretaPromoScritte, avviaAssociaConAI, chiudiAvvisoAssocia,
@@ -34,7 +33,7 @@ import {
   toggleParentCaratteristica, scioglieParent, chiudiVolantino, riapriVolantino, nuovoVolantino,
   svuotaOfferteVolantino, rimuoviOfferteMarginiamo, updateParentFieldInline, updateOfferFieldInline,
   updateOfferGroupFieldInline, setParentTagInline, moveProductToParent, setParentImageFromFile,
-  mergeParentsForm, archiviaOfferteSelezionate, aggiungiOffertaAMano, dividiPadrePerPrezzo, dividiTuttiIPadriPerPrezzo, setTipologiaInline, setParentAnimaliInline } from "@/lib/zoo-actions";
+  mergeParentsForm, archiviaOfferteSelezionate, aggiungiOffertaAMano, dividiTuttiIPadriPerPrezzo, setTipologiaInline, setParentAnimaliInline } from "@/lib/zoo-actions";
 
 // "Associa con AI" può richiedere più dei 10s di default per un lotto di articoli:
 // alza il limite dove la piattaforma lo consente (vale anche per le server action
@@ -386,7 +385,7 @@ export default async function OfferteInCorso({ user, sp }: { user: User; sp: Rec
           <div className="alert alert-green">✓ Rimosse {sp.rimossemarginiamo} offerte &quot;marginiamo&quot;.</div>
         )}
         {sp.nuovo && <div className="alert alert-green">✓ Nuovo volantino aperto: le pagine ripartono pulite.</div>}
-        {campaign && <AvanzamentoVolantino passi={passiVolantino(db, campaign)} campaignId={campaign.id} puoSegnare={consortium} />}
+
         {sp.riaperto && <div className="alert alert-green">✓ Volantino riaperto: puoi modificarlo di nuovo.</div>}
         {sp.errore === "giaaperto" && (
           <div className="alert alert-amber">
@@ -756,15 +755,6 @@ export default async function OfferteInCorso({ user, sp }: { user: User; sp: Rec
                             )}
                             {!parent && <span className="pill pill-gray">senza padre</span>}
                             {parent && <DettagliPadre parentId={parent.id} />}
-                            {parent && consortium && padriConPiuPrezzi.includes(parent) && (
-                              <div style={{ marginTop: 3 }}>
-                                <PulsanteAzione azione={dividiPadrePerPrezzo.bind(null, parent.id)} className="pill pill-amber"
-                                  conferma={`Dividere «${parent.nome}» in un padre per prezzo? Il formato finisce nel nome e nella descrizione dei nuovi padri.`}
-                                  title="Questo padre ha articoli in offerta a prezzi diversi: stesse descrizioni su righe che dicono cose diverse">
-                                  ⚠ più prezzi · dividi
-                                </PulsanteAzione>
-                              </div>
-                            )}
                             {parent && animali.length === 0 && (
                               <span className="pill pill-amber" title="L'animale non è stato riconosciuto: scegli nella colonna Animale">senza animale</span>
                             )}

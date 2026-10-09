@@ -689,7 +689,8 @@ table.data td { overflow-wrap: anywhere; }
  * prodotti non fa sparire i filtri (comodo con centinaia di articoli).
  */
 .vol-filtro {
-  position: sticky; top: calc(var(--vol-top2, 120px) + 8px); max-height: calc(100vh - var(--vol-top2, 120px) - 20px);
+  /* resta in vista scorrendo, subito sotto la testata (la barra delle pagine sta nella colonna centrale) */
+  position: sticky; top: calc(var(--vol-top1, 56px) + 8px); max-height: calc(100vh - var(--vol-top1, 56px) - 20px);
   display: flex; flex-direction: column; overflow: hidden;
   background: #fff; border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow);
 }
@@ -703,7 +704,7 @@ table.data td { overflow-wrap: anywhere; }
 .vol-filtro-head button { margin-left: auto; }
 .vol-filtro-body { padding: 10px 12px 12px; }
 .vol-filtro-lista { padding: 10px 12px 14px; display: grid; grid-template-columns: 1fr; gap: 8px; }
-.vol-filtro-lista { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+.vol-filtro-lista { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
 .vol-filtro .field { margin-bottom: 8px; font-size: 12px; }
 .vol-filtro .field select, .vol-filtro .field input { margin-top: 2px; font-size: 12px; padding: 5px 8px; }
 /* `min-width: 0` è indispensabile: senza, la scheda non scende sotto la larghezza
@@ -1253,8 +1254,14 @@ th.ordinata[data-ordine="desc"]::after { content: " ▼"; font-size: 9px; }
 /* Crea Volantino: maniglia per allargare l'elenco, tessera compatta, pannello di unione */
 .vol-maniglia { position: absolute; top: 0; right: -6px; width: 10px; height: 100%; cursor: col-resize; z-index: 5; }
 .vol-maniglia:hover { background: linear-gradient(90deg, transparent 3px, var(--green-500) 3px, var(--green-500) 5px, transparent 5px); }
-.vol-off-corpo { display: grid; grid-template-columns: auto 52px minmax(0, 1fr); gap: 8px; align-items: start; }
-.vol-off-foto { width: 52px; height: 52px; object-fit: contain; background: #fff; border-radius: 6px; border: 1px solid var(--line); align-self: start; }
+.vol-off-corpo { display: grid; grid-template-columns: auto 48px minmax(0, 1fr); gap: 8px; align-items: center; }
+.vol-off-titolo { font-size: 12px; font-weight: 800; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vol-off-descr { font-size: 10.5px; color: var(--muted); line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.vol-off-prezzo { display: flex; gap: 5px; align-items: center; flex-wrap: wrap; font-size: 11px; color: var(--muted); margin-top: 2px; }
+.vol-off-prezzo strong { color: #c2410c; font-size: 12px; }
+.vol-off-meta { display: flex; gap: 3px; flex-wrap: wrap; align-items: center; margin-top: 5px; }
+.vol-off-meta .pill { font-size: 10px; padding: 1px 6px; }
+.vol-off-foto { width: 48px; height: 48px; object-fit: contain; background: #fff; border-radius: 6px; border: 1px solid var(--line); }
 .vol-off-pagine { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
 .vol-unione { margin: 8px 12px 0; padding: 10px; border: 2px solid var(--green-500); border-radius: 10px; background: #f6fbf6; }
 /* scelta di più valori in una cella (InlineMulti) */
@@ -1305,3 +1312,12 @@ input:checked + .fb-colore { box-shadow: 0 0 0 2px var(--green-700); }
 .dash-box-testa { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .dash-box ul { margin: 6px 0 8px; padding-left: 18px; font-size: 12.5px; }
 .dash-box li { margin: 1px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Dashboard: consegna al grafico, incontri fissati */
+.dash-deadline { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 8px 12px; margin-bottom: 10px; border-left: 4px solid var(--green-500); }
+.dash-deadline.vicina { border-left-color: #d9473b; background: #fff5f4; }
+.dash-incontri { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 10px; align-items: start; }
+@media (max-width: 900px) { .dash-incontri { grid-template-columns: 1fr; } }
+.prog-incontro { padding: 10px 12px; display: grid; gap: 8px; }
+.prog-griglia { display: grid; grid-template-columns: 1fr 1.4fr 0.8fr 2fr; gap: 8px; align-items: end; }
+@media (max-width: 900px) { .prog-griglia { grid-template-columns: 1fr 1fr; } }

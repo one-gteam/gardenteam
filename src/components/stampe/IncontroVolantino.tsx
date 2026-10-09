@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { avviaIncontro, battitoIncontro, terminaIncontro, partecipantiIncontro, type StatoIncontro } from "@/lib/zoo-incontri";
+import { avviaIncontro, battitoIncontro, terminaIncontro, partecipantiIncontro, iniziaDaOra, type StatoIncontro } from "@/lib/zoo-incontri";
 
 /**
  * Il cronometro dell'incontro, in testa a Crea Volantino: «Avvia» / «Termina»
@@ -71,6 +71,8 @@ export default function IncontroVolantino({
           <strong style={{ fontSize: 12.5 }}>Incontro in corso · {durata}</strong>
           <button type="button" className="btn btn-outline btn-sm" onClick={() => setAperto(!aperto)}
             title="Chi partecipa all'incontro">{partecipanti.length} {partecipanti.length === 1 ? "persona" : "persone"} ▾</button>
+          <button type="button" className="btn btn-outline btn-sm" onClick={() => iniziaDaOra(campaignId).then(setSt)}
+            title="Fai partire il tempo da adesso (es. se l'incontro era partito da solo prima di cominciare davvero)">Inizio</button>
           <button type="button" className="btn btn-outline btn-sm" onClick={() => terminaIncontro(campaignId).then(setSt)}>Termina</button>
         </>
       ) : (

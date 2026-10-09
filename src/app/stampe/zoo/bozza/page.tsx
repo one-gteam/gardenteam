@@ -12,6 +12,7 @@ import {
 import { aggiungiNotaBozza, risolviNotaBozza } from "@/lib/zoo-actions";
 import TabellaVolantino from "@/components/stampe/TabellaVolantino";
 import EsportaVolantino from "@/components/stampe/EsportaVolantino";
+import { colonneGriglia, colonnaGriglia, colonnaSezione } from "@/lib/volantino-griglia";
 import AvvisaColleghi from "@/components/stampe/AvvisaColleghi";
 import { userSites } from "@/lib/types";
 
@@ -79,15 +80,6 @@ export default async function ZooBozzaPage({
               <a className={`pill ${sp.vista === "tabella" ? "pill-blue" : "pill-gray"}`} href={`/stampe/zoo/bozza?vista=tabella&scope=${scopeParam}`}>Tabella delle offerte</a>
             </div>
           )}
-          {campaign && (
-            <div className="no-print" style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", width: "100%" }}>
-              <EsportaVolantino campaignId={campaign.id}
-                excelHref={`/stampe/zoo/crea-volantino/excel?campagna=${campaign.id}`}
-                fotoZipHref={`/stampe/zoo/crea-volantino/foto?campagna=${campaign.id}`}
-                selettorePagine=".bozza-pagine .vol-page" />
-              <AvvisaColleghi tipo="bozza" scopeParam={scopeParam} colleghi={colleghiZoo} />
-            </div>
-          )}
           <form method="get" style={{ display: "flex", gap: 8, alignItems: "center" }}>
             {sp.vista === "tabella" && <input type="hidden" name="vista" value="tabella" />}
             <label style={{ fontSize: 12.5, fontWeight: 700 }}>
@@ -98,6 +90,15 @@ export default async function ZooBozzaPage({
             </label>
             <button className="btn btn-sm" type="submit">OK</button>
           </form>
+          {campaign && (
+            <div className="no-print" style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", width: "100%" }}>
+              <EsportaVolantino campaignId={campaign.id}
+                excelHref={`/stampe/zoo/crea-volantino/excel?campagna=${campaign.id}`}
+                fotoZipHref={`/stampe/zoo/crea-volantino/foto?campagna=${campaign.id}`}
+                selettorePagine=".bozza-pagine .vol-page" />
+              <AvvisaColleghi tipo="bozza" scopeParam={scopeParam} colleghi={colleghiZoo} />
+            </div>
+          )}
         </div>
 
         {sp.nota && <div className="alert alert-green">✓ Nota salvata: la vedono anche gli altri.</div>}
@@ -158,12 +159,12 @@ export default async function ZooBozzaPage({
                   {page.note && <p className="nota-grafico">Note per il grafico: {page.note}</p>}
 
                   <div className="vol-page" style={{
-                    gridTemplateColumns: `repeat(${page.cols}, 1fr)`,
+                    gridTemplateColumns: colonneGriglia(),
                     gridTemplateRows: `repeat(${page.rows}, 1fr)`,
                   }}>
                     {(page.sezioni ?? []).map((sz) => (
                       <div key={sz.id} className="vol-sezione"
-                        style={{ gridColumn: `${sz.c + 1} / span ${sz.cs}`, gridRow: `${sz.r + 1} / span ${sz.rs}`, background: sz.bg }}>
+                        style={{ gridColumn: colonnaSezione(page, sz), gridRow: `${sz.r + 1} / span ${sz.rs}`, background: sz.bg }}>
                         {sz.testo && <div className="vol-sezione-testo">{sz.testo}</div>}
                         {sz.titolo && <div className="vol-sezione-titolo">{sz.titolo}</div>}
                       </div>
@@ -174,7 +175,7 @@ export default async function ZooBozzaPage({
                       const dentroSezione = (page.sezioni ?? []).some((sz) => b.r >= sz.r && b.r < sz.r + sz.rs && b.c >= sz.c && b.c < sz.c + sz.cs);
                       return (
                         <div key={b.id} className="vol-cell" style={{
-                          gridColumn: `${b.c + 1} / span ${b.cs}`, gridRow: `${b.r + 1} / span ${b.rs}`,
+                          gridColumn: colonnaGriglia(page, b), gridRow: `${b.r + 1} / span ${b.rs}`,
                           background: b.imageUrl ? `center/cover no-repeat url(${b.imageUrl})` : b.bg ? b.bg : dentroSezione ? "transparent" : "#fff",
                           border: dentroSezione ? "1px dashed rgba(0,0,0,.12)" : "1px solid #e6e6e6",
                         }}>
@@ -231,8 +232,9 @@ export default async function ZooBozzaPage({
                                     )}
                                     {dati.sconto && <span style={{ fontSize: 9, fontWeight: 800, color: "#15803d" }}>{dati.sconto}</span>}
                                   </div>
-                                  {dati.tipi.length > 0 && (
-                                    <div style={{ fontSize: 8, color: "#274b7a", fontWeight: 700 }}>{dati.tipi.join(" · ")}</div>
+                                  {/* il prezzo barrato si vede già dal prezzo: si scrivono solo le altre tipologie (3x2, sconto in cassa…) */}
+                                  {dati.tipi.filter((t) => t !== "prezzo barrato").length > 0 && (
+                                    <div style={{ fontSize: 8, color: "#274b7a", fontWeight: 700 }}>{dati.tipi.filter((t) => t !== "prezzo barrato").join(" · ")}</div>
                                   )}
                                 </div>
                               );
