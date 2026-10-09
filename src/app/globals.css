@@ -1321,3 +1321,5 @@ input:checked + .fb-colore { box-shadow: 0 0 0 2px var(--green-700); }
 .prog-incontro { padding: 10px 12px; display: grid; gap: 8px; }
 .prog-griglia { display: grid; grid-template-columns: 1fr 1.4fr 0.8fr 2fr; gap: 8px; align-items: end; }
 @media (max-width: 900px) { .prog-griglia { grid-template-columns: 1fr 1fr; } }
+/* finestra stretta: l'elenco sta sopra le pagine, fisso le coprirebbe */
+@media (max-width: 1100px) { .vol-filtro { position: static; max-height: 70vh; } }
