@@ -1323,3 +1323,35 @@ input:checked + .fb-colore { box-shadow: 0 0 0 2px var(--green-700); }
 @media (max-width: 900px) { .prog-griglia { grid-template-columns: 1fr 1fr; } }
 /* finestra stretta: l'elenco sta sopra le pagine, fisso le coprirebbe */
 @media (max-width: 1100px) { .vol-filtro { position: static; max-height: 70vh; } }
+
+/* Dashboard, seconda versione: testata con la consegna, due colonne sobrie */
+.testata-compatta .dash-deadline { display: inline-flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 4px 10px; margin: 0; border: 1px solid var(--line); border-left: 4px solid var(--green-500); border-radius: 8px; background: #fff; }
+.testata-compatta .dash-deadline.vicina { border-left-color: #d9473b; background: #fff5f4; }
+.dash-colonne { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 12px; align-items: start; margin-top: 12px; }
+@media (max-width: 1000px) { .dash-colonne { grid-template-columns: 1fr; } }
+.dash-sezione { padding: 12px 14px; }
+.dash-sezione h2 { margin: 0 0 8px; font-size: 16px; }
+.dash-riga { border-top: 1px solid var(--line); }
+.dash-riga > summary { display: flex; gap: 10px; align-items: center; padding: 7px 0; cursor: pointer; list-style: none; font-size: 13.5px; }
+.dash-riga > summary::-webkit-details-marker { display: none; }
+.dash-conto { min-width: 34px; text-align: center; font-weight: 900; font-variant-numeric: tabular-nums; background: #fff3d6; color: #8a5a00; border-radius: 999px; padding: 1px 8px; font-size: 12.5px; }
+.dash-riga.urgente .dash-conto { background: #fde4e1; color: #a1271c; }
+.dash-riga ul { margin: 0 0 8px; padding-left: 52px; font-size: 12.5px; color: #333; }
+.dash-prossimi { list-style: none; padding: 0; margin: 0 0 8px; display: grid; gap: 8px; }
+.dash-prossimi li { border-left: 3px solid var(--green-500); padding-left: 8px; font-size: 13px; }
+.dash-fissa { margin-top: 10px; }
+.dash-fissa > summary { list-style: none; display: inline-block; }
+.dash-fissa > summary::-webkit-details-marker { display: none; }
+.dash-fissa .prog-incontro { margin-top: 8px; box-shadow: none; }
+
+/* Focus: schede comprimibili, risultati della ricerca senza focus */
+.fb-col.compressa { min-height: 0; }
+.fb-col.compressa .fb-testa { border-bottom: 0; padding-bottom: 0; }
+.fb-testa { align-items: center; }
+.fb-freccia { border: 0; background: transparent; cursor: pointer; font-size: 13px; padding: 0 2px; color: var(--muted); }
+.fb-voce { position: relative; }
+.fb-togli { position: absolute; top: 2px; right: 3px; border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 14px; line-height: 1; opacity: 0; }
+.fb-voce:hover .fb-togli { opacity: 1; }
+.fb-togli:hover { color: var(--red, #c0392b); }
+.fb-trovate { border: 1px dashed var(--line); border-radius: 10px; padding: 8px 10px; margin-bottom: 10px; background: #fff; }
+.fb-trovate-voci { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 4px; margin-top: 6px; }

@@ -247,20 +247,6 @@ export default function VolantinoBuilder({
     [pages]
   );
 
-  const eccedenze = useMemo(() => {
-    const libere = new Map<string, number>();
-    for (const p of pages) libere.set(p.id, p.blocks.filter(vuoto).length);
-    const fuori: OffLite[] = [];
-    for (const o of daDisporre) {
-      const a = animaleDi(o.paginaId);
-      const candidate = a ? pages.filter((p) => p.animale === a).map((p) => p.id) : [o.paginaId!];
-      const id = candidate.find((pid) => (libere.get(pid) ?? 0) > 0);
-      if (id) libere.set(id, (libere.get(id) ?? 1) - 1);
-      else fuori.push(o);
-    }
-    return fuori;
-  }, [daDisporre, pages]);
-
   const upd = (fn: (p: VolPage[]) => VolPage[]) => setPages((prev) => fn(structuredClone(prev)).map(normalizza));
   const offer = (id?: string) => offers.find((o) => o.id === id) ?? offers.find((o) => !!id && o.offerIds?.includes(id));
   const blockOf = (ps: VolPage[], pi: number, id: string) => ps[pi].blocks.find((b) => b.id === id);
@@ -1025,21 +1011,6 @@ export default function VolantinoBuilder({
         </div>
 
         {avviso && <div className="alert alert-amber no-print">{avviso}</div>}
-
-        {/* eccedenze: offerte assegnate a una pagina che non ha più celle libere */}
-        {eccedenze.length > 0 && (
-          <div className="alert alert-red no-print" style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-            <strong>{eccedenze.length} offerte non ci stanno nella pagina assegnata.</strong>
-            <span style={{ fontSize: 12.5 }}>
-              Restano nell&apos;elenco a sinistra: allarga la griglia della pagina, unisci meno celle o spostane
-              qualcuna su un&apos;altra pagina.
-            </span>
-            <span style={{ fontSize: 11.5, color: "var(--muted)", width: "100%" }}>
-              {[...new Set(eccedenze.map((o) => o.padre ?? o.descrizione))].slice(0, 6).join(" · ")}
-              {eccedenze.length > 6 ? " …" : ""}
-            </span>
-          </div>
-        )}
 
         {vista === "verticale"
           ? <div className="vol-verticale">{pages.map((_, pi) => renderPage(pi))}</div>
