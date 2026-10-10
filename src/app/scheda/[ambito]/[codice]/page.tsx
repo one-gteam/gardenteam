@@ -6,7 +6,7 @@ import IntroEmozionale from "@/components/scheda/IntroEmozionale";
 import Galleria from "@/components/scheda/Galleria";
 import {
   getStampeDb, scopeDaSlug, schedaOnlinePer, campiScheda, productImageUrl, aziendaLogoUrl, insegnaDiScope, effectiveValue,
-  schedaExtraPer, galleriaProdotto, schedaUrl, type PrintProduct, type Scope, type StampeDB,
+  schedaExtraPer, galleriaProdotto, schedaUrl, catalogoDi, disponibilitaPV, etichettaDisponibilita, type PrintProduct, type Scope, type StampeDB,
 } from "@/lib/stampe";
 import type { DB } from "@/lib/types";
 import { elencoGruppi, gruppoDi } from "@/lib/cartello-campi";
@@ -99,6 +99,12 @@ export default async function SchedaPubblicaPage({ params }: { params: Params })
   const accessori = extra.accessori.map(prodottoDi).filter((p): p is PrintProduct => !!p).map((p) => tessera(db, scope, academyDb, p));
   const simili = extra.correlati.map(prodottoDi).filter((p): p is PrintProduct => !!p).map((p) => tessera(db, scope, academyDb, p));
   const testoCondivisione = `${titolo}${sottotitolo ? ` — ${sottotitolo}` : ""} · ${nome}`;
+  // il catalogo dell'insegna e, se la scheda è di un punto vendita, la sua disponibilità
+  const tenantId = scope.type === "tenant" ? scope.id : scope.type === "store" ? academyDb.stores.find((x) => x.id === scope.id)?.tenantId : undefined;
+  const catalogo = tenantId ? catalogoDi(db, tenantId) : undefined;
+  const dispo = catalogo ? disponibilitaPV(db, catalogo, scope.type === "store" ? scope.id : undefined, product) : { stato: "nd" as const };
+  const etichettaDispo = etichettaDisponibilita(dispo);
+  const linkCatalogo = catalogo?.attivo && tenantId ? `/catalogo/${tenantId}${scope.type === "store" ? `?pv=${scope.id}` : ""}` : "";
 
   return (
     <div className="scheda-pubblica sp" style={{ ["--insegna" as string]: colore }}>
@@ -140,6 +146,7 @@ export default async function SchedaPubblicaPage({ params }: { params: Params })
                 </div>
               )}
               {codici.length > 0 && <span className="scheda-codice">Cod. {codici.join(" · ")}</span>}
+              {etichettaDispo && <span className={`sp-dispo ${dispo.stato}`}>{dispo.stato === "esaurito" ? "○" : "●"} {etichettaDispo}{scope.type === "store" ? ` a ${scope.label}` : ""}</span>}
             </section>
 
             {(descrizione || inTabella.length > 0) && (
@@ -197,6 +204,14 @@ export default async function SchedaPubblicaPage({ params }: { params: Params })
         <span>{nome}{scope.type === "store" ? ` · ${scope.label}` : ""}</span>
         <span>Garden Team · Cartelli Arredo Giardino</span>
       </footer>
+      {linkCatalogo && (
+        <div className="sp-barra">
+          <div className="sp-barra-inner">
+            <div className="sp-barra-dove"><span>{nome}{scope.type === "store" ? ` ${scope.label}` : ""}</span><strong>{etichettaDispo || "Disponibile in negozio"}</strong></div>
+            <a className="sp-btn" href={linkCatalogo}>Tutto il catalogo</a>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

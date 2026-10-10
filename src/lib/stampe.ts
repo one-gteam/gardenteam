@@ -100,6 +100,58 @@ export interface SchedaExtra {
   correlati?: string[]; // id dei prodotti simili
 }
 
+/**
+ * Il catalogo online di un'insegna: tutta la selezione Arredo, con i prodotti
+ * che l'insegna ha spento tolti, e la disponibilità del punto vendita scelto
+ * dal cliente se l'insegna gestisce le quantità.
+ */
+export interface CatalogoPref {
+  tenantId: string;
+  attivo?: boolean;
+  titolo?: string;
+  bannerUrl?: string;
+  bannerOcchiello?: string;
+  bannerTesto?: string;
+  /** Le quantità dei PV contano: senza, tutto è «disponibile in negozio». */
+  gestioneQuantita?: boolean;
+  /** A quantità zero: nascosto (true) oppure «su ordinazione» (false, predefinito). */
+  esauritiNascosti?: boolean;
+  /** Id dei prodotti spenti per questa insegna. */
+  spenti?: string[];
+}
+
+/** Le quantità di un punto vendita, per codice fornitore, con da dove arrivano. */
+export interface GiacenzePV {
+  storeId: string;
+  aggiornatoIl?: string;
+  fonte?: "api" | "excel" | "mano";
+  quantita: Record<string, number>;
+  /** La chiave con cui il gestionale manda le quantità (Authorization: Bearer). */
+  token?: string;
+}
+
+/** Un totem nel punto vendita: schermo verticale a tutto schermo, configurato da qui. */
+export interface Totem {
+  id: string;
+  storeId: string;
+  nome: string;
+  /** La chiave nell'indirizzo: senza, la pagina non si apre. */
+  chiave: string;
+  modo: "attesa" | "prodotti";
+  /** Tipologie mostrate (vuoto = tutte). */
+  categorie: string[];
+  /** Foto e video dell'attesa (modo attesa) o i banner fra i prodotti (modo prodotti). */
+  media: MediaEmozionale[];
+  occhiello?: string;
+  frase?: string;
+  sottotitolo?: string;
+  secondiMedia: number;
+  secondiInattivita: number;
+  secondiProdotto: number;
+  bannerOgni: number;
+  mostraPrezzi: boolean;
+}
+
 export interface PrintFormat {
   id: string;
   name: string;
@@ -250,6 +302,9 @@ export interface StampeDB {
   fieldPrefs: FieldPref[];
   schedaOnline: SchedaOnlinePref[];
   schedaExtra: SchedaExtra[];
+  catalogo: CatalogoPref[];
+  giacenze: GiacenzePV[];
+  totem: Totem[];
   formats: PrintFormat[];
   layouts: CardLayout[];
   reports: ErrorReport[];
@@ -273,6 +328,9 @@ export async function getStampeDb(): Promise<StampeDB> {
   if (!db.fieldPrefs) db.fieldPrefs = [];
   if (!db.schedaOnline) db.schedaOnline = [];
   if (!db.schedaExtra) db.schedaExtra = [];
+  if (!db.catalogo) db.catalogo = [];
+  if (!db.giacenze) db.giacenze = [];
+  if (!db.totem) db.totem = [];
   if (!db.formats) db.formats = [];
   if (!db.layouts) db.layouts = [];
   if (!db.reports) db.reports = [];
@@ -537,6 +595,50 @@ export function similiProposti(db: StampeDB, product: PrintProduct, esclusi: str
   const stessoProdotto = (p: PrintProduct) => p.id === product.id || p.variantOf === base || p.id === base || (!!p.variantOf && p.variantOf === product.variantOf);
   const candidati = db.products.filter((p) => !stessoProdotto(p) && !esclusi.includes(p.id) && p.tipologia === product.tipologia && !p.variantOf);
   return [...candidati.filter((p) => p.marca === product.marca), ...candidati.filter((p) => p.marca !== product.marca)].slice(0, n);
+}
+
+/* ================== Catalogo online dell'insegna e quantità dei PV ================== */
+
+export function catalogoDi(db: StampeDB, tenantId: string): CatalogoPref {
+  return db.catalogo.find((c) => c.tenantId === tenantId) ?? { tenantId };
+}
+
+/** I prodotti del catalogo di un'insegna: quelli accesi; le varianti colore stanno sotto il prodotto base. */
+export function prodottiCatalogo(db: StampeDB, tenantId: string): PrintProduct[] {
+  const spenti = new Set(catalogoDi(db, tenantId).spenti ?? []);
+  return db.products.filter((p) => !spenti.has(p.id) && !p.variantOf);
+}
+
+export type StatoDisponibilita = "ok" | "pochi" | "esaurito" | "nd";
+
+/**
+ * La disponibilità di un prodotto in un punto vendita: dalle quantità del PV
+ * (comprese le varianti colore), se l'insegna le gestisce; altrimenti non si dice.
+ */
+export function disponibilitaPV(db: StampeDB, pref: CatalogoPref, storeId: string | undefined, product: PrintProduct): { stato: StatoDisponibilita; quantita?: number } {
+  if (!pref.gestioneQuantita || !storeId) return { stato: "nd" };
+  const g = db.giacenze.find((x) => x.storeId === storeId);
+  if (!g || !g.aggiornatoIl) return { stato: "nd" };
+  const codici = [product.codice, ...db.products.filter((v) => v.variantOf === product.id).map((v) => v.codice)];
+  let q = 0, trovato = false;
+  for (const c of codici) if (g.quantita[c] !== undefined) { q += g.quantita[c]; trovato = true; }
+  if (!trovato) return { stato: "esaurito", quantita: 0 };
+  return { stato: q <= 0 ? "esaurito" : q <= 2 ? "pochi" : "ok", quantita: q };
+}
+
+export function etichettaDisponibilita(d: { stato: StatoDisponibilita; quantita?: number }): string {
+  if (d.stato === "ok") return "Disponibile";
+  if (d.stato === "pochi") return d.quantita === 1 ? "Ultimo pezzo" : `Ultimi ${d.quantita}`;
+  if (d.stato === "esaurito") return "Su ordinazione";
+  return "";
+}
+
+/** Il prezzo numerico di un prodotto per un ambito (promo se c'è), per ordinare e filtrare. */
+export function prezzoNumero(db: StampeDB, scope: Scope, product: PrintProduct, academyDb: DB): number | undefined {
+  const v = effectiveValue(db, scope, product, "prezzoPromo", academyDb).value || effectiveValue(db, scope, product, "prezzo", academyDb).value;
+  const testo = v.replace(/[€\s]/g, "");
+  const n = parseFloat(testo.includes(",") ? testo.replace(/\./g, "").replace(",", ".") : testo);
+  return Number.isFinite(n) ? n : undefined;
 }
 
 /** Layout effettivo per formato+ambito(+tipologia): personalizzato se esiste, altrimenti quello del Consorzio. */

@@ -5,7 +5,8 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "./auth";
 import { getDb } from "./db";
 import { uploadPublicFile } from "./supabase";
-import type { SchedaExtra, StampeDB } from "./stampe";
+import type { SchedaExtra, StampeDB, Totem } from "./stampe";
+import { randomBytes } from "crypto";
 import {
   getStampeDb,
   saveStampeDb,
@@ -931,5 +932,217 @@ export async function ereditaSchedaExtra(productId: string, scopeParam: string, 
   }
   await saveStampeDb(db);
   revalidatePath("/stampe/arredo/dati");
+  return { ok: true };
+}
+
+
+/* ================== Catalogo online dell'insegna ================== */
+
+/** L'insegna dell'ambito (un PV porta alla sua insegna) e se chi chiede la gestisce. */
+async function ambitoInsegna(scopeParam: string) {
+  const user = await requireStampeUser();
+  const db = await getStampeDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  const tenantId = scope.type === "tenant" ? scope.id : scope.type === "store" ? academyDb.stores.find((s) => s.id === scope.id)?.tenantId : undefined;
+  const storeId = scope.type === "store" ? scope.id : undefined;
+  const ok = !!tenantId && gestisceArea(user, "arredo", scope, academyDb) && !isStoreBlocked(db, scope);
+  // il catalogo è dell'insegna: dal PV si gestiscono solo le quantità
+  const okInsegna = ok && scope.type === "tenant";
+  return { user, db, academyDb, scope, tenantId, storeId, ok, okInsegna };
+}
+
+function prefCatalogo(db: StampeDB, tenantId: string) {
+  let c = db.catalogo.find((x) => x.tenantId === tenantId);
+  if (!c) { c = { tenantId }; db.catalogo.push(c); }
+  return c;
+}
+
+/** Acceso/spento, titolo, banner e regole delle quantità del catalogo dell'insegna. */
+export async function salvaCatalogo(scopeParam: string, fd: FormData): Promise<{ ok: boolean; error?: string }> {
+  const { db, tenantId, okInsegna } = await ambitoInsegna(scopeParam);
+  if (!okInsegna) return { ok: false, error: "Il catalogo lo gestisce l'insegna." };
+  const c = prefCatalogo(db, tenantId!);
+  c.attivo = fd.get("attivo") === "on";
+  c.titolo = String(fd.get("titolo") ?? "").trim().slice(0, 60) || undefined;
+  c.bannerOcchiello = String(fd.get("bannerOcchiello") ?? "").trim().slice(0, 60) || undefined;
+  c.bannerTesto = String(fd.get("bannerTesto") ?? "").trim().slice(0, 120) || undefined;
+  c.gestioneQuantita = fd.get("gestioneQuantita") === "on";
+  c.esauritiNascosti = fd.get("esauriti") === "nascosti";
+  await saveStampeDb(db);
+  revalidatePath("/stampe/arredo/catalogo");
+  return { ok: true };
+}
+
+/** La foto del banner del catalogo, già caricata su Supabase. */
+export async function salvaBannerCatalogo(scopeParam: string, url: string | null): Promise<{ ok: boolean; error?: string }> {
+  const { db, tenantId, okInsegna } = await ambitoInsegna(scopeParam);
+  if (!okInsegna) return { ok: false, error: "Il catalogo lo gestisce l'insegna." };
+  const c = prefCatalogo(db, tenantId!);
+  c.bannerUrl = url && /^https:\/\/[^ ]+\/arredo-media\//.test(url) ? url : undefined;
+  await saveStampeDb(db);
+  revalidatePath("/stampe/arredo/catalogo");
+  return { ok: true };
+}
+
+/** Accende o spegne prodotti nel catalogo dell'insegna (uno, o tutti quelli di una tipologia). */
+export async function accendiProdottiCatalogo(scopeParam: string, ids: string[], acceso: boolean): Promise<{ ok: boolean; error?: string }> {
+  const { db, tenantId, okInsegna } = await ambitoInsegna(scopeParam);
+  if (!okInsegna) return { ok: false, error: "Il catalogo lo gestisce l'insegna." };
+  const c = prefCatalogo(db, tenantId!);
+  const spenti = new Set(c.spenti ?? []);
+  for (const id of ids) { if (acceso) spenti.delete(id); else spenti.add(id); }
+  c.spenti = [...spenti];
+  await saveStampeDb(db);
+  revalidatePath("/stampe/arredo/catalogo");
+  return { ok: true };
+}
+
+/* ================== Quantità dei punti vendita ================== */
+
+function giacenzaDi(db: StampeDB, storeId: string) {
+  let g = db.giacenze.find((x) => x.storeId === storeId);
+  if (!g) { g = { storeId, quantita: {} }; db.giacenze.push(g); }
+  return g;
+}
+
+/** Una quantità scritta a mano nell'elenco del PV. */
+export async function salvaQuantitaMano(scopeParam: string, codice: string, quantita: string): Promise<{ ok: boolean; error?: string }> {
+  const { db, storeId, ok } = await ambitoInsegna(scopeParam);
+  if (!ok || !storeId) return { ok: false, error: "Le quantità si scrivono dal punto vendita." };
+  if (!db.products.some((p) => p.codice === codice)) return { ok: false, error: "Codice non trovato." };
+  const g = giacenzaDi(db, storeId);
+  const n = quantita.trim() === "" ? undefined : Math.max(0, Math.floor(Number(quantita)));
+  if (n === undefined) delete g.quantita[codice]; else if (Number.isFinite(n)) g.quantita[codice] = n; else return { ok: false, error: "Scrivi un numero." };
+  g.aggiornatoIl = new Date().toISOString(); g.fonte = "mano";
+  await saveStampeDb(db);
+  revalidatePath("/stampe/arredo/catalogo");
+  return { ok: true };
+}
+
+/**
+ * Le quantità da un Excel del PV: colonne «codice» e «quantità» (o le prime
+ * due), un prodotto per riga. Sostituisce tutte le quantità del PV: è la foto
+ * del magazzino di oggi.
+ */
+export async function importaQuantitaExcel(scopeParam: string, fd: FormData): Promise<{ ok: boolean; error?: string }> {
+  const { db, storeId, ok } = await ambitoInsegna(scopeParam);
+  if (!ok || !storeId) return { ok: false, error: "Le quantità si caricano dal punto vendita." };
+  const file = fd.get("file") as File | null;
+  if (!file || file.size === 0) return { ok: false, error: "Scegli un file." };
+  const XLSX = await import("xlsx");
+  const wb = XLSX.read(Buffer.from(await file.arrayBuffer()), { type: "buffer" });
+  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[wb.SheetNames[0]], { defval: "" });
+  const codici = new Set(db.products.map((p) => p.codice));
+  const quantita: Record<string, number> = {};
+  let ignorate = 0;
+  for (const row of rows) {
+    const chiavi = Object.keys(row);
+    const kCod = chiavi.find((k) => /cod/i.test(k)) ?? chiavi[0];
+    const kQta = chiavi.find((k) => /quant|qt|giac|pezzi|disp/i.test(k)) ?? chiavi[1];
+    const codice = String(row[kCod] ?? "").trim().replace(/\.0$/, "");
+    const n = Math.floor(Number(String(row[kQta] ?? "").replace(",", ".")));
+    if (!codice || !codici.has(codice) || !Number.isFinite(n)) { ignorate++; continue; }
+    quantita[codice] = Math.max(0, n);
+  }
+  if (Object.keys(quantita).length === 0) return { ok: false, error: "Nessuna riga valida: servono le colonne codice e quantità, con i codici fornitore del catalogo." };
+  const g = giacenzaDi(db, storeId);
+  g.quantita = quantita; g.aggiornatoIl = new Date().toISOString(); g.fonte = "excel";
+  await saveStampeDb(db);
+  revalidatePath("/stampe/arredo/catalogo");
+  return { ok: true, error: `Caricate ${Object.keys(quantita).length} quantità${ignorate ? `, ${ignorate} righe ignorate (codice sconosciuto o quantità non numerica)` : ""}.` };
+}
+
+/** Una nuova chiave per il gestionale del PV (quella vecchia smette di valere). */
+export async function rigeneraTokenGiacenze(scopeParam: string): Promise<{ ok: boolean; error?: string }> {
+  const { db, storeId, ok } = await ambitoInsegna(scopeParam);
+  if (!ok || !storeId) return { ok: false, error: "La chiave è del punto vendita." };
+  const g = giacenzaDi(db, storeId);
+  g.token = `gt_${randomBytes(18).toString("base64url")}`;
+  await saveStampeDb(db);
+  revalidatePath("/stampe/arredo/catalogo");
+  return { ok: true };
+}
+
+/* ================== Totem del punto vendita ================== */
+
+async function totemDi(id: string) {
+  const user = await requireStampeUser();
+  const db = await getStampeDb();
+  const academyDb = await getDb();
+  const t = db.totem.find((x) => x.id === id);
+  if (!t) return { user, db, academyDb, t: undefined, ok: false };
+  const scope = { type: "store" as const, id: t.storeId, label: "" };
+  const ok = gestisceArea(user, "arredo", scope, academyDb) && !isStoreBlocked(db, scope);
+  return { user, db, academyDb, t, ok };
+}
+
+export async function creaTotem(scopeParam: string, fd: FormData): Promise<{ ok: boolean; error?: string }> {
+  const { db, storeId, ok } = await ambitoInsegna(scopeParam);
+  if (!ok || !storeId) return { ok: false, error: "Il totem si crea dal punto vendita." };
+  const nome = String(fd.get("nome") ?? "").trim().slice(0, 60) || "Totem";
+  const t: Totem = {
+    id: `tt_${Date.now().toString(36)}`, storeId, nome, chiave: randomBytes(9).toString("base64url"), modo: "attesa", categorie: [], media: [],
+    secondiMedia: 8, secondiInattivita: 45, secondiProdotto: 10, bannerOgni: 4, mostraPrezzi: true,
+  };
+  db.totem.push(t);
+  await saveStampeDb(db);
+  revalidatePath("/stampe/arredo/totem");
+  return { ok: true };
+}
+
+export async function salvaTotem(id: string, fd: FormData): Promise<{ ok: boolean; error?: string }> {
+  const { db, t, ok } = await totemDi(id);
+  if (!t || !ok) return { ok: false, error: "Totem non trovato o non tuo." };
+  const num = (k: string, min: number, max: number, def: number) => { const n = Number(fd.get(k)); return Number.isFinite(n) && n > 0 ? Math.min(max, Math.max(min, Math.round(n))) : def; };
+  t.nome = String(fd.get("nome") ?? t.nome).trim().slice(0, 60) || t.nome;
+  t.modo = fd.get("modo") === "prodotti" ? "prodotti" : "attesa";
+  t.categorie = (fd.getAll("categorie") as string[]).filter(Boolean).slice(0, 30);
+  t.occhiello = String(fd.get("occhiello") ?? "").trim().slice(0, 60) || undefined;
+  t.frase = String(fd.get("frase") ?? "").trim().slice(0, 120) || undefined;
+  t.sottotitolo = String(fd.get("sottotitolo") ?? "").trim().slice(0, 160) || undefined;
+  t.secondiMedia = num("secondiMedia", 3, 120, 8);
+  t.secondiInattivita = num("secondiInattivita", 10, 900, 45);
+  t.secondiProdotto = num("secondiProdotto", 3, 120, 10);
+  t.bannerOgni = num("bannerOgni", 1, 50, 4);
+  t.mostraPrezzi = fd.get("mostraPrezzi") === "on";
+  await saveStampeDb(db);
+  revalidatePath("/stampe/arredo/totem");
+  return { ok: true };
+}
+
+export async function registraMediaTotem(id: string, media: { url: string; tipo: "foto" | "video" }[]): Promise<{ ok: boolean; error?: string }> {
+  const { db, t, ok } = await totemDi(id);
+  if (!t || !ok) return { ok: false, error: "Totem non trovato o non tuo." };
+  t.media = [...t.media, ...media.filter((m) => /^https:\/\/[^ ]+\/arredo-media\//.test(m.url))].slice(0, 20);
+  await saveStampeDb(db);
+  revalidatePath("/stampe/arredo/totem");
+  return { ok: true };
+}
+
+export async function rimuoviMediaTotem(id: string, url: string): Promise<{ ok: boolean; error?: string }> {
+  const { db, t, ok } = await totemDi(id);
+  if (!t || !ok) return { ok: false, error: "Totem non trovato o non tuo." };
+  t.media = t.media.filter((m) => m.url !== url);
+  await saveStampeDb(db);
+  revalidatePath("/stampe/arredo/totem");
+  return { ok: true };
+}
+
+export async function eliminaTotem(id: string): Promise<{ ok: boolean; error?: string }> {
+  const { db, t, ok } = await totemDi(id);
+  if (!t || !ok) return { ok: false, error: "Totem non trovato o non tuo." };
+  db.totem = db.totem.filter((x) => x.id !== id);
+  await saveStampeDb(db);
+  revalidatePath("/stampe/arredo/totem");
+  return { ok: true };
+}
+
+export async function rigeneraChiaveTotem(id: string): Promise<{ ok: boolean; error?: string }> {
+  const { db, t, ok } = await totemDi(id);
+  if (!t || !ok) return { ok: false, error: "Totem non trovato o non tuo." };
+  t.chiave = randomBytes(9).toString("base64url");
+  await saveStampeDb(db);
+  revalidatePath("/stampe/arredo/totem");
   return { ok: true };
 }

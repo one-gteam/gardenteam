@@ -48,6 +48,8 @@ export default async function StampeHeader({
         ...(vedeLayout(user, "arredo") ? [{ href: "/stampe/arredo/layout", label: "Layout", key: "layout" }] : []),
         { href: "/stampe/arredo/stampa", label: "Stampa cartelli", key: "stampa" },
         ...(gestArredo ? [{ href: "/stampe/arredo/scheda", label: "Scheda online", key: "scheda" }] : []),
+        ...(gestArredo ? [{ href: "/stampe/arredo/catalogo", label: "Catalogo online", key: "catalogo" }] : []),
+        ...(gestArredo ? [{ href: "/stampe/arredo/totem", label: "Totem", key: "totem" }] : []),
         { href: "/stampe/arredo/linee-guida", label: "Linee guida", key: "linee-guida" },
         ...(gestArredo ? [{ href: "/stampe/impostazioni", label: "Impostazioni", key: "impostazioni" }] : []),
       ];
