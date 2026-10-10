@@ -76,6 +76,30 @@ export interface SchedaOnlinePref {
   benvenuto?: string;
 }
 
+/** Una foto o un video d'ambiente, per l'apertura a tutto schermo della scheda e per il totem. */
+export interface MediaEmozionale {
+  url: string;
+  tipo: "foto" | "video";
+}
+
+/**
+ * Quello che la scheda online mostra in più dei campi: foto aggiuntive,
+ * apertura emozionale (foto o video a tutto schermo con una frase), accessori
+ * e prodotti simili. Per ambito: il Consorzio decide per tutti, un'insegna o un
+ * PV può ridefinire ogni voce per sé (la voce più vicina vince, voce per voce).
+ */
+export interface SchedaExtra {
+  scopeType: ScopeType;
+  scopeId: string;
+  productId: string;
+  foto?: string[];
+  emozionali?: MediaEmozionale[];
+  occhiello?: string;
+  frase?: string;
+  accessori?: string[]; // id dei prodotti
+  correlati?: string[]; // id dei prodotti simili
+}
+
 export interface PrintFormat {
   id: string;
   name: string;
@@ -225,6 +249,7 @@ export interface StampeDB {
   overrides: FieldOverride[];
   fieldPrefs: FieldPref[];
   schedaOnline: SchedaOnlinePref[];
+  schedaExtra: SchedaExtra[];
   formats: PrintFormat[];
   layouts: CardLayout[];
   reports: ErrorReport[];
@@ -247,6 +272,7 @@ export async function getStampeDb(): Promise<StampeDB> {
   if (!db.overrides) db.overrides = [];
   if (!db.fieldPrefs) db.fieldPrefs = [];
   if (!db.schedaOnline) db.schedaOnline = [];
+  if (!db.schedaExtra) db.schedaExtra = [];
   if (!db.formats) db.formats = [];
   if (!db.layouts) db.layouts = [];
   if (!db.reports) db.reports = [];
@@ -469,6 +495,48 @@ export function campiScheda(db: StampeDB, scope: Scope, product: PrintProduct, a
     if (value.trim()) out.push({ field: f, value });
   }
   return out;
+}
+
+/** Gli extra della scheda come valgono per questo ambito: ogni voce dal record più vicino che la definisce. */
+export function schedaExtraPer(db: StampeDB, scope: Scope, productId: string, academyDb: DB): Required<Omit<SchedaExtra, "scopeType" | "scopeId" | "productId">> & { origine: Record<string, ScopeType | undefined> } {
+  const out = { foto: [] as string[], emozionali: [] as MediaEmozionale[], occhiello: "", frase: "", accessori: [] as string[], correlati: [] as string[], origine: {} as Record<string, ScopeType | undefined> };
+  const catena = parentScopes(scope, academyDb);
+  for (const chiave of ["foto", "emozionali", "occhiello", "frase", "accessori", "correlati"] as const) {
+    for (const sc of catena) {
+      const r = db.schedaExtra.find((x) => x.productId === productId && x.scopeType === sc.type && x.scopeId === sc.id);
+      if (r && r[chiave] !== undefined) {
+        (out as Record<string, unknown>)[chiave] = r[chiave];
+        out.origine[chiave] = sc.type;
+        break;
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Le foto della galleria: quella di catalogo, poi le varianti in cartella
+ * (<codice>_2.jpg, <codice>_3.jpg…: per chi tiene le foto in SharePoint), poi
+ * quelle caricate dalla scheda del prodotto.
+ */
+export function galleriaProdotto(product: PrintProduct, extra: { foto: string[] }): string[] {
+  const out = [productImageUrl(product)];
+  for (let n = 2; n <= 9; n++) {
+    for (const ext of ["jpg", "jpeg", "png", "webp"]) {
+      const abs = path.join(process.cwd(), "public", "immagini", "foto prodotti", `${product.codice}_${n}.${ext}`);
+      if (fs.existsSync(abs)) { out.push(`/immagini/foto prodotti/${product.codice}_${n}.${ext}`); break; }
+    }
+  }
+  for (const u of extra.foto) if (!out.includes(u)) out.push(u);
+  return out.filter((u) => !u.includes("mancante") || out.length === 1);
+}
+
+/** Prodotti simili proposti: stessa tipologia, prima quelli della stessa marca; mai le varianti colore dello stesso prodotto. */
+export function similiProposti(db: StampeDB, product: PrintProduct, esclusi: string[] = [], n = 6): PrintProduct[] {
+  const base = product.variantOf ?? product.id;
+  const stessoProdotto = (p: PrintProduct) => p.id === product.id || p.variantOf === base || p.id === base || (!!p.variantOf && p.variantOf === product.variantOf);
+  const candidati = db.products.filter((p) => !stessoProdotto(p) && !esclusi.includes(p.id) && p.tipologia === product.tipologia && !p.variantOf);
+  return [...candidati.filter((p) => p.marca === product.marca), ...candidati.filter((p) => p.marca !== product.marca)].slice(0, n);
 }
 
 /** Layout effettivo per formato+ambito(+tipologia): personalizzato se esiste, altrimenti quello del Consorzio. */

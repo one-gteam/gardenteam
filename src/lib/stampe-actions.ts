@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "./auth";
 import { getDb } from "./db";
 import { uploadPublicFile } from "./supabase";
+import type { SchedaExtra, StampeDB } from "./stampe";
 import {
   getStampeDb,
   saveStampeDb,
@@ -856,4 +857,79 @@ export async function deleteLayout(layoutId: string, scopeParam: string) {
     await saveStampeDb(db);
   }
   redirect(backUrl("/stampe/arredo/layout", scopeParam));
+}
+
+
+/* ================== Scheda online: foto in più, apertura emozionale, accessori e simili ================== */
+
+async function ambitoSchedaExtra(scopeParam: string) {
+  const user = await requireStampeUser();
+  const db = await getStampeDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  const ok = gestisceArea(user, "arredo", scope, academyDb) && !isStoreBlocked(db, scope);
+  return { user, db, academyDb, scope, ok };
+}
+
+function recordExtra(db: StampeDB, scope: { type: ScopeType; id: string }, productId: string): SchedaExtra {
+  let r = db.schedaExtra.find((x) => x.productId === productId && x.scopeType === scope.type && x.scopeId === scope.id);
+  if (!r) { r = { scopeType: scope.type, scopeId: scope.id, productId }; db.schedaExtra.push(r); }
+  return r;
+}
+
+/** Occhiello e frase dell'apertura, accessori e simili (id dei prodotti, uno per riga nel modulo). */
+export async function salvaSchedaExtra(productId: string, scopeParam: string, fd: FormData): Promise<{ ok: boolean; error?: string }> {
+  const { db, scope, ok } = await ambitoSchedaExtra(scopeParam);
+  if (!ok) return { ok: false, error: "Non puoi modificare questo ambito." };
+  if (!db.products.some((p) => p.id === productId)) return { ok: false, error: "Prodotto non trovato." };
+  const r = recordExtra(db, scope, productId);
+  const ids = (nome: string) => [...new Set((fd.getAll(nome) as string[]).filter((id) => id && id !== productId && db.products.some((p) => p.id === id)))].slice(0, 24);
+  if (fd.get("campo") === "testi") {
+    r.occhiello = String(fd.get("occhiello") ?? "").trim().slice(0, 60);
+    r.frase = String(fd.get("frase") ?? "").trim().slice(0, 200);
+  }
+  if (fd.get("campo") === "accessori") r.accessori = ids("accessori");
+  if (fd.get("campo") === "correlati") r.correlati = ids("correlati");
+  await saveStampeDb(db);
+  revalidatePath("/stampe/arredo/dati");
+  return { ok: true };
+}
+
+/** Registra foto o video già caricati su Supabase (il browser li manda da solo, con l'URL firmato). */
+export async function registraMediaScheda(productId: string, scopeParam: string, dove: "foto" | "emozionali", media: { url: string; tipo: "foto" | "video" }[]): Promise<{ ok: boolean; error?: string }> {
+  const { db, scope, ok } = await ambitoSchedaExtra(scopeParam);
+  if (!ok) return { ok: false, error: "Non puoi modificare questo ambito." };
+  const r = recordExtra(db, scope, productId);
+  const buoni = media.filter((m) => /^https:\/\/[^ ]+\/arredo-media\//.test(m.url)).slice(0, 20);
+  if (dove === "foto") r.foto = [...(r.foto ?? []), ...buoni.filter((m) => m.tipo === "foto").map((m) => m.url)].slice(0, 20);
+  else r.emozionali = [...(r.emozionali ?? []), ...buoni.map((m) => ({ url: m.url, tipo: m.tipo }))].slice(0, 10);
+  await saveStampeDb(db);
+  revalidatePath("/stampe/arredo/dati");
+  return { ok: true };
+}
+
+/** Toglie una foto o un video dalla scheda (il file resta nello storage: non si cancellano file in produzione da qui). */
+export async function rimuoviMediaScheda(productId: string, scopeParam: string, dove: "foto" | "emozionali", url: string): Promise<{ ok: boolean; error?: string }> {
+  const { db, scope, ok } = await ambitoSchedaExtra(scopeParam);
+  if (!ok) return { ok: false, error: "Non puoi modificare questo ambito." };
+  const r = recordExtra(db, scope, productId);
+  if (dove === "foto") r.foto = (r.foto ?? []).filter((u) => u !== url);
+  else r.emozionali = (r.emozionali ?? []).filter((m) => m.url !== url);
+  await saveStampeDb(db);
+  revalidatePath("/stampe/arredo/dati");
+  return { ok: true };
+}
+
+/** Un'insegna o un PV torna a quello che decide il livello sopra, per una voce. */
+export async function ereditaSchedaExtra(productId: string, scopeParam: string, voce: "foto" | "emozionali" | "accessori" | "correlati" | "testi"): Promise<{ ok: boolean; error?: string }> {
+  const { db, scope, ok } = await ambitoSchedaExtra(scopeParam);
+  if (!ok) return { ok: false, error: "Non puoi modificare questo ambito." };
+  const r = db.schedaExtra.find((x) => x.productId === productId && x.scopeType === scope.type && x.scopeId === scope.id);
+  if (r) {
+    if (voce === "testi") { delete r.occhiello; delete r.frase; } else delete r[voce];
+    if (Object.keys(r).length <= 3) db.schedaExtra = db.schedaExtra.filter((x) => x !== r);
+  }
+  await saveStampeDb(db);
+  revalidatePath("/stampe/arredo/dati");
+  return { ok: true };
 }

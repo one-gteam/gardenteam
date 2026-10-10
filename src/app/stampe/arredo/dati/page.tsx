@@ -5,6 +5,7 @@ import StampeHeader from "@/components/stampe/StampeHeader";
 import Cartello from "@/components/stampe/Cartello";
 import FieldEditor from "@/components/stampe/FieldEditor";
 import ProductClipboard from "@/components/stampe/ProductClipboard";
+import SchedaExtraEditor from "@/components/stampe/SchedaExtraEditor";
 import {
   getStampeDb,
   canAccessArea,
@@ -23,6 +24,9 @@ import {
   listValues,
   isImageField,
   anniCollezione,
+  schedaExtraPer,
+  similiProposti,
+  schedaUrl,
 } from "@/lib/stampe";
 import {
   toggleFieldHidden,
@@ -73,6 +77,11 @@ export default async function DatiPage({
   const values = product ? cartelloValues(db, scope, product, academyDb) : {};
   const photo = product ? productImageUrl(product) : "";
   const photoMissing = photo === "/immagini/mancante.jpg";
+  // la scheda online in più: foto, apertura, accessori e simili, come valgono per questo ambito
+  const breve = (p: (typeof db.products)[number]) => ({ id: p.id, codice: p.codice, titolo: p.fields.titolo ?? p.codice, foto: productImageUrl(p), marca: p.marca });
+  const extra = product ? schedaExtraPer(db, scope, product.id, academyDb) : undefined;
+  const prodottoDi = (id: string) => db.products.find((x) => x.id === id);
+  const prodottiBrevi = db.products.filter((x) => !x.variantOf || x.id === product?.id).map(breve);
 
   const qs = (extra: Record<string, string>) => {
     const params = new URLSearchParams();
@@ -405,6 +414,16 @@ export default async function DatiPage({
                     );
                   })}
               </div>
+            )}
+            {product && extra && (
+              <SchedaExtraEditor
+                productId={product.id} scopeParam={scopeParam} scopeType={scope.type} canEdit={canEdit}
+                foto={extra.foto} emozionali={extra.emozionali} occhiello={extra.occhiello} frase={extra.frase}
+                accessori={extra.accessori.map(prodottoDi).filter(Boolean).map((x) => breve(x!))}
+                correlati={extra.correlati.map(prodottoDi).filter(Boolean).map((x) => breve(x!))}
+                proposti={similiProposti(db, product, extra.correlati).map(breve)}
+                prodotti={prodottiBrevi} origine={extra.origine} urlScheda={schedaUrl(scope, product, false)}
+              />
             )}
           </div>
 
