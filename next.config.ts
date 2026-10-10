@@ -45,7 +45,7 @@ const nextConfig: NextConfig = {
       { key: "Strict-Transport-Security", value: "max-age=31536000" },
     ];
     return [
-      { source: "/((?!api/scorm|demo-volantino).*)", headers: sicurezza },
+      { source: "/((?!api/scorm|demo-volantino|demo-arredo).*)", headers: sicurezza },
       // la demo pubblica del volantino digitale carica i caratteri da Google Fonts
       {
         source: "/demo-volantino/:path*",
@@ -56,6 +56,16 @@ const nextConfig: NextConfig = {
           { key: "Cache-Control", value: "public, max-age=0, must-revalidate" },
         ],
       },
+      // la demo pubblica dell'Arredo (scheda, catalogo, totem): stesse regole del volantino
+      {
+        source: "/demo-arredo/:path*",
+        headers: [
+          ...sicurezza.filter((h) => h.key !== "Content-Security-Policy"),
+          { key: "Content-Security-Policy", value: csp.replace("style-src 'self' 'unsafe-inline'", "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com").replace("font-src 'self' data:", "font-src 'self' data: https://fonts.gstatic.com") },
+          { key: "Cache-Control", value: "public, max-age=0, must-revalidate" },
+        ],
+      },
+      { source: "/demo-arredo/img/:path*", headers: cache },
       { source: "/demo-volantino/img/:path*", headers: cache },
       ...["/immagini/:path*", "/loghi/:path*", "/fonts/:path*", "/uploads/:path*"].map((source) => ({ source, headers: cache })),
     ];

@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Tavolo Rio 210 con 6 sedie Net · Il Germoglio</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&display=swap">
+<link rel="stylesheet" href="stile.css">
+</head>
+<body>
+<div class="scheda">
+
+  <!-- apertura emozionale: si vede una volta per visita -->
+  <div class="intro" id="intro">
+    <div class="foto on" style="background-image:url(img/em_giardino.jpg)"></div>
+    <div class="foto" style="background-image:url(img/em_terrazza.jpg)"></div>
+    <div class="foto" style="background-image:url(img/p_rio.jpg)"></div>
+    <div class="velo"></div>
+    <span class="insegna">IL GERMOGLIO</span>
+    <button class="salta" type="button" onclick="chiudiIntro()">Salta</button>
+    <div class="testo">
+      <span class="occhiello">LA TUA ESTATE, FUORI</span>
+      <h1>Tavolo Rio 210 con 6 sedie Net</h1>
+      <p>Una tavolata da dodici, quando serve. Un tavolo da sei, tutti i giorni.</p>
+      <button class="btn" type="button" onclick="chiudiIntro()">Scopri il prodotto <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14m0 0-6-6m6 6 6-6"/></svg></button>
+      <div class="barre" id="barre"><span class="on"><i></i></span><span><i></i></span><span><i></i></span></div>
+    </div>
+  </div>
+
+  <header class="testata">
+    <div class="logo">IG</div>
+    <div class="nome"><strong>Il Germoglio</strong><span>Garden center · Vicenza</span></div>
+    <button class="icona" type="button" aria-label="Condividi" onclick="condividi()"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1d241f" stroke-width="2" stroke-linecap="round"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7M12 15V3m0 0L8 7m4-4 4 4"/></svg></button>
+  </header>
+
+  <div class="colonne">
+  <div>
+  <section class="galleria">
+    <div class="scorri" id="scorri">
+      <img src="img/p_rio.jpg" alt="Tavolo Rio con sedie Net sul terrazzo">
+      <img src="img/p_legno.jpg" alt="Il set in giardino">
+      <img src="img/p_lounge_bianco.jpg" alt="Dettaglio sotto la pergola">
+      <img src="img/em_terrazza.jpg" alt="Ambientazione in terrazza">
+      <img src="img/em_giardino.jpg" alt="Ambientazione in giardino">
+    </div>
+    <span class="pill novita">NOVITÀ 2026</span>
+    <span class="conta" id="conta">1 / 5</span>
+  </section>
+  <div class="punti" id="punti"><span class="on"></span><span></span><span></span><span></span><span></span></div>
+  <div class="mini" id="mini">
+    <img src="img/p_rio.jpg" alt="" class="on" onclick="vai(0)"><img src="img/p_legno.jpg" alt="" onclick="vai(1)"><img src="img/p_lounge_bianco.jpg" alt="" onclick="vai(2)"><img src="img/em_terrazza.jpg" alt="" onclick="vai(3)"><img src="img/em_giardino.jpg" alt="" onclick="vai(4)"><span class="video" onclick="vai(4)">▶ video</span>
+  </div>
+  </div>
+
+  <div>
+  <section class="tessera prezzo-box">
+    <span class="marca">NARDI · SET DA PRANZO</span>
+    <h1 class="titolo">Tavolo Rio 210 allungabile con 6 sedie Net</h1>
+    <p class="sotto">Resina fiberglass, bianco. Per esterno, resiste a sole e pioggia.</p>
+    <div class="riga-prezzo"><span class="prezzo grande">€ 1.290</span><span class="barrato" style="font-size:15px">€ 1.540</span><span class="risparmio">risparmi € 250</span></div>
+    <span class="hint">Cod. AR-20417 · prezzo del punto vendita di Vicenza</span>
+  </section>
+
+  <section class="tessera">
+    <h2>In breve</h2>
+    <div class="etichette"><span>Resina fiberglass</span><span>Bianco</span><span>210 → 280 cm</span><span>6 sedie incluse</span><span>Garanzia 3 anni</span></div>
+    <p class="descr">Il piano si allunga con una mano sola grazie alle guide in alluminio. Sedie impilabili, leggere, lavabili con acqua e sapone. Non teme sole, pioggia e salsedine.</p>
+    <table class="tabella" style="margin-top:10px">
+      <tr><td>Materiale</td><td>Resina fiberglass</td></tr>
+      <tr><td>Colore</td><td>Bianco</td></tr>
+      <tr><td>Tavolo</td><td>210/280 × 100 × 76 cm</td></tr>
+      <tr><td>Sedie</td><td>6, impilabili</td></tr>
+      <tr><td>Imballo</td><td>3 colli · 48 kg</td></tr>
+      <tr><td>Garanzia</td><td>3 anni</td></tr>
+    </table>
+  </section>
+
+  <section class="tessera">
+    <h2>Completa il set</h2>
+    <a class="acc" href="#"><img src="img/p_sedie_filo.jpg" alt=""><span class="t"><strong>Cuscino sedia Net</strong><span>grigio, antracite, verde</span></span><span class="prezzo">€ 19,90</span></a>
+    <a class="acc" href="#"><img src="img/p_bistro.jpg" alt=""><span class="t"><strong>Telo copritavolo 280</strong><span>impermeabile</span></span><span class="prezzo">€ 49,00</span></a>
+    <a class="acc" href="#"><img src="img/p_sdraio.jpg" alt=""><span class="t"><strong>Ombrellone Alfa 3 m</strong><span>con base 50 kg</span></span><span class="prezzo">€ 289</span></a>
+  </section>
+  </div>
+  </div>
+
+  <h2 style="margin:16px 16px 8px;font-size:15px">Simili a questo</h2>
+  <div class="simili">
+    <a href="#"><img src="img/p_legno.jpg" alt=""><strong>Tavolo Rio 140, 4 sedie</strong><span class="prezzo" style="font-size:13px">€ 890</span></a>
+    <a href="#"><img src="img/p_lounge_legno.jpg" alt=""><strong>Set Cube tortora</strong><span class="prezzo" style="font-size:13px">€ 1.190</span></a>
+    <a href="#"><img src="img/p_rattan.jpg" alt=""><strong>Tavolo Libeccio teak</strong><span class="prezzo" style="font-size:13px">€ 1.690</span></a>
+    <a href="#"><img src="img/p_divano.jpg" alt=""><strong>Set Aria 4 posti</strong><span class="prezzo" style="font-size:13px">€ 740</span></a>
+  </div>
+
+  <div class="barra-fissa"><div class="inner">
+    <div class="dove"><span>Il Germoglio Vicenza</span><strong>Disponibile in negozio</strong></div>
+    <a class="btn" href="catalogo.html">Tutto il catalogo</a>
+    <button class="icona" type="button" aria-label="Condividi" onclick="condividi()"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1d241f" stroke-width="2" stroke-linecap="round"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7M12 15V3m0 0L8 7m4-4 4 4"/></svg></button>
+  </div></div>
+</div>
+<script src="scheda.js"></script>
+</body>
+</html>
