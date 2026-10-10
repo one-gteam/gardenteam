@@ -158,7 +158,9 @@ export default async function SchedaPubblicaPage({ params }: { params: Params })
                     <tbody>
                       {gruppi.length > 1 && <tr className="sp-gruppo"><td colSpan={2}>{g}</td></tr>}
                       {inTabella.filter((c) => gruppoDi(c.field) === g).map((c) => (
-                        <tr key={c.field.id}><td>{c.field.label}</td><td>{testoStampato(c.value)}</td></tr>
+                        c.value.length > 70
+                          ? <tr key={c.field.id} className="sp-lungo"><td colSpan={2}><span>{c.field.label}</span><p>{testoStampato(c.value)}</p></td></tr>
+                          : <tr key={c.field.id}><td>{c.field.label}</td><td>{testoStampato(c.value)}</td></tr>
                       ))}
                     </tbody>
                   </table>

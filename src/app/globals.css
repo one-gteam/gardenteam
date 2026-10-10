@@ -1611,3 +1611,6 @@ img.tt-media.on { animation: sp-kb 12s linear forwards; }
 .tt-prod .prossimi img { width: 92px; height: 92px; border-radius: 12px; object-fit: contain; background: #fff; flex: none; }
 .tt-prod .piede { display: flex; align-items: center; justify-content: space-between; padding: 14px 24px 20px; font-size: 13.5px; color: #5c6660; }
 .tt-prod .piede b { color: #1d241f; }
+.sp-tabella tr.sp-lungo td { text-align: left; font-weight: 500; }
+.sp-tabella tr.sp-lungo span { display: block; color: #6b7280; font-size: 12.5px; margin-bottom: 2px; }
+.sp-tabella tr.sp-lungo p { margin: 0; line-height: 1.45; }
