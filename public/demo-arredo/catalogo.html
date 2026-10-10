@@ -13,14 +13,14 @@
   <header class="testata">
     <div class="logo">IG</div>
     <div class="nome"><strong>Il Germoglio</strong><span>Arredo giardino 2026</span></div>
-    <button class="pv" type="button" id="pv" onclick="cambiaPv()"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1d241f" stroke-width="2.2" stroke-linecap="round"><path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg><span>Vicenza</span> ▾</button>
+    <button class="pv" type="button" id="pv" onclick="cambiaPv()"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1d241f" stroke-width="2.2" stroke-linecap="round"><path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg><span>Venezia</span> ▾</button>
   </header>
 
   <div class="corpo">
     <aside class="lato">
       <div class="gruppo"><strong class="t">CATEGORIA</strong><div id="lato-cat"></div></div>
       <div class="gruppo"><strong class="t">MARCA</strong><label><input type="checkbox" checked> Nardi</label><label><input type="checkbox" checked> Emu</label><label><input type="checkbox" checked> Scab</label></div>
-      <div class="gruppo"><strong class="t">DISPONIBILITÀ</strong><label><input type="checkbox" id="solo-disp-lato" onchange="soloDisp(this.checked)"> Solo disponibili a Vicenza</label><label><input type="checkbox"> In promozione</label><label><input type="checkbox"> Novità 2026</label></div>
+      <div class="gruppo"><strong class="t">DISPONIBILITÀ</strong><label><input type="checkbox" id="solo-disp-lato" onchange="soloDisp(this.checked)"> Solo disponibili a Venezia</label><label><input type="checkbox"> In promozione</label><label><input type="checkbox"> Novità 2026</label></div>
     </aside>
     <main>
       <label class="cerca"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5c6660" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><input type="search" id="cerca" placeholder="Cerca tavoli, sedie, ombrelloni…" oninput="disegna()"></label>
@@ -28,15 +28,15 @@
       <div class="conto"><span id="conto"></span><label><input type="checkbox" id="solo-disp" onchange="soloDisp(this.checked)"> solo disponibili</label></div>
       <div class="banner" style="background-image:url(img/em_terrazza.jpg)"><span class="occhiello">SALDI DI FINE STAGIONE</span><strong>Lounge e divani fino al -30%</strong></div>
       <div class="griglia" id="griglia"></div>
-      <div class="piede">Disponibilità aggiornata oggi alle 7:30 · Il Germoglio Vicenza · i prezzi sono del punto vendita scelto</div>
+      <div class="piede">Disponibilità aggiornata oggi alle 7:30 · Il Germoglio Venezia · i prezzi sono del punto vendita scelto</div>
     </main>
   </div>
 </div>
 <script src="dati.js"></script>
 <script>
-var cat = "Tutti", solo = false, pv = "Vicenza";
+var cat = "Tutti", solo = false, pv = "Venezia";
 function soloDisp(v) { solo = v; document.getElementById("solo-disp").checked = v; document.getElementById("solo-disp-lato").checked = v; disegna(); }
-function cambiaPv() { pv = pv === "Vicenza" ? "Padova" : "Vicenza"; document.querySelector("#pv span").textContent = pv; PRODOTTI.forEach(function (p) { if (pv === "Padova") p.stato = p.id % 3 === 0 ? "ordina" : p.id % 4 === 0 ? "pochi" : "ok"; else p.stato = p.statoOrig; }); disegna(); }
+function cambiaPv() { pv = pv === "Venezia" ? "Mestre" : "Venezia"; document.querySelector("#pv span").textContent = pv; PRODOTTI.forEach(function (p) { if (pv === "Mestre") p.stato = p.id % 3 === 0 ? "ordina" : p.id % 4 === 0 ? "pochi" : "ok"; else p.stato = p.statoOrig; }); disegna(); }
 PRODOTTI.forEach(function (p) { p.statoOrig = p.stato; });
 function disegna() {
   var q = document.getElementById("cerca").value.trim().toLowerCase();
