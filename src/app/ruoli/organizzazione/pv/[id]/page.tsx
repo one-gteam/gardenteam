@@ -62,6 +62,27 @@ export default async function StorePage({
                 <input type="text" name="city" defaultValue={s.city} placeholder="es. Rosà (VI)" />
               </label>
             </div>
+            <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 12 }}>
+              <label className="field">
+                Indirizzo
+                <input type="text" name="indirizzo" defaultValue={s.indirizzo ?? ""} placeholder="es. Via Cornarotta 7/C, 30030 Robegano di Salzano (VE)" />
+              </label>
+              <label className="field">
+                Telefono
+                <input type="tel" name="telefono" defaultValue={s.telefono ?? ""} placeholder="es. 041 5740402" />
+              </label>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <label className="field">
+                Email del negozio
+                <input type="email" name="email" defaultValue={s.email ?? ""} placeholder="es. info@insegna.it" />
+              </label>
+              <label className="field">
+                Sito
+                <input type="text" name="sito" defaultValue={s.sito ?? ""} placeholder="es. www.insegna.it" />
+              </label>
+            </div>
+            <p className="hint" style={{ margin: "-4px 0 10px" }}>I contatti escono sulla scheda online dei prodotti e sul catalogo, per il cliente che vuole chiamare o venire in negozio.</p>
             <label className="field">
               Messaggio di benvenuto per gli studenti del punto vendita
               <textarea name="welcome" rows={2} defaultValue={s.welcome ?? ""} placeholder="Compare in evidenza nella home degli studenti di questo negozio" />

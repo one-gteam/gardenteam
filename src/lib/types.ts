@@ -133,6 +133,11 @@ export interface Store {
   tenantId: string;
   name: string;
   city: string;
+  /** Contatti del negozio, come sul sito dell'insegna: escono sulla scheda online e sul catalogo. */
+  indirizzo?: string;
+  telefono?: string;
+  email?: string;
+  sito?: string;
   welcome?: string;
   secretWord?: string;
   approvalEmail?: string;

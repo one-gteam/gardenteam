@@ -50,7 +50,7 @@
     var html = ""; lista.forEach(function (p, i) { html += tessera(p, true); if (i === 3) html += '</div><div class="banner" style="background-image:url(img/em_giardino.jpg)"><span class="occhiello">SOLO IN NEGOZIO</span><strong>Prova i lounge nell\'area esterna, corsia 7</strong></div><div class="griglia">'; });
     $("tcat-griglia").innerHTML = html;
     $("tcat-cat").innerHTML = CATEGORIE.map(function (c) { return '<button type="button" class="' + (c === cat ? "on" : "") + '" onclick="scegliCat(\'' + c + '\')">' + c + "</button>"; }).join("");
-    $("tcat-sotto").textContent = "Il Germoglio Venezia · " + lista.length + " prodotti";
+    $("tcat-sotto").textContent = "Il Germoglio Robegano · " + lista.length + " prodotti";
     $("tcat-scorri").scrollTop = 0;
   }
 

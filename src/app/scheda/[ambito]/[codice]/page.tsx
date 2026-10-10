@@ -202,6 +202,20 @@ export default async function SchedaPubblicaPage({ params }: { params: Params })
         )}
       </main>
 
+      {(() => {
+        const pv = scope.type === "store" ? academyDb.stores.find((x) => x.id === scope.id) : undefined;
+        if (!pv || !(pv.indirizzo || pv.telefono || pv.email)) return null;
+        return (
+          <section className="sp-tessera sp-negozio">
+            <h2>Vieni a trovarci</h2>
+            <strong>{pv.name}</strong>
+            {pv.indirizzo && <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${pv.name} ${pv.indirizzo}`)}`} target="_blank" rel="noreferrer">{pv.indirizzo}</a>}
+            {pv.telefono && <a href={`tel:${pv.telefono.replace(/[^+\d]/g, "")}`}>Tel. {pv.telefono}</a>}
+            {pv.email && <a href={`mailto:${pv.email}`}>{pv.email}</a>}
+            {pv.sito && <a href={`https://${pv.sito}`} target="_blank" rel="noreferrer">{pv.sito}</a>}
+          </section>
+        );
+      })()}
       <footer className="scheda-piede">
         <span>{nome}{scope.type === "store" ? ` · ${scope.label}` : ""}</span>
         <span>Garden Team · Cartelli Arredo Giardino</span>

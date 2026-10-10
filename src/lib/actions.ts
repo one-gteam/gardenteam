@@ -1252,6 +1252,14 @@ export async function updateStore(storeId: string, formData: FormData): Promise<
   const name = String(formData.get("name") ?? "").trim();
   if (name) s.name = name;
   s.city = String(formData.get("city") ?? "").trim();
+  if (formData.has("indirizzo")) {
+    s.indirizzo = String(formData.get("indirizzo") ?? "").trim().slice(0, 200) || undefined;
+    s.telefono = String(formData.get("telefono") ?? "").trim().slice(0, 60) || undefined;
+    const email = String(formData.get("email") ?? "").trim();
+    s.email = email.includes("@") ? email.slice(0, 120) : undefined;
+    const sito = String(formData.get("sito") ?? "").trim().replace(/^https?:\/\//i, "").replace(/\/$/, "");
+    s.sito = sito.slice(0, 120) || undefined;
+  }
   s.welcome = String(formData.get("welcome") ?? "").trim() || undefined;
   s.secretWord = String(formData.get("secretWord") ?? "").trim() || undefined;
   s.approvalEmail = String(formData.get("approvalEmail") ?? "").trim() || undefined;
