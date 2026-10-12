@@ -1,14 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Save, Plus, ChevronDown, ChevronUp, ArrowLeft, Rows3, Columns2 } from "lucide-react";
+import { Save, Plus, ChevronDown, ChevronUp, Undo2, Rows3, Columns2, Settings } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { SceltaFoto } from "./UnisciNelVolantino";
 import {
   saveVolantinoLayout, updateZooOfferQuick, uploadVolantinoImage, updateParentFieldInline,
   unisciVociVolantino, separaUnioneVolantino, updateOfferGroupFieldInline,
 } from "@/lib/zoo-actions";
-import { assegnaFocusOfferte } from "@/lib/zoo-focus-actions";
+import { assegnaFocusOfferte, salvaFocusDef } from "@/lib/zoo-focus-actions";
 import { colonneGriglia, colonnaGriglia, colonnaSezione, colonneRiga, righeBloccate } from "@/lib/volantino-griglia";
 import type { VolPage, VolBlock, VolSection } from "@/lib/zoo";
 
@@ -259,7 +259,40 @@ export default function VolantinoBuilder({
     [pages]
   );
 
-  const upd = (fn: (p: VolPage[]) => VolPage[]) => setPages((prev) => fn(structuredClone(prev)).map(normalizza));
+  /*
+   * Annulla: prima di ogni modifica si tiene la versione di prima (fino a 50
+   * passi). In sviluppo React chiama due volte lo stesso aggiornamento: la
+   * stessa versione non si mette due volte.
+   */
+  const storia = useRef<VolPage[][]>([]);
+  const [passiIndietro, setPassiIndietro] = useState(0);
+  const upd = (fn: (p: VolPage[]) => VolPage[]) => setPages((prev) => {
+    if (storia.current[storia.current.length - 1] !== prev) {
+      storia.current.push(prev);
+      if (storia.current.length > 50) storia.current.shift();
+    }
+    return fn(structuredClone(prev)).map(normalizza);
+  });
+  useEffect(() => { setPassiIndietro(storia.current.length); }, [pages]);
+  const annulla = () => {
+    const prima = storia.current.pop();
+    if (!prima) return;
+    setPages(prima);
+    setPassiIndietro(storia.current.length);
+    setSel(null); setExtra([]);
+  };
+  // Ctrl+Z annulla, ma non mentre si scrive in un campo (lì annulla il testo)
+  useEffect(() => {
+    const tasto = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "z" || e.shiftKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
+      e.preventDefault(); annulla();
+    };
+    window.addEventListener("keydown", tasto);
+    return () => window.removeEventListener("keydown", tasto);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const offer = (id?: string) => offers.find((o) => o.id === id) ?? offers.find((o) => !!id && o.offerIds?.includes(id));
   const blockOf = (ps: VolPage[], pi: number, id: string) => ps[pi].blocks.find((b) => b.id === id);
 
@@ -676,6 +709,20 @@ export default function VolantinoBuilder({
   const [focusScelto, setFocusScelto] = useState("");
   const [focusNuovo, setFocusNuovo] = useState("");
   const [colora, setColora] = useState(true);
+  const [focusNuovoTesto, setFocusNuovoTesto] = useState("");
+  // pannello della cella: testo e «altro» (commento per il grafico, immagine) si aprono a richiesta
+  const [apriTesto, setApriTesto] = useState(false);
+  const [apriAltro, setApriAltro] = useState(false);
+  useEffect(() => { setApriTesto(false); setApriAltro(false); }, [sel?.id]);
+  /** Il testo di un focus, scritto dal pannello: vale per tutto il volantino. */
+  const salvaTestoFocus = async (nome: string, descrizione: string) => {
+    const def = focusDisponibili.find((f) => f.nome === nome);
+    if ((def?.descrizione ?? "") === descrizione.trim()) return;
+    const fd = new FormData(); fd.set("nome", nome); fd.set("descrizione", descrizione); if (def?.colore) fd.set("colore", def.colore);
+    const r = await salvaFocusDef(campaignId, nome, fd).catch(() => ({ ok: false }));
+    flash(r.ok ? `Testo del focus «${nome}» salvato.` : "Testo del focus non salvato.");
+    if (r.ok) router.refresh();
+  };
   const selBlock = sel ? pages[sel.pi]?.blocks.find((b) => b.id === sel.id) : undefined;
   const selPage = sel ? pages[sel.pi] : undefined;
   const selOffs = ((selBlock?.offerIds ?? []).map(offer).filter(Boolean) as OffLite[]);
@@ -1042,8 +1089,9 @@ export default function VolantinoBuilder({
       <div>
         <div className="vol-toolbar no-print">
           <div className="vol-tabs">
-            <button type="button" className="btn btn-outline btn-sm" title="Torna alla pagina precedente" onClick={() => history.back()}>
-              <ArrowLeft size={14} style={{ verticalAlign: -2 }} /> Indietro
+            <button type="button" className="btn btn-outline btn-sm" disabled={passiIndietro === 0} onClick={annulla}
+              title={passiIndietro ? `Annulla l'ultima modifica alle pagine (Ctrl+Z) · ${passiIndietro} ${passiIndietro === 1 ? "passo" : "passi"} disponibili` : "Nessuna modifica da annullare"}>
+              <Undo2 size={14} style={{ verticalAlign: -2 }} /> Annulla
             </button>
             <button type="button" className="btn btn-outline btn-sm" onClick={() => setVista(vista === "schede" ? "verticale" : "schede")}
               title={vista === "schede" ? "Tutte le pagine una sotto l'altra: si scorre con la rotellina" : "Torna alle schede affiancate"}>
@@ -1118,37 +1166,29 @@ export default function VolantinoBuilder({
               <button className="mini-btn" onClick={() => { setSel(null); setExtra([]); }}>Chiudi</button>
             </div>
 
-            <div className="vol-side-riga">
-              <button className="btn btn-outline btn-sm" onClick={() => unisci(sel!.pi, selBlock.id, "destra")}>Unisci →</button>
-              <button className="btn btn-outline btn-sm" onClick={() => unisci(sel!.pi, selBlock.id, "giu")}>Unisci ↓</button>
-              {selBlock.cs > 1 && <button className="btn btn-outline btn-sm" onClick={() => separa(sel!.pi, selBlock.id, "destra")}>Separa ←</button>}
-              {selBlock.rs > 1 && <button className="btn btn-outline btn-sm" onClick={() => separa(sel!.pi, selBlock.id, "giu")}>Separa ↑</button>}
+            {/* struttura della cella: tre gruppi compatti */}
+            <div className="vol-strum">
+              <div className="vol-strum-gruppo">
+                <span className="vol-strum-tit">Cella</span>
+                <button type="button" onClick={() => unisci(sel!.pi, selBlock.id, "destra")} title="Unisci con la cella a destra">Unisci →</button>
+                <button type="button" onClick={() => unisci(sel!.pi, selBlock.id, "giu")} title="Unisci con la cella sotto">Unisci ↓</button>
+                {selBlock.cs > 1 && <button type="button" onClick={() => separa(sel!.pi, selBlock.id, "destra")}>Separa ←</button>}
+                {selBlock.rs > 1 && <button type="button" onClick={() => separa(sel!.pi, selBlock.id, "giu")}>Separa ↑</button>}
+              </div>
+              <div className="vol-strum-gruppo">
+                <span className="vol-strum-tit">Contenuto</span>
+                <button type="button" onClick={() => setClip({ ...selBlock })}>Copia</button>
+                <button type="button" disabled={!clip} onClick={() => clip && patch(sel!.pi, selBlock.id, contenutoDi(clip))}>Incolla</button>
+                <button type="button" className="danger" disabled={vuoto(selBlock)} onClick={() => svuota(sel!.pi, selBlock.id)}>Svuota</button>
+              </div>
+              <div className="vol-strum-gruppo" title="Righe con un numero di celle diverso: le celle che restano si allargano da sole">
+                <span className="vol-strum-tit">Riga · {colonneRiga(selPage, selBlock.r)} celle</span>
+                <button type="button" onClick={() => eliminaCella(sel!.pi, selBlock.id)} title="Togli questa cella dalla riga">− Cella</button>
+                <button type="button" onClick={() => aggiungiCella(sel!.pi, selBlock.r)} title="Aggiungi una cella in fondo alla riga">+ Cella</button>
+              </div>
             </div>
-            <div className="vol-side-riga">
-              <button className="btn btn-outline btn-sm" onClick={() => setClip({ ...selBlock })}>Copia</button>
-              {clip && <button className="btn btn-outline btn-sm" onClick={() => patch(sel!.pi, selBlock.id, contenutoDi(clip))}>Incolla</button>}
-              {!vuoto(selBlock) && <button className="btn btn-outline btn-sm danger" onClick={() => svuota(sel!.pi, selBlock.id)}>Svuota</button>}
-            </div>
-            <div className="vol-side-riga" title="Righe con un numero di celle diverso: le celle che restano si allargano da sole">
-              <span style={{ fontSize: 11.5 }}>Riga: {colonneRiga(selPage, selBlock.r)} celle</span>
-              <button className="btn btn-outline btn-sm" onClick={() => eliminaCella(sel!.pi, selBlock.id)}>− Togli questa cella</button>
-              <button className="btn btn-outline btn-sm" onClick={() => aggiungiCella(sel!.pi, selBlock.r)}>+ Cella sulla riga</button>
-            </div>
+            {selOffs.length === 0 && <p className="hint" style={{ margin: "8px 0 0", fontSize: 11 }}>Trascina un&apos;offerta dall&apos;elenco a sinistra dentro la cella, o fra due celle per aggiungerne una.</p>}
 
-            {/* un'altra offerta nello stesso riquadro: solo per il volantino, i padri non cambiano */}
-            <label className="field" style={{ marginTop: 8 }}>
-              {selOffs.length ? "Aggiungi un'altra offerta in questo riquadro" : "Metti un'offerta in questo riquadro"}
-              <select key={`agg_${selBlock.id}_${(selBlock.offerIds ?? []).length}`} defaultValue="" onChange={(e) => {
-                const id = e.target.value; if (!id) return;
-                patch(sel!.pi, selBlock.id, { offerIds: [...(selBlock.offerIds ?? []), id] });
-              }}>
-                <option value="">— scegli un'offerta —</option>
-                {offers.filter((o) => !inserite.has(o.id) && o.paginaId !== NO_VOLANTINO).map((o) => (
-                  <option key={o.id} value={o.id}>{o.padre ?? o.descrizione}{o.prezzo ? ` · € ${o.prezzo}` : ""}</option>
-                ))}
-              </select>
-              <span className="hint" style={{ fontSize: 10.5 }}>oppure trascina un&apos;offerta dall&apos;elenco sopra questa cella</span>
-            </label>
             {selOffs.length > 0 && (
               <>
                 <hr style={{ border: "none", borderTop: "1px solid var(--line)", margin: "10px 0" }} />
@@ -1220,60 +1260,93 @@ export default function VolantinoBuilder({
                 {labels.map((l) => <option key={l} value={l}>{l}</option>)}
               </select>
             </label>
-            {/* focus: alle offerte di questa cella e di quelle scelte con Ctrl/Maiusc + clic, con il suo colore */}
-            <div className="vol-focus-box">
-              <strong style={{ fontSize: 12.5 }}>Focus</strong>
-              <span className="hint" style={{ display: "block", fontSize: 11 }}>
-                {extra.length ? `Vale per ${extra.length + 1} celle (Ctrl o Maiusc + clic per aggiungerne o toglierne).` : "Ctrl o Maiusc + clic su altre celle per applicarlo a più tessere insieme."}
-              </span>
-              {selOffs[0]?.focus && <span className="pill pill-blue" style={{ margin: "4px 0", display: "inline-block" }}>attuale: {selOffs[0].focus}</span>}
-              <div style={{ display: "flex", gap: 4, marginTop: 4 }}>
-                <select value={focusScelto} onChange={(e) => setFocusScelto(e.target.value)} style={{ marginTop: 0, flex: 1, minWidth: 0, fontSize: 12 }}>
-                  <option value="">— scegli un focus —</option>
-                  {focusDisponibili.map((f) => <option key={f.nome} value={f.nome}>{f.nome}</option>)}
-                </select>
-                <button type="button" className="btn btn-sm" disabled={!focusScelto} onClick={() => applicaFocus(focusScelto)}>Applica</button>
-              </div>
-              {focusScelto && focusDisponibili.find((f) => f.nome === focusScelto)?.descrizione && (
-                <p className="hint" style={{ margin: "4px 0 0", fontSize: 11, whiteSpace: "pre-line" }}>{focusDisponibili.find((f) => f.nome === focusScelto)!.descrizione}</p>
-              )}
-              <div style={{ display: "flex", gap: 4, marginTop: 4 }}>
-                <input value={focusNuovo} onChange={(e) => setFocusNuovo(e.target.value)} placeholder="oppure un focus nuovo…" style={{ marginTop: 0, flex: 1, minWidth: 0, fontSize: 12 }} />
-                <button type="button" className="btn btn-outline btn-sm" disabled={!focusNuovo.trim()} onClick={() => applicaFocus(focusNuovo.trim())}>Crea</button>
-              </div>
-              <label style={{ display: "flex", gap: 5, alignItems: "center", fontSize: 12, marginTop: 4 }}>
-                <input type="checkbox" checked={colora} onChange={(e) => setColora(e.target.checked)} /> colora lo sfondo con il colore del focus
-              </label>
-              <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 4, flexWrap: "wrap" }}>
-                {selOffs.some((o) => o.focus) && <button type="button" className="mini-btn" onClick={() => applicaFocus("")}>togli il focus</button>}
-                <span style={{ fontSize: 11 }}>sfondo cella</span>
-                <input type="color" value={selBlock.bg ?? "#ffffff"} onChange={(e) => { const v = e.target.value; upd((ps) => { for (const c of [sel!, ...extra]) { const b = ps[c.pi]?.blocks.find((x) => x.id === c.id); if (b) b.bg = v; } return ps; }); }}
-                  style={{ width: 30, height: 22, padding: 0, marginTop: 0 }} title="Colore di sfondo della cella (e delle celle scelte)" />
-                {selBlock.bg && <button type="button" className="mini-btn" onClick={() => upd((ps) => { for (const c of [sel!, ...extra]) { const b = ps[c.pi]?.blocks.find((x) => x.id === c.id); if (b) b.bg = undefined; } return ps; })}>togli sfondo</button>}
-              </div>
-            </div>
-            <label className="field">Testo (anche sopra l&apos;immagine)
-              <textarea key={`t_${selBlock.id}_${selBlock.testo ?? ""}`} rows={2} defaultValue={selBlock.testo ?? ""}
-                onBlur={(e) => patch(sel!.pi, selBlock.id, { testo: e.target.value || undefined })} />
-            </label>
-            <label className="field">Commento per il grafico
-              <textarea key={`c_${selBlock.id}`} rows={2} defaultValue={selBlock.commento ?? ""}
-                onBlur={(e) => patch(sel!.pi, selBlock.id, { commento: e.target.value || undefined })} />
-            </label>
-            <label className="field">Immagine di sfondo
-              <input type="file" accept="image/*" style={{ fontSize: 11 }}
-                onChange={(e) => e.target.files?.[0] && caricaImmagine(sel!.pi, selBlock.id, e.target.files[0])} />
-            </label>
-            {selBlock.imageUrl && (
-              <button className="btn btn-outline btn-sm" onClick={() => patch(sel!.pi, selBlock.id, { imageUrl: undefined })}>Togli immagine</button>
-            )}
+            {/* focus: alle offerte di questa cella e di quelle scelte con Ctrl/Maiusc + clic, con il suo colore e il suo testo */}
+            {(() => {
+              const nomeFocus = focusScelto || selOffs[0]?.focus || "";
+              const def = focusDisponibili.find((f) => f.nome === nomeFocus);
+              return (
+                <div className="vol-focus-box">
+                  <strong style={{ fontSize: 12.5 }}>Focus</strong>
+                  <span className="hint" style={{ display: "block", fontSize: 11 }}>
+                    {extra.length ? `Vale per ${extra.length + 1} celle (Ctrl o Maiusc + clic per aggiungerne o toglierne).` : "Ctrl o Maiusc + clic su altre celle per applicarlo a più tessere insieme."}
+                  </span>
+                  {selOffs[0]?.focus && <span className="pill pill-blue" style={{ margin: "4px 0", display: "inline-block" }}>attuale: {selOffs[0].focus}</span>}
+                  <div style={{ display: "flex", gap: 4, marginTop: 4 }}>
+                    <select value={focusScelto} onChange={(e) => setFocusScelto(e.target.value)} style={{ marginTop: 0, flex: 1, minWidth: 0, fontSize: 12 }}>
+                      <option value="">— scegli un focus —</option>
+                      {focusDisponibili.map((f) => <option key={f.nome} value={f.nome}>{f.nome}</option>)}
+                    </select>
+                    <button type="button" className="btn btn-sm" disabled={!focusScelto} onClick={() => applicaFocus(focusScelto)}>Applica</button>
+                  </div>
+                  {nomeFocus && (
+                    <label className="field" style={{ margin: "6px 0 0", fontSize: 11.5 }}>Testo del focus «{nomeFocus}»
+                      <textarea key={`ft_${nomeFocus}_${def?.descrizione ?? ""}`} rows={3} defaultValue={def?.descrizione ?? ""}
+                        placeholder="Il testo che accompagna il focus nel volantino (vale per tutte le sue offerte)"
+                        onBlur={(e) => salvaTestoFocus(nomeFocus, e.target.value)} style={{ fontSize: 12 }} />
+                    </label>
+                  )}
+                  <details className="vol-focus-nuovo" open={!!focusNuovo}>
+                    <summary>oppure un focus nuovo</summary>
+                    <input value={focusNuovo} onChange={(e) => setFocusNuovo(e.target.value)} placeholder="nome del focus" style={{ marginTop: 4, width: "100%", fontSize: 12 }} />
+                    <textarea value={focusNuovoTesto} onChange={(e) => setFocusNuovoTesto(e.target.value)} rows={2} placeholder="testo del focus (facoltativo)" style={{ marginTop: 4, width: "100%", fontSize: 12 }} />
+                    <button type="button" className="btn btn-outline btn-sm" style={{ marginTop: 4 }} disabled={!focusNuovo.trim()}
+                      onClick={async () => {
+                        const n = focusNuovo.trim(); const t = focusNuovoTesto.trim();
+                        await applicaFocus(n);
+                        if (t) {
+                          const fd = new FormData(); fd.set("nome", n); fd.set("descrizione", t);
+                          await salvaFocusDef(campaignId, n, fd).catch(() => undefined);
+                          router.refresh();
+                        }
+                        setFocusNuovoTesto("");
+                      }}>Crea e applica</button>
+                  </details>
+                  <label style={{ display: "flex", gap: 5, alignItems: "center", fontSize: 12, marginTop: 6 }}>
+                    <input type="checkbox" checked={colora} onChange={(e) => setColora(e.target.checked)} /> colora lo sfondo con il colore del focus
+                  </label>
+                  <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 4, flexWrap: "wrap" }}>
+                    {selOffs.some((o) => o.focus) && <button type="button" className="mini-btn" onClick={() => applicaFocus("")}>togli il focus</button>}
+                    <span style={{ fontSize: 11 }}>sfondo cella</span>
+                    <input type="color" value={selBlock.bg ?? "#ffffff"} onChange={(e) => { const v = e.target.value; upd((ps) => { for (const c of [sel!, ...extra]) { const b = ps[c.pi]?.blocks.find((x) => x.id === c.id); if (b) b.bg = v; } return ps; }); }}
+                      style={{ width: 30, height: 22, padding: 0, marginTop: 0 }} title="Colore di sfondo della cella (e delle celle scelte)" />
+                    {selBlock.bg && <button type="button" className="mini-btn" onClick={() => upd((ps) => { for (const c of [sel!, ...extra]) { const b = ps[c.pi]?.blocks.find((x) => x.id === c.id); if (b) b.bg = undefined; } return ps; })}>togli sfondo</button>}
+                  </div>
+                </div>
+              );
+            })()}
 
-            <hr style={{ border: "none", borderTop: "1px solid var(--line)", margin: "10px 0" }} />
-            <strong style={{ fontSize: 12.5 }}>Sfondo di gruppo (sezione)</strong>
-            <p className="hint" style={{ margin: "4px 0 6px", fontSize: 11 }}>
-              Colora un&apos;area della pagina dietro le celle: le offerte restano posizionabili sopra.
-            </p>
-            <button className="btn btn-outline btn-sm" onClick={() => aggiungiSezione(sel!.pi, selBlock)}>Crea sezione da questa cella</button>
+            {/* in fondo: il testo, le altre cose (commento, immagine) e lo sfondo di gruppo, a richiesta */}
+            <div className="vol-side-azioni">
+              <button type="button" className={`btn btn-outline btn-sm${apriTesto || selBlock.testo ? " attivo" : ""}`} onClick={() => setApriTesto((v) => !v)}
+                title="Un testo nella cella, anche sopra l'immagine">{selBlock.testo ? "Testo" : "+ Testo"}</button>
+              <button type="button" className="btn btn-sm" onClick={() => aggiungiSezione(sel!.pi, selBlock)}
+                title="Colora un'area della pagina dietro le celle, a partire da questa">Sfondo di gruppo</button>
+              <button type="button" className={`btn btn-outline btn-sm vol-rotella${apriAltro ? " attivo" : ""}`} onClick={() => setApriAltro((v) => !v)}
+                aria-label="Altro: commento per il grafico e immagine di sfondo" title="Commento per il grafico e immagine di sfondo">
+                <Settings size={15} style={{ verticalAlign: -3 }} />
+                {(selBlock.commento || selBlock.imageUrl) && <span className="vol-pallino" />}
+              </button>
+            </div>
+            {(apriTesto || !!selBlock.testo) && (
+              <label className="field" style={{ marginTop: 8 }}>Testo (anche sopra l&apos;immagine)
+                <textarea key={`t_${selBlock.id}_${selBlock.testo ?? ""}`} rows={2} defaultValue={selBlock.testo ?? ""} autoFocus={apriTesto && !selBlock.testo}
+                  onBlur={(e) => patch(sel!.pi, selBlock.id, { testo: e.target.value || undefined })} />
+              </label>
+            )}
+            {apriAltro && (
+              <div className="vol-altro">
+                <label className="field">Commento per il grafico
+                  <textarea key={`c_${selBlock.id}`} rows={2} defaultValue={selBlock.commento ?? ""}
+                    onBlur={(e) => patch(sel!.pi, selBlock.id, { commento: e.target.value || undefined })} />
+                </label>
+                <label className="field" style={{ marginBottom: 4 }}>Immagine di sfondo
+                  <input type="file" accept="image/*" style={{ fontSize: 11 }}
+                    onChange={(e) => e.target.files?.[0] && caricaImmagine(sel!.pi, selBlock.id, e.target.files[0])} />
+                </label>
+                {selBlock.imageUrl && <button className="btn btn-outline btn-sm" onClick={() => patch(sel!.pi, selBlock.id, { imageUrl: undefined })}>Togli immagine</button>}
+              </div>
+            )}
+            {(selPage.sezioni ?? []).length > 0 && <strong style={{ fontSize: 12, display: "block", marginTop: 10 }}>Sfondi di gruppo della pagina</strong>}
             {(selPage.sezioni ?? []).map((s) => (
               <div key={s.id} style={{ marginTop: 6, paddingTop: 6, borderTop: "1px solid var(--line)" }}>
                 <div style={{ display: "flex", gap: 4, alignItems: "center" }}>

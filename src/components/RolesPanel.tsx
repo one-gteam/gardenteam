@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition, type MouseEvent, type ReactNode } from "react";
-import { aggiungiRuoloExtra, aggiornaRuoloExtra, togliRuoloExtra, deleteUsers, quickSetGestioneUtenti, quickSetManages, quickSetRole, quickSetSites, quickToggleActive, setTenantUserDelegation } from "@/lib/actions";
+import { reinviaAccessoMolti, aggiungiRuoloExtra, aggiornaRuoloExtra, togliRuoloExtra, deleteUsers, quickSetGestioneUtenti, quickSetManages, quickSetRole, quickSetSites, quickToggleActive, setTenantUserDelegation } from "@/lib/actions";
 import { ROLE_LABELS, Role, SITE_LABELS_BREVI, SiteId } from "@/lib/types";
 
 const SITES: SiteId[] = ["academy", "arredo", "zoo", "piante"];
@@ -112,7 +112,7 @@ export default function RolesPanel({
         key: "nome",
         label: "Collaboratore",
         cell: (u) => (
-          <a href={`/admin/utenti/${u.id}`} style={{ color: "inherit" }}>
+          <a href={`/ruoli/utenti/${u.id}`} style={{ color: "inherit" }}>
             <strong>{u.nome}</strong>
           </a>
         ),
@@ -407,6 +407,18 @@ export default function RolesPanel({
           <strong>{selected.size} {selected.size === 1 ? "selezionato" : "selezionati"}</strong>
           <button type="button" className="btn btn-sm" disabled={pending} onClick={() => setSelected(new Set())}>
             Deseleziona
+          </button>
+          <button
+            type="button"
+            className="btn btn-outline btn-sm"
+            disabled={pending}
+            title="Chi non ha ancora attivato l'account riceve di nuovo il benvenuto con il link per la password; gli altri una mail con il link per entrare"
+            onClick={() => {
+              if (!window.confirm(`Mandare la mail di accesso a ${selected.size} ${selected.size === 1 ? "persona" : "persone"}?`)) return;
+              run(async () => { const r = await reinviaAccessoMolti([...selected]); if (r.ok) { setSelected(new Set()); window.alert(r.error ?? "Mail mandate."); } return r.ok ? { ok: true } : r; });
+            }}
+          >
+            Rimanda mail di accesso
           </button>
           <button
             type="button"

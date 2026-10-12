@@ -2242,6 +2242,69 @@ Se non hai chiesto tu niente, ignora questa email: la password resta quella di p
   redirect("/reimposta?inviata=1");
 }
 
+/**
+ * Rimanda la mail per entrare a una persona del proprio ambito: chi non ha
+ * ancora la password riceve di nuovo il benvenuto (con il link per sceglierla,
+ * 7 giorni); chi ce l'ha una mail con l'indirizzo e il link per reimpostarla
+ * (24 ore). Al massimo 3 volte all'ora per persona, per non riempire la casella.
+ */
+async function mandaMailAccesso(db: DB, admin: User, target: User): Promise<string | null> {
+  if (!canTouchUser(db, admin, target)) return "fuori dal tuo ambito";
+  if (target.active === false) return "account cessato";
+  if (!target.email.includes("@")) return "email mancante";
+  const regole: Regola[] = [{ chiave: `reinvio-accesso:${target.id}`, massimo: 3, minuti: 60 }];
+  if (await attesaMinuti(regole) > 0) return "già mandata 3 volte nell'ultima ora";
+  await segnaErrore(regole);
+  if (!target.passwordHash) {
+    await queueEmail(db, target, "benvenuto");
+    return null;
+  }
+  const token = tokenReimposta(target.id, target.passwordHash, 24);
+  const link = `${siteUrl()}/reimposta?token=${token}`;
+  const subject = "🔑 Il tuo accesso a GT One";
+  const body = `Ciao ${target.firstName},
+
+ecco come entrare in GT One:
+${siteUrl()}/login
+con la tua email (${target.email}) e la tua password.
+
+Se non la ricordi, scegline una nuova da qui (il link vale 24 ore):
+${link}
+
+Questa mail te l'ha mandata ${admin.firstName} ${admin.lastName}.`;
+  await pushEmail(db, target, "reimposta", subject, body);
+  return null;
+}
+
+export async function reinviaAccesso(userId: string): Promise<{ ok: boolean; error?: string }> {
+  const admin = await requireUser();
+  const db = await getDb();
+  const target = db.users.find((u) => u.id === userId);
+  if (!target || target.id === admin.id) return { ok: false, error: "Non consentito" };
+  const errore = await mandaMailAccesso(db, admin, target);
+  if (errore) return { ok: false, error: `Non mandata: ${errore}.` };
+  await saveDb(db);
+  revalidatePath(`/ruoli/utenti/${userId}`);
+  revalidatePath(`/admin/utenti/${userId}`);
+  return { ok: true };
+}
+
+export async function reinviaAccessoMolti(userIds: string[]): Promise<{ ok: boolean; error?: string }> {
+  const admin = await requireUser();
+  const db = await getDb();
+  let mandate = 0;
+  const saltate: string[] = [];
+  for (const id of userIds.slice(0, 200)) {
+    const t = db.users.find((u) => u.id === id);
+    if (!t || t.id === admin.id) continue;
+    const errore = await mandaMailAccesso(db, admin, t);
+    if (errore) saltate.push(`${t.firstName} ${t.lastName} (${errore})`); else mandate++;
+  }
+  if (mandate > 0) await saveDb(db);
+  revalidatePath("/ruoli");
+  return { ok: mandate > 0 || saltate.length === 0, error: `Mail mandate: ${mandate}.${saltate.length ? ` Saltate: ${saltate.join(", ")}.` : ""}` };
+}
+
 /** La nuova password, dal link ricevuto per email. */
 export async function reimpostaPassword(formData: FormData) {
   const token = String(formData.get("token") ?? "");

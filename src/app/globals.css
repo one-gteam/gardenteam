@@ -1617,3 +1617,20 @@ img.tt-media.on { animation: sp-kb 12s linear forwards; }
 .sp-negozio { max-width: 936px; display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
 @media (min-width: 900px) { .sp-negozio { margin: 4px auto 0; } }
 .sp-negozio a { color: var(--insegna); font-weight: 700; text-decoration: none; }
+
+/* Crea Volantino: pannello della cella, seconda versione */
+.vol-strum { display: grid; gap: 6px; }
+.vol-strum-gruppo { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 6px; border: 1px solid var(--line); border-radius: 8px; background: #fafbf9; }
+.vol-strum-tit { flex: 1 0 100%; font-size: 10.5px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.vol-strum-gruppo button { flex: 1 1 0; min-width: 0; border: 1px solid var(--line); background: #fff; border-radius: 6px; padding: 5px 4px; font: inherit; font-size: 12px; font-weight: 700; color: var(--green-700); cursor: pointer; white-space: nowrap; }
+.vol-strum-gruppo button:hover:not(:disabled) { border-color: var(--green-600); }
+.vol-strum-gruppo button:disabled { opacity: .4; cursor: default; }
+.vol-strum-gruppo button.danger { color: var(--red, #b42318); }
+.vol-focus-nuovo { margin-top: 6px; font-size: 12px; }
+.vol-focus-nuovo > summary { cursor: pointer; color: var(--green-700); font-weight: 700; }
+.vol-side-azioni { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; align-items: center; }
+.vol-side-azioni .btn { flex: 1 1 auto; }
+.vol-side-azioni .btn.attivo { background: #eef7f0; border-color: var(--green-600); }
+.vol-rotella { flex: 0 0 auto !important; position: relative; padding-left: 10px; padding-right: 10px; }
+.vol-pallino { position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; border-radius: 50%; background: #e8481c; }
+.vol-altro { margin-top: 8px; padding: 8px; border: 1px dashed var(--line); border-radius: 8px; }
