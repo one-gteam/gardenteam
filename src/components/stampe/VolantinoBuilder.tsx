@@ -65,6 +65,9 @@ const PAGINE_DEFAULT = (): VolPage[] => [
   pagina("Acquario e rettili"),
 ];
 
+/** Campioni di colore per lo sfondo delle celle (gli stessi toni dei focus). */
+const CAMPIONI = ["#ffffff", "#e8f3ea", "#fde8ef", "#e6eefb", "#fff3d6", "#efe6fb", "#e0f4f4", "#fbe9df", "#f1f1ec", "#d7ead9", "#fbd3df", "#cfe0f7"];
+
 const vuoto = (b: VolBlock) => !b.offerIds?.length && !b.testo && !b.imageUrl && !b.label;
 
 /** Ogni cella della griglia deve essere coperta da esattamente un blocco. */
@@ -325,7 +328,7 @@ export default function VolantinoBuilder({
     if (!r.ok) return flash("Focus non salvato.");
     for (const o of voci) sovrascrivi(o.id, { focus: nome || undefined });
     if (colora) {
-      const colore = nome ? (r.colore ?? focusDisponibili.find((f) => f.nome === nome)?.colore) : undefined;
+      const colore = nome ? (r.colore ?? focusDisponibili.find((f) => f.nome === nome)?.colore ?? CAMPIONI[1 + (focusDisponibili.findIndex((f) => f.nome === nome) + 1) % (CAMPIONI.length - 1)]) : undefined;
       upd((ps) => { for (const c of celle) { const b = ps[c.pi]?.blocks.find((x) => x.id === c.id); if (b) b.bg = colore; } return ps; });
     }
     setFocusNuovo("");
@@ -610,8 +613,17 @@ export default function VolantinoBuilder({
       upd((ps) => { const b = blockOf(ps, pi, blockId)!; b.offerIds = [...(b.offerIds ?? []), drag.id]; return ps; });
     } else if (drag.pi === pi) {
       spostaContenuto(pi, drag.id, blockId);
-    } else {
-      flash("Per ora si sposta solo all'interno della stessa pagina: usa copia e incolla fra pagine diverse.");
+    } else if (drag.pi !== undefined) {
+      // fra due pagine: le due celle si scambiano il contenuto, come nella stessa pagina
+      const da = drag.pi, idDa = drag.id;
+      upd((ps) => {
+        const a = blockOf(ps, da, idDa); const b = blockOf(ps, pi, blockId);
+        if (!a || !b) return ps;
+        const ca = contenutoDi(a), cb = contenutoDi(b);
+        Object.assign(a, VUOTO, cb); Object.assign(b, VUOTO, ca);
+        return ps;
+      });
+      flash(`Celle scambiate fra pagina ${da + 1} e pagina ${pi + 1}.`);
     }
     setDrag(null);
   };
@@ -1265,8 +1277,8 @@ export default function VolantinoBuilder({
               const nomeFocus = focusScelto || selOffs[0]?.focus || "";
               const def = focusDisponibili.find((f) => f.nome === nomeFocus);
               return (
-                <div className="vol-focus-box">
-                  <strong style={{ fontSize: 12.5 }}>Focus</strong>
+                <details className="vol-focus-box" key={`fb_${selBlock.id}`} open={!!selOffs[0]?.focus || undefined}>
+                  <summary style={{ cursor: "pointer", fontSize: 12.5, fontWeight: 800 }}>Focus{selOffs[0]?.focus ? ` · ${selOffs[0].focus}` : ""}</summary>
                   <span className="hint" style={{ display: "block", fontSize: 11 }}>
                     {extra.length ? `Vale per ${extra.length + 1} celle (Ctrl o Maiusc + clic per aggiungerne o toglierne).` : "Ctrl o Maiusc + clic su altre celle per applicarlo a più tessere insieme."}
                   </span>
@@ -1306,12 +1318,21 @@ export default function VolantinoBuilder({
                   </label>
                   <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 4, flexWrap: "wrap" }}>
                     {selOffs.some((o) => o.focus) && <button type="button" className="mini-btn" onClick={() => applicaFocus("")}>togli il focus</button>}
-                    <span style={{ fontSize: 11 }}>sfondo cella</span>
+                    <span style={{ fontSize: 11, width: "100%" }}>sfondo cella</span>
+                    <span className="vol-campioni">
+                      {[...new Set([...focusDisponibili.map((f) => f.colore).filter((c): c is string => !!c), ...CAMPIONI])].slice(0, 14).map((c) => (
+                        <button key={c} type="button" className={`vol-campione${(selBlock.bg ?? "#ffffff").toLowerCase() === c.toLowerCase() ? " on" : ""}`} style={{ background: c }}
+                          title={focusDisponibili.find((f) => f.colore === c) ? `colore del focus «${focusDisponibili.find((f) => f.colore === c)!.nome}»` : c}
+                          aria-label={`Sfondo ${c}`}
+                          onClick={() => upd((ps) => { for (const k of [sel!, ...extra]) { const b = ps[k.pi]?.blocks.find((x) => x.id === k.id); if (b) b.bg = c === "#ffffff" ? undefined : c; } return ps; })} />
+                      ))}
+                    </span>
+                    <span style={{ fontSize: 11 }}>altro:</span>
                     <input type="color" value={selBlock.bg ?? "#ffffff"} onChange={(e) => { const v = e.target.value; upd((ps) => { for (const c of [sel!, ...extra]) { const b = ps[c.pi]?.blocks.find((x) => x.id === c.id); if (b) b.bg = v; } return ps; }); }}
                       style={{ width: 30, height: 22, padding: 0, marginTop: 0 }} title="Colore di sfondo della cella (e delle celle scelte)" />
                     {selBlock.bg && <button type="button" className="mini-btn" onClick={() => upd((ps) => { for (const c of [sel!, ...extra]) { const b = ps[c.pi]?.blocks.find((x) => x.id === c.id); if (b) b.bg = undefined; } return ps; })}>togli sfondo</button>}
                   </div>
-                </div>
+                </details>
               );
             })()}
 

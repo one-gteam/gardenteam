@@ -13,10 +13,11 @@ import {
 } from "@/lib/zoo";
 import { incontriDelVolantino, correggiIncontro, incontriProgrammati, eliminaProgrammato, spostaProgrammato } from "@/lib/zoo-incontri";
 
-/** Le squadre che si incontrano sul volantino: di solito persone diverse. */
+/** Le squadre di riserva, se in Utenti e ruoli non ci sono gruppi «Squadra …». */
 const SQUADRE = ["Zoo", "Comunicazione"];
 import { salvaDeadlineGrafico } from "@/lib/zoo-actions";
 import ProgrammaIncontro from "@/components/stampe/ProgrammaIncontro";
+import AvvisaDeadline from "@/components/stampe/AvvisaDeadline";
 import ModuloAutoSalva from "@/components/ModuloAutoSalva";
 import { PulsanteAzione } from "@/components/AzioneSenzaRicarica";
 import { userSites } from "@/lib/types";
@@ -90,6 +91,17 @@ export default async function ZooDashboardPage() {
     .map((u) => ({ id: u.id, nome: `${u.firstName} ${u.lastName}`, email: u.email }))
     .sort((a, b) => a.nome.localeCompare(b.nome, "it"));
   const prossimi = programmati.filter((p) => Date.parse(p.quando) + p.durataMin * 60000 > Date.now());
+  /*
+   * Le squadre del volantino sono i gruppi del Consorzio che si chiamano
+   * «Squadra …» (Utenti e ruoli → Organizzazione → Gruppi): servono per
+   * avvisare della consegna e per fissare gli incontri con le persone giuste.
+   */
+  const gruppiSquadra = academyDb.groups.filter((g) => !g.tenantId && /^squadra\b/i.test(g.name.trim()))
+    .map((g) => ({ id: g.id, nome: g.name, membri: academyDb.users.filter((u) => u.active !== false && (u.groupIds ?? []).includes(g.id)) }));
+  const nomiSquadre = gruppiSquadra.length ? gruppiSquadra.map((g) => g.nome) : SQUADRE;
+  const ricordatiSquadre: Record<string, string[]> = { ...squadre };
+  for (const g of gruppiSquadra) if (g.membri.length) ricordatiSquadre[g.nome] = g.membri.map((u) => u.id);
+  const ultimoAvviso = campaign.avvisiDeadline?.at(-1);
   const gDeadline = giorniA(campaign.deadlineGrafico);
   const minuti = (i: { inizio: string; fine?: string; ultimo: string }) => Math.max(0, Math.round((Date.parse(i.fine ?? i.ultimo) - Date.parse(i.inizio)) / 60000));
   const totaleMin = incontri.reduce((t, i) => t + minuti(i), 0);
@@ -143,6 +155,11 @@ export default async function ZooDashboardPage() {
                 : gDeadline > 0 ? `mancano ${gDeadline} ${gDeadline === 1 ? "giorno" : "giorni"}`
                 : gDeadline === 0 ? "è oggi" : `scaduta da ${-gDeadline} ${gDeadline === -1 ? "giorno" : "giorni"}`}
             </span>
+            {editor && (
+              <AvvisaDeadline campaignId={campaign.id} haData={!!campaign.deadlineGrafico}
+                squadre={gruppiSquadra.map((g) => ({ id: g.id, nome: g.nome, persone: g.membri.filter((u) => u.email).map((u) => `${u.firstName} ${u.lastName}`) }))}
+                ultimo={ultimoAvviso ? `${oraIt(ultimoAvviso.il)} a ${ultimoAvviso.persone} (${ultimoAvviso.gruppi.join(", ")})` : undefined} />
+            )}
           </span>
         </div>
         <p className="hint" style={{ margin: "0 0 10px" }}>
@@ -210,7 +227,7 @@ export default async function ZooDashboardPage() {
             {editor && (
               <details className="dash-fissa">
                 <summary className="btn btn-outline btn-sm">＋ Fissa un incontro</summary>
-                <ProgrammaIncontro campaignId={campaign.id} squadre={SQUADRE} ricordati={squadre} colleghi={colleghi} />
+                <ProgrammaIncontro campaignId={campaign.id} squadre={nomiSquadre} ricordati={ricordatiSquadre} colleghi={colleghi} />
               </details>
             )}
             <details className="dash-fissa">

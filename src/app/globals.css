@@ -1658,3 +1658,13 @@ img.tt-media.on { animation: sp-kb 12s linear forwards; }
 .rt-aree label { font-size: 12px; display: inline-flex; gap: 4px; align-items: center; white-space: nowrap; }
 .rt-stato { white-space: nowrap; border: 1px solid #e3a9a1; background: #fff5f4; color: #a1271c; font-weight: 800; font-size: 11.5px; border-radius: 999px; padding: 3px 10px; cursor: pointer; font-family: inherit; }
 .rt-stato.on { border-color: #9fd0ae; background: #eef7f0; color: #1d6b39; }
+
+.vol-focus-box > summary { list-style: none; }
+.vol-focus-box > summary::-webkit-details-marker { display: none; }
+.vol-focus-box > summary::before { content: "▸ "; color: var(--muted); }
+.vol-focus-box[open] > summary::before { content: "▾ "; }
+.vol-campioni { display: flex; flex-wrap: wrap; gap: 4px; }
+.vol-campione { width: 22px; height: 22px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px var(--line); cursor: pointer; padding: 0; }
+.vol-campione.on { box-shadow: 0 0 0 2px var(--green-700); }
+
+.avvisa-box { flex-basis: 100%; display: grid; gap: 6px; padding: 8px; border: 1px dashed var(--line); border-radius: 8px; background: #fff; }

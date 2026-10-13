@@ -100,6 +100,11 @@ export async function assegnaFocusOfferte(campaignId: string, offerIds: string[]
     def = { id: nuovoId("fd"), campaignId, nome: n, colore: COLORI_FOCUS[quanti % COLORI_FOCUS.length] };
     db.focusDef.push(def);
   }
+  // un focus nato senza colore (dalla bacheca o dalle offerte) ne prende uno: serve per lo sfondo delle celle
+  if (def && !def.colore) {
+    const usati = new Set(db.focusDef.filter((f) => f.campaignId === campaignId).map((f) => f.colore));
+    def.colore = COLORI_FOCUS.find((c) => !usati.has(c)) ?? COLORI_FOCUS[db.focusDef.indexOf(def) % COLORI_FOCUS.length];
+  }
   for (const o of db.offers) if (o.campaignId === campaignId && offerIds.includes(o.id)) o.focus = def?.nome || undefined;
   await saveZooDb(db);
   aggiorna();

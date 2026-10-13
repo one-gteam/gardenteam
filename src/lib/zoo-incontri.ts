@@ -5,7 +5,7 @@ import { requireUser } from "./auth";
 import { canAccessArea, isZooEditor } from "./stampe";
 import { readDomain, writeDomain } from "./supabase";
 import { getDb } from "./db";
-import { getZooDb } from "./zoo";
+import { getZooDb, saveZooDb } from "./zoo";
 import { sendMail } from "./mailer";
 
 /*
@@ -287,6 +287,52 @@ export async function eliminaProgrammato(id: string): Promise<{ ok: boolean; err
   await writeDomain("zoo_incontri", db);
   revalidatePath("/stampe/zoo/dashboard");
   return { ok: true };
+}
+
+/**
+ * Avvisa una o più squadre (gruppi di persone di Utenti e ruoli) della
+ * consegna del volantino al grafico: data, quanti giorni mancano, cosa manca
+ * ancora e un testo libero. Ogni persona riceve una mail sola anche se sta in
+ * più squadre.
+ */
+export async function avvisaDeadline(campaignId: string, groupIds: string[], testo: string): Promise<{ ok: boolean; error?: string }> {
+  const user = await requireUser();
+  if (!isZooEditor(user)) return { ok: false, error: "Solo chi cura lo Zoo per il Consorzio." };
+  const [academy, zoo] = await Promise.all([getDb(), getZooDb()]);
+  const c = zoo.campaigns.find((x) => x.id === campaignId);
+  if (!c) return { ok: false, error: "Volantino non trovato." };
+  if (!c.deadlineGrafico) return { ok: false, error: "Prima fissa la data di invio al grafico." };
+  const gruppi = academy.groups.filter((g) => groupIds.includes(g.id));
+  if (gruppi.length === 0) return { ok: false, error: "Scegli almeno una squadra." };
+  const persone = academy.users.filter((u) => u.active !== false && u.email?.includes("@") && (u.groupIds ?? []).some((g) => groupIds.includes(g)));
+  if (persone.length === 0) return { ok: false, error: "Nelle squadre scelte non c'è nessuno: aggiungi le persone in Utenti e ruoli → Organizzazione → Gruppi." };
+  const oggi = new Date(new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Rome" }) + "T00:00:00");
+  const giorni = Math.round((Date.parse(`${c.deadlineGrafico}T00:00:00`) - oggi.getTime()) / 86400000);
+  const quando = new Date(`${c.deadlineGrafico}T12:00:00`).toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long" });
+  const manca = giorni > 1 ? `mancano ${giorni} giorni` : giorni === 1 ? "è domani" : giorni === 0 ? "è oggi" : `era ${-giorni} ${giorni === -1 ? "giorno" : "giorni"} fa`;
+  const sito = (process.env.SITE_URL || "https://gardenteam.vercel.app").replace(/\/$/, "");
+  const nota = testo.trim().slice(0, 2000);
+  let inviate = 0;
+  for (const u of persone) {
+    const corpo = [
+      `Ciao ${u.firstName},`,
+      "",
+      `il volantino «${c.nome}» va mandato al grafico entro ${quando} (${manca}).`,
+      nota ? `\n${nota}\n` : "",
+      `A che punto siamo: ${sito}/stampe/zoo/dashboard`,
+      `Crea Volantino: ${sito}/stampe/zoo/crea-volantino`,
+      "",
+      `${user.firstName} ${user.lastName}`,
+    ].join("\n");
+    const r = await sendMail(u.email, `Volantino «${c.nome}»: invio al grafico entro ${quando}`, corpo, { marchio: "gtone" }).catch(() => ({ sent: false as const }));
+    if (r.sent === true) inviate++;
+  }
+  c.avvisiDeadline = [...(c.avvisiDeadline ?? []), { il: new Date().toISOString(), da: user.id, gruppi: gruppi.map((g) => g.name), persone: inviate }].slice(-20);
+  await saveZooDb(zoo);
+  revalidatePath("/stampe/zoo/dashboard");
+  return inviate > 0
+    ? { ok: true, error: `Avviso mandato a ${inviate} ${inviate === 1 ? "persona" : "persone"}.` }
+    : { ok: false, error: "Nessuna mail partita (invio non configurato o indirizzi mancanti)." };
 }
 
 /** "2026-10-14T15:00" letto come ora di Roma → ISO (UTC). */

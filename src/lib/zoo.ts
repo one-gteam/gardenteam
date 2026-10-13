@@ -120,6 +120,8 @@ export interface ZooCampaign {
   focusArchiviato?: boolean;
   /** Entro quando il volantino va mandato al grafico (yyyy-mm-dd). */
   deadlineGrafico?: string;
+  /** Avvisi mandati alle squadre sulla consegna al grafico. */
+  avvisiDeadline?: { il: string; da: string; gruppi: string[]; persone: number }[];
   /** Passi del volantino segnati a mano (fatto/riaperto): vincono sul calcolo automatico. */
   passi?: Partial<Record<PassoVolantinoId, { fatto: boolean; da: string; il: string }>>;
 }
