@@ -14,6 +14,8 @@ export interface VoceCatalogo {
   listino: string;
   novita: boolean;
   prezzoNum?: number;
+  /** I prezzi per negozio ("" = dell'insegna). */
+  prezzi: Record<string, { prezzo: string; listino: string; num?: number }>;
   /** stato per punto vendita: ok / pochi / esaurito / nd */
   stati: Record<string, "ok" | "pochi" | "esaurito" | "nd">;
   etichette: Record<string, string>;
@@ -24,6 +26,14 @@ export interface VoceCatalogo {
  * vendita (prezzi e disponibilità di quel negozio), «solo disponibili»,
  * ordinamento. Tutto in pagina: i dati arrivano una volta dal server.
  */
+/** «1.099» = 1099, «1.099,00» = 1099, «12,50» = 12,5: come sul server. */
+function numero(v: string): number | undefined {
+  const t = String(v ?? "").replace(/[€\s]/g, "");
+  if (!t) return undefined;
+  const n = parseFloat(t.includes(",") ? t.replace(/\./g, "").replace(",", ".") : /^\d{1,3}(\.\d{3})+$/.test(t) ? t.replace(/\./g, "") : t);
+  return Number.isFinite(n) ? n : undefined;
+}
+
 export default function CatalogoCliente({
   voci, tipologie, puntiVendita, pvIniziale, slugInsegna, gestioneQuantita, esauritiNascosti, banner, aggiornato,
 }: {
@@ -48,6 +58,7 @@ export default function CatalogoCliente({
   }, []);
   const scegliPv = (id: string) => { setPv(id); try { localStorage.setItem(`cat-pv-${slugInsegna}`, id); } catch { /* niente */ } };
 
+  const prezzoDi = (v: VoceCatalogo) => v.prezzi[pv] ?? v.prezzi[""] ?? { prezzo: v.prezzo, listino: v.listino, num: v.prezzoNum };
   const lista = useMemo(() => {
     const testo = q.trim().toLowerCase();
     let l = voci.filter((v) => (!cat || v.tipologia === cat) && (!testo || `${v.titolo} ${v.sotto} ${v.marca} ${v.codice}`.toLowerCase().includes(testo)));
@@ -55,8 +66,8 @@ export default function CatalogoCliente({
       if (esauritiNascosti) l = l.filter((v) => v.stati[pv] !== "esaurito");
       if (soloDisp) l = l.filter((v) => v.stati[pv] === "ok" || v.stati[pv] === "pochi");
     }
-    if (ordine === "prezzo-su") l = [...l].sort((a, b) => (a.prezzoNum ?? 1e9) - (b.prezzoNum ?? 1e9));
-    if (ordine === "prezzo-giu") l = [...l].sort((a, b) => (b.prezzoNum ?? -1) - (a.prezzoNum ?? -1));
+    if (ordine === "prezzo-su") l = [...l].sort((a, b) => (prezzoDi(a).num ?? 1e9) - (prezzoDi(b).num ?? 1e9));
+    if (ordine === "prezzo-giu") l = [...l].sort((a, b) => (prezzoDi(b).num ?? -1) - (prezzoDi(a).num ?? -1));
     if (ordine === "nome") l = [...l].sort((a, b) => a.titolo.localeCompare(b.titolo, "it"));
     return l;
   }, [voci, cat, q, pv, soloDisp, ordine, gestioneQuantita, esauritiNascosti]);
@@ -103,7 +114,9 @@ export default function CatalogoCliente({
         <div className="cp-griglia">
           {lista.map((v) => {
             const stato = gestioneQuantita && pv ? v.stati[pv] : "nd";
-            const sconto = v.listino && v.prezzoNum ? (() => { const l = parseFloat(v.listino.replace(/[€\s]/g, "").replace(/\./g, "").replace(",", ".")); return l > v.prezzoNum! ? `-${Math.round(((l - v.prezzoNum!) / l) * 100)}%` : ""; })() : "";
+            const pr = prezzoDi(v);
+            const l = numero(pr.listino), n = pr.num ?? numero(pr.prezzo);
+            const sconto = l && n && l > n ? `-${Math.round(((l - n) / l) * 100)}%` : "";
             return (
               <a key={v.id} href={hrefScheda(v)}>
                 <span className="foto">
@@ -113,7 +126,7 @@ export default function CatalogoCliente({
                 </span>
                 <span className="marca">{v.marca}</span>
                 <strong>{v.titolo}</strong>
-                {v.prezzo && <span className="prezzo">{v.prezzo.startsWith("€") ? v.prezzo : `€ ${v.prezzo}`}{v.listino && sconto && <s>€ {v.listino.replace(/^€\s*/, "")}</s>}</span>}
+                {pr.prezzo && <span className="prezzo">{pr.prezzo.startsWith("€") ? pr.prezzo : `€ ${pr.prezzo}`}{pr.listino && sconto && <s>€ {pr.listino.replace(/^€\s*/, "")}</s>}</span>}
                 {stato !== "nd" && <span className={`stato ${stato}`}>{stato === "esaurito" ? "○" : "●"} {v.etichette[pv]}</span>}
               </a>
             );

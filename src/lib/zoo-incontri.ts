@@ -387,8 +387,10 @@ export async function correggiIncontro(incontroId: string, fd: FormData): Promis
     const i = db.incontri.find((x) => x.id === incontroId);
     if (!i) return { ok: false, error: "Incontro non trovato." };
     const ini = String(fd.get("inizio") ?? ""), fin = String(fd.get("fine") ?? "");
-    if (ini && !Number.isNaN(Date.parse(ini))) i.inizio = new Date(ini).toISOString();
-    if (fin && !Number.isNaN(Date.parse(fin))) { i.fine = new Date(fin).toISOString(); i.ultimo = i.fine; }
+    // il campo è l'ora italiana del browser: sul server (UTC) va letta come ora di Roma
+    const comeIso = (v: string) => (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(v) ? romaInIso(v) : new Date(v).toISOString());
+    if (ini && !Number.isNaN(Date.parse(ini))) i.inizio = comeIso(ini);
+    if (fin && !Number.isNaN(Date.parse(fin))) { i.fine = comeIso(fin); i.ultimo = i.fine; }
   }
   await writeDomain("zoo_incontri", db);
   revalidatePath("/stampe/zoo/dashboard");

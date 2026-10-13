@@ -588,7 +588,14 @@ export interface VolPage {
   animale?: string;
   caratt?: string;
 }
-export interface VolantinoLayout { campaignId: string; pages: VolPage[] }
+export interface VolantinoLayout {
+  campaignId: string;
+  pages: VolPage[];
+  /** Cambia a ogni salvataggio: chi salva una versione vecchia viene fermato invece di cancellare il lavoro degli altri. */
+  versione?: string;
+  salvatoDa?: string;
+  salvatoIl?: string;
+}
 
 /* --- vecchio formato a righe/celle, conservato solo per la migrazione --- */
 interface OldCell { span?: number; vspan?: number; tipo?: string; offerId?: string; testo?: string; descrizione?: string; prezzo?: string }
@@ -2020,23 +2027,52 @@ export interface VolantinoCellRow {
   "Prezzo al kg/l": string; "File foto": string;
 }
 
-/** Il nome del file di una foto (es. «56058.jpg»), dall'indirizzo. */
+/** Il nome del file di una foto come esce nello ZIP per il grafico (es. «56058.jpg»): minuscolo, senza spazi. */
 export function nomeFileFoto(url: string): string {
   if (!url || url.includes("mancante")) return "";
-  const ultimo = url.split("?")[0].split("/").pop() ?? "";
-  try { return decodeURIComponent(ultimo); } catch { return ultimo; }
+  let ultimo = url.split("?")[0].split("/").pop() ?? "";
+  try { ultimo = decodeURIComponent(ultimo); } catch { /* resta com'è */ }
+  const punto = ultimo.lastIndexOf(".");
+  const base = (punto > 0 ? ultimo.slice(0, punto) : ultimo).toLowerCase().replace(/[^a-z0-9._-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 80) || "foto";
+  const ext = (punto > 0 ? ultimo.slice(punto + 1) : "jpg").toLowerCase().slice(0, 5);
+  return `${base}.${ext}`;
 }
+
+/**
+ * Le offerte di ogni «voce» del volantino: quelle dello stesso padre con lo
+ * stesso prezzo, o di un'unione fatta a mano. In una cella si trascina la
+ * voce, ma la cella tiene l'id della prima offerta: per Excel, passi e conteggi
+ * contano tutte quelle della voce (prima i gusti dopo il primo risultavano «da
+ * collocare» e l'Excel ne riportava un EAN solo).
+ */
+export function indiceVoci(db: ZooDB, campaignId: string): { voceDi: Map<string, string>; offerteDi: Map<string, ZooOffer[]> } {
+  const padreDi = new Map(db.products.map((p) => [p.id, p.parentId]));
+  const voceDi = new Map<string, string>();
+  const offerteDi = new Map<string, ZooOffer[]>();
+  for (const o of db.offers) {
+    if (o.campaignId !== campaignId || o.scopeType) continue;
+    const pid = padreDi.get(o.productId ?? "");
+    const k = o.unioneVolantino ? `u:${o.unioneVolantino}` : pid ? `p:${pid}~${chiavePrezzo(o)}` : `o:${o.id}`;
+    voceDi.set(o.id, k);
+    offerteDi.set(k, [...(offerteDi.get(k) ?? []), o]);
+  }
+  return { voceDi, offerteDi };
+}
+
 
 /** Righe dell'export "per cella": una per ogni cella non vuota della griglia del volantino. */
 export function volantinoCellRows(db: ZooDB, campaignId: string): VolantinoCellRow[] {
   const layout = db.volantinoLayouts.find((l) => l.campaignId === campaignId);
   if (!layout) return [];
   const pages = migraVolantinoPages(layout.pages);
+  const voci = indiceVoci(db, campaignId);
   const rows: VolantinoCellRow[] = [];
   pages.forEach((page, pi) => {
     const nomePagina = page.titolo || `Pagina ${pi + 1}`;
     page.blocks.forEach((b, bi) => {
-      const offs = (b.offerIds ?? []).map((id) => db.offers.find((o) => o.id === id)).filter(Boolean) as ZooOffer[];
+      const primeDellaCella = (b.offerIds ?? []).map((id) => db.offers.find((o) => o.id === id)).filter(Boolean) as ZooOffer[];
+      // tutte le offerte delle voci della cella (i gusti dello stesso padre), non solo la prima
+      const offs = [...new Map(primeDellaCella.flatMap((o) => voci.offerteDi.get(voci.voceDi.get(o.id) ?? "") ?? [o]).map((o) => [o.id, o])).values()];
       if (offs.length === 0 && !b.testo && !b.imageUrl && !b.label && !b.focus) return; // celle vuote: non servono al grafico
       const sez = (page.sezioni ?? []).find(
         (s) => b.r >= s.r && b.r < s.r + s.rs && b.c >= s.c && b.c < s.c + s.cs
@@ -2055,8 +2091,8 @@ export function volantinoCellRows(db: ZooDB, campaignId: string): VolantinoCellR
         "N. offerte": offs.length, EAN: offs.map((o) => o.ean).join(" / "),
         Descrizione: b.descrizione ?? offs.map((o) => o.descrizione).join(" / "),
         Marca: offs.map((o) => db.products.find((p) => p.id === o.productId)?.marca ?? "").join(" / "),
-        "Prezzo promo": b.prezzo ?? offs.map((o) => o.prezzoPromo).join(" / "),
-        "Prezzo listino": offs.map((o) => o.prezzoListino ?? "").join(" / "),
+        "Prezzo promo": b.prezzo ?? [...new Set(offs.map((o) => o.prezzoPromo).filter(Boolean))].join(" / "),
+        "Prezzo listino": [...new Set(offs.map((o) => o.prezzoListino ?? "").filter(Boolean))].join(" / "),
         Etichetta: b.label ?? primo?.label ?? "",
         Testo: b.testo ?? "",
         Immagine: b.imageUrl ?? "",
@@ -2066,8 +2102,9 @@ export function volantinoCellRows(db: ZooDB, campaignId: string): VolantinoCellR
         "Testo del focus": defFocus?.descrizione ?? "",
         "Nota del focus per il grafico": defFocus?.notaGrafico ?? "",
         Meccanica: offs.map((o) => o.meccanica ?? "").filter(Boolean).join(" / "),
-        "Prezzo al kg/l": offs.map((o, i) => prezzoUnitaDi(o, prodotti[i], b.prezzo || o.prezzoPromo || (o.meccanica ? o.prezzoListino ?? "" : ""))).filter(Boolean).join(" / "),
-        "File foto": [...new Set(offs.map((o, i) => nomeFileFoto(zooImageUrl(prodotti[i], padri[i]))).filter(Boolean))].join(" / "),
+        // il prezzo cambiato nella cella vale per la prima offerta, come nel volantino
+        "Prezzo al kg/l": [...new Set(offs.map((o, i) => prezzoUnitaDi(o, prodotti[i], (i === 0 && b.prezzo) || o.prezzoPromo || (o.meccanica ? o.prezzoListino ?? "" : ""))).filter(Boolean))].join(" / "),
+        "File foto": [...new Set(offs.flatMap((o, i) => { const u = unioneDi(db, o); return u?.foto?.length ? u.foto.map(nomeFileFoto) : [nomeFileFoto(zooImageUrl(prodotti[i], padri[i]))]; }).filter(Boolean))].join(" / "),
       });
     });
   });
@@ -2095,6 +2132,8 @@ export function volantinoPhotoRefs(db: ZooDB, campaignId: string): VolantinoPhot
         if (!o) continue;
         const p = db.products.find((x) => x.id === o.productId);
         const parent = p?.parentId ? db.parents.find((x) => x.id === p.parentId) : undefined;
+        const unione = unioneDi(db, o);
+        for (const u of unione?.foto ?? []) if (u.startsWith("http") && !seen.has(u)) seen.set(u, { url: u, nome: nomeFileFoto(u).replace(/\.[a-z0-9]{2,5}$/i, "") });
         const url = zooImageUrl(p, parent);
         if (url.startsWith("http") && !seen.has(url)) {
           // il nome del file com'è caricato (es. 56058): è quello scritto nella colonna «File foto» dell'Excel
@@ -2185,7 +2224,9 @@ export function passiVolantino(db: ZooDB, campaign: ZooCampaign): PassoVolantino
   const senzaFocus = new Set(scelte.filter((o) => !(o.focus ?? "").trim()).map((o) => prodById.get(o.productId ?? "")?.parentId ?? o.id)).size;
   const layout = db.volantinoLayouts.find((l) => l.campaignId === campaign.id);
   const pagine = layout ? migraVolantinoPages(layout.pages) : [];
-  const collocateIds = new Set(pagine.flatMap((p) => p.blocks.flatMap((b) => b.offerIds ?? [])));
+  const indice = indiceVoci(db, campaign.id);
+  const collocateIds = new Set(pagine.flatMap((p) => p.blocks.flatMap((b) => b.offerIds ?? []))
+    .flatMap((id) => (indice.offerteDi.get(indice.voceDi.get(id) ?? "") ?? []).map((o) => o.id).concat(id)));
   const collocate = collocateIds.size;
   // il dettaglio dei passi: una voce per padre (o per offerta senza padre), come si ragiona sul volantino
   const nomeVoce = (o: ZooOffer) => parentById.get(prodById.get(o.productId ?? "")?.parentId ?? "")?.nome ?? o.descrizione;

@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { getDb } from "@/lib/db";
 import CatalogoCliente, { type VoceCatalogo } from "@/components/catalogo/CatalogoCliente";
 import {
-  getStampeDb, catalogoDi, prodottiCatalogo, productImageUrl, effectiveValue, disponibilitaPV, etichettaDisponibilita, prezzoNumero, type Scope,
+  getStampeDb, catalogoDi, prodottiCatalogo, productImageUrl, effectiveValue, disponibilitaPV, etichettaDisponibilita, numeroPrezzoTesto, prezzoPubblico, type Scope,
 } from "@/lib/stampe";
 
 /*
@@ -44,23 +44,27 @@ export default async function CatalogoPage({ params, searchParams }: { params: P
   const voci: VoceCatalogo[] = prodottiCatalogo(db, tenant.id).map((p) => {
     const stati: VoceCatalogo["stati"] = {}; const etichette: VoceCatalogo["etichette"] = {};
     for (const s of stores) { const d = disponibilitaPV(db, pref, s.id, p); stati[s.id] = d.stato; etichette[s.id] = etichettaDisponibilita(d); }
-    // il prezzo dell'insegna: quello del PV scelto può differire e lo dice la scheda
+    // i prezzi di ogni negozio (e dell'insegna): sul telefono cambiano col negozio scelto
     const scope = pvIniziale ? scopeDi(pvIniziale) : scopeInsegna;
-    const promo = effectiveValue(db, scope, p, "prezzoPromo", academyDb).value;
-    const prezzo = promo || effectiveValue(db, scope, p, "prezzo", academyDb).value;
+    const prezzi: VoceCatalogo["prezzi"] = {};
+    for (const sc of [scopeInsegna, ...stores.map((x) => scopeDi(x.id))]) {
+      const pp = prezzoPubblico(db, sc, p, academyDb);
+      prezzi[sc.type === "tenant" ? "" : sc.id] = { prezzo: pp.prezzo, listino: pp.listino, num: numeroPrezzoTesto(pp.prezzo) };
+    }
+    const { prezzo, listino } = prezzi[pvIniziale] ?? prezzi[""];
     return {
       id: p.id, codice: p.codice,
       titolo: effectiveValue(db, scope, p, "titolo", academyDb).value || p.fields.titolo || p.codice,
       sotto: effectiveValue(db, scope, p, "sottotitolo", academyDb).value,
       marca: p.marca, tipologia: p.tipologia, foto: productImageUrl(p),
-      prezzo, listino: promo ? effectiveValue(db, scope, p, "prezzoListino", academyDb).value || effectiveValue(db, scope, p, "prezzo", academyDb).value : "",
+      prezzo, listino, prezzi,
       novita: !!effectiveValue(db, scope, p, "novita", academyDb).value,
-      prezzoNum: prezzoNumero(db, scope, p, academyDb), stati, etichette,
+      prezzoNum: numeroPrezzoTesto(prezzo), stati, etichette,
     };
   });
   const tipologie = [...new Set(voci.map((v) => v.tipologia))].sort((a, b) => a.localeCompare(b, "it"));
   const aggiornato: Record<string, string> = {};
-  for (const g of db.giacenze) if (g.aggiornatoIl) aggiornato[g.storeId] = new Date(g.aggiornatoIl).toLocaleString("it-IT", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" });
+  for (const g of db.giacenze) if (g.aggiornatoIl && stores.some((x) => x.id === g.storeId)) aggiornato[g.storeId] = new Date(g.aggiornatoIl).toLocaleString("it-IT", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" });
   const logo = tenant.logoUrl ?? academyDb.settings.logoUrl ?? "/loghi/gardenteam.png";
 
   return (

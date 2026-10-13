@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { timingSafeEqual } from "crypto";
 import { getStampeDb, saveStampeDb } from "@/lib/stampe";
+import { segretoUguale } from "@/lib/auth";
 
 /**
  * Le quantità di un punto vendita mandate dal suo gestionale (Linfa o altro).
@@ -18,8 +18,7 @@ export async function POST(req: NextRequest) {
   const token = auth.replace(/^Bearer\s+/i, "").trim();
   if (!token) return NextResponse.json({ error: "Manca la chiave (Authorization: Bearer …)" }, { status: 401 });
   const db = await getStampeDb();
-  const uguale = (a: string, b: string) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
-  const g = db.giacenze.find((x) => !!x.token && uguale(x.token, token));
+  const g = db.giacenze.find((x) => !!x.token && segretoUguale(token, x.token));
   if (!g) return NextResponse.json({ error: "Chiave non valida" }, { status: 403 });
 
   const tipo = req.headers.get("content-type") ?? "";

@@ -99,7 +99,8 @@ export function parseColumns(raw: string[] | string | undefined): ReportColumn[]
 }
 
 export function rowsToCsv(rows: ReportRow[], columns: ReportColumn[]): string {
-  const esc = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
+  // un valore che comincia con = + - @ Excel lo esegue come formula (es. un cognome «=HYPERLINK(...)»): si disinnesca
+  const esc = (v: string | number) => { let t = String(v); if (typeof v === "string" && /^[=+\-@\t\r]/.test(t)) t = `'${t}`; return `"${t.replace(/"/g, '""')}"`; };
   const header = columns.map((c) => esc(REPORT_COLUMNS.find((rc) => rc.key === c)!.label)).join(";");
   const body = rows
     .map((r) => columns.map((c) => esc(c === "stato" ? STATO_LABELS[r.stato] : c === "percento" ? `${r[c]}%` : r[c])).join(";"))

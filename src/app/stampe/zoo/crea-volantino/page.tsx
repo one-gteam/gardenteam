@@ -182,6 +182,7 @@ export default async function CreaVolantinoPage({
             campaignId={campaign.id}
             offers={offers}
             initialPages={layout ? migraVolantinoPages(layout.pages) : []}
+            versioneIniziale={layout?.versione}
             excelHref={`/stampe/zoo/crea-volantino/excel?campagna=${campaign.id}`}
             fotoZipHref={`/stampe/zoo/crea-volantino/foto?campagna=${campaign.id}`}
             scopeParam={scopeParam}

@@ -47,12 +47,20 @@ export default function TotemSchermo({ config, voci, tipologie, insegna, negozio
 
   /* ---- attesa ---- */
   const media = config.media.length ? config.media : voci.slice(0, 4).map((v) => ({ url: v.amb[0] ?? v.foto, tipo: "foto" as const }));
+  // la chiave dei media: l'aggiornamento di ogni minuto porta oggetti nuovi ma uguali, e non deve far ripartire il timer
+  const chiaveMedia = media.map((m) => m.url).join("|");
   const [k, setK] = useState(0);
   useEffect(() => {
     if (schermo !== "attesa" || media.length < 2 || media[k % media.length]?.tipo === "video") return;
     const t = setTimeout(() => setK((x) => (x + 1) % media.length), config.secondiMedia * 1000);
     return () => clearTimeout(t);
-  }, [schermo, k, media, config.secondiMedia]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [schermo, k, chiaveMedia, config.secondiMedia]);
+  // dalla scheda di un prodotto si torna qui da soli dopo l'inattività
+  const apri = (href: string) => (e: React.MouseEvent) => {
+    e.preventDefault();
+    location.href = `${href}?ritorno=${encodeURIComponent(location.pathname + location.search)}&dopo=${config.secondiInattivita}`;
+  };
 
   /* ---- catalogo al tocco, con ritorno per inattività ---- */
   const [restano, setRestano] = useState(config.secondiInattivita);
@@ -87,18 +95,21 @@ export default function TotemSchermo({ config, voci, tipologie, insegna, negozio
     setFotoIdx(0); setIdx(prossimo);
     if (config.bannerOgni > 0 && prossimo % config.bannerOgni === 0 && (config.media.length > 0 || config.frase)) setBanner(true);
   }, [voci, idx, fotoIdx, banner, config.bannerOgni, config.media.length, config.frase]);
+  const passoRef = useRef(passo);
+  passoRef.current = passo;
   useEffect(() => {
     if (schermo !== "prodotti" || fermo || voci.length === 0) return;
-    const t = setTimeout(passo, config.secondiProdotto * 1000);
+    const t = setTimeout(() => passoRef.current(), config.secondiProdotto * 1000);
     return () => clearTimeout(t);
-  }, [schermo, fermo, passo, config.secondiProdotto, voci.length]);
+    // il timer riparte quando cambia il prodotto mostrato, non a ogni aggiornamento dei dati
+  }, [schermo, fermo, idx, fotoIdx, banner, config.secondiProdotto, voci.length]);
   const p = voci[idx % Math.max(1, voci.length)];
   const immagini = p ? [p.foto, ...p.amb] : [];
   const bannerMedia = config.media[Math.floor(idx / Math.max(1, config.bannerOgni)) % Math.max(1, config.media.length)];
 
   const euro = (v: string) => (v.startsWith("€") ? v : `€ ${v}`);
   const tessera = (v: VoceTotem) => (
-    <a key={v.id} href={v.href} className="tt-tessera">
+    <a key={v.id} href={v.href} className="tt-tessera" onClick={apri(v.href)}>
       <span className="foto">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={v.foto} alt="" loading="lazy" />
@@ -117,7 +128,8 @@ export default function TotemSchermo({ config, voci, tipologie, insegna, negozio
       {schermo === "attesa" && (
         <section className="tt-attesa" onClick={apriCatalogo}>
           {media.map((m, i) => m.tipo === "video"
-            ? <video key={m.url} className={`tt-media${i === k % media.length ? " on" : ""}`} src={m.url} autoPlay muted loop playsInline />
+            ? <video key={m.url} className={`tt-media${i === k % media.length ? " on" : ""}`} src={m.url} autoPlay muted playsInline loop={media.length < 2}
+                onEnded={() => setK((x) => (x + 1) % media.length)} />
             // eslint-disable-next-line @next/next/no-img-element
             : <img key={m.url} className={`tt-media${i === k % media.length ? " on" : ""}`} src={m.url} alt="" />)}
           <div className="tt-velo" />
@@ -226,7 +238,7 @@ export default function TotemSchermo({ config, voci, tipologie, insegna, negozio
             </div>
           )}
           <div className="azioni">
-            <a className="tt-btn" href={p.href}>Tocca per i dettagli</a>
+            <a className="tt-btn" href={p.href} onClick={apri(p.href)}>Tocca per i dettagli</a>
             <button type="button" className="tt-btn chiaro" onClick={() => setFermo((f) => !f)}>{fermo ? "Riprendi" : "Ferma"}</button>
           </div>
           <div className="prossimi">

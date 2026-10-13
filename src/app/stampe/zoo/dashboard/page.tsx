@@ -9,7 +9,7 @@ import { gestisce } from "@/lib/types";
 import { listStorageFilesConData } from "@/lib/supabase";
 import {
   getZooDb, campagnaInLavorazione, campagnaInCorso, passiVolantino, animaliDi,
-  fotoDaAbbinare, volantinoDiFoto, focusDelVolantino, migraVolantinoPages, NO_VOLANTINO, destinazioneAnimale, vociSenzaFoto,
+  fotoDaAbbinare, volantinoDiFoto, focusDelVolantino, migraVolantinoPages, indiceVoci, NO_VOLANTINO, destinazioneAnimale, vociSenzaFoto,
 } from "@/lib/zoo";
 import { incontriDelVolantino, correggiIncontro, incontriProgrammati, eliminaProgrammato, spostaProgrammato } from "@/lib/zoo-incontri";
 
@@ -66,7 +66,10 @@ export default async function ZooDashboardPage() {
 
   // numeri del volantino
   const layout = db.volantinoLayouts.find((l) => l.campaignId === campaign.id);
-  const collocate = new Set((layout ? migraVolantinoPages(layout.pages) : []).flatMap((p) => p.blocks.flatMap((b) => b.offerIds ?? [])));
+  // collocata una voce (padre con i suoi gusti), contano collocate tutte le sue offerte
+  const indice = indiceVoci(db, campaign.id);
+  const collocate = new Set((layout ? migraVolantinoPages(layout.pages) : []).flatMap((p) => p.blocks.flatMap((b) => b.offerIds ?? []))
+    .flatMap((id) => (indice.offerteDi.get(indice.voceDi.get(id) ?? "") ?? []).map((o) => o.id).concat(id)));
   const daCollocarePerAnimale = new Map<string, number>();
   for (const o of voci(aVolantino.filter((o) => destinazioneAnimale(o.paginaId)))) {
     const a = destinazioneAnimale(o.paginaId)!; daCollocarePerAnimale.set(a, (daCollocarePerAnimale.get(a) ?? 0) + 1);

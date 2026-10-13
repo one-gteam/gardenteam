@@ -2455,7 +2455,13 @@ export async function canBuildVolantinoCheck(): Promise<boolean> {
   return isZooEditor(user) || (db.settings.volantinoEditors ?? []).includes(user.id);
 }
 
-export async function saveVolantinoLayout(campaignId: string, pagesJson: string) {
+/**
+ * Salva le pagine del volantino. Con `versione` si controlla di partire dall'ultima
+ * salvata: se un collega ha salvato nel frattempo si risponde «conflitto» invece
+ * di sovrascrivere il suo lavoro (prima, con due persone aperte sulla stessa
+ * pagina, l'ultimo salvataggio cancellava le offerte messe dall'altro).
+ */
+export async function saveVolantinoLayout(campaignId: string, pagesJson: string, versione?: string, forza = false) {
   const user = await requireZooUser();
   const db = await getZooDb();
   const allowed = isZooEditor(user) || (db.settings.volantinoEditors ?? []).includes(user.id);
@@ -2466,10 +2472,15 @@ export async function saveVolantinoLayout(campaignId: string, pagesJson: string)
   try { pages = JSON.parse(pagesJson); } catch { return { ok: false as const }; }
   if (!Array.isArray(pages) || pages.length > 80) return { ok: false as const };
   const existing = db.volantinoLayouts.find((l) => l.campaignId === campaignId);
-  if (existing) existing.pages = pages;
-  else db.volantinoLayouts.push({ campaignId, pages });
+  if (existing?.versione && existing.versione !== versione && !forza) {
+    return { ok: false as const, conflitto: true as const, chi: existing.salvatoDa ?? "un collega", il: existing.salvatoIl };
+  }
+  const nuova = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  const firma = { versione: nuova, salvatoDa: `${user.firstName} ${user.lastName}`.trim(), salvatoIl: new Date().toISOString() };
+  if (existing) Object.assign(existing, { pages }, firma);
+  else db.volantinoLayouts.push({ campaignId, pages, ...firma });
   await saveZooDb(db);
-  return { ok: true as const };
+  return { ok: true as const, versione: nuova };
 }
 
 /** Il Gestore Zoo (o sistema) sceglie chi altro può usare Crea Volantino. */

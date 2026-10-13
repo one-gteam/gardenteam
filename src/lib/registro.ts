@@ -27,6 +27,8 @@ export interface VoceRegistro {
 }
 
 const MAX_TESTO = 400;
+let coda: VoceRegistro[] = [];
+let programmato = false;
 const taglia = (v?: string) => (v === undefined ? undefined : v.length > MAX_TESTO ? `${v.slice(0, MAX_TESTO)}…` : v);
 
 export function dominioRegistro(d = new Date()): string {
@@ -35,7 +37,8 @@ export function dominioRegistro(d = new Date()): string {
 
 async function scriviVoci(voci: VoceRegistro[]): Promise<void> {
   const dominio = dominioRegistro();
-  for (let tentativo = 0; tentativo < 6; tentativo++) {
+  for (let tentativo = 0; tentativo < 12; tentativo++) {
+    if (tentativo) await new Promise((r) => setTimeout(r, 50 + Math.random() * 200 * tentativo));
     const { data: riga } = await supabase().from(APP_DATA_TABLE).select("data, updated_at").eq("domain", dominio).maybeSingle();
     const ora = new Date().toISOString();
     if (!riga) {
@@ -64,7 +67,15 @@ export function registra(
     ...voce, il: new Date().toISOString(), chi: user.id, chiNome: `${user.firstName} ${user.lastName}`.trim(),
     oggetto: taglia(voce.oggetto) ?? "", prima: taglia(voce.prima), dopo: taglia(voce.dopo),
   };
-  const lavoro = () => scriviVoci([v]).catch(() => undefined);
+  /*
+   * Le voci della stessa richiesta (es. 20 persone cancellate insieme) vanno in
+   * una scrittura sola: prima ogni voce faceva la sua e, in concorrenza sulla
+   * stessa riga del mese, molte andavano perse.
+   */
+  coda.push(v);
+  if (programmato) return;
+  programmato = true;
+  const lavoro = () => { const tutte = coda; coda = []; programmato = false; return scriviVoci(tutte).catch(() => undefined); };
   try { after(lavoro); } catch { void lavoro(); }
 }
 

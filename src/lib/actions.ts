@@ -660,12 +660,12 @@ export async function updateCourse(courseId: string, formData: FormData) {
 }
 
 export async function deleteCourse(courseId: string) {
-  const { db } = await requireEditableCourse(courseId);
+  const { db, course: eliminato, admin: chiElimina } = await requireEditableCourse(courseId);
   db.courses = db.courses.filter((c) => c.id !== courseId);
   db.progress = db.progress.filter((p) => p.courseId !== courseId);
   db.paths = db.paths.map((p) => ({ ...p, courseIds: p.courseIds.filter((id) => id !== courseId) }));
   // i certificati già emessi restano nello storico
-  registra(await requireUser(), { area: "academy", cosa: "Corso eliminato", oggetto: courseId });
+  registra(chiElimina, { area: "academy", cosa: "Corso eliminato", oggetto: eliminato.title });
   await saveDb(db);
   redirect("/admin/corsi?eliminato=1");
 }

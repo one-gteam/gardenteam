@@ -110,10 +110,10 @@ const ANIMALE_PREFISSO = "animale:";
 const animaleDi = (paginaId?: string) => (paginaId?.startsWith(ANIMALE_PREFISSO) ? paginaId.slice(ANIMALE_PREFISSO.length) : undefined);
 
 export default function VolantinoBuilder({
-  campaignId, offers: offersProp, initialPages, animali, caratts, labels, marche, fornitori, scopeParam,
+  campaignId, offers: offersProp, initialPages, versioneIniziale, animali, caratts, labels, marche, fornitori, scopeParam,
   focusDisponibili = [],
 }: {
-  campaignId: string; offers: OffLite[]; initialPages: VolPage[]; excelHref?: string; fotoZipHref?: string;
+  campaignId: string; offers: OffLite[]; initialPages: VolPage[]; versioneIniziale?: string; excelHref?: string; fotoZipHref?: string;
   animali: string[]; caratts: string[]; labels: string[]; marche: string[]; fornitori: string[];
   scopeParam: string;
   /** I focus del volantino (pagina Focus): si associano alle offerte delle celle, anche col colore di sfondo. */
@@ -192,7 +192,8 @@ export default function VolantinoBuilder({
       if (voce) s.add(voce.id);
     }
     return s;
-  }, [pages]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pages, offers]);
 
   /*
    * L'elenco mostra TUTTE le offerte che passano il filtro, comprese quelle già
@@ -299,11 +300,23 @@ export default function VolantinoBuilder({
   const offer = (id?: string) => offers.find((o) => o.id === id) ?? offers.find((o) => !!id && o.offerIds?.includes(id));
   const blockOf = (ps: VolPage[], pi: number, id: string) => ps[pi].blocks.find((b) => b.id === id);
 
-  const salva = useCallback(async (silenzioso = false) => {
+  /*
+   * Salvataggio con la versione: se un collega ha salvato mentre lavoravi, il
+   * server non sovrascrive e qui compare l'avviso (carica la sua versione o
+   * tieni la tua). Finché c'è il conflitto il salvataggio automatico si ferma.
+   */
+  const versione = useRef<string | undefined>(versioneIniziale);
+  const [conflitto, setConflitto] = useState<{ chi: string; il?: string } | null>(null);
+  const daSalvare = useRef(false);
+  const salva = useCallback(async (silenzioso = false, forza = false) => {
     if (!silenzioso) setStato("salvo");
     try {
-      const res = await saveVolantinoLayout(campaignId, JSON.stringify(pages));
-      setStato(res.ok ? "salvato" : "errore");
+      const res = await saveVolantinoLayout(campaignId, JSON.stringify(pages), versione.current, forza);
+      if (res.ok) {
+        versione.current = res.versione; daSalvare.current = false; setConflitto(null); setStato("salvato");
+      } else if ("conflitto" in res && res.conflitto) {
+        setConflitto({ chi: res.chi, il: res.il }); setStato("errore");
+      } else setStato("errore");
     } catch {
       setStato("errore"); // rete assente o server non raggiungibile
     }
@@ -311,10 +324,20 @@ export default function VolantinoBuilder({
 
   useEffect(() => {
     if (primoRender.current) { primoRender.current = false; return; }
+    daSalvare.current = true;
     setStato("");
+    if (conflitto) return;
     const t = setTimeout(() => { salva(true); }, 1500);
     return () => clearTimeout(t);
-  }, [pages, salva]);
+  }, [pages, salva, conflitto]);
+  // uscendo dalla pagina con una modifica non ancora salvata: si salva subito, e il browser chiede conferma
+  const salvaOra = useRef(salva);
+  useEffect(() => { salvaOra.current = salva; }, [salva]);
+  useEffect(() => {
+    const avvisa = (e: BeforeUnloadEvent) => { if (daSalvare.current) { void salvaOra.current(true); e.preventDefault(); } };
+    window.addEventListener("beforeunload", avvisa);
+    return () => { window.removeEventListener("beforeunload", avvisa); if (daSalvare.current) void salvaOra.current(true); };
+  }, []);
 
   const flash = (m: string) => { setAvviso(m); setTimeout(() => setAvviso(""), 3500); };
   /** Il focus alle offerte della cella aperta e di quelle scelte con Ctrl/Maiusc; se richiesto anche il colore di sfondo. */
@@ -325,12 +348,8 @@ export default function VolantinoBuilder({
     const ids = [...new Set(voci.flatMap((o) => o.offerIds ?? [o.id]))];
     // le celle senza offerte tengono il focus su di sé: ne mostrano nome e testo
     const celleVuote = celle.filter((c) => !(pages[c.pi]?.blocks.find((b) => b.id === c.id)?.offerIds ?? []).length);
-    // solo celle vuote e un focus nuovo: lo si crea, così entra nell'elenco (con il suo colore)
-    if (!ids.length && nome && !focusDisponibili.some((f) => f.nome === nome)) {
-      const fd = new FormData(); fd.set("nome", nome);
-      await salvaFocusDef(campaignId, null, fd).catch(() => undefined);
-    }
-    const r = ids.length ? await assegnaFocusOfferte(campaignId, ids, nome).catch(() => ({ ok: false as const, colore: undefined })) : { ok: true, colore: focusDisponibili.find((f) => f.nome === nome)?.colore };
+    // anche solo celle vuote: il server crea il focus se non c'è e ne restituisce il colore vero
+    const r = ids.length || nome ? await assegnaFocusOfferte(campaignId, ids, nome).catch(() => ({ ok: false as const, colore: undefined })) : { ok: true, colore: undefined };
     if (!r.ok) return flash("Focus non salvato.");
     for (const o of voci) sovrascrivi(o.id, { focus: nome || undefined });
     if (celleVuote.length) upd((ps) => { for (const c of celleVuote) { const b = ps[c.pi]?.blocks.find((x) => x.id === c.id); if (b) b.focus = nome || undefined; } return ps; });
@@ -703,7 +722,11 @@ export default function VolantinoBuilder({
 
   const aggiungiSezione = (pi: number, b: VolBlock) => {
     upd((ps) => {
-      ps[pi].sezioni = [...(ps[pi].sezioni ?? []), { id: uid("vs"), r: b.r, c: b.c, rs: b.rs, cs: b.cs, bg: "#eaf3e2", titolo: "Sezione" }];
+      // la sezione sta sulla griglia della pagina (cols), la cella su quella della sua riga: si converte
+      const n = b.rs > 1 ? ps[pi].cols : colonneRiga(ps[pi], b.r);
+      const c = Math.min(ps[pi].cols - 1, Math.floor((b.c * ps[pi].cols) / n));
+      const cs = Math.max(1, Math.min(ps[pi].cols - c, Math.round((b.cs * ps[pi].cols) / n)));
+      ps[pi].sezioni = [...(ps[pi].sezioni ?? []), { id: uid("vs"), r: b.r, c, rs: b.rs, cs, bg: "#eaf3e2", titolo: "Sezione" }];
       return ps;
     });
     flash("Sezione creata su questa cella: allargala con → e ↓ qui sotto, o cambiale colore e titolo.");
@@ -896,7 +919,7 @@ export default function VolantinoBuilder({
 
         <details className="no-print vol-note">
           <summary>Note della pagina per il grafico{page.note ? " ●" : ""}</summary>
-          <textarea rows={2} defaultValue={page.note ?? ""} placeholder="Es. sfondo verde su tutta la pagina, titolo in alto…"
+          <textarea key={`nota_${page.id}_${page.note ?? ""}`} rows={2} defaultValue={page.note ?? ""} placeholder="Es. sfondo verde su tutta la pagina, titolo in alto…"
             onBlur={(e) => upd((ps) => { ps[pi].note = e.target.value || undefined; return ps; })} />
         </details>
       </div>
@@ -1164,6 +1187,14 @@ export default function VolantinoBuilder({
         </div>
 
         {avviso && <div className="alert alert-amber no-print">{avviso}</div>}
+        {conflitto && (
+          <div className="alert alert-red no-print" style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <strong>{conflitto.chi} ha salvato il volantino mentre lavoravi{conflitto.il ? ` (${new Date(conflitto.il).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })})` : ""}.</strong>
+            <span style={{ fontSize: 12.5 }}>Le tue ultime modifiche non sono salvate, per non cancellare le sue.</span>
+            <button type="button" className="btn btn-sm" onClick={() => location.reload()}>Carica la sua versione</button>
+            <button type="button" className="btn btn-outline btn-sm" onClick={() => { if (confirm("Salvare la tua versione al posto della sua? Le sue modifiche andranno perse.")) salva(false, true); }}>Tieni la mia</button>
+          </div>
+        )}
 
         {vista === "verticale"
           ? <div className="vol-verticale">{pages.map((_, pi) => renderPage(pi))}</div>
@@ -1258,12 +1289,12 @@ export default function VolantinoBuilder({
                 )}
                 <label className="field">Descrizione (solo su questo volantino)
                   <input key={`d_${selBlock.id}`} defaultValue={selBlock.descrizione ?? selOffs[0].descrizione}
-                    onBlur={(e) => patch(sel!.pi, selBlock.id, { descrizione: e.target.value || undefined })} />
+                    onBlur={(e) => { const v = e.target.value; if (v === (selBlock.descrizione ?? selOffs[0].descrizione)) return; patch(sel!.pi, selBlock.id, { descrizione: v && v !== selOffs[0].descrizione ? v : undefined }); }} />
                 </label>
                 <div style={{ display: "flex", gap: 8, alignItems: "end" }}>
                   <label className="field" style={{ flex: 1 }}>Prezzo
                     <input key={`p_${selBlock.id}`} defaultValue={selBlock.prezzo ?? selOffs[0].prezzo}
-                      onBlur={(e) => patch(sel!.pi, selBlock.id, { prezzo: e.target.value || undefined })} />
+                      onBlur={(e) => { const v = e.target.value; if (v === (selBlock.prezzo ?? selOffs[0].prezzo)) return; patch(sel!.pi, selBlock.id, { prezzo: v && v !== selOffs[0].prezzo ? v : undefined }); }} />
                   </label>
                   <button className="btn btn-outline btn-sm" style={{ marginBottom: 12 }}
                     onClick={async () => {

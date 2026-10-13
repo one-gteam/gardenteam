@@ -83,7 +83,10 @@ export default async function DettaglioUtente({ admin, id, salvato, area }: { ad
                 <label className="field">
                   Punto vendita
                   <select name="storeId" defaultValue={u.storeId ?? ""}>
-                    {admin.role === "system_admin" && <option value="">— Nessuno (ruolo di consorzio/insegna) —</option>}
+                    {/* senza questa voce il browser mostrava il primo negozio e il salvataggio automatico ci spostava la persona */}
+                    {admin.role === "system_admin"
+                      ? <option value="">— Nessuno (ruolo di consorzio/insegna) —</option>
+                      : !selectableStores.some((x) => x.id === u.storeId) && <option value="">— {u.storeId ? "un punto vendita fuori dal tuo ambito" : "nessun punto vendita"} (resta così) —</option>}
                     {selectableStores.map((s) => {
                       const t = db.tenants.find((x) => x.id === s.tenantId);
                       return <option key={s.id} value={s.id}>{t?.name ?? "?"} — {s.name}</option>;

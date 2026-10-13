@@ -626,6 +626,19 @@ export function disponibilitaPV(db: StampeDB, pref: CatalogoPref, storeId: strin
   return { stato: q <= 0 ? "esaurito" : q <= 2 ? "pochi" : "ok", quantita: q };
 }
 
+/**
+ * Il prezzo di un prodotto come lo vede il pubblico per un ambito: solo se
+ * quell'ambito mostra online il campo del prezzo (chi lo nasconde sulla scheda
+ * non deve trovarlo sul catalogo o nelle tessere degli altri prodotti).
+ */
+export function prezzoPubblico(db: StampeDB, scope: Scope, product: PrintProduct, academyDb: DB): { prezzo: string; listino: string } {
+  const online = (id: string) => visibilitaCampo(db, scope, id, academyDb).online;
+  const promo = online("prezzoPromo") ? effectiveValue(db, scope, product, "prezzoPromo", academyDb).value : "";
+  const pieno = online("prezzo") ? effectiveValue(db, scope, product, "prezzo", academyDb).value : "";
+  const listino = promo ? (online("prezzoListino") ? effectiveValue(db, scope, product, "prezzoListino", academyDb).value : "") || pieno : "";
+  return { prezzo: promo || pieno, listino };
+}
+
 export function etichettaDisponibilita(d: { stato: StatoDisponibilita; quantita?: number }): string {
   if (d.stato === "ok") return "Disponibile";
   if (d.stato === "pochi") return d.quantita === 1 ? "Ultimo pezzo" : `Ultimi ${d.quantita}`;
@@ -636,8 +649,14 @@ export function etichettaDisponibilita(d: { stato: StatoDisponibilita; quantita?
 /** Il prezzo numerico di un prodotto per un ambito (promo se c'è), per ordinare e filtrare. */
 export function prezzoNumero(db: StampeDB, scope: Scope, product: PrintProduct, academyDb: DB): number | undefined {
   const v = effectiveValue(db, scope, product, "prezzoPromo", academyDb).value || effectiveValue(db, scope, product, "prezzo", academyDb).value;
-  const testo = v.replace(/[€\s]/g, "");
-  const n = parseFloat(testo.includes(",") ? testo.replace(/\./g, "").replace(",", ".") : testo);
+  return numeroPrezzoTesto(v);
+}
+
+/** «1.099» = 1099 (punto delle migliaia), «1.099,00» = 1099, «12,50» = 12,5. Lo stesso nel catalogo del cliente. */
+export function numeroPrezzoTesto(v: string): number | undefined {
+  const t = String(v ?? "").replace(/[€\s]/g, "");
+  if (!t) return undefined;
+  const n = parseFloat(t.includes(",") ? t.replace(/\./g, "").replace(",", ".") : /^\d{1,3}(\.\d{3})+$/.test(t) ? t.replace(/\./g, "") : t);
   return Number.isFinite(n) ? n : undefined;
 }
 

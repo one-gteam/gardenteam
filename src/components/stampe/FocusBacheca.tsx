@@ -21,13 +21,17 @@ function ModuloFocus({ campaignId, def, onSalvato, onElimina, colori }: {
   const rif = useRef<HTMLFormElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [stato, setStato] = useState("");
+  // il nome com'è adesso sul server: dopo una rinomina i salvataggi successivi usano quello nuovo
+  const nomeAttuale = useRef(def.nome);
   const invia = async (rinomina: boolean) => {
     if (!rif.current) return;
     if (timer.current) { clearTimeout(timer.current); timer.current = null; }
     const fd = new FormData(rif.current);
-    if (!rinomina) fd.set("nome", def.nome);
+    const nuovoNome = String(fd.get("nome") ?? "").trim();
+    if (!rinomina) fd.set("nome", nomeAttuale.current);
     setStato("Salvo…");
-    const r = await salvaFocusDef(campaignId, def.nome, fd).catch(() => ({ ok: false, error: "errore di rete" }));
+    const r = await salvaFocusDef(campaignId, nomeAttuale.current, fd).catch(() => ({ ok: false, error: "errore di rete" }));
+    if (r.ok && rinomina && nuovoNome) nomeAttuale.current = nuovoNome;
     setStato(r.ok ? "✓ Salvato" : r.error ?? "Non salvato");
     if (r.ok) onSalvato();
   };
@@ -37,7 +41,7 @@ function ModuloFocus({ campaignId, def, onSalvato, onElimina, colori }: {
       onChange={(e) => { if ((e.target as unknown as HTMLInputElement).name !== "nome") presto(); }}>
       <label className="field" style={{ marginBottom: 4 }}>Nome
         <input name="nome" defaultValue={def.nome} required
-          onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== def.nome) invia(true); }} />
+          onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== nomeAttuale.current) invia(true); }} />
       </label>
       <label className="field" style={{ marginBottom: 4 }}>Testo del focus
         <textarea name="descrizione" rows={3} defaultValue={def.descrizione ?? ""} onBlur={() => timer.current && invia(false)} />
@@ -53,7 +57,8 @@ function ModuloFocus({ campaignId, def, onSalvato, onElimina, colori }: {
             <span className="fb-colore" style={{ background: c }} title="colore del focus (anche per lo sfondo delle celle)" />
           </label>
         ))}
-        <input type="color" name="coloreLibero" defaultValue={def.colore ?? "#e8f3ea"} title="altro colore" style={{ width: 28, height: 22, padding: 0, marginTop: 0 }} />
+        <input type="color" name="coloreLibero" defaultValue={def.colore ?? "#e8f3ea"} title="altro colore" style={{ width: 28, height: 22, padding: 0, marginTop: 0 }}
+          onInput={() => rif.current?.querySelectorAll<HTMLInputElement>('input[name="colore"]').forEach((r) => { r.checked = false; })} />
       </div>
       <div style={{ display: "flex", gap: 8, marginTop: 6, alignItems: "center" }}>
         <span className="hint" style={{ flex: 1, fontSize: 11 }}>{stato || "si salva da solo"}</span>

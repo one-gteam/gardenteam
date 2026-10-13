@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getDb } from "@/lib/db";
 import TotemSchermo, { type VoceTotem } from "@/components/totem/TotemSchermo";
+import { segretoUguale } from "@/lib/auth";
 import {
-  getStampeDb, catalogoDi, prodottiCatalogo, productImageUrl, effectiveValue, disponibilitaPV, etichettaDisponibilita, schedaExtraPer, schedaUrl, type Scope,
+  getStampeDb, catalogoDi, prodottiCatalogo, productImageUrl, effectiveValue, disponibilitaPV, etichettaDisponibilita, schedaExtraPer, schedaUrl, prezzoPubblico, type Scope,
 } from "@/lib/stampe";
 
 /*
@@ -18,7 +19,7 @@ export default async function TotemPage({ params, searchParams }: { params: Prom
   const { k } = await searchParams;
   const [db, academyDb] = await Promise.all([getStampeDb(), getDb()]);
   const totem = db.totem.find((t) => t.id === id);
-  if (!totem || !k || k !== totem.chiave) notFound();
+  if (!totem || !k || !segretoUguale(k, totem.chiave)) notFound();
   const store = academyDb.stores.find((s) => s.id === totem.storeId);
   const tenant = store ? academyDb.tenants.find((t) => t.id === store.tenantId) : undefined;
   if (!store || !tenant) notFound();
@@ -28,15 +29,16 @@ export default async function TotemPage({ params, searchParams }: { params: Prom
     .filter((p) => totem.categorie.length === 0 || totem.categorie.includes(p.tipologia))
     .map((p) => {
       const d = disponibilitaPV(db, pref, store.id, p);
-      const promo = effectiveValue(db, scope, p, "prezzoPromo", academyDb).value;
+      // i prezzi partono solo se il totem li mostra e l'ambito li tiene online
+      const pp = totem.mostraPrezzi ? prezzoPubblico(db, scope, p, academyDb) : { prezzo: "", listino: "" };
       const extra = schedaExtraPer(db, scope, p.id, academyDb);
       return {
         id: p.id, codice: p.codice,
         titolo: effectiveValue(db, scope, p, "titolo", academyDb).value || p.fields.titolo || p.codice,
         sotto: effectiveValue(db, scope, p, "sottotitolo", academyDb).value,
         marca: p.marca, tipologia: p.tipologia, foto: productImageUrl(p),
-        prezzo: promo || effectiveValue(db, scope, p, "prezzo", academyDb).value,
-        listino: promo ? effectiveValue(db, scope, p, "prezzoListino", academyDb).value || effectiveValue(db, scope, p, "prezzo", academyDb).value : "",
+        prezzo: pp.prezzo,
+        listino: pp.listino,
         novita: !!effectiveValue(db, scope, p, "novita", academyDb).value,
         stato: pref.esauritiNascosti && d.stato === "esaurito" ? "esaurito" : d.stato, etichetta: etichettaDisponibilita(d),
         amb: extra.emozionali.filter((m) => m.tipo === "foto").map((m) => m.url),

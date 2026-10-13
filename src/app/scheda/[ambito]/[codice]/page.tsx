@@ -4,9 +4,10 @@ import { getDb } from "@/lib/db";
 import Condividi from "@/components/scheda/Condividi";
 import IntroEmozionale from "@/components/scheda/IntroEmozionale";
 import Galleria from "@/components/scheda/Galleria";
+import TornaAlTotem from "@/components/scheda/TornaAlTotem";
 import {
   getStampeDb, scopeDaSlug, schedaOnlinePer, campiScheda, productImageUrl, aziendaLogoUrl, insegnaDiScope, effectiveValue,
-  schedaExtraPer, galleriaProdotto, schedaUrl, catalogoDi, disponibilitaPV, etichettaDisponibilita, type PrintProduct, type Scope, type StampeDB,
+  schedaExtraPer, galleriaProdotto, schedaUrl, prezzoPubblico, catalogoDi, disponibilitaPV, etichettaDisponibilita, type PrintProduct, type Scope, type StampeDB,
 } from "@/lib/stampe";
 import type { DB } from "@/lib/types";
 import { elencoGruppi, gruppoDi } from "@/lib/cartello-campi";
@@ -40,7 +41,7 @@ const euro = (v: string) => (v.trim().startsWith("€") ? v.trim() : `€ ${v.tr
 /** Una tessera di un altro prodotto (accessorio o simile), con il prezzo come lo vede questo ambito. */
 function tessera(db: StampeDB, scope: Scope, academyDb: DB, p: PrintProduct) {
   const titolo = effectiveValue(db, scope, p, "titolo", academyDb).value || p.fields.titolo || p.codice;
-  const prezzo = effectiveValue(db, scope, p, "prezzoPromo", academyDb).value || effectiveValue(db, scope, p, "prezzo", academyDb).value;
+  const prezzo = prezzoPubblico(db, scope, p, academyDb).prezzo;
   const sotto = effectiveValue(db, scope, p, "sottotitolo", academyDb).value;
   return { id: p.id, href: schedaUrl(scope, p, false), foto: productImageUrl(p), titolo, prezzo, sotto, marca: p.marca };
 }
@@ -61,8 +62,11 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   };
 }
 
-export default async function SchedaPubblicaPage({ params }: { params: Params }) {
+export default async function SchedaPubblicaPage({ params, searchParams }: { params: Params; searchParams: Promise<{ ritorno?: string; dopo?: string }> }) {
   const dati = await carica(params);
+  // aperta dal totem: si torna al totem (solo indirizzi /totem/…, niente redirect verso fuori)
+  const { ritorno, dopo } = await searchParams;
+  const ritornoTotem = ritorno && /^\/totem\/[A-Za-z0-9_-]+\?k=[A-Za-z0-9_-]+$/.test(ritorno) ? ritorno : undefined;
   if (!dati) notFound();
   const { db, academyDb, scope, product } = dati;
   const insegna = insegnaDiScope(scope, academyDb);
@@ -108,6 +112,7 @@ export default async function SchedaPubblicaPage({ params }: { params: Params })
 
   return (
     <div className="scheda-pubblica sp" style={{ ["--insegna" as string]: colore }}>
+      {ritornoTotem && <TornaAlTotem href={ritornoTotem} secondi={Math.min(600, Math.max(15, Number(dopo) || 45))} />}
       {extra.emozionali.length > 0 && <IntroEmozionale media={extra.emozionali} occhiello={extra.occhiello} frase={extra.frase} titolo={titolo} insegna={nome} />}
 
       <header className="scheda-testata">

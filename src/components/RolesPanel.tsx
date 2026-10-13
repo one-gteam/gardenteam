@@ -117,6 +117,8 @@ export default function RolesPanel({
   });
   const ruoliPresenti = [...new Set(tutte.flatMap((u) => [u.ruolo, ...u.extra.map((x) => x.ruolo)]))];
   const filtroAttivo = !!(filtro.q || filtro.insegna || filtro.ruolo || filtro.area || filtro.stato);
+  // col filtro cambiano le righe: l'intervallo con Maiusc riparte da capo (prima selezionava righe mai viste)
+  useEffect(() => { setLastIndex(null); }, [filtro]);
 
   const toggleSite = (u: RowUser, site: SiteId) => {
     const next = u.sites.includes(site) ? u.sites.filter((s) => s !== site) : [...u.sites, site];
@@ -344,7 +346,7 @@ export default function RolesPanel({
         const [from, to] = lastIndex < index ? [lastIndex, index] : [index, lastIndex];
         for (let i = from; i <= to; i++) {
           const row = righe[i];
-          if (!row.editabile) continue;
+          if (!row || !row.editabile) continue;
           if (checked) next.add(row.id);
           else next.delete(row.id);
         }
