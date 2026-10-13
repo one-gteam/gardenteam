@@ -201,6 +201,9 @@ function hashPassword(password: string): string {
   return `${salt}:${scryptSync(password, salt, 64).toString("hex")}`;
 }
 
+/** Un hash qualsiasi, per far durare quanto un login vero quello con un'email che non esiste. */
+const HASH_FINTO = `${"0".repeat(32)}:${"0".repeat(128)}`;
+
 function verifyPassword(password: string, stored: string): boolean {
   const [salt, hash] = stored.split(":");
   if (!salt || !hash) return false;
@@ -248,7 +251,7 @@ async function requireEditableCourse(courseId: string) {
  */
 export async function provisionSsoUser(
   token: string
-): Promise<{ ok: true; userId: string } | { ok: false; reason: "disattivato" | "token" }> {
+): Promise<{ ok: true; userId: string } | { ok: false; reason: "disattivato" | "token" | "amministratore" }> {
   /*
    * Il token si verifica QUI, non solo nella route: essendo un'azione server è
    * richiamabile dal browser come tutte le altre, e senza questo controllo
@@ -289,6 +292,12 @@ export async function provisionSsoUser(
   }
 
   if (!user.active) return { ok: false, reason: "disattivato" };
+  /*
+   * Il link di My Rosaflor apre la formazione: non deve aprire un account da
+   * amministratore, dove chi ha il segreto condiviso (o un buco di My Rosaflor)
+   * diventerebbe padrone del portale. Gli amministratori entrano con la password.
+   */
+  if (ruoliDi(user).some((r) => RUOLI_AMMINISTRATORE.includes(r))) return { ok: false, reason: "amministratore" };
   return { ok: true, userId: user.id };
 }
 
@@ -1406,12 +1415,27 @@ function gestioniAssegnabili(admin: User, target: User, scelte: SiteId[]): SiteI
 }
 
 /** Il bersaglio è nel perimetro dell'admin e l'admin ha la gestione utenti attiva? */
+/** Il peso da amministratore: chi gestisce gli utenti non tocca chi pesa quanto lui o di più. */
+const RANGO: Partial<Record<Role, number>> = { system_admin: 3, group_admin: 2, store_admin: 1 };
+
 function canTouchUser(db: DB, admin: User, target: User): boolean {
   const livello = livelloGestioneUtenti(db, admin);
   if (!livello) return false;
   // contano anche i ruoli in più: un amministratore resta tale anche se oggi opera da gestore
   const ruoli = ruoliDi(target);
   if (ruoli.includes("system_admin") && admin.role !== "system_admin") return false;
+  /*
+   * Fra amministratori decide il grado, non solo il luogo: un amministratore di
+   * PV non tocca un amministratore d'insegna che sta nel suo negozio, e due
+   * amministratori dello stesso grado non si tolgono l'account a vicenda
+   * (prima bastava stare nello stesso PV per farsi dare il link di accesso
+   * dell'altro). Fa eccezione la propria persona, gestita dalle azioni stesse.
+   */
+  if (admin.role !== "system_admin" && target.id !== admin.id) {
+    const mio = RANGO[admin.role] ?? 0;
+    const suo = Math.max(0, ...ruoli.map((r) => RANGO[r] ?? 0));
+    if (suo > 0 && suo >= mio) return false;
+  }
   // chi ha solo l'incarico non tocca gli amministratori (nemmeno per cessarli)
   if (delegatoUtenti(admin) && ruoli.some((r) => RUOLI_AMMINISTRATORE.includes(r))) return false;
   if (livello === "consorzio") return true;
@@ -1704,7 +1728,7 @@ export async function setTenantUserDelegation(tenantId: string, allow: boolean) 
   const db = await getDb();
   const tenant = db.tenants.find((t) => t.id === tenantId);
   if (!tenant) return { ok: false as const };
-  const allowed = admin.role === "system_admin" || (admin.role === "group_admin" && admin.tenantId === tenantId);
+  const allowed = admin.role === "system_admin" || (admin.role === "group_admin" && admin.tenantId === tenantId && canManageUsers(db, admin));
   if (!allowed) return { ok: false as const };
   tenant.pvGestioneUtenti = allow;
   await saveDb(db);
@@ -2210,7 +2234,9 @@ export async function loginWithPassword(formData: FormData) {
   if (attesa > 0) redirect(`/login?errore=troppi&minuti=${attesa}`);
   const db = await getDb();
   const user = db.users.find((u) => u.email.toLowerCase() === email);
-  if (!user || !user.passwordHash || !verifyPassword(password, user.passwordHash)) {
+  // per un'email sconosciuta si calcola comunque un hash: la risposta non deve essere più veloce
+  const passwordOk = user?.passwordHash ? verifyPassword(password, user.passwordHash) : (verifyPassword(password, HASH_FINTO), false);
+  if (!user || !user.passwordHash || !passwordOk) {
     await segnaErrore(regole);
     redirect("/login?errore=credenziali");
   }
@@ -2469,7 +2495,7 @@ export async function approveRegistration(regId: string, formData: FormData) {
   if (!reg) redirect("/admin/utenti");
   const allowed =
     admin.role === "system_admin" ||
-    (admin.role === "group_admin" && reg!.tenantId === admin.tenantId) ||
+    (admin.role === "group_admin" && reg!.tenantId === admin.tenantId && canManageUsers(db, admin)) ||
     (admin.role === "store_admin" && reg!.storeId === admin.storeId && canManageUsers(db, admin));
   if (!allowed) redirect("/admin/utenti");
 
@@ -2508,7 +2534,7 @@ export async function rejectRegistration(regId: string) {
   if (!reg) redirect("/admin/utenti");
   const allowed =
     admin.role === "system_admin" ||
-    (admin.role === "group_admin" && reg!.tenantId === admin.tenantId) ||
+    (admin.role === "group_admin" && reg!.tenantId === admin.tenantId && canManageUsers(db, admin)) ||
     (admin.role === "store_admin" && reg!.storeId === admin.storeId && canManageUsers(db, admin));
   if (!allowed) redirect("/admin/utenti");
   reg!.status = "rejected";

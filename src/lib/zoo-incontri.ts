@@ -54,10 +54,23 @@ interface DbIncontri { incontri: Incontro[]; programmati?: IncontroProgrammato[]
 const INATTIVITA_MIN = 15;
 const vuoto: DbIncontri = { incontri: [] };
 
+/**
+ * Chi lavora al volantino: chi cura lo Zoo per il Consorzio o chi è fra gli
+ * «editor del volantino». Prima bastava avere l'area Zoo per chiudere,
+ * riaprire o cambiare i partecipanti degli incontri degli altri.
+ */
 async function editor() {
   const user = await requireUser();
   if (!canAccessArea(user, "zoo")) return null;
-  return user;
+  if (isZooEditor(user)) return user;
+  const zoo = await getZooDb();
+  return (zoo.settings.volantinoEditors ?? []).includes(user.id) ? user : null;
+}
+
+/** Il volantino esiste: niente incontri su id inventati. */
+async function volantinoEsiste(campaignId: string): Promise<boolean> {
+  const zoo = await getZooDb();
+  return zoo.campaigns.some((c) => c.id === campaignId);
 }
 
 /** Chiude gli incontri rimasti aperti senza gesti da troppo tempo; true se ha cambiato qualcosa. */
@@ -74,6 +87,7 @@ function chiudiScaduti(db: DbIncontri, ora = Date.now()): boolean {
 }
 
 export async function incontriDelVolantino(campaignId: string): Promise<Incontro[]> {
+  if (!(await editor())) return [];
   const db = await readDomain<DbIncontri>("zoo_incontri", vuoto);
   chiudiScaduti(db);
   return (db.incontri ?? []).filter((i) => i.campaignId === campaignId).sort((a, b) => b.inizio.localeCompare(a.inizio));
@@ -86,6 +100,7 @@ async function stato(db: DbIncontri, campaignId: string): Promise<StatoIncontro>
 }
 
 export async function statoIncontro(campaignId: string): Promise<StatoIncontro> {
+  if (!(await editor())) return { minutiInattivita: INATTIVITA_MIN };
   const db = await readDomain<DbIncontri>("zoo_incontri", vuoto);
   if (chiudiScaduti(db)) await writeDomain("zoo_incontri", db);
   return stato(db, campaignId);
@@ -94,7 +109,7 @@ export async function statoIncontro(campaignId: string): Promise<StatoIncontro> 
 /** Avvio col pulsante (o automatico, al primo gesto). Se ce n'è già uno aperto, resta quello. */
 export async function avviaIncontro(campaignId: string, auto = false): Promise<StatoIncontro> {
   const user = await editor();
-  if (!user) return { minutiInattivita: INATTIVITA_MIN };
+  if (!user || !(await volantinoEsiste(campaignId))) return { minutiInattivita: INATTIVITA_MIN };
   const db = await readDomain<DbIncontri>("zoo_incontri", vuoto);
   db.incontri ??= [];
   chiudiScaduti(db);
@@ -139,7 +154,7 @@ export async function terminaIncontro(campaignId: string, perInattivita = false)
 /** «Inizio»: il tempo dell'incontro aperto riparte da adesso (es. se era partito da solo mentre si guardava la pagina). */
 export async function iniziaDaOra(campaignId: string): Promise<StatoIncontro> {
   const user = await editor();
-  if (!user) return { minutiInattivita: INATTIVITA_MIN };
+  if (!user || !(await volantinoEsiste(campaignId))) return { minutiInattivita: INATTIVITA_MIN };
   const db = await readDomain<DbIncontri>("zoo_incontri", vuoto);
   db.incontri ??= [];
   chiudiScaduti(db);
@@ -158,6 +173,7 @@ export async function iniziaDaOra(campaignId: string): Promise<StatoIncontro> {
 /* ================== incontri fissati in anticipo ================== */
 
 export async function incontriProgrammati(campaignId: string): Promise<{ programmati: IncontroProgrammato[]; squadre: Record<string, string[]> }> {
+  if (!(await editor())) return { programmati: [], squadre: {} };
   const db = await readDomain<DbIncontri>("zoo_incontri", vuoto);
   return {
     programmati: (db.programmati ?? []).filter((p) => p.campaignId === campaignId).sort((a, b) => a.quando.localeCompare(b.quando)),

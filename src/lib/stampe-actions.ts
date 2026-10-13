@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "./auth";
 import { getDb } from "./db";
-import { uploadPublicFile } from "./supabase";
+import { uploadPublicFile, publicUrlFor } from "./supabase";
 import { registra } from "./registro";
 import type { SchedaExtra, StampeDB, Totem } from "./stampe";
 import { randomBytes } from "crypto";
@@ -31,6 +31,24 @@ async function requireStampeUser() {
   return user;
 }
 
+/**
+ * Può personalizzare questo ambito? Il Consorzio (scope «system») solo chi cura
+ * l'Arredo per il Consorzio: prima chiunque stesse al Consorzio con l'area
+ * Arredo (anche un grafico) cambiava campi, liste e testi per tutti. Un'insegna
+ * o un PV: non bloccato dall'insegna, e non il grafico, che fa layout e stampa.
+ */
+function puoPersonalizzare(user: Parameters<typeof isConsortiumEditor>[0], scope: { type: string; id: string }, db: StampeDB): boolean {
+  if (scope.type === "system") return isConsortiumEditor(user);
+  return !isStoreBlocked(db, scope as Parameters<typeof isStoreBlocked>[1]) && user.role !== "grafico";
+}
+
+/** Gli indirizzi dei nostri file caricati (Supabase, cartella arredo-media): niente foto da siti esterni sulle pagine pubbliche. */
+function mediaNostro(url: unknown): url is string {
+  if (typeof url !== "string") return false;
+  const base = publicUrlFor("arredo-media/");
+  return url.startsWith(base) && !url.slice(base.length).includes("..") && url.length < 600;
+}
+
 function backUrl(page: string, scopeParam: string, extra: Record<string, string> = {}) {
   // `page` puo' gia' portarsi dietro dei parametri (es. "...?abbina=1"): si uniscono, non si sovrascrivono
   const [percorso, suoi] = page.split("?");
@@ -49,6 +67,7 @@ export async function autosaveField(productId: string, fieldId: string, scopePar
   const academyDb = await getDb();
   const scope = resolveScope(user, scopeParam, academyDb);
   if (isStoreBlocked(db, scope)) return { ok: false as const, error: "personalizzazione disabilitata dall'insegna" };
+  if (!puoPersonalizzare(user, scope, db)) return { ok: false as const, error: "non autorizzato" };
   const product = db.products.find((p) => p.id === productId);
   if (!product) return { ok: false as const, error: "prodotto non trovato" };
   value = value.trim();
@@ -84,6 +103,7 @@ export async function savePrintField(productId: string, fieldId: string, scopePa
   const db = await getStampeDb();
   const academyDb = await getDb();
   const scope = resolveScope(user, scopeParam, academyDb);
+  if (!puoPersonalizzare(user, scope, db)) redirect(backUrl("/stampe/arredo/dati", scopeParam, { prodotto: productId }));
   const product = db.products.find((p) => p.id === productId);
   if (!product) redirect("/stampe/arredo/dati");
   const value = String(formData.get("value") ?? "").trim();
@@ -114,6 +134,7 @@ export async function resetPrintField(productId: string, fieldId: string, scopeP
   const db = await getStampeDb();
   const academyDb = await getDb();
   const scope = resolveScope(user, scopeParam, academyDb);
+  if (!puoPersonalizzare(user, scope, db)) redirect(backUrl("/stampe/arredo/dati", scopeParam, { prodotto: productId }));
   if (scope.type !== "system") {
     db.overrides = db.overrides.filter(
       (o) => !(o.scopeType === scope.type && o.scopeId === scope.id && o.productId === productId && o.fieldId === fieldId)
@@ -128,6 +149,7 @@ export async function toggleFieldHidden(fieldId: string, scopeParam: string, pro
   const db = await getStampeDb();
   const academyDb = await getDb();
   const scope = resolveScope(user, scopeParam, academyDb);
+  if (!puoPersonalizzare(user, scope, db)) redirect(backUrl("/stampe/arredo/dati", scopeParam, { prodotto: productId }));
   const existing = db.fieldPrefs.find(
     (p) => p.scopeType === scope.type && p.scopeId === scope.id && p.fieldId === fieldId
   );
@@ -501,7 +523,7 @@ export async function importOverridesExcel(scopeParam: string, formData: FormDat
   const db = await getStampeDb();
   const academyDb = await getDb();
   const scope = resolveScope(user, scopeParam, academyDb);
-  if (scope.type === "system" || isStoreBlocked(db, scope)) {
+  if (scope.type === "system" || !puoPersonalizzare(user, scope, db)) {
     redirect(backUrl("/stampe/arredo/dati", scopeParam, { importati: "0" }));
   }
   const file = formData.get("file") as File | null;
@@ -545,7 +567,7 @@ export async function importInternalCodes(scopeParam: string, formData: FormData
   const db = await getStampeDb();
   const academyDb = await getDb();
   const scope = resolveScope(user, scopeParam, academyDb);
-  if (scope.type === "system" || isStoreBlocked(db, scope)) {
+  if (scope.type === "system" || !puoPersonalizzare(user, scope, db)) {
     redirect(backUrl("/stampe/impostazioni", scopeParam, { codici: "0" }));
   }
   const file = formData.get("file") as File | null;
@@ -578,7 +600,7 @@ export async function addScopedField(scopeParam: string, formData: FormData) {
   const db = await getStampeDb();
   const academyDb = await getDb();
   const scope = resolveScope(user, scopeParam, academyDb);
-  if (isStoreBlocked(db, scope)) redirect("/stampe/impostazioni");
+  if (!puoPersonalizzare(user, scope, db)) redirect("/stampe/impostazioni");
   const label = String(formData.get("label") ?? "").trim();
   if (!label) redirect("/stampe/impostazioni");
   const type = formData.get("type") === "image" ? "image" as const : "text" as const;
@@ -619,7 +641,7 @@ export async function addListValue(key: "marche" | "tipologie" | "colori", scope
   const db = await getStampeDb();
   const academyDb = await getDb();
   const scope = resolveScope(user, scopeParam, academyDb);
-  if (isStoreBlocked(db, scope)) redirect("/stampe/impostazioni");
+  if (!puoPersonalizzare(user, scope, db)) redirect("/stampe/impostazioni");
   const value = String(formData.get("value") ?? "").trim();
   if (value && !db.lists[key].some((v) => v.value.toLowerCase() === value.toLowerCase())) {
     db.lists[key].push({
@@ -704,6 +726,7 @@ export async function removeScopedBackground(formatId: string, scopeParam: strin
   const db = await getStampeDb();
   const academyDb = await getDb();
   const scope = resolveScope(user, scopeParam, academyDb);
+  if (isStoreBlocked(db, scope) || !puoModificareLayout(user, "arredo", scope, academyDb)) redirect(backUrl("/stampe/arredo/layout", scopeParam, { formato: formatId }));
   db.scopedBackgrounds = db.scopedBackgrounds.filter(
     (b) => !(b.formatId === formatId && b.scopeType === scope.type && b.scopeId === scope.id)
   );
@@ -716,7 +739,7 @@ export async function uploadLayoutImage(scopeParam: string, formData: FormData) 
   const db = await getStampeDb();
   const academyDb = await getDb();
   const scope = resolveScope(user, scopeParam, academyDb);
-  if (isStoreBlocked(db, scope)) redirect("/stampe/arredo/layout");
+  if (isStoreBlocked(db, scope) || !puoModificareLayout(user, "arredo", scope, academyDb)) redirect("/stampe/arredo/layout");
   const file = formData.get("image") as File;
   const name = String(formData.get("name") ?? "").trim() || file?.name || "Immagine";
   const url = await saveUpload(file, "uploads/layout-img", `img_${scope.type}_${scope.id || "sys"}`);
@@ -911,7 +934,8 @@ export async function registraMediaScheda(productId: string, scopeParam: string,
   const { db, scope, ok } = await ambitoSchedaExtra(scopeParam);
   if (!ok) return { ok: false, error: "Non puoi modificare questo ambito." };
   const r = recordExtra(db, scope, productId);
-  const buoni = media.filter((m) => /^https:\/\/[^ ]+\/arredo-media\//.test(m.url)).slice(0, 20);
+  if (!db.products.some((p) => p.id === productId)) return { ok: false, error: "Prodotto non trovato." };
+  const buoni = (Array.isArray(media) ? media : []).filter((m) => mediaNostro(m?.url) && (m.tipo === "foto" || m.tipo === "video")).slice(0, 20);
   if (dove === "foto") r.foto = [...(r.foto ?? []), ...buoni.filter((m) => m.tipo === "foto").map((m) => m.url)].slice(0, 20);
   else r.emozionali = [...(r.emozionali ?? []), ...buoni.map((m) => ({ url: m.url, tipo: m.tipo }))].slice(0, 10);
   await saveStampeDb(db);
@@ -989,7 +1013,7 @@ export async function salvaBannerCatalogo(scopeParam: string, url: string | null
   const { db, tenantId, okInsegna } = await ambitoInsegna(scopeParam);
   if (!okInsegna) return { ok: false, error: "Il catalogo lo gestisce l'insegna." };
   const c = prefCatalogo(db, tenantId!);
-  c.bannerUrl = url && /^https:\/\/[^ ]+\/arredo-media\//.test(url) ? url : undefined;
+  c.bannerUrl = mediaNostro(url) ? url : undefined;
   await saveStampeDb(db);
   revalidatePath("/stampe/arredo/catalogo");
   return { ok: true };
@@ -1000,7 +1024,9 @@ export async function accendiProdottiCatalogo(scopeParam: string, ids: string[],
   const { db, tenantId, okInsegna } = await ambitoInsegna(scopeParam);
   if (!okInsegna) return { ok: false, error: "Il catalogo lo gestisce l'insegna." };
   const c = prefCatalogo(db, tenantId!);
-  const spenti = new Set(c.spenti ?? []);
+  const esistono = new Set(db.products.map((p) => p.id));
+  ids = (Array.isArray(ids) ? ids : []).filter((id) => typeof id === "string" && esistono.has(id)).slice(0, 5000);
+  const spenti = new Set((c.spenti ?? []).filter((id) => esistono.has(id)));
   for (const id of ids) { if (acceso) spenti.delete(id); else spenti.add(id); }
   c.spenti = [...spenti];
   await saveStampeDb(db);
@@ -1124,7 +1150,8 @@ export async function salvaTotem(id: string, fd: FormData): Promise<{ ok: boolea
 export async function registraMediaTotem(id: string, media: { url: string; tipo: "foto" | "video" }[]): Promise<{ ok: boolean; error?: string }> {
   const { db, t, ok } = await totemDi(id);
   if (!t || !ok) return { ok: false, error: "Totem non trovato o non tuo." };
-  t.media = [...t.media, ...media.filter((m) => /^https:\/\/[^ ]+\/arredo-media\//.test(m.url))].slice(0, 20);
+  const buoni = (Array.isArray(media) ? media : []).filter((m) => mediaNostro(m?.url) && (m.tipo === "foto" || m.tipo === "video")).map((m) => ({ url: m.url, tipo: m.tipo }));
+  t.media = [...t.media, ...buoni].slice(0, 20);
   await saveStampeDb(db);
   revalidatePath("/stampe/arredo/totem");
   return { ok: true };

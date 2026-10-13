@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
   if (!payload) return NextResponse.redirect(new URL("/login?errore=sso", req.url));
 
   const result = await provisionSsoUser(token);
-  if (!result.ok) return NextResponse.redirect(new URL("/login?errore=disattivato", req.url));
+  if (!result.ok) return NextResponse.redirect(new URL(result.reason === "amministratore" ? "/login?errore=sso-amministratore" : "/login?errore=disattivato", req.url));
 
   const db = await getDb();
   const user = db.users.find((u) => u.id === result.userId)!;

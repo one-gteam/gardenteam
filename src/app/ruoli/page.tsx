@@ -5,7 +5,9 @@ import RolesPanel from "@/components/RolesPanel";
 import RuoliHeader from "@/components/RuoliHeader";
 import NuovoUtente from "@/components/NuovoUtente";
 import { assignableRolesFor, canManageUsers, livelloGestioneUtenti, RUOLI_AMMINISTRATORE, scopeUsers } from "@/lib/logic";
-import { userSites, ruoliDi, ruoloEsteso } from "@/lib/types";
+import { userSites, ruoliDi, ruoloEsteso, type Role } from "@/lib/types";
+
+const RANGO: Partial<Record<Role, number>> = { system_admin: 3, group_admin: 2, store_admin: 1 };
 
 /**
  * Gestione Ruoli: area a sé, raggiunta dalla scelta area. A cascata:
@@ -44,8 +46,10 @@ export default async function RuoliPage({
       attivo: u.active !== false,
       sites: userSites(u),
       manages: u.manages ?? [],
+      // come canTouchUser: fra amministratori decide il grado
       editabile: canManage && u.id !== user.id && (!ruoliDi(u).includes("system_admin") || user.role === "system_admin")
-        && (puoDelegare || !ruoliDi(u).some((r) => RUOLI_AMMINISTRATORE.includes(r))),
+        && (puoDelegare || !ruoliDi(u).some((r) => RUOLI_AMMINISTRATORE.includes(r)))
+        && (user.role === "system_admin" || Math.max(0, ...ruoliDi(u).map((r) => RANGO[r] ?? 0)) < (RANGO[user.role] ?? 0) || !ruoliDi(u).some((r) => RUOLI_AMMINISTRATORE.includes(r))),
       // i ruoli in più (stessa collocazione), con le loro aree
       extra: (u.ruoliExtra ?? []).map((p) => {
         const come = { ...u, role: p.role, sites: p.sites ?? [], manages: p.manages };

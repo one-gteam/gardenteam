@@ -432,7 +432,9 @@ export async function associaConAI(back: string, scopeParam: string, formData: F
   if (!gestisceArea(user, "zoo", scopeAi, academyDbAi)) redirect(backUrl(back, scopeParam));
   const ids = (formData.getAll("sel") as string[]).filter(Boolean);
   const db = await getZooDb();
-  const selected = db.products.filter((p) => ids.includes(p.id));
+  // il Consorzio raggruppa il catalogo; un'insegna o un PV solo i propri articoli (non quelli comuni né degli altri)
+  const selected = db.products.filter((p) => ids.includes(p.id)
+    && (scopeAi.type === "system" ? isZooEditor(user) : p.scopeType === scopeAi.type && p.scopeId === scopeAi.id));
   if (selected.length === 0) redirect(backUrl(back, scopeParam));
   const chiave = apiKeyFor(db, scopeAi) || process.env.ANTHROPIC_API_KEY;
   const { groups, usedAi, error, restanti } = await groupAndDescribeBatched(chiave, selected, db.settings);
@@ -527,6 +529,7 @@ export async function updateParentFieldInline(
   const db = await getZooDb();
   const academyDb = await getDb();
   const scope = resolveScope(user, scopeParam, academyDb);
+  value = String(value ?? "").slice(0, 4000);
   const parent = db.parents.find((p) => p.id === parentId);
   if (!parent) return { ok: false };
   const primaTesto = scope.type === "system" ? parent[field] : (db.textOverrides.find((o) => o.scopeType === scope.type && o.scopeId === scope.id && o.parentId === parentId && o.field === field)?.value ?? parent[field]);
@@ -721,6 +724,7 @@ export async function setOfferTextScoped(
   const db = await getZooDb();
   const academyDb = await getDb();
   const scope = resolveScope(user, scopeParam, academyDb);
+  value = String(value ?? "").slice(0, 4000);
   const offer = db.offers.find((o) => o.id === offerId);
   if (!offer) return { ok: false };
   const v = value.trim();
@@ -1776,7 +1780,8 @@ export async function voteZooOffer(offerId: string, tipo: "preferita" | "nontrat
   const db = await getZooDb();
   const academyDb = await getDb();
   const scope = resolveScope(user, scopeParam, academyDb);
-  const nota = String(formData?.get("nota") ?? "");
+  const nota = String(formData?.get("nota") ?? "").slice(0, 1000);
+  if (!db.offers.some((o) => o.id === offerId)) return;
   const existing = db.votes.find((v) => v.offerId === offerId && v.userId === user.id && v.tipo === tipo);
   if (existing) {
     db.votes = db.votes.filter((v) => v !== existing); // secondo clic = rimuove il voto
@@ -2089,8 +2094,11 @@ export async function mettiInCoda(
   let voci: { offerId: string; impostazioni: Record<string, string> }[] = [];
   try { voci = JSON.parse(vociJson); } catch { return { ok: false, n: 0 }; }
   let n = 0;
-  for (const v of voci) {
-    if (!v.offerId) continue;
+  if (!Array.isArray(voci)) return { ok: false, n: 0 };
+  const offerteEsistenti = new Set(db.offers.map((o) => o.id));
+  for (const v of voci.slice(0, 1000)) {
+    if (!v || typeof v.offerId !== "string" || !offerteEsistenti.has(v.offerId)) continue;
+    if (v.impostazioni && JSON.stringify(v.impostazioni).length > 4000) v.impostazioni = {};
     const esistente = db.coda.find((c) => c.scopeType === scope.type && c.scopeId === scope.id && c.offerId === v.offerId && !c.stampato);
     if (esistente) {
       esistente.stato = stato;
@@ -2309,7 +2317,7 @@ export async function sendZooSuggestion(scopeParam: string, formData: FormData) 
   const db = await getZooDb();
   const academyDb = await getDb();
   const scope = resolveScope(user, scopeParam, academyDb);
-  const message = String(formData.get("message") ?? "").trim();
+  const message = String(formData.get("message") ?? "").trim().slice(0, 2000);
   const parentId = String(formData.get("parentId") ?? "") || undefined;
   const offerId = String(formData.get("offerId") ?? "") || undefined;
   const back = String(formData.get("back") ?? "/stampe/zoo/stampa");
@@ -2452,8 +2460,11 @@ export async function saveVolantinoLayout(campaignId: string, pagesJson: string)
   const db = await getZooDb();
   const allowed = isZooEditor(user) || (db.settings.volantinoEditors ?? []).includes(user.id);
   if (!allowed) return { ok: false as const };
+  // un volantino vero sta in poche centinaia di KB: oltre è un errore o un abuso
+  if (pagesJson.length > 3_000_000 || !db.campaigns.some((c) => c.id === campaignId)) return { ok: false as const };
   let pages;
   try { pages = JSON.parse(pagesJson); } catch { return { ok: false as const }; }
+  if (!Array.isArray(pages) || pages.length > 80) return { ok: false as const };
   const existing = db.volantinoLayouts.find((l) => l.campaignId === campaignId);
   if (existing) existing.pages = pages;
   else db.volantinoLayouts.push({ campaignId, pages });
@@ -2849,7 +2860,8 @@ export async function copiaZooLayoutSuFormato(layoutId: string, scopeParam: stri
   const academyDb = await getDb();
   const scope = resolveScope(user, scopeParam, academyDb);
   if (!puoModificareLayout(user, "zoo", scope, academyDb)) redirect(backUrl("/stampe/zoo/layout", scopeParam));
-  const sorgente = db.zooLayouts.find((l) => l.id === layoutId);
+  // si copia un layout che questo ambito vede (il suo o di chi gli sta sopra), non quello di un'altra insegna
+  const sorgente = db.zooLayouts.find((l) => l.id === layoutId && ownScopeVisible(scope, academyDb, { scopeType: l.scopeType === "system" ? undefined : l.scopeType, scopeId: l.scopeId }));
   const destFormatId = String(formData.get("formatId") ?? "");
   const da = ZOO_FORMATS.find((f) => f.id === sorgente?.formatId);
   const a = ZOO_FORMATS.find((f) => f.id === destFormatId);
@@ -3027,7 +3039,9 @@ export async function eliminaOffertaPropria(offerId: string, scopeParam: string)
   const academyDb = await getDb();
   const scope = resolveScope(user, scopeParam, academyDb);
   const o = db.offers.find((x) => x.id === offerId);
-  if (!o || !o.scopeType || !ownScopeVisible(scope, academyDb, o)) {
+  // la cancella chi gestisce lo Zoo nell'ambito dell'offerta (o sopra): non un collega del PV su un'offerta dell'insegna
+  if (!o || !o.scopeType || !ownScopeVisible(scope, academyDb, o)
+    || !gestisceArea(user, "zoo", { type: o.scopeType, id: o.scopeId ?? "" }, academyDb)) {
     redirect(backUrl("/stampe/zoo/stampa", scopeParam));
   }
   db.offers = db.offers.filter((x) => x.id !== offerId);
@@ -3136,7 +3150,8 @@ export async function aggiungiNotaBozza(campaignId: string, scopeParam: string, 
   const db = await getZooDb();
   const academyDb = await getDb();
   const scope = resolveScope(user, scopeParam, academyDb);
-  const testo = String(formData.get("testo") ?? "").trim();
+  const testo = String(formData.get("testo") ?? "").trim().slice(0, 2000);
+  if (!db.campaigns.some((c) => c.id === campaignId)) redirect(backUrl("/stampe/zoo/bozza", scopeParam));
   if (!testo) redirect(backUrl("/stampe/zoo/bozza", scopeParam));
   db.noteBozza.push({
     id: `nb_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
@@ -3293,7 +3308,9 @@ export async function creaCartelloNuovo(
 ): Promise<{ ok: boolean; id?: string; errore?: string }> {
   const { user, db, academyDb, scope, puo } = await ambitoCartelliPropri(scopeParam);
   if (!puo) return { ok: false, errore: "I cartelli del Consorzio li crea chi gestisce i contenuti Zoo." };
-  const titolo = String(formData.get("titolo") ?? "").trim();
+  // condividerlo col Consorzio lo decide chi gestisce lo Zoo nell'ambito
+  if (formData.get("condivisa") === "1" && !gestisceArea(user, "zoo", scope, academyDb)) formData.set("condivisa", "");
+  const titolo = String(formData.get("titolo") ?? "").trim().slice(0, 200);
   const prezzoPromo = priceOrEmpty(String(formData.get("prezzoPromo") ?? ""));
   const meccanica = String(formData.get("meccanica") ?? "").trim();
   if (!titolo) return { ok: false, errore: "Serve almeno il titolo del cartello." };

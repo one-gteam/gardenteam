@@ -1,4 +1,5 @@
 "use server";
+import { publicUrlFor } from "./supabase";
 
 import { revalidatePath } from "next/cache";
 import { requireUser } from "./auth";
@@ -144,7 +145,9 @@ export async function descrizioneAi(formData: FormData): Promise<{ ok: boolean; 
   const files = (formData.getAll("allegati") as File[]).filter((f) => f && f.size > 0 && TIPI_ALLEGATO.test(f.type));
   const documenti = await Promise.all(files.slice(0, 5).map(async (f) => ({ nome: f.name, tipo: f.type, bytes: Buffer.from(await f.arrayBuffer()) })));
   // anche gli allegati già caricati in precedenza (articolo in modifica)
-  for (const url of (formData.getAll("allegato_url") as string[]).slice(0, 5)) {
+  // solo gli allegati caricati da noi (Supabase): il server non va a prendere indirizzi qualsiasi, nemmeno interni
+  const nostri = publicUrlFor("");
+  for (const url of (formData.getAll("allegato_url") as string[]).filter((u) => typeof u === "string" && u.startsWith(nostri) && !u.includes("..")).slice(0, 5)) {
     try {
       const r = await fetch(url);
       if (!r.ok) continue;
