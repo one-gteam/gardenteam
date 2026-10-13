@@ -1634,3 +1634,27 @@ img.tt-media.on { animation: sp-kb 12s linear forwards; }
 .vol-rotella { flex: 0 0 auto !important; position: relative; padding-left: 10px; padding-right: 10px; }
 .vol-pallino { position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; border-radius: 50%; background: #e8481c; }
 .vol-altro { margin-top: 8px; padding: 8px; border: 1px dashed var(--line); border-radius: 8px; }
+
+/* Utenti e ruoli: filtro e tabella compatta */
+.rt-filtro { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 12px; margin-bottom: 10px; position: sticky; top: 8px; z-index: 6; }
+.rt-filtro select, .rt-filtro input { margin: 0; height: 36px; padding: 0 10px; font-size: 13px; }
+.rt-cerca { flex: 1 1 220px; min-width: 180px; }
+.rt-cerca input { width: 100%; }
+.rt-tab th { white-space: nowrap; font-size: 11px; }
+.rt-tab td { vertical-align: middle; padding-top: 8px; padding-bottom: 8px; }
+.rt-nome { display: flex; flex-direction: column; gap: 1px; color: inherit; text-decoration: none; min-width: 170px; }
+.rt-nome strong { font-size: 13.5px; }
+.rt-nome span { font-size: 11.5px; color: var(--muted); word-break: break-all; }
+.rt-nome em { font-style: normal; font-size: 10.5px; font-weight: 800; color: #8a5a00; background: #fff3d6; border-radius: 999px; padding: 1px 7px; align-self: flex-start; margin-top: 2px; }
+.rt-dove { display: flex; flex-direction: column; font-size: 12.5px; white-space: nowrap; }
+.rt-dove strong { font-weight: 700; }
+.rt-dove span { color: var(--muted); font-size: 11.5px; }
+.rt-sel { margin: 0; width: 100%; min-width: 150px; height: 34px; padding: 0 8px; font-size: 12.5px; }
+.rt-sel.piccolo { min-width: 120px; width: auto; height: 28px; font-size: 12px; padding: 0 6px; }
+.rt-sel.aggiungi { color: var(--green-700); font-weight: 700; border-style: dashed; }
+.rt-tab .ruoli-extra { min-width: 150px; }
+.rt-tab .ruolo-extra-riga .pill { font-size: 9.5px; }
+.rt-aree { display: grid; grid-template-columns: repeat(2, max-content); gap: 3px 12px; }
+.rt-aree label { font-size: 12px; display: inline-flex; gap: 4px; align-items: center; white-space: nowrap; }
+.rt-stato { white-space: nowrap; border: 1px solid #e3a9a1; background: #fff5f4; color: #a1271c; font-weight: 800; font-size: 11.5px; border-radius: 999px; padding: 3px 10px; cursor: pointer; font-family: inherit; }
+.rt-stato.on { border-color: #9fd0ae; background: #eef7f0; color: #1d6b39; }

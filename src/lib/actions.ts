@@ -2276,6 +2276,27 @@ Questa mail te l'ha mandata ${admin.firstName} ${admin.lastName}.`;
   return null;
 }
 
+/**
+ * Il link per scegliere (o reimpostare) la password, da mandare a mano a chi
+ * non riceve la mail. Vale 7 giorni e smette di valere appena la password
+ * cambia. Solo per le persone del proprio ambito, al massimo 10 all'ora.
+ */
+export async function creaLinkAccesso(userId: string): Promise<{ ok: true; link: string; scade: string } | { ok: false; error: string }> {
+  const admin = await requireUser();
+  const db = await getDb();
+  const target = db.users.find((u) => u.id === userId);
+  if (!target || target.id === admin.id) return { ok: false, error: "Non consentito" };
+  if (!canTouchUser(db, admin, target)) return { ok: false, error: "Fuori dal tuo ambito" };
+  if (target.active === false) return { ok: false, error: "Account cessato: riattivalo prima." };
+  const regole: Regola[] = [{ chiave: `link-accesso:${admin.id}`, massimo: 10, minuti: 60 }];
+  if (await attesaMinuti(regole) > 0) return { ok: false, error: "Troppi link creati nell'ultima ora: riprova più tardi." };
+  await segnaErrore(regole);
+  const ore = 24 * 7;
+  const token = tokenReimposta(target.id, target.passwordHash, ore);
+  const scade = new Date(Date.now() + ore * 3600 * 1000).toLocaleString("it-IT", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" });
+  return { ok: true, link: `${siteUrl()}/reimposta?token=${token}`, scade };
+}
+
 export async function reinviaAccesso(userId: string): Promise<{ ok: boolean; error?: string }> {
   const admin = await requireUser();
   const db = await getDb();

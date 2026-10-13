@@ -11,6 +11,10 @@ const COLUMN_ORDER_KEY = "agt_ruoli_col_order";
 interface RowUser {
   id: string;
   nome: string;
+  email: string;
+  tenantId: string;
+  /** Ha già scelto la password. */
+  attivato: boolean;
   ruolo: Role;
   insegna: string;
   pv: string;
@@ -47,6 +51,8 @@ export default function RolesPanel({
   deleghe,
   showInsegna,
   puoDelegare = false,
+  insegne = [],
+  filtroIniziale = { q: "", insegna: "" },
 }: {
   users: RowUser[];
   assignableRoles: Role[];
@@ -54,6 +60,8 @@ export default function RolesPanel({
   showInsegna: boolean;
   /** Chi guarda è un amministratore: può dare l'incarico "gestisce utenti". */
   puoDelegare?: boolean;
+  insegne?: { id: string; nome: string }[];
+  filtroIniziale?: { q: string; insegna: string };
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -94,7 +102,21 @@ export default function RolesPanel({
         });
       });
   };
-  const righe = users.map((u) => ({ ...u, ...modifiche[u.id] }));
+  const [filtro, setFiltro] = useState({ q: filtroIniziale.q, insegna: filtroIniziale.insegna, ruolo: "", area: "", stato: "" });
+  const tutte = users.map((u) => ({ ...u, ...modifiche[u.id] }));
+  const testo = filtro.q.trim().toLowerCase();
+  const righe = tutte.filter((u) => {
+    if (testo && !`${u.nome} ${u.email}`.toLowerCase().includes(testo)) return false;
+    if (filtro.insegna && (filtro.insegna === "_consorzio" ? u.tenantId !== "" : u.tenantId !== filtro.insegna)) return false;
+    if (filtro.ruolo && u.ruolo !== filtro.ruolo && !u.extra.some((x) => x.ruolo === filtro.ruolo)) return false;
+    if (filtro.area && !u.sites.includes(filtro.area as SiteId)) return false;
+    if (filtro.stato === "attivi" && !u.attivo) return false;
+    if (filtro.stato === "cessati" && u.attivo) return false;
+    if (filtro.stato === "nonattivati" && (u.attivato || !u.attivo)) return false;
+    return true;
+  });
+  const ruoliPresenti = [...new Set(tutte.flatMap((u) => [u.ruolo, ...u.extra.map((x) => x.ruolo)]))];
+  const filtroAttivo = !!(filtro.q || filtro.insegna || filtro.ruolo || filtro.area || filtro.stato);
 
   const toggleSite = (u: RowUser, site: SiteId) => {
     const next = u.sites.includes(site) ? u.sites.filter((s) => s !== site) : [...u.sites, site];
@@ -112,15 +134,18 @@ export default function RolesPanel({
         key: "nome",
         label: "Collaboratore",
         cell: (u) => (
-          <a href={`/ruoli/utenti/${u.id}`} style={{ color: "inherit" }}>
+          <a href={`/ruoli/utenti/${u.id}`} className="rt-nome">
             <strong>{u.nome}</strong>
+            <span>{u.email}</span>
+            {!u.attivato && u.attivo && <em title="Non ha ancora scelto la password">non attivato</em>}
           </a>
         ),
       },
     ];
-    if (showInsegna) cols.push({ key: "insegna", label: "Insegna", cell: (u) => u.insegna });
     cols.push(
-      { key: "pv", label: "Punto vendita", cell: (u) => u.pv },
+      { key: "dove", label: showInsegna ? "Insegna · PV" : "Punto vendita", cell: (u) => (
+        <span className="rt-dove">{showInsegna && <strong>{u.insegna}</strong>}<span>{u.pv}</span></span>
+      ) },
       {
         key: "ruolo",
         label: "Ruolo",
@@ -129,7 +154,7 @@ export default function RolesPanel({
             <select
               value={u.ruolo}
               onChange={(e) => { const r = e.target.value as Role; cambia(u, { ruolo: r }, () => quickSetRole(u.id, r)); }}
-              style={{ marginTop: 0, minWidth: 190 }}
+              className="rt-sel"
             >
               {assignableRoles.map((r) => (
                 <option key={r} value={r}>{ROLE_LABELS[r]}</option>
@@ -149,7 +174,7 @@ export default function RolesPanel({
               {u.extra.map((x) => (
                 <span key={x.id} className="ruolo-extra-riga">
                   {u.editabile && x.togliibile ? (
-                    <select value={x.ruolo} style={{ marginTop: 0, minWidth: 170 }}
+                    <select value={x.ruolo} className="rt-sel piccolo"
                       onChange={(e) => { const r = e.target.value as Role; run(() => aggiornaRuoloExtra(u.id, x.id, { role: r })); }}>
                       {liberi(x.ruolo).map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
                     </select>
@@ -180,7 +205,7 @@ export default function RolesPanel({
                 </span>
               ))}
               {u.editabile && liberi().length > 0 && (
-                <select value="" style={{ marginTop: 0, minWidth: 150 }} disabled={pending}
+                <select value="" className="rt-sel piccolo aggiungi" disabled={pending}
                   title="Un altro ruolo per la stessa persona, con le stesse aree: quando entra sceglie con quale lavorare"
                   onChange={(e) => {
                     const r = e.target.value as Role;
@@ -201,9 +226,9 @@ export default function RolesPanel({
         key: "aree",
         label: "Aree",
         cell: (u) => (
-          <span style={{ whiteSpace: "nowrap" }}>
+          <span className="rt-aree">
             {SITES.map((site) => (
-              <label key={site} style={{ fontSize: 12.5, display: "inline-flex", gap: 4, alignItems: "center", marginRight: 10 }}>
+              <label key={site}>
                 <input
                   type="checkbox"
                   checked={u.sites.includes(site)}
@@ -239,7 +264,7 @@ export default function RolesPanel({
           u.editabile ? (
             <button
               type="button"
-              className={`btn btn-sm ${u.attivo ? "btn-outline" : ""}`}
+              className={`rt-stato ${u.attivo ? "on" : ""}`}
               onClick={() => cambia(u, { attivo: !u.attivo }, () => quickToggleActive(u.id))}
               title={u.attivo ? "Blocca l'accesso (cessazione)" : "Riattiva l'accesso"}
             >
@@ -308,7 +333,7 @@ export default function RolesPanel({
   };
 
   // ---------- selezione righe, con estensione a intervallo tenendo Maiusc ----------
-  const selectableRows = users.filter((u) => u.editabile);
+  const selectableRows = righe.filter((u) => u.editabile);
   const allSelected = selectableRows.length > 0 && selectableRows.every((u) => selected.has(u.id));
 
   const handleRowCheck = (e: MouseEvent<HTMLInputElement>, id: string, index: number) => {
@@ -318,7 +343,7 @@ export default function RolesPanel({
       if (e.shiftKey && lastIndex !== null) {
         const [from, to] = lastIndex < index ? [lastIndex, index] : [index, lastIndex];
         for (let i = from; i <= to; i++) {
-          const row = users[i];
+          const row = righe[i];
           if (!row.editabile) continue;
           if (checked) next.add(row.id);
           else next.delete(row.id);
@@ -432,12 +457,40 @@ export default function RolesPanel({
         </div>
       )}
 
+      <div className="rt-filtro card">
+        <label className="rt-cerca">
+          <input type="search" value={filtro.q} onChange={(e) => setFiltro({ ...filtro, q: e.target.value })} placeholder="Cerca nome o email…" aria-label="Cerca nome o email" />
+        </label>
+        {showInsegna && (
+          <select value={filtro.insegna} onChange={(e) => setFiltro({ ...filtro, insegna: e.target.value })} aria-label="Insegna">
+            <option value="">Tutte le insegne</option>
+            <option value="_consorzio">Consorzio</option>
+            {insegne.map((t) => <option key={t.id} value={t.id}>{t.nome}</option>)}
+          </select>
+        )}
+        <select value={filtro.ruolo} onChange={(e) => setFiltro({ ...filtro, ruolo: e.target.value })} aria-label="Ruolo">
+          <option value="">Tutti i ruoli</option>
+          {ruoliPresenti.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+        </select>
+        <select value={filtro.area} onChange={(e) => setFiltro({ ...filtro, area: e.target.value })} aria-label="Area">
+          <option value="">Tutte le aree</option>
+          {SITES.map((a) => <option key={a} value={a}>{SITE_LABELS_BREVI[a]}</option>)}
+        </select>
+        <select value={filtro.stato} onChange={(e) => setFiltro({ ...filtro, stato: e.target.value })} aria-label="Stato">
+          <option value="">Attivi e cessati</option>
+          <option value="attivi">Solo attivi</option>
+          <option value="nonattivati">Non ancora attivati</option>
+          <option value="cessati">Solo cessati</option>
+        </select>
+        <span className="hint" style={{ marginLeft: "auto" }}>{righe.length === tutte.length ? `${tutte.length} persone` : `${righe.length} di ${tutte.length}`}</span>
+        {filtroAttivo && <button type="button" className="mini-btn" onClick={() => setFiltro({ q: "", insegna: "", ruolo: "", area: "", stato: "" })}>azzera</button>}
+      </div>
       <p className="hint" style={{ margin: "0 0 8px" }}>
         Clic su una casella e poi Maiusc+clic su un&apos;altra per selezionare un intervallo. Trascina l&apos;intestazione di una colonna per riordinarla.
       </p>
 
       <div className="card table-wrap">
-        <table className="data">
+        <table className="data rt-tab">
           <thead>
             <tr>
               <th style={{ width: 32 }}>
@@ -470,6 +523,7 @@ export default function RolesPanel({
             </tr>
           </thead>
           <tbody>
+            {righe.length === 0 && <tr><td colSpan={columns.length + 1} className="empty">Nessuna persona con questi filtri.</td></tr>}
             {righe.map((u, index) => (
               <tr key={u.id} style={{ opacity: u.attivo ? 1 : 0.55 }}>
                 <td>

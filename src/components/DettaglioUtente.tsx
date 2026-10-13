@@ -6,6 +6,7 @@ import RuoliHeader from "@/components/RuoliHeader";
 import { updateUser, toggleUserActive, reinviaAccesso } from "@/lib/actions";
 import ModuloAutoSalva from "@/components/ModuloAutoSalva";
 import { PulsanteAzione } from "@/components/AzioneSenzaRicarica";
+import LinkAccesso from "@/components/LinkAccesso";
 import { ROLE_LABELS, userSites, ruoloEsteso, type User } from "@/lib/types";
 import { coursesForUser, getProgress, isCourseCompleted, canManageUsers, scopeUsers, assignableRolesFor, livelloGestioneUtenti } from "@/lib/logic";
 
@@ -149,6 +150,10 @@ export default async function DettaglioUtente({ admin, id, salvato, area }: { ad
                     : "L'account non è ancora attivato: rimanda la mail di benvenuto con il link per scegliere la password (vale 7 giorni)."}
                   {mailAccesso && <><br />Ultima mail di accesso: {quando(mailAccesso.date)} a {mailAccesso.to}{mailAccesso.status === "errore" ? " (non consegnata)" : ""}.</>}
                 </p>
+                <p className="hint" style={{ margin: "6px 0 0", fontSize: 12 }}>
+                  Non arriva? Parte da <strong>noreply@academy.rosaflor.it</strong>: fai controllare lo spam o la quarantena della posta aziendale, oppure manda il link qui sotto da un&apos;altra casella o con WhatsApp.
+                </p>
+                <div style={{ marginTop: 10 }}><LinkAccesso userId={u.id} nome={u.firstName} email={u.email} /></div>
               </div>
               <PulsanteAzione azione={reinviaAccesso.bind(null, u.id)} className="btn btn-outline" conferma={`Mandare la mail di accesso a ${u.email}?`}>
                 {u.passwordHash ? "Manda mail di accesso" : "Rimanda mail di registrazione"}

@@ -28,15 +28,16 @@ export default async function RuoliPage({
   // l'incarico lo danno solo gli amministratori
   const puoDelegare = RUOLI_AMMINISTRATORE.includes(user.role);
   const sp = await searchParams;
-  const q = (sp.q ?? "").trim().toLowerCase();
 
+  // tutte le persone dell'ambito: si filtrano in tabella, senza ricaricare
   const users = scopeUsers(db, user)
-    .filter((u) => !sp.insegna || u.tenantId === sp.insegna)
-    .filter((u) => !q || `${u.firstName} ${u.lastName} ${u.email}`.toLowerCase().includes(q))
     .sort((a, b) => a.lastName.localeCompare(b.lastName))
     .map((u) => ({
       id: u.id,
       nome: `${u.lastName} ${u.firstName}`,
+      email: u.email,
+      tenantId: u.tenantId ?? "",
+      attivato: !!u.passwordHash,
       ruolo: u.role,
       insegna: db.tenants.find((t) => t.id === u.tenantId)?.name ?? "Consorzio",
       pv: db.stores.find((s) => s.id === u.storeId)?.name ?? "—",
@@ -80,22 +81,6 @@ export default async function RuoliPage({
           .
         </p>
 
-        <form method="get" style={{ display: "flex", gap: 10, alignItems: "end", marginBottom: 16, flexWrap: "wrap" }}>
-          <label className="field" style={{ marginBottom: 0, width: 260 }}>
-            Cerca
-            <input type="text" name="q" defaultValue={sp.q ?? ""} placeholder="nome o email" />
-          </label>
-          {livello === "consorzio" && (
-            <label className="field" style={{ marginBottom: 0, width: 220 }}>
-              Insegna
-              <select name="insegna" defaultValue={sp.insegna ?? ""}>
-                <option value="">Tutte</option>
-                {db.tenants.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-              </select>
-            </label>
-          )}
-          <button className="btn btn-sm" type="submit">Filtra</button>
-        </form>
 
         {canManage && (
           <NuovoUtente
@@ -120,6 +105,8 @@ export default async function RuoliPage({
           deleghe={deleghe}
           showInsegna={livello === "consorzio"}
           puoDelegare={puoDelegare}
+          insegne={db.tenants.map((t) => ({ id: t.id, nome: t.name }))}
+          filtroIniziale={{ q: sp.q ?? "", insegna: sp.insegna ?? "" }}
         />
       </div>
     </div>
