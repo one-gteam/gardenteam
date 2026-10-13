@@ -1146,3 +1146,38 @@ export async function rigeneraChiaveTotem(id: string): Promise<{ ok: boolean; er
   revalidatePath("/stampe/arredo/totem");
   return { ok: true };
 }
+
+
+/* ================== Stampa cartelli Arredo: cosa stampare da un Excel ================== */
+
+/**
+ * Un Excel di prodotti (EAN o CODICE FORNITORE, una riga per prodotto) decide
+ * la selezione di stampa: le righe con STAMPA «sì» (o senza colonna) entrano,
+ * quelle con «no» (o NON STAMPARE «sì») escono. Si parte dalla selezione che
+ * c'è già, così si possono caricare più file.
+ */
+export async function selezioneStampaDaExcel(scopeParam: string, selezioneAttuale: string, righeJson: string): Promise<void> {
+  await requireStampeUser();
+  const db = await getStampeDb();
+  let righe: Record<string, unknown>[] = [];
+  try { const r = JSON.parse(righeJson); if (Array.isArray(r)) righe = r; } catch { /* niente */ }
+  const sel = new Set(selezioneAttuale.split(",").filter(Boolean));
+  const val = (row: Record<string, unknown>, ...nomi: string[]) => {
+    const k = Object.keys(row).find((x) => nomi.includes(x.trim().toLowerCase()));
+    return k ? String(row[k] ?? "").trim().replace(/\.0$/, "") : "";
+  };
+  const si = (v: string) => ["si", "sì", "s", "1", "x", "true", "y", "yes"].includes(v.trim().toLowerCase());
+  let dentro = 0, fuori = 0, sconosciuti = 0;
+  for (const row of righe) {
+    const ean = val(row, "ean", "codice ean", "barcode", "codice a barre", "cod. barre").replace(/\s/g, "").replace(/^'/, "");
+    const codice = val(row, "codice fornitore", "cod. fornitore", "codice articolo", "codice");
+    const p = db.products.find((x) => (ean && x.ean === ean) || (codice && x.codice === codice));
+    if (!p) { if (ean || codice) sconosciuti++; continue; }
+    const kNo = Object.keys(row).find((k) => ["non stampare", "escludi"].includes(k.trim().toLowerCase()));
+    const kSi = Object.keys(row).find((k) => ["stampa", "stampare", "da stampare"].includes(k.trim().toLowerCase()));
+    const stampa = kNo ? !si(String(row[kNo] ?? "")) : kSi ? si(String(row[kSi] ?? "")) : true;
+    if (stampa) { if (!sel.has(p.id)) dentro++; sel.add(p.id); } else { if (sel.delete(p.id)) fuori++; }
+  }
+  const q = new URLSearchParams({ scope: scopeParam, tutti: "1", sel: [...sel].join(","), excel: `${dentro}_${fuori}_${sconosciuti}` });
+  redirect(`/stampe/arredo/stampa?${q.toString()}`);
+}

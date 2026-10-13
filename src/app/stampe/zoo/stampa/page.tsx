@@ -479,6 +479,10 @@ export default async function ZooStampaPage({
             </p>
           </div>
           {tab === "stampa" && <ApriNuovoCartello />}
+          {tab === "stampa" && scope.type !== "system" && (
+            <a className="btn btn-outline btn-sm no-print" href={`/stampe/zoo/stampa?scope=${scopeParam}&tab=regole#non-stampare`}
+              title="Un Excel con i codici a barre: chi è da stampare e chi no, per questo ambito">Excel: da stampare / non stampare</a>
+          )}
           {/* periodo e ambito cambiano al volo: niente pulsanti da premere dopo */}
           <form method="get">
             {Object.entries(sp).map(([k, v]) => (k !== "scope" && k !== "campagna" && v ? <input key={k} type="hidden" name={k} value={v} /> : null))}
@@ -1036,7 +1040,7 @@ export default async function ZooStampaPage({
                   />
                 </div>
 
-                <div className="card">
+                <div className="card" id="non-stampare">
                   <h3>Cartelli da non stampare</h3>
                   <p className="stato">
                     {nCodiciNoPrint > 0

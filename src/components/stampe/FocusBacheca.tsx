@@ -1,11 +1,67 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { spostaInFocus, unisciFocus, salvaFocusDef, eliminaFocus } from "@/lib/zoo-focus-actions";
 
-export interface VoceBacheca { id: string; offerIds: string[]; nome: string; animale?: string; foto: string; prezzo?: string }
-export interface FocusBachecaDef { nome: string; descrizione?: string; colore?: string; voci: VoceBacheca[] }
+export interface VoceBacheca {
+  id: string; offerIds: string[]; nome: string; animale?: string; foto: string; prezzo?: string;
+  articoli?: { ean: string; descrizione: string; prezzo: string; codice: string }[];
+}
+export interface FocusBachecaDef { nome: string; descrizione?: string; colore?: string; notaGrafico?: string; voci: VoceBacheca[] }
+
+/**
+ * Il modulo di un focus: testo, nota per il grafico e colore si salvano da
+ * soli un attimo dopo; il nome quando si esce dal campo (rinominare a ogni
+ * lettera sposterebbe le offerte a metà parola).
+ */
+function ModuloFocus({ campaignId, def, onSalvato, onElimina, colori }: {
+  campaignId: string; def: FocusBachecaDef; onSalvato: () => void; onElimina: () => void; colori: string[];
+}) {
+  const rif = useRef<HTMLFormElement>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [stato, setStato] = useState("");
+  const invia = async (rinomina: boolean) => {
+    if (!rif.current) return;
+    if (timer.current) { clearTimeout(timer.current); timer.current = null; }
+    const fd = new FormData(rif.current);
+    if (!rinomina) fd.set("nome", def.nome);
+    setStato("Salvo…");
+    const r = await salvaFocusDef(campaignId, def.nome, fd).catch(() => ({ ok: false, error: "errore di rete" }));
+    setStato(r.ok ? "✓ Salvato" : r.error ?? "Non salvato");
+    if (r.ok) onSalvato();
+  };
+  const presto = () => { if (timer.current) clearTimeout(timer.current); timer.current = setTimeout(() => invia(false), 900); };
+  return (
+    <form ref={rif} onSubmit={(e) => e.preventDefault()}
+      onChange={(e) => { if ((e.target as unknown as HTMLInputElement).name !== "nome") presto(); }}>
+      <label className="field" style={{ marginBottom: 4 }}>Nome
+        <input name="nome" defaultValue={def.nome} required
+          onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== def.nome) invia(true); }} />
+      </label>
+      <label className="field" style={{ marginBottom: 4 }}>Testo del focus
+        <textarea name="descrizione" rows={3} defaultValue={def.descrizione ?? ""} onBlur={() => timer.current && invia(false)} />
+      </label>
+      <label className="field" style={{ marginBottom: 4 }}>Note per il grafico <span className="hint" style={{ fontWeight: 400 }}>(non si stampano)</span>
+        <textarea name="notaGrafico" rows={2} defaultValue={def.notaGrafico ?? ""} placeholder="es. tenere vicine queste offerte, usare la foto ambientata del cane"
+          onBlur={() => timer.current && invia(false)} />
+      </label>
+      <div style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap" }}>
+        {colori.map((c) => (
+          <label key={c} style={{ display: "inline-flex" }}>
+            <input type="radio" name="colore" value={c} defaultChecked={(def.colore ?? colori[0]) === c} hidden />
+            <span className="fb-colore" style={{ background: c }} title="colore del focus (anche per lo sfondo delle celle)" />
+          </label>
+        ))}
+        <input type="color" name="coloreLibero" defaultValue={def.colore ?? "#e8f3ea"} title="altro colore" style={{ width: 28, height: 22, padding: 0, marginTop: 0 }} />
+      </div>
+      <div style={{ display: "flex", gap: 8, marginTop: 6, alignItems: "center" }}>
+        <span className="hint" style={{ flex: 1, fontSize: 11 }}>{stato || "si salva da solo"}</span>
+        <button className="btn btn-outline btn-sm" type="button" style={{ color: "var(--red)" }} onClick={onElimina}>Elimina</button>
+      </div>
+    </form>
+  );
+}
 
 const COLORI = ["#e8f3ea", "#fde8ef", "#e6eefb", "#fff3d6", "#efe6fb", "#e0f4f4", "#fbe9df"];
 
@@ -75,6 +131,16 @@ export default function FocusBacheca({
       <span style={{ minWidth: 0 }}>
         <span className="fb-nome">{v.nome}</span>
         <span className="hint" style={{ fontSize: 10.5 }}>{[v.animale, v.prezzo && `€ ${v.prezzo}`].filter(Boolean).join(" · ")}</span>
+        {(v.articoli?.length ?? 0) > 0 && (
+          <details className="fb-articoli" onClick={(e) => e.stopPropagation()}>
+            <summary>dettagli · {v.articoli!.length} {v.articoli!.length === 1 ? "articolo" : "articoli"}</summary>
+            <ul>
+              {v.articoli!.map((a) => (
+                <li key={`${a.ean}_${a.codice}`}>{a.descrizione}<span className="hint"> · {a.ean}{a.codice ? ` · ${a.codice}` : ""}{a.prezzo ? ` · ${/^[\d.,]+$/.test(a.prezzo) ? `€ ${a.prezzo}` : a.prezzo}` : ""}</span></li>
+              ))}
+            </ul>
+          </details>
+        )}
       </span>
       {nelFocus && (
         <button type="button" className="fb-togli" title="Togli dal focus (l'offerta resta nel volantino)" disabled={pending}
@@ -100,31 +166,12 @@ export default function FocusBacheca({
         {!compressa && (
           <>
             <details className="fb-dett">
-              <summary>{def.descrizione ? "modifica" : "aggiungi descrizione e colore"}</summary>
-              <form onSubmit={(e) => {
-                e.preventDefault();
-                const fd = new FormData(e.currentTarget);
-                esegui(() => salvaFocusDef(campaignId, def.nome, fd), "Focus salvato.");
-              }}>
-                <label className="field" style={{ marginBottom: 4 }}>Nome<input name="nome" defaultValue={def.nome} required /></label>
-                <label className="field" style={{ marginBottom: 4 }}>Descrizione<textarea name="descrizione" rows={3} defaultValue={def.descrizione ?? ""} /></label>
-                <div style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap" }}>
-                  {COLORI.map((c) => (
-                    <label key={c} style={{ display: "inline-flex" }}>
-                      <input type="radio" name="colore" value={c} defaultChecked={(def.colore ?? COLORI[0]) === c} hidden />
-                      <span className="fb-colore" style={{ background: c }} title="colore del focus (anche per lo sfondo delle celle)" />
-                    </label>
-                  ))}
-                  <input type="color" name="coloreLibero" defaultValue={def.colore ?? "#e8f3ea"} title="altro colore" style={{ width: 28, height: 22, padding: 0, marginTop: 0 }} />
-                </div>
-                <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-                  <button className="btn btn-sm" type="submit" disabled={pending}>Salva</button>
-                  <button className="btn btn-outline btn-sm" type="button" style={{ color: "var(--red)" }}
-                    onClick={() => confirm(`Eliminare il focus «${def.nome}»? Le offerte restano nel volantino, senza focus.`) && esegui(() => eliminaFocus(campaignId, def.nome), "Focus eliminato.")}>Elimina</button>
-                </div>
-              </form>
+              <summary>{def.descrizione || def.notaGrafico ? "modifica" : "aggiungi testo, note e colore"}</summary>
+              <ModuloFocus campaignId={campaignId} def={def} colori={COLORI} onSalvato={() => router.refresh()}
+                onElimina={() => confirm(`Eliminare il focus «${def.nome}»? Le offerte restano nel volantino, senza focus.`) && esegui(() => eliminaFocus(campaignId, def.nome), "Focus eliminato.")} />
             </details>
             {def.descrizione && <p className="fb-descr">{def.descrizione}</p>}
+            {def.notaGrafico && <p className="fb-nota">Per il grafico: {def.notaGrafico}</p>}
             <div className="fb-voci">
               {visibili.map((v) => voce(v, true))}
               {visibili.length === 0 && <span className="hint" style={{ fontSize: 11 }}>{q ? "nessuna offerta trovata qui" : "trascina qui le offerte"}</span>}

@@ -4,6 +4,8 @@ import { getDb } from "@/lib/db";
 import StampeHeader from "@/components/stampe/StampeHeader";
 import Cartello from "@/components/stampe/Cartello";
 import StampaPicker from "@/components/stampe/StampaPicker";
+import ImportExcel from "@/components/stampe/ImportExcel";
+import { selezioneStampaDaExcel } from "@/lib/stampe-actions";
 import {
   getStampeDb,
   canAccessArea,
@@ -161,6 +163,29 @@ export default async function StampaPage({
             <button className="btn btn-sm" type="submit">Filtra</button>
           </form>
         </div>
+
+        {(() => {
+          const [dentro, fuori, sconosciuti] = (sp.excel ?? "").split("_").map(Number);
+          return (
+            <details className="card no-print" style={{ padding: "10px 14px", marginBottom: 12 }} open={!!sp.excel}>
+              <summary style={{ cursor: "pointer", fontWeight: 700 }}>Da Excel: prodotti da stampare o da non stampare</summary>
+              {sp.excel && (
+                <div className="alert alert-green" style={{ margin: "8px 0" }}>
+                  ✓ {dentro} {dentro === 1 ? "prodotto aggiunto" : "prodotti aggiunti"} alla selezione{fuori ? `, ${fuori} tolti` : ""}{sconosciuti ? `, ${sconosciuti} codici non trovati nel catalogo` : ""}. Ora sono selezionati {selectedIds.length} cartelli.
+                </div>
+              )}
+              <p className="hint" style={{ margin: "6px 0 8px" }}>
+                Un prodotto per riga, con EAN o CODICE FORNITORE. Se c&apos;è la colonna STAMPA, «sì» lo mette fra i cartelli da stampare e «no» lo toglie;
+                senza colonna, tutte le righe vanno in stampa. Si aggiunge alla selezione che c&apos;è già.
+              </p>
+              <ImportExcel
+                action={selezioneStampaDaExcel.bind(null, scopeParam, selectedIds.join(","))}
+                colonne={["ean", "codice ean", "barcode", "codice a barre", "cod. barre", "codice fornitore", "cod. fornitore", "codice articolo", "codice", "stampa", "stampare", "da stampare", "non stampare", "escludi"]}
+                etichetta="Carica l'Excel"
+              />
+            </details>
+          );
+        })()}
 
         <div className="stampa-griglia">
           <StampaPicker

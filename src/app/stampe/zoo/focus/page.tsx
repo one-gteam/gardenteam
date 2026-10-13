@@ -132,12 +132,14 @@ export default async function ZooFocusPage({
       const parent = product?.parentId ? parentById.get(product.parentId) : undefined;
       const focus = (o.focus ?? "").trim();
       const chiave = `${focus.toLowerCase()}|${parent?.id ?? o.id}`;
-      const v = voci.get(chiave) ?? { id: chiave, offerIds: [], nome: nomeOfferta(o).nome, animale: animaleFocus(db, o), foto: zooImageUrl(product, parent), prezzo: o.prezzoPromo, focus };
+      const v = voci.get(chiave) ?? { id: chiave, offerIds: [], nome: nomeOfferta(o).nome, animale: animaleFocus(db, o), foto: zooImageUrl(product, parent), prezzo: o.prezzoPromo, focus, articoli: [] };
       v.offerIds.push(o.id);
+      // gli articoli della voce (gusti, formati): si vedono con «dettagli»
+      v.articoli!.push({ ean: o.ean, descrizione: product?.descrizione ?? o.descrizione, prezzo: o.prezzoPromo || o.meccanica || "", codice: product?.codice ?? "" });
       voci.set(chiave, v);
     }
     const tutte = [...voci.values()].sort((a, b) => a.nome.localeCompare(b.nome, "it"));
-    const focus: FocusBachecaDef[] = defs.map((d) => ({ nome: d.nome, descrizione: d.descrizione, colore: d.colore, voci: tutte.filter((v) => v.focus.toLowerCase() === d.nome.trim().toLowerCase()) }));
+    const focus: FocusBachecaDef[] = defs.map((d) => ({ nome: d.nome, descrizione: d.descrizione, colore: d.colore, notaGrafico: d.notaGrafico, voci: tutte.filter((v) => v.focus.toLowerCase() === d.nome.trim().toLowerCase()) }));
     return { campaignId: inLavorazione.id, nome: inLavorazione.nome, focus, senzaFocus: tutte.filter((v) => !v.focus) };
   })();
 

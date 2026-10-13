@@ -176,6 +176,8 @@ export interface ZooFocusDef {
   nome: string;
   descrizione?: string;
   colore?: string;
+  /** Indicazioni per il grafico su questo focus (non si stampano). */
+  notaGrafico?: string;
 }
 
 /**
@@ -2014,7 +2016,7 @@ export interface VolantinoCellRow {
   Sezione: string; "Sfondo sezione": string; "Testo sezione": string; "N. offerte": number; EAN: string;
   Descrizione: string; Marca: string; "Prezzo promo": string; "Prezzo listino": string;
   Etichetta: string; Testo: string; Immagine: string; "Commento per il grafico": string;
-  "Titolo offerta": string; Focus: string; "Testo del focus": string; Meccanica: string;
+  "Titolo offerta": string; Focus: string; "Testo del focus": string; "Nota del focus per il grafico": string; Meccanica: string;
   "Prezzo al kg/l": string; "File foto": string;
 }
 
@@ -2062,6 +2064,7 @@ export function volantinoCellRows(db: ZooDB, campaignId: string): VolantinoCellR
         "Titolo offerta": unioneTitolo || [...new Set(offs.map((o, i) => padri[i]?.nome ?? o.descrizione))].join(" / "),
         Focus: nomeFocus,
         "Testo del focus": defFocus?.descrizione ?? "",
+        "Nota del focus per il grafico": defFocus?.notaGrafico ?? "",
         Meccanica: offs.map((o) => o.meccanica ?? "").filter(Boolean).join(" / "),
         "Prezzo al kg/l": offs.map((o, i) => prezzoUnitaDi(o, prodotti[i], b.prezzo || o.prezzoPromo || (o.meccanica ? o.prezzoListino ?? "" : ""))).filter(Boolean).join(" / "),
         "File foto": [...new Set(offs.map((o, i) => nomeFileFoto(zooImageUrl(prodotti[i], padri[i]))).filter(Boolean))].join(" / "),

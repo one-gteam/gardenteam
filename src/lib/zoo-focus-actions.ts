@@ -65,6 +65,8 @@ export async function salvaFocusDef(campaignId: string, nomePrima: string | null
     def.nome = nome;
     def.descrizione = descrizione || undefined;
     if (colore) def.colore = colore;
+    // la nota si tocca solo se il modulo la porta (Crea Volantino manda solo nome e testo)
+    if (fd.has("notaGrafico")) def.notaGrafico = String(fd.get("notaGrafico") ?? "").trim().slice(0, 2000) || undefined;
   }
   await saveZooDb(db);
   aggiorna();
