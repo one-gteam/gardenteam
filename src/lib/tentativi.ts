@@ -1,6 +1,6 @@
 import { createHash } from "crypto";
 import { headers } from "next/headers";
-import { readDomain, writeDomain } from "./supabase";
+import { supabase, APP_DATA_TABLE } from "./supabase";
 
 /*
  * Limite ai tentativi sbagliati (password, parola segreta, attivazione).
@@ -35,24 +35,64 @@ export async function ipChiamante(): Promise<string> {
   );
 }
 
-async function leggi(): Promise<Registro> {
+/*
+ * Letture e scritture dirette sulla riga «tentativi», con il controllo di
+ * updated_at: se due richieste scrivono insieme, una delle due rilegge e
+ * riprova. Prima si leggeva, si controllava e si scriveva dopo: tante
+ * richieste lanciate insieme passavano tutte il controllo prima che il primo
+ * errore fosse scritto, e il limite si poteva superare di molto.
+ */
+async function leggiRiga(): Promise<{ registro: Registro; versione?: string }> {
   try {
-    return (await readDomain<Registro>(DOMINIO, {})) ?? {};
+    const { data } = await supabase().from(APP_DATA_TABLE).select("data, updated_at").eq("domain", DOMINIO).maybeSingle();
+    return { registro: (data?.data as Registro) ?? {}, versione: data?.updated_at as string | undefined };
   } catch {
-    return {};
+    return { registro: {} };
   }
 }
 
-/** Minuti di attesa ancora da fare (0 = si può provare). */
-export async function attesaMinuti(regole: Regola[]): Promise<number> {
-  const registro = await leggi();
-  const ora = Date.now();
+async function leggi(): Promise<Registro> {
+  return (await leggiRiga()).registro;
+}
+
+function pulisci(registro: Registro, ora: number) {
+  // via tutto quello che ha più di un giorno
+  for (const [k, tempi] of Object.entries(registro)) {
+    const vivi = tempi.filter((t) => ora - t < 24 * 3_600_000);
+    if (vivi.length === 0) delete registro[k];
+    else registro[k] = vivi.slice(-100);
+  }
+}
+
+/** Cambia il registro in modo atomico; `cambia` può rinunciare restituendo false. Fallisce aperto: l'accesso non deve rompersi. */
+async function aggiorna(cambia: (registro: Registro, ora: number) => boolean | void): Promise<void> {
+  for (let tentativo = 0; tentativo < 10; tentativo++) {
+    if (tentativo) await new Promise((r) => setTimeout(r, 30 + Math.random() * 120 * tentativo));
+    const { registro, versione } = await leggiRiga();
+    const ora = Date.now();
+    if (cambia(registro, ora) === false) return;
+    pulisci(registro, ora);
+    const adesso = new Date().toISOString();
+    try {
+      if (!versione) {
+        const { error } = await supabase().from(APP_DATA_TABLE).insert({ domain: DOMINIO, data: registro, updated_at: adesso });
+        if (!error) return;
+      } else {
+        const { data } = await supabase().from(APP_DATA_TABLE).update({ data: registro, updated_at: adesso })
+          .eq("domain", DOMINIO).eq("updated_at", versione).select("updated_at");
+        if (data && data.length) return;
+      }
+    } catch { return; }
+  }
+}
+
+function attesaDa(registro: Registro, regole: Regola[], ora: number): number {
   let attesa = 0;
   for (const r of regole) {
     const finestra = r.minuti * 60_000;
     const recenti = (registro[impronta(r.chiave)] ?? []).filter((t) => ora - t < finestra);
     if (recenti.length >= r.massimo) {
-      // si riapre quando il più vecchio degli errori che fanno scattare il blocco esce dalla finestra
+      // si riapre quando il più vecchio dei tentativi che fanno scattare il blocco esce dalla finestra
       const sblocco = recenti.sort((a, b) => b - a)[r.massimo - 1] + finestra;
       attesa = Math.max(attesa, Math.ceil((sblocco - ora) / 60_000));
     }
@@ -60,25 +100,29 @@ export async function attesaMinuti(regole: Regola[]): Promise<number> {
   return attesa;
 }
 
-async function scrivi(cambia: (registro: Registro, ora: number) => void) {
-  const registro = await leggi();
-  const ora = Date.now();
-  cambia(registro, ora);
-  // pulizia: via tutto quello che ha più di un giorno
-  for (const [k, tempi] of Object.entries(registro)) {
-    const vivi = tempi.filter((t) => ora - t < 24 * 3_600_000);
-    if (vivi.length === 0) delete registro[k];
-    else registro[k] = vivi.slice(-100);
-  }
-  try {
-    await writeDomain(DOMINIO, registro);
-  } catch {
-    // se il contatore non si salva, l'accesso non deve rompersi
-  }
+/**
+ * Controlla e conta in un colpo solo: se c'è da aspettare non conta niente e
+ * restituisce i minuti; altrimenti segna il tentativo e restituisce 0. Da usare
+ * al posto di attesaMinuti + segnaErrore, che fra le due chiamate lasciavano
+ * passare le raffiche.
+ */
+export async function prenota(regole: Regola[]): Promise<number> {
+  let attesa = 0;
+  await aggiorna((registro, ora) => {
+    attesa = attesaDa(registro, regole, ora);
+    if (attesa > 0) return false;
+    for (const r of regole) { const k = impronta(r.chiave); registro[k] = [...(registro[k] ?? []), ora]; }
+  });
+  return attesa;
+}
+
+/** Minuti di attesa ancora da fare (0 = si può provare). */
+export async function attesaMinuti(regole: Regola[]): Promise<number> {
+  return attesaDa(await leggi(), regole, Date.now());
 }
 
 export async function segnaErrore(regole: Regola[]) {
-  await scrivi((registro, ora) => {
+  await aggiorna((registro, ora) => {
     for (const r of regole) {
       const k = impronta(r.chiave);
       registro[k] = [...(registro[k] ?? []), ora];
@@ -89,7 +133,7 @@ export async function segnaErrore(regole: Regola[]) {
 export async function azzera(chiavi: string[]) {
   const registro = await leggi();
   if (!chiavi.some((c) => registro[impronta(c)])) return;
-  await scrivi((reg) => {
+  await aggiorna((reg) => {
     for (const c of chiavi) delete reg[impronta(c)];
   });
 }

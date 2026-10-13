@@ -9,7 +9,7 @@ import { uploadPublicFile } from "./supabase";
 import { mailerConfig, sendMail, nomeMarchio, type Marchio } from "./mailer";
 import { verifySsoToken } from "./sso";
 import { AUTH_COOKIE, RUOLO_COOKIE, OPZIONI_SESSIONE, requireUser, valoreSessione, tokenReimposta, idDaTokenReimposta } from "./auth";
-import { attesaMinuti, azzera, ipChiamante, Regola, segnaErrore } from "./tentativi";
+import { attesaMinuti, azzera, ipChiamante, prenota, Regola, segnaErrore } from "./tentativi";
 import { registra } from "./registro";
 import { assignableRolesFor, canManageUsers, delegatoUtenti, livelloGestioneUtenti, RUOLI_AMMINISTRATORE, coursesForUser, courseVisibleTo, dueDate, getProgress, hasStartedCourse, isCourseCompleted, pathsForUser } from "./logic";
 import {
@@ -2221,7 +2221,15 @@ export async function removeGroupMember(groupId: string, userId: string): Promis
  */
 function regoleLogin(email: string, ip: string): Regola[] {
   return [
-    { chiave: `login-email:${email}`, massimo: 5, minuti: 15 },
+    /*
+     * 5 tentativi ogni 15 minuti per email DA QUEL dispositivo (indirizzo): chi
+     * prova le password di un collega blocca solo sé stesso, non il collega, che
+     * dal suo computer entra lo stesso. Prima il blocco era per email e chiunque
+     * poteva chiudere fuori un collega con 5 password sbagliate.
+     */
+    { chiave: `login-email-ip:${email}|${ip}`, massimo: 5, minuti: 15 },
+    // contro chi prova da tanti indirizzi diversi: 50 l'ora per email, comunque
+    { chiave: `login-email:${email}`, massimo: 50, minuti: 60 },
     { chiave: `login-ip:${ip}`, massimo: 30, minuti: 15 },
   ];
 }
@@ -2230,14 +2238,14 @@ export async function loginWithPassword(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const password = String(formData.get("password") ?? "");
   const regole = regoleLogin(email, await ipChiamante());
-  const attesa = await attesaMinuti(regole);
+  // si conta prima di provare (in modo atomico): una raffica di richieste insieme non passa più tutta
+  const attesa = await prenota(regole);
   if (attesa > 0) redirect(`/login?errore=troppi&minuti=${attesa}`);
   const db = await getDb();
   const user = db.users.find((u) => u.email.toLowerCase() === email);
   // per un'email sconosciuta si calcola comunque un hash: la risposta non deve essere più veloce
   const passwordOk = user?.passwordHash ? verifyPassword(password, user.passwordHash) : (verifyPassword(password, HASH_FINTO), false);
   if (!user || !user.passwordHash || !passwordOk) {
-    await segnaErrore(regole);
     redirect("/login?errore=credenziali");
   }
   await azzera([regole[0].chiave]);
@@ -2259,9 +2267,8 @@ export async function richiediReimposta(formData: FormData) {
     { chiave: `reimposta-email:${email}`, massimo: 3, minuti: 60 },
     { chiave: `reimposta-ip:${await ipChiamante()}`, massimo: 10, minuti: 60 },
   ];
-  const attesa = await attesaMinuti(regole);
+  const attesa = await prenota(regole);
   if (attesa > 0) redirect(`/reimposta?errore=troppi&minuti=${attesa}`);
-  await segnaErrore(regole);
   const db = await getDb();
   const user = db.users.find((u) => u.email.toLowerCase() === email);
   if (user && user.active !== false) {
@@ -2293,8 +2300,7 @@ async function mandaMailAccesso(db: DB, admin: User, target: User): Promise<stri
   if (target.active === false) return "account cessato";
   if (!target.email.includes("@")) return "email mancante";
   const regole: Regola[] = [{ chiave: `reinvio-accesso:${target.id}`, massimo: 3, minuti: 60 }];
-  if (await attesaMinuti(regole) > 0) return "già mandata 3 volte nell'ultima ora";
-  await segnaErrore(regole);
+  if (await prenota(regole) > 0) return "già mandata 3 volte nell'ultima ora";
   if (!target.passwordHash) {
     await queueEmail(db, target, "benvenuto");
     return null;
@@ -2329,8 +2335,7 @@ export async function creaLinkAccesso(userId: string): Promise<{ ok: true; link:
   if (!canTouchUser(db, admin, target)) return { ok: false, error: "Fuori dal tuo ambito" };
   if (target.active === false) return { ok: false, error: "Account cessato: riattivalo prima." };
   const regole: Regola[] = [{ chiave: `link-accesso:${admin.id}`, massimo: 10, minuti: 60 }];
-  if (await attesaMinuti(regole) > 0) return { ok: false, error: "Troppi link creati nell'ultima ora: riprova più tardi." };
-  await segnaErrore(regole);
+  if (await prenota(regole) > 0) return { ok: false, error: "Troppi link creati nell'ultima ora: riprova più tardi." };
   const ore = 24 * 7;
   const token = tokenReimposta(target.id, target.passwordHash, ore);
   const scade = new Date(Date.now() + ore * 3600 * 1000).toLocaleString("it-IT", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" });
@@ -2424,7 +2429,8 @@ Se non hai chiesto tu niente, ignora questa email.`;
 export async function registerRequest(formData: FormData) {
   // la parola segreta si indovina a tentoni: 10 errori l'ora per indirizzo
   const regole: Regola[] = [{ chiave: `registrati-ip:${await ipChiamante()}`, massimo: 10, minuti: 60 }];
-  const attesa = await attesaMinuti(regole);
+  // ogni tentativo conta (anche quelli giusti, sono pochi): niente raffiche che passano insieme il controllo
+  const attesa = await prenota(regole);
   if (attesa > 0) redirect(`/registrati?errore=troppi&minuti=${attesa}`);
   const db = await getDb();
   const secret = String(formData.get("secret") ?? "").trim();
@@ -2437,7 +2443,6 @@ export async function registerRequest(formData: FormData) {
     (store!.secretWord && secret === store!.secretWord) || (tenant.secretWord && secret === tenant.secretWord)
     || (db.settings.secretWord && secret === db.settings.secretWord);
   if (!secret || !validSecret) {
-    await segnaErrore(regole);
     redirect("/registrati?errore=segreta");
   }
 

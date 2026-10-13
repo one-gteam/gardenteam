@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { decifra } from "./auth";
 import { getDb } from "./db";
 import { uploadPublicFile } from "./supabase";
+import { sendMail } from "./mailer";
 import {
   getArticoliDb, saveArticoliDb, pubblicaArticoli, ripulisciHtml, testoInHtml, linkNelTesto,
   type Allegato, type ArticoliDB, type VoceRegistroEmail,
@@ -76,11 +77,29 @@ export async function articoloDaMessaggio(
     autoreId: autore?.id,
     autoreNome: autore ? `${autore.firstName} ${autore.lastName}` : mittente,
     origine: "email", mittenteEmail: mittente,
-    creato: adesso, pubblicato: puo ? adesso : undefined,
-    stato: puo ? "pubblicato" : "bozza",
+    /*
+     * Sempre in bozza: il mittente di una mail si può falsificare, e un articolo
+     * pubblicato a nome di un collega finirebbe anche nella newsletter. Lo
+     * pubblica una persona, dalla pagina Articoli.
+     */
+    creato: adesso, pubblicato: undefined,
+    stato: "bozza",
     destinatari: {}, letture: {},
   });
-  return { ...voce, esito: puo ? "pubblicato" : "bozza", articoloId: id, nota: allegati.length ? `${allegati.length} allegati` : undefined };
+  // all'autore vero arriva l'avviso: se non l'ha mandato lui, se ne accorge subito
+  if (autore?.email) {
+    const sito = (process.env.SITE_URL || "https://gardenteam.vercel.app").replace(/\/$/, "");
+    const corpo = [
+      `Ciao ${autore.firstName},`,
+      "",
+      `è arrivato per email l'articolo «${titolo}» a tuo nome. È in bozza: controllalo e pubblicalo da qui:`,
+      `${sito}/articoli`,
+      "",
+      "Se non l'hai mandato tu, non pubblicarlo e avvisa chi gestisce il portale.",
+    ].join("\n");
+    await sendMail(autore.email, `Articolo in bozza: «${titolo}»`, corpo, { marchio: "gtone" }).catch(() => undefined);
+  }
+  return { ...voce, esito: "bozza", articoloId: id, nota: [allegati.length ? `${allegati.length} allegati` : "", puo ? "da pubblicare in Articoli" : "mittente non abilitato"].filter(Boolean).join(" · ") };
 }
 
 function registra(db: ArticoliDB, voci: VoceRegistroEmail[]) {

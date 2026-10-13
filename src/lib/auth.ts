@@ -37,26 +37,38 @@ function impronta(passwordHash?: string): string {
   return createHash("sha256").update(passwordHash ?? "").digest("base64url").slice(0, 16);
 }
 
-function firmaSessione(segreto: string, userId: string, passwordHash?: string): string {
-  return createHmac("sha256", segreto).update(`${userId}|${impronta(passwordHash)}`).digest("base64url");
+/** Quanto vale un accesso: dopo, si rientra (anche se qualcuno ha copiato il biscotto). */
+const DURATA_SESSIONE_MS = 30 * 24 * 3600 * 1000;
+
+function firmaSessione(segreto: string, userId: string, passwordHash: string | undefined, emesso: string): string {
+  return createHmac("sha256", segreto).update(`${userId}|${emesso}|${impronta(passwordHash)}`).digest("base64url");
 }
 
-/** Il valore da scrivere nel biscotto: id più firma (legata alla password di adesso). */
+/**
+ * Il valore da scrivere nel biscotto: id, momento dell'accesso e firma (legata
+ * alla password di adesso). Il momento è dentro la firma: la sessione scade sul
+ * server dopo 30 giorni, non solo nel browser. Prima un biscotto copiato valeva
+ * finché la persona non cambiava password.
+ */
 export function valoreSessione(userId: string, passwordHash?: string): string {
   const segreto = segretoSessione();
   if (!segreto) throw new Error("Manca il segreto delle sessioni (AUTH_COOKIE_SECRET/SSO_SHARED_SECRET)");
-  return `${userId}.${firmaSessione(segreto, userId, passwordHash)}`;
+  const emesso = Date.now().toString(36);
+  return `${userId}.${emesso}.${firmaSessione(segreto, userId, passwordHash, emesso)}`;
 }
 
 /** L'id dentro al biscotto, se la firma torna con la password attuale dell'utente. */
 function idDaBiscotto(valore: string, passwordHashDi: (id: string) => string | undefined): string | null {
   const segreto = segretoSessione();
   if (!segreto) return null; // senza segreto nessuna sessione vale: meglio fuori che aperti a tutti
-  const punto = valore.lastIndexOf(".");
-  if (punto <= 0) return null; // biscotto senza firma: non vale più
-  const id = valore.slice(0, punto);
-  const firma = Buffer.from(valore.slice(punto + 1));
-  const attesa = Buffer.from(firmaSessione(segreto, id, passwordHashDi(id)));
+  // id.momento.firma: i biscotti del formato vecchio (senza momento) non valgono più, si rientra una volta
+  const parti = valore.split(".");
+  if (parti.length !== 3) return null;
+  const [id, emesso, firmaTesto] = parti;
+  const quando = parseInt(emesso, 36);
+  if (!id || !Number.isFinite(quando) || Date.now() - quando > DURATA_SESSIONE_MS || quando > Date.now() + 60_000) return null;
+  const firma = Buffer.from(firmaTesto);
+  const attesa = Buffer.from(firmaSessione(segreto, id, passwordHashDi(id), emesso));
   if (firma.length !== attesa.length || !timingSafeEqual(firma, attesa)) return null;
   return id;
 }

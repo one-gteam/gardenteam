@@ -3121,13 +3121,25 @@ export async function avvisaColleghi(
   }
   const emailRegistrate = new Set(academyDb.users.filter((u) => u.active !== false && u.email).map((u) => u.email.toLowerCase()));
   const scelti = (formData.getAll("destinatari") as string[]).filter((x) => emailRegistrate.has(x.toLowerCase()));
-  const manuali = String(formData.get("altri") ?? "")
-    .split(/[\s,;]+/).map((x) => x.trim()).filter((x) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(x)).slice(0, 10);
+  /*
+   * Solo persone che hanno un account nel portale: anche gli indirizzi scritti a
+   * mano devono essere di un collega registrato. Prima se ne potevano scrivere 10
+   * qualsiasi a ogni invio, dall'indirizzo aziendale.
+   */
+  const scrittiAMano = String(formData.get("altri") ?? "")
+    .split(/[\s,;]+/).map((x) => x.trim().toLowerCase()).filter((x) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(x));
+  const manuali = scrittiAMano.filter((x) => emailRegistrate.has(x)).slice(0, 20);
+  const fuori = scrittiAMano.filter((x) => !emailRegistrate.has(x));
   const destinatari = [...new Set([...scelti, ...manuali])].slice(0, 200);
-  if (destinatari.length === 0) return { ok: false, error: "Scegli almeno un destinatario" };
+  if (destinatari.length === 0) return { ok: false, error: fuori.length ? `${fuori.join(", ")}: non sono nel portale. Si avvisano solo i colleghi registrati.` : "Scegli almeno un destinatario" };
+  // al massimo 10 avvisi l'ora per persona
+  const { prenota } = await import("./tentativi");
+  if (await prenota([{ chiave: `avvisa-colleghi:${user.id}`, massimo: 10, minuti: 60 }]) > 0) {
+    return { ok: false, error: "Hai già mandato 10 avvisi nell'ultima ora: riprova più tardi." };
+  }
 
   const entro = String(formData.get("entro") ?? "").trim();
-  const nota = String(formData.get("nota") ?? "").trim();
+  const nota = String(formData.get("nota") ?? "").trim().slice(0, 2000);
   const campaign = campagnaInLavorazione(db) ?? campagnaInCorso(db);
   const base = (process.env.SITE_URL || "https://gardenteam.vercel.app").replace(/\/$/, "");
   const dataIt = entro ? new Date(`${entro}T00:00:00`).toLocaleDateString("it-IT", { day: "numeric", month: "long" }) : "";
