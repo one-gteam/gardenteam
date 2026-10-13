@@ -34,6 +34,11 @@ export default async function LoginPage({
             Email o password non corretti. Se l&apos;hai dimenticata, <a href="/reimposta">te ne mandiamo una nuova per email</a>.
           </div>
         )}
+        {errore === "sso-amministratore" && (
+          <div className="alert alert-amber">
+            <strong>Entra con la tua password.</strong> Il collegamento da My Rosaflor apre solo la formazione: gli account da amministratore entrano da qui, con email e password.
+          </div>
+        )}
         {errore === "troppi" && (
           <div className="alert alert-amber">
             <strong>Troppi tentativi sbagliati.</strong> Per sicurezza l&apos;accesso è bloccato per{" "}
