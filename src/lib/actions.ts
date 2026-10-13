@@ -10,6 +10,7 @@ import { mailerConfig, sendMail, nomeMarchio, type Marchio } from "./mailer";
 import { verifySsoToken } from "./sso";
 import { AUTH_COOKIE, RUOLO_COOKIE, OPZIONI_SESSIONE, requireUser, valoreSessione, tokenReimposta, idDaTokenReimposta } from "./auth";
 import { attesaMinuti, azzera, ipChiamante, Regola, segnaErrore } from "./tentativi";
+import { registra } from "./registro";
 import { assignableRolesFor, canManageUsers, delegatoUtenti, livelloGestioneUtenti, RUOLI_AMMINISTRATORE, coursesForUser, courseVisibleTo, dueDate, getProgress, hasStartedCourse, isCourseCompleted, pathsForUser } from "./logic";
 import {
   Course, CourseLevel, CourseSession, DB, DEFAULT_HOME_BLOCKS, DEFAULT_REMINDER_RULES, DEFAULT_WATCH_THRESHOLD,
@@ -644,6 +645,7 @@ export async function updateCourse(courseId: string, formData: FormData) {
     if (formData.get("removeCover") === "on") course.coverUrl = undefined;
   }
 
+  registra(admin, { area: "academy", cosa: "Corso modificato", oggetto: course.title });
   await saveDb(db);
   redirect(`/admin/corsi/${courseId}?salvato=1`);
 }
@@ -654,6 +656,7 @@ export async function deleteCourse(courseId: string) {
   db.progress = db.progress.filter((p) => p.courseId !== courseId);
   db.paths = db.paths.map((p) => ({ ...p, courseIds: p.courseIds.filter((id) => id !== courseId) }));
   // i certificati già emessi restano nello storico
+  registra(await requireUser(), { area: "academy", cosa: "Corso eliminato", oggetto: courseId });
   await saveDb(db);
   redirect("/admin/corsi?eliminato=1");
 }
@@ -663,7 +666,7 @@ export async function deleteCourse(courseId: string) {
  * che mostra il "salvato" senza far saltare la pagina.
  */
 export async function saveLesson(courseId: string, lessonId: string | null, formData: FormData) {
-  const { db, course } = await requireEditableCourse(courseId);
+  const { db, course, admin } = await requireEditableCourse(courseId);
   const title = String(formData.get("title") ?? "").trim();
   if (!title) return { ok: false as const, error: "Il titolo è obbligatorio" };
   const type = String(formData.get("type") ?? "pdf") as LessonType;
@@ -688,6 +691,7 @@ export async function saveLesson(courseId: string, lessonId: string | null, form
     // il primo allegato può arrivare già con il form di creazione
     await attachToLesson(lesson, formData);
   }
+  registra(admin, { area: "academy", cosa: lessonId ? "Lezione modificata" : "Lezione aggiunta", oggetto: `${course.title} · ${title}` });
   await saveDb(db);
   revalidatePath(`/admin/corsi/${courseId}`);
   return { ok: true as const };
@@ -1099,6 +1103,7 @@ export async function toggleUserActive(userId: string): Promise<{ ok: boolean; e
   if (!target || target.id === admin.id || target.role === "system_admin") return { ok: false, error: "Non consentito" };
   if (!canTouchUser(db, admin, target)) return { ok: false, error: "Fuori dal tuo ambito" };
   target.active = target.active === false;
+  registra(admin, { area: "utenti", cosa: target.active ? "Riattivato" : "Cessato", oggetto: `${target.firstName} ${target.lastName}` });
   await saveDb(db);
   revalidatePath("/admin/utenti");
   revalidatePath("/ruoli");
@@ -1440,6 +1445,7 @@ export async function quickSetRole(userId: string, role: Role) {
   if (!target || target.id === admin.id) return { ok: false as const, error: "Non consentito" };
   if (!canTouchUser(db, admin, target)) return { ok: false as const, error: "Fuori dal tuo ambito" };
   if (!assignableRolesFor(admin).includes(role)) return { ok: false as const, error: "Ruolo non assegnabile dal tuo profilo" };
+  registra(admin, { area: "utenti", cosa: "Ruolo", oggetto: `${target.firstName} ${target.lastName}`, prima: ROLE_LABELS[target.role], dopo: ROLE_LABELS[role] });
   target.role = role;
   await saveDb(db);
   revalidatePath("/admin/ruoli");
@@ -1472,6 +1478,7 @@ export async function aggiungiRuoloExtra(userId: string, role: Role, sites: Site
     return { ok: false as const, error: "Ha già questo ruolo con queste aree" };
   }
   target.ruoliExtra = [...(target.ruoliExtra ?? []), { id: `r${Date.now().toString(36)}${randomBytes(2).toString("hex")}`, role, sites: aree, manages: gestite }];
+  registra(admin, { area: "utenti", cosa: "Altro ruolo aggiunto", oggetto: `${target.firstName} ${target.lastName}`, dopo: ROLE_LABELS[role] });
   await saveDb(db);
   revalidatePath("/ruoli");
   return { ok: true as const };
@@ -1522,6 +1529,7 @@ export async function togliRuoloExtra(userId: string, profiloId: string) {
   const p = (target.ruoliExtra ?? []).find((x) => x.id === profiloId);
   if (!p) return { ok: true as const };
   if (!assignableRolesFor(admin).includes(p.role)) return { ok: false as const, error: `Il ruolo «${ruoloEsteso({ ...target, role: p.role, manages: p.manages })}» lo toglie chi lo può assegnare` };
+  registra(admin, { area: "utenti", cosa: "Altro ruolo tolto", oggetto: `${target.firstName} ${target.lastName}`, prima: ROLE_LABELS[p.role] });
   target.ruoliExtra = (target.ruoliExtra ?? []).filter((x) => x.id !== profiloId);
   if (target.ruoliExtra.length === 0) target.ruoliExtra = undefined;
   await saveDb(db);
@@ -1551,7 +1559,9 @@ export async function quickSetSites(userId: string, sites: SiteId[]) {
   const target = db.users.find((u) => u.id === userId);
   if (!target) return { ok: false as const, error: "Utente non trovato" };
   if (!canTouchUser(db, admin, target)) return { ok: false as const, error: "Fuori dal tuo ambito" };
+  const primaAree = (target.sites ?? []).join(", ");
   target.sites = sitesAssegnabili(admin, target, sites);
+  registra(admin, { area: "utenti", cosa: "Aree", oggetto: `${target.firstName} ${target.lastName}`, prima: primaAree, dopo: target.sites.join(", ") });
   await saveDb(db);
   revalidatePath("/admin/ruoli");
   return { ok: true as const };
@@ -1583,6 +1593,7 @@ export async function quickToggleActive(userId: string) {
   if (!target || target.id === admin.id) return { ok: false as const, error: "Non consentito" };
   if (!canTouchUser(db, admin, target)) return { ok: false as const, error: "Fuori dal tuo ambito" };
   target.active = !target.active;
+  registra(admin, { area: "utenti", cosa: target.active ? "Riattivato" : "Cessato", oggetto: `${target.firstName} ${target.lastName}` });
   await saveDb(db);
   revalidatePath("/admin/ruoli");
   return { ok: true as const };
@@ -1651,6 +1662,7 @@ export async function creaUtente(formData: FormData) {
       manages: r === "manager" ? gestibili(spuntateGestite.length ? spuntateGestite : newUser.sites ?? []) : undefined,
     }));
   }
+  registra(admin, { area: "utenti", cosa: "Persona creata", oggetto: `${firstName} ${lastName} (${email})`, dopo: ROLE_LABELS[role] });
   db.users.push(newUser);
   await queueEmail(db, newUser, "benvenuto");
   await notifyNewAssignments(db, newUser);
@@ -1673,6 +1685,7 @@ export async function deleteUsers(userIds: string[]) {
   const deletable = targets.filter((t) => t.id !== admin.id && canTouchUser(db, admin, t));
   if (deletable.length === 0) return { ok: false as const, error: "Nessun utente cancellabile nel tuo ambito" };
   const ids = new Set(deletable.map((t) => t.id));
+  for (const t of deletable) registra(admin, { area: "utenti", cosa: "Cancellato definitivamente", oggetto: `${t.firstName} ${t.lastName} (${t.email})` });
   db.users = db.users.filter((u) => !ids.has(u.id));
   db.progress = db.progress.filter((p) => !ids.has(p.userId));
   db.assignments = db.assignments.filter((a) => !ids.has(a.userId));
@@ -1760,6 +1773,7 @@ export async function updateUser(userId: string, formData: FormData): Promise<{ 
   const departmentId = String(formData.get("departmentId") ?? "");
   target!.departmentId = departmentId || undefined;
 
+  registra(admin, { area: "utenti", cosa: "Scheda modificata", oggetto: `${target!.firstName} ${target!.lastName}`, dopo: `${ROLE_LABELS[target!.role]} · ${(target!.sites ?? []).join(", ")}` });
   await notifyNewAssignments(db, target!);
   await saveDb(db);
   revalidatePath("/admin/utenti");

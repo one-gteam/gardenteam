@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { after } from "next/server";
+import { registra } from "./registro";
 import { eseguiAssociazione, lavoroAttivo } from "./zoo-ai-lavoro";
 import { creaMiniature } from "./miniature";
 import { revalidatePath } from "next/cache";
@@ -528,6 +529,7 @@ export async function updateParentFieldInline(
   const scope = resolveScope(user, scopeParam, academyDb);
   const parent = db.parents.find((p) => p.id === parentId);
   if (!parent) return { ok: false };
+  const primaTesto = scope.type === "system" ? parent[field] : (db.textOverrides.find((o) => o.scopeType === scope.type && o.scopeId === scope.id && o.parentId === parentId && o.field === field)?.value ?? parent[field]);
   if (scope.type === "system") {
     if (!isZooEditor(user)) return { ok: false };
     parent[field] = value;
@@ -543,6 +545,7 @@ export async function updateParentFieldInline(
       db.textOverrides = db.textOverrides.filter((o) => o !== existing);
     }
   }
+  registra(user, { area: "zoo", cosa: { nome: "Titolo del padre", descVolantino: "Descrizione volantino", descCartello: "Descrizione cartello" }[field], oggetto: parent.nome, prima: primaTesto ?? "", dopo: value, ambito: scope.type === "system" ? undefined : scope.label });
   await saveZooDb(db);
   return { ok: true };
 }
@@ -562,6 +565,7 @@ export async function setParentAnimaliInline(parentId: string, values: string[])
   if (!parent) return { ok: false };
   const dominio = db.settings.categorieAnimali;
   const scelti = dominio.filter((a) => values.includes(a)); // nell'ordine delle impostazioni
+  registra(user, { area: "zoo", cosa: "Animale del padre", oggetto: parent.nome, prima: parent.caratteristiche.filter((c) => dominio.includes(c)).join(", "), dopo: scelti.join(", ") });
   parent.caratteristiche = [...parent.caratteristiche.filter((c) => !dominio.includes(c)), ...scelti];
   await saveZooDb(db);
   return { ok: true };
@@ -587,6 +591,7 @@ export async function setAnimaliArticolo(productId: string, values: string[]): P
     db.parents.push(parent);
     prod.parentId = parent.id;
   }
+  registra(user, { area: "zoo", cosa: "Animale", oggetto: parent.nome, prima: parent.caratteristiche.filter((c) => dominio.includes(c)).join(", "), dopo: scelti.join(", ") });
   parent.caratteristiche = [...parent.caratteristiche.filter((c) => !dominio.includes(c)), ...scelti];
   await saveZooDb(db);
   revalidatePath("/stampe/zoo/prodotti");
@@ -626,6 +631,7 @@ export async function setTipologiaInline(id: string, padre: boolean, value: stri
   if (v && !db.settings.tipologieProdotto.includes(v)) return { ok: false };
   const x = padre ? db.parents.find((p) => p.id === id) : db.products.find((p) => p.id === id);
   if (!x) return { ok: false };
+  registra(user, { area: "zoo", cosa: padre ? "Tipologia del padre" : "Tipologia dell'articolo", oggetto: "nome" in x ? x.nome : (x as { descrizione: string }).descrizione, prima: x.tipologia ?? "", dopo: v });
   x.tipologia = v || undefined;
   await saveZooDb(db);
   return { ok: true };
@@ -661,6 +667,7 @@ export async function updateOfferFieldInline(
   const o = db.offers.find((x) => x.id === offerId);
   if (!o) return { ok: false };
   const v = value.trim();
+  const primaCampo = String((o as unknown as Record<string, unknown>)[field] ?? "");
   if (field === "descrizione") o.descrizione = v || o.descrizione;
   else if (field === "prezzoPromo") o.prezzoPromo = v; // sempre valorizzato: vuoto = nessun prezzo
   else if (field === "paginaId") {
@@ -668,6 +675,7 @@ export async function updateOfferFieldInline(
     // assegnare una pagina significa sceglierla per il volantino; "no volantino" la scarta
     o.selezionata = Boolean(v) && v !== NO_VOLANTINO;
   } else o[field] = v || undefined;
+  registra(user, { area: "zoo", cosa: `Offerta: ${field}`, oggetto: `${o.descrizione} (${o.ean})`, prima: primaCampo, dopo: String((o as unknown as Record<string, unknown>)[field] ?? "") });
   await saveZooDb(db);
   return { ok: true };
 }
@@ -813,6 +821,7 @@ export async function updateProductFieldInline(
   const p = db.products.find((x) => x.id === productId);
   if (!p) return { ok: false };
   const v = value.trim();
+  registra(user, { area: "zoo", cosa: "Descrizione dell'articolo", oggetto: `${p.ean} ${p.codice}`, prima: p.descrizione, dopo: v || p.descrizione });
   if (field === "descrizione") p.descrizione = v || p.descrizione;
   await saveZooDb(db);
   return { ok: true };
@@ -837,6 +846,8 @@ export async function updateOfferGroupFieldInline(
       o.selezionata = Boolean(v) && v !== NO_VOLANTINO;
     } else o[field] = v || undefined;
   }
+  const prima1 = db.offers.find((o) => offerIds.includes(o.id));
+  registra(user, { area: "zoo", cosa: `Offerte del padre: ${field}`, oggetto: `${prima1?.descrizione ?? ""} (${offerIds.length} offerte)`, dopo: v });
   await saveZooDb(db);
   return { ok: true };
 }
@@ -1355,6 +1366,7 @@ export async function importZooOffers(scopeParam: string, formData: FormData) {
     db.offers.push(offerta);
     nOffers++;
   }
+  registra(user, { area: "zoo", cosa: "Import offerte da Excel", oggetto: db.campaigns.find((c) => c.id === campaignId)?.nome ?? "volantino", dopo: `${nOffers} nuove, ${nAggiornate} aggiornate` });
   await saveZooDb(db);
   redirect(backUrl("/stampe/zoo/prodotti", scopeParam, {
     ...(nMarginiamo ? { esclusemarginiamo: String(nMarginiamo) } : {}),
@@ -1663,6 +1675,7 @@ export async function salvaDeadlineGrafico(campaignId: string, fd: FormData): Pr
   const c = db.campaigns.find((x) => x.id === campaignId);
   if (!c) return { ok: false, error: "Volantino non trovato." };
   const d = String(fd.get("deadline") ?? "");
+  registra(user, { area: "zoo", cosa: "Invio al grafico", oggetto: c.nome, prima: c.deadlineGrafico ?? "", dopo: /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : "" });
   c.deadlineGrafico = /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : undefined;
   await saveZooDb(db);
   revalidatePath("/stampe/zoo/dashboard");
@@ -2466,6 +2479,8 @@ export async function updateZooOfferQuick(offerId: string, descrizione: string, 
   if (!allowed) return { ok: false as const };
   const o = db.offers.find((x) => x.id === offerId);
   if (!o) return { ok: false as const };
+  if (descrizione.trim()) registra(user, { area: "zoo", cosa: "Descrizione dell'offerta", oggetto: o.ean, prima: o.descrizione, dopo: descrizione.trim() });
+  if (prezzo.trim()) registra(user, { area: "zoo", cosa: "Prezzo dell'offerta", oggetto: `${o.descrizione} (${o.ean})`, prima: o.prezzoPromo ?? "", dopo: prezzo.trim() });
   if (descrizione.trim()) o.descrizione = descrizione.trim();
   if (prezzo.trim()) o.prezzoPromo = prezzo.trim();
   await saveZooDb(db);

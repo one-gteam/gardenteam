@@ -11,7 +11,7 @@ import HeaderMenu from "@/components/HeaderMenu";
  * materia — chi c'è e come è strutturato il consorzio — e stanno insieme invece
  * che sparse fra le aree.
  */
-export default async function RuoliHeader({ user, active }: { user: User; active: "ruoli" | "organizzazione" | "permessi" | "email" }) {
+export default async function RuoliHeader({ user, active }: { user: User; active: "ruoli" | "organizzazione" | "permessi" | "email" | "registro" }) {
   const db = await getDb();
   // chi ha solo l'incarico "gestisce utenti" non tocca insegne, reparti e parole segrete
   const voci = [
@@ -20,6 +20,7 @@ export default async function RuoliHeader({ user, active }: { user: User; active
       ? [{ href: "/ruoli/organizzazione", label: "Organizzazione", key: "organizzazione" as const }]
       : []),
     { href: "/ruoli/permessi", label: "Permessi", key: "permessi" as const },
+    { href: "/registro", label: "Registro modifiche", key: "registro" as const },
     // l'email di benvenuto GT One: il Consorzio quella comune, insegna e PV la loro versione
     ...(user.role === "system_admin" || (["group_admin", "store_admin"].includes(user.role) && permessoRuolo(user.role, "modelliEmail"))
       ? [{ href: "/ruoli/email", label: "Email", key: "email" as const }]

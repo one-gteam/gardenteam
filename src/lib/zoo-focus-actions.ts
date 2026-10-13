@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireUser } from "./auth";
+import { registra } from "./registro";
 import { canAccessArea, isZooEditor } from "./stampe";
 import { getZooDb, saveZooDb, animaleFocus, fotoDaAbbinare, type ZooDB } from "./zoo";
 import { listStorageFiles } from "./supabase";
@@ -43,7 +44,8 @@ function defDi(db: ZooDB, campaignId: string, nome: string) {
  * nome nuovo si riporta su tutte le offerte che avevano quello vecchio.
  */
 export async function salvaFocusDef(campaignId: string, nomePrima: string | null, fd: FormData): Promise<Esito> {
-  if (!(await editorZoo())) return { ok: false, error: "Solo chi cura lo Zoo per il Consorzio." };
+  const utente = await editorZoo();
+  if (!utente) return { ok: false, error: "Solo chi cura lo Zoo per il Consorzio." };
   const db = await getZooDb();
   const nome = testo(fd, "nome", 120);
   if (!nome) return { ok: false, error: "Scrivi il nome del focus." };
@@ -68,6 +70,7 @@ export async function salvaFocusDef(campaignId: string, nomePrima: string | null
     // la nota si tocca solo se il modulo la porta (Crea Volantino manda solo nome e testo)
     if (fd.has("notaGrafico")) def.notaGrafico = String(fd.get("notaGrafico") ?? "").trim().slice(0, 2000) || undefined;
   }
+  registra(utente, { area: "zoo", cosa: nomePrima === null ? "Focus creato" : "Focus modificato", oggetto: nome, dopo: descrizione || undefined });
   await saveZooDb(db);
   aggiorna();
   return { ok: true };
@@ -93,7 +96,8 @@ export async function spostaInFocus(campaignId: string, offerIds: string[], nome
 
 /** Assegna un focus (anche nuovo) alle offerte di una o più celle di Crea Volantino; risponde col colore. */
 export async function assegnaFocusOfferte(campaignId: string, offerIds: string[], nome: string): Promise<{ ok: boolean; colore?: string; error?: string }> {
-  if (!(await editorZoo())) return { ok: false, error: "Non autorizzato." };
+  const utente = await editorZoo();
+  if (!utente) return { ok: false, error: "Non autorizzato." };
   const db = await getZooDb();
   const n = nome.trim().slice(0, 120);
   let def = n ? defDi(db, campaignId, n) : undefined;
@@ -108,6 +112,7 @@ export async function assegnaFocusOfferte(campaignId: string, offerIds: string[]
     def.colore = COLORI_FOCUS.find((c) => !usati.has(c)) ?? COLORI_FOCUS[db.focusDef.indexOf(def) % COLORI_FOCUS.length];
   }
   for (const o of db.offers) if (o.campaignId === campaignId && offerIds.includes(o.id)) o.focus = def?.nome || undefined;
+  registra(utente, { area: "zoo", cosa: "Focus assegnato", oggetto: `${offerIds.length} offerte`, dopo: n || "(nessun focus)" });
   await saveZooDb(db);
   aggiorna();
   return { ok: true, colore: def?.colore };

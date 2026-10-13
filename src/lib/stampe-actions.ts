@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "./auth";
 import { getDb } from "./db";
 import { uploadPublicFile } from "./supabase";
+import { registra } from "./registro";
 import type { SchedaExtra, StampeDB, Totem } from "./stampe";
 import { randomBytes } from "crypto";
 import {
@@ -51,10 +52,13 @@ export async function autosaveField(productId: string, fieldId: string, scopePar
   const product = db.products.find((p) => p.id === productId);
   if (!product) return { ok: false as const, error: "prodotto non trovato" };
   value = value.trim();
+  const primaCampo = scope.type === "system" ? (product.fields[fieldId] ?? "") : (db.overrides.find((o) => o.scopeType === scope.type && o.scopeId === scope.id && o.productId === productId && o.fieldId === fieldId)?.value ?? product.fields[fieldId] ?? "");
+  const annota = () => registra(user, { area: "arredo", cosa: db.fields.find((f) => f.id === fieldId)?.label ?? fieldId, oggetto: `${product.fields.titolo ?? ""} (${product.codice})`, prima: primaCampo, dopo: value, ambito: scope.type === "system" ? undefined : scope.label });
 
   if (scope.type === "system") {
     if (!isConsortiumEditor(user)) return { ok: false as const, error: "non autorizzato" };
     product.fields[fieldId] = value;
+    annota();
     await saveStampeDb(db);
     return { ok: true as const, custom: false };
   }
@@ -63,11 +67,13 @@ export async function autosaveField(productId: string, fieldId: string, scopePar
   );
   if (value === (product.fields[fieldId] ?? "")) {
     db.overrides = db.overrides.filter((o) => o !== existing);
+    annota();
     await saveStampeDb(db);
     return { ok: true as const, custom: false };
   }
   if (existing) existing.value = value;
   else db.overrides.push({ scopeType: scope.type, scopeId: scope.id, productId, fieldId, value });
+  annota();
   await saveStampeDb(db);
   return { ok: true as const, custom: true };
 }
@@ -98,6 +104,7 @@ export async function savePrintField(productId: string, fieldId: string, scopePa
       db.overrides.push({ scopeType: scope.type, scopeId: scope.id, productId, fieldId, value });
     }
   }
+  registra(user, { area: "arredo", cosa: db.fields.find((f) => f.id === fieldId)?.label ?? fieldId, oggetto: `${product!.fields.titolo ?? ""} (${product!.codice})`, dopo: value, ambito: scope.type === "system" ? undefined : scope.label });
   await saveStampeDb(db);
   redirect(backUrl("/stampe/arredo/dati", scopeParam, { prodotto: productId, salvato: "1" }));
 }
@@ -308,6 +315,7 @@ export async function updateProductMeta(productId: string, scopeParam: string, f
   if (marca) p!.marca = marca;
   const anno = String(formData.get("annoCollezione") ?? "").trim();
   p!.annoCollezione = /^\d{4}$/.test(anno) ? anno : undefined;
+  registra(user, { area: "arredo", cosa: "Anagrafica prodotto", oggetto: `${p!.fields.titolo ?? ""} (${p!.codice})`, dopo: `EAN ${p!.ean} · ${p!.tipologia} · ${p!.marca}${p!.annoCollezione ? ` · ${p!.annoCollezione}` : ""}` });
   await saveStampeDb(db);
   redirect(backUrl("/stampe/arredo/dati", scopeParam, { prodotto: productId, salvato: "1" }));
 }
@@ -327,6 +335,7 @@ export async function copyFieldBroadcast(productId: string, fieldId: string, sco
     p.fields[fieldId] = value;
     n++;
   }
+  registra(user, { area: "arredo", cosa: `Campo copiato su ${target === "tutti" ? "tutti i prodotti" : "tutta la tipologia"}`, oggetto: `${db.fields.find((f) => f.id === fieldId)?.label ?? fieldId} da ${source!.codice}`, dopo: value });
   await saveStampeDb(db);
   redirect(backUrl("/stampe/arredo/dati", scopeParam, { prodotto: productId, copiati: String(n) }));
 }
@@ -475,6 +484,7 @@ export async function importProductsExcel(scopeParam: string, formData: FormData
       else p.fields[fieldId] = v;
     }
   }
+  registra(user, { area: "arredo", cosa: "Import prodotti da Excel", oggetto: file!.name, dopo: `${created} nuovi, ${updated} aggiornati` });
   await saveStampeDb(db);
   redirect(backUrl("/stampe/arredo/dati", scopeParam, { importati: String(created + updated), nuovi: String(created) }));
 }
