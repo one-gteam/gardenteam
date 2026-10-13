@@ -26,7 +26,7 @@ import {
   importZooProducts, finalizeZooPhotoUpload, confirmZooPhotoTargets, createZooParent, associaConAI,
   rigeneraTestiAI, saveParentTexts, setParentImage, toggleParentCaratteristica, scioglieParent, toggleZooHidden,
   toggleZooHiddenBulk, updateParentFieldInline, updateProductFieldInline, setParentTagInline, moveProductToParent,
-  setParentImageFromFile, mergeParentsForm, promuoviProdottoAConsorzio, adottaProdotto, staccaZooFoto, setTipologiaInline, setParentAnimaliInline } from "@/lib/zoo-actions";
+  setParentImageFromFile, mergeParentsForm, promuoviProdottoAConsorzio, adottaProdotto, staccaZooFoto, setTipologiaInline, setParentAnimaliInline, setAnimaliArticolo } from "@/lib/zoo-actions";
 
 // "Associa con AI" può richiedere più dei 10s di default per un lotto di articoli.
 export const maxDuration = 60;
@@ -70,6 +70,9 @@ export default async function CatalogoProdotti({ user, sp }: { user: User; sp: R
   const q = (sp.q ?? "").toLowerCase();
   const soloSenzaPadre = sp.senzapadre === "1";
   const soloSenzaAnimale = sp.senzaanimale === "1";
+  // dalla Dashboard: solo gli articoli in offerta nel volantino indicato
+  const volantinoFiltro = sp.volantino ? db.campaigns.find((c) => c.id === sp.volantino) : undefined;
+  const prodottiDelVolantino = volantinoFiltro ? new Set(db.offers.filter((o) => o.campaignId === volantinoFiltro.id && o.productId).map((o) => o.productId!)) : undefined;
   /*
    * Di norma si vede il catalogo comune più i propri articoli. Con "mostra anche
    * quelli di altri" si guardano quelli caricati dalle altre insegne/PV: il
@@ -86,10 +89,12 @@ export default async function CatalogoProdotti({ user, sp }: { user: User; sp: R
     if (sp.fornitore && p.fornitore !== sp.fornitore) return false;
     if (sp.marca && marcaEffettiva(p) !== sp.marca) return false;
     if (soloSenzaPadre && p.parentId) return false;
+    // «senza animale» = padri senza animale (è quello che conta la Dashboard); dal volantino, solo i suoi
     if (soloSenzaAnimale) {
       const par = p.parentId ? parentById.get(p.parentId) : undefined;
-      if (par && animaliDi(db, par.caratteristiche).length > 0) return false;
+      if (!par || animaliDi(db, par.caratteristiche).length > 0) return false;
     }
+    if (prodottiDelVolantino && !prodottiDelVolantino.has(p.id)) return false;
     if (sp.animale || sp.caratt) {
       const caratts = (p.parentId ? parentById.get(p.parentId) : undefined)?.caratteristiche ?? [];
       if (sp.animale && !caratts.includes(sp.animale)) return false;
@@ -425,11 +430,12 @@ export default async function CatalogoProdotti({ user, sp }: { user: User; sp: R
           <FiltriMobile id="filtri-dati" scelte={[
             vistaArticoli ? "articoli singoli" : "raggruppata",
             sp.q && `«${sp.q}»`, sp.animale, sp.caratt, sp.fornitore, sp.marca,
-            soloSenzaPadre && "solo senza padre", soloSenzaAnimale && "solo senza animale", showHidden && "anche i nascosti",
+            soloSenzaPadre && "solo senza padre", soloSenzaAnimale && "solo padri senza animale", volantinoFiltro && `solo il volantino «${volantinoFiltro.nome}»`, showHidden && "anche i nascosti",
           ]}>
           <form method="get" style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr)) auto", gap: 10, alignItems: "end" }}>
             <input type="hidden" name="scope" value={scopeParam} />
             <input type="hidden" name="vista" value={vistaArticoli ? "articoli" : "raggruppata"} />
+            {volantinoFiltro && <input type="hidden" name="volantino" value={volantinoFiltro.id} />}
             {abbinaAperto && <input type="hidden" name="abbina" value="1" />}
             <label className="field" style={{ marginBottom: 0 }}>Cerca<input type="text" name="q" defaultValue={sp.q ?? ""} placeholder="descrizione, EAN, codice" /></label>
             <label className="field" style={{ marginBottom: 0 }}>
@@ -463,7 +469,7 @@ export default async function CatalogoProdotti({ user, sp }: { user: User; sp: R
             <button className="btn btn-sm" type="submit">Filtra</button>
             <label style={{ fontSize: 12.5, gridColumn: "1 / -1" }}>
               <input type="checkbox" name="senzapadre" value="1" defaultChecked={soloSenzaPadre} /> solo senza padre
-              {" "}<input type="checkbox" name="senzaanimale" value="1" defaultChecked={soloSenzaAnimale} /> solo senza animale
+              {" "}<input type="checkbox" name="senzaanimale" value="1" defaultChecked={soloSenzaAnimale} /> solo padri senza animale
               {" "}<input type="checkbox" name="altrui" value="1" defaultChecked={mostraAltrui} /> mostra anche gli articoli di altre insegne/PV
               {scope.type !== "system" && (
                 <>
@@ -589,6 +595,11 @@ export default async function CatalogoProdotti({ user, sp }: { user: User; sp: R
                         {consortium && parent ? (
                           <InlineMulti values={animali} options={db.settings.categorieAnimali}
                             onSave={setParentAnimaliInline.bind(null, parent.id)} />
+                        ) : consortium ? (
+                          <span title="L'animale sta sul padre: scegliendolo, l'articolo diventa un padre da solo (poi si può unire ad altri)">
+                            <InlineMulti values={[]} options={db.settings.categorieAnimali} vuoto="+ animale"
+                              onSave={setAnimaliArticolo.bind(null, first.id)} />
+                          </span>
                         ) : (
                           <span style={{ fontSize: 11.5, color: "var(--muted)" }}>{animali.join(", ") || "—"}</span>
                         )}
@@ -708,6 +719,11 @@ export default async function CatalogoProdotti({ user, sp }: { user: User; sp: R
                         {consortium && parent ? (
                           <InlineMulti values={animali} options={db.settings.categorieAnimali}
                             onSave={setParentAnimaliInline.bind(null, parent.id)} />
+                        ) : consortium ? (
+                          <span title="L'animale sta sul padre: scegliendolo, l'articolo diventa un padre da solo (poi si può unire ad altri)">
+                            <InlineMulti values={[]} options={db.settings.categorieAnimali} vuoto="+ animale"
+                              onSave={setAnimaliArticolo.bind(null, p.id)} />
+                          </span>
                         ) : (
                           <span style={{ fontSize: 11.5, color: "var(--muted)" }}>{animali.join(", ") || "—"}</span>
                         )}

@@ -222,6 +222,8 @@ export default async function ZooBozzaPage({
                                   <div style={{ display: "flex", gap: 3, justifyContent: "center", alignItems: "baseline", flexWrap: "wrap" }}>
                                     {prezzoTestoUnione ? (
                                       <span style={{ fontSize: 11, color: "#c8161d", fontWeight: 800 }}>{prezzoTestoUnione}</span>
+                                    ) : !dati.prezzo && o!.meccanica ? (
+                                      <span style={{ fontSize: 12, color: "#c8161d", fontWeight: 800 }}>{o!.meccanica}</span>
                                     ) : dati.prezzo ? (
                                       <span style={{ fontSize: 12, color: "#c8161d", fontWeight: 800 }}>{aPartireDa ? "a partire da " : ""}€ {dati.prezzo}</span>
                                     ) : (

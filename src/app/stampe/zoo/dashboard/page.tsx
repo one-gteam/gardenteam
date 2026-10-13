@@ -121,7 +121,7 @@ export default async function ZooDashboardPage() {
   const daFare = [
     { titolo: "Voci a volantino senza foto", righe: senzaFoto.map(nome), href: `/stampe/zoo/foto?campagna=${campaign.id}`, cta: "Raccolta foto", urgente: true },
     { titolo: "Offerte senza prezzo", righe: senzaPrezzo.map((o) => o.descrizione), href: "/stampe/zoo/prodotti", cta: "Completa i prezzi", urgente: true },
-    { titolo: "Padri senza animale", righe: senzaAnimale.map((p) => p.nome), href: "/stampe/zoo/prodotti?vista=catalogo&senzaanimale=1", cta: "Assegna l'animale", urgente: false },
+    { titolo: "Padri senza animale", righe: senzaAnimale.map((p) => p.nome), href: `/stampe/zoo/prodotti?vista=catalogo&senzaanimale=1&volantino=${campaign.id}`, cta: "Assegna l'animale", urgente: false },
     { titolo: "Offerte senza padre", righe: senzaPadre.map((o) => o.descrizione), href: "/stampe/zoo/prodotti?senzapadre=1", cta: "Raggruppa", urgente: false },
     { titolo: "Foto caricate da abbinare", righe: fotoLibere, href: "/stampe/zoo/prodotti?vista=catalogo&abbina=1", cta: "Abbina le foto", urgente: false },
     { titolo: "Segnalazioni aperte", righe: segnalazioni.map((x) => `${x.message} — ${x.userName}`), href: "/stampe/zoo/volantino", cta: "Vedi", urgente: false },

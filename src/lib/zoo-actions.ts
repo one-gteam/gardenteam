@@ -568,6 +568,32 @@ export async function setParentAnimaliInline(parentId: string, values: string[])
 }
 
 /**
+ * L'animale di un articolo, dalla tabella Prodotti. L'animale sta sul padre:
+ * se l'articolo ce l'ha si cambia quello; se è senza padre se ne crea uno con
+ * il solo articolo (nome = descrizione), che poi si può unire ad altri.
+ */
+export async function setAnimaliArticolo(productId: string, values: string[]): Promise<{ ok: boolean }> {
+  const user = await requireZooUser();
+  if (!isZooEditor(user)) return { ok: false };
+  const db = await getZooDb();
+  const prod = db.products.find((p) => p.id === productId);
+  if (!prod) return { ok: false };
+  const dominio = db.settings.categorieAnimali;
+  const scelti = dominio.filter((a) => values.includes(a));
+  let parent = prod.parentId ? db.parents.find((p) => p.id === prod.parentId) : undefined;
+  if (!parent) {
+    if (scelti.length === 0) return { ok: true };
+    parent = { id: `zp_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, nome: prod.descrizione.slice(0, 60), descVolantino: "", descCartello: "", caratteristiche: [], image: prod.image };
+    db.parents.push(parent);
+    prod.parentId = parent.id;
+  }
+  parent.caratteristiche = [...parent.caratteristiche.filter((c) => !dominio.includes(c)), ...scelti];
+  await saveZooDb(db);
+  revalidatePath("/stampe/zoo/prodotti");
+  return { ok: true };
+}
+
+/**
  * Raccolta foto: un'immagine trascinata su un'offerta diventa la foto del suo
  * prodotto padre (o dell'articolo, se non ha padre).
  */

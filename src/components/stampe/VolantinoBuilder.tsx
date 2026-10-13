@@ -68,7 +68,7 @@ const PAGINE_DEFAULT = (): VolPage[] => [
 /** Campioni di colore per lo sfondo delle celle (gli stessi toni dei focus). */
 const CAMPIONI = ["#ffffff", "#e8f3ea", "#fde8ef", "#e6eefb", "#fff3d6", "#efe6fb", "#e0f4f4", "#fbe9df", "#f1f1ec", "#d7ead9", "#fbd3df", "#cfe0f7"];
 
-const vuoto = (b: VolBlock) => !b.offerIds?.length && !b.testo && !b.imageUrl && !b.label;
+const vuoto = (b: VolBlock) => !b.offerIds?.length && !b.testo && !b.imageUrl && !b.label && !b.focus;
 
 /** Ogni cella della griglia deve essere coperta da esattamente un blocco. */
 function normalizza(page: VolPage): VolPage {
@@ -323,10 +323,17 @@ export default function VolantinoBuilder({
     const celle = [sel, ...extra];
     const voci = celle.flatMap((c) => (pages[c.pi]?.blocks.find((b) => b.id === c.id)?.offerIds ?? []).map(offer).filter(Boolean) as OffLite[]);
     const ids = [...new Set(voci.flatMap((o) => o.offerIds ?? [o.id]))];
-    if (ids.length === 0 && !colora) return flash("Nelle celle scelte non ci sono offerte.");
+    // le celle senza offerte tengono il focus su di sé: ne mostrano nome e testo
+    const celleVuote = celle.filter((c) => !(pages[c.pi]?.blocks.find((b) => b.id === c.id)?.offerIds ?? []).length);
+    // solo celle vuote e un focus nuovo: lo si crea, così entra nell'elenco (con il suo colore)
+    if (!ids.length && nome && !focusDisponibili.some((f) => f.nome === nome)) {
+      const fd = new FormData(); fd.set("nome", nome);
+      await salvaFocusDef(campaignId, null, fd).catch(() => undefined);
+    }
     const r = ids.length ? await assegnaFocusOfferte(campaignId, ids, nome).catch(() => ({ ok: false as const, colore: undefined })) : { ok: true, colore: focusDisponibili.find((f) => f.nome === nome)?.colore };
     if (!r.ok) return flash("Focus non salvato.");
     for (const o of voci) sovrascrivi(o.id, { focus: nome || undefined });
+    if (celleVuote.length) upd((ps) => { for (const c of celleVuote) { const b = ps[c.pi]?.blocks.find((x) => x.id === c.id); if (b) b.focus = nome || undefined; } return ps; });
     if (colora) {
       const colore = nome ? (r.colore ?? focusDisponibili.find((f) => f.nome === nome)?.colore ?? CAMPIONI[1 + (focusDisponibili.findIndex((f) => f.nome === nome) + 1) % (CAMPIONI.length - 1)]) : undefined;
       upd((ps) => { for (const c of celle) { const b = ps[c.pi]?.blocks.find((x) => x.id === c.id); if (b) b.bg = colore; } return ps; });
@@ -587,9 +594,9 @@ export default function VolantinoBuilder({
 
   const contenutoDi = (x: VolBlock) => ({
     offerIds: x.offerIds, testo: x.testo, imageUrl: x.imageUrl, label: x.label,
-    commento: x.commento, descrizione: x.descrizione, prezzo: x.prezzo, bg: x.bg,
+    commento: x.commento, descrizione: x.descrizione, prezzo: x.prezzo, bg: x.bg, focus: x.focus,
   });
-  const VUOTO = { offerIds: undefined, testo: undefined, imageUrl: undefined, label: undefined, commento: undefined, descrizione: undefined, prezzo: undefined, bg: undefined };
+  const VUOTO = { offerIds: undefined, testo: undefined, imageUrl: undefined, label: undefined, commento: undefined, descrizione: undefined, prezzo: undefined, bg: undefined, focus: undefined };
 
   const spostaContenuto = (pi: number, fromId: string, toId: string) => upd((ps) => {
     if (fromId === toId) return ps;
@@ -819,6 +826,12 @@ export default function VolantinoBuilder({
           </div>
         )}
         {b.testo && <div className="vol-testo">{b.testo}</div>}
+        {offs.length === 0 && b.focus && (
+          <div className="vol-focus-cella">
+            <strong>{b.focus}</strong>
+            {focusDisponibili.find((f) => f.nome === b.focus)?.descrizione && <span>{focusDisponibili.find((f) => f.nome === b.focus)!.descrizione}</span>}
+          </div>
+        )}
         {isVuoto && <span className="vol-hint no-print">trascina qui</span>}
         {b.commento && <span className="vol-nota no-print" title={b.commento}>nota</span>}
       </div>
@@ -1274,15 +1287,17 @@ export default function VolantinoBuilder({
             </label>
             {/* focus: alle offerte di questa cella e di quelle scelte con Ctrl/Maiusc + clic, con il suo colore e il suo testo */}
             {(() => {
-              const nomeFocus = focusScelto || selOffs[0]?.focus || "";
+              const focusAttuale = selOffs[0]?.focus || selBlock.focus || "";
+              const nomeFocus = focusScelto || focusAttuale;
               const def = focusDisponibili.find((f) => f.nome === nomeFocus);
               return (
-                <details className="vol-focus-box" key={`fb_${selBlock.id}`} open={!!selOffs[0]?.focus || undefined}>
-                  <summary style={{ cursor: "pointer", fontSize: 12.5, fontWeight: 800 }}>Focus{selOffs[0]?.focus ? ` · ${selOffs[0].focus}` : ""}</summary>
+                <details className="vol-focus-box" key={`fb_${selBlock.id}`} open={!!focusAttuale || undefined}>
+                  <summary style={{ cursor: "pointer", fontSize: 12.5, fontWeight: 800 }}>Focus{focusAttuale ? ` · ${focusAttuale}` : ""}</summary>
                   <span className="hint" style={{ display: "block", fontSize: 11 }}>
                     {extra.length ? `Vale per ${extra.length + 1} celle (Ctrl o Maiusc + clic per aggiungerne o toglierne).` : "Ctrl o Maiusc + clic su altre celle per applicarlo a più tessere insieme."}
                   </span>
-                  {selOffs[0]?.focus && <span className="pill pill-blue" style={{ margin: "4px 0", display: "inline-block" }}>attuale: {selOffs[0].focus}</span>}
+                  {focusAttuale && <span className="pill pill-blue" style={{ margin: "4px 0", display: "inline-block" }}>attuale: {focusAttuale}{!selOffs.length ? " (della cella)" : ""}</span>}
+                  {!selOffs.length && <span className="hint" style={{ display: "block", fontSize: 11 }}>Cella senza offerte: il focus si scrive nella cella, con il suo testo.</span>}
                   <div style={{ display: "flex", gap: 4, marginTop: 4 }}>
                     <select value={focusScelto} onChange={(e) => setFocusScelto(e.target.value)} style={{ marginTop: 0, flex: 1, minWidth: 0, fontSize: 12 }}>
                       <option value="">— scegli un focus —</option>
@@ -1317,7 +1332,7 @@ export default function VolantinoBuilder({
                     <input type="checkbox" checked={colora} onChange={(e) => setColora(e.target.checked)} /> colora lo sfondo con il colore del focus
                   </label>
                   <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 4, flexWrap: "wrap" }}>
-                    {selOffs.some((o) => o.focus) && <button type="button" className="mini-btn" onClick={() => applicaFocus("")}>togli il focus</button>}
+                    {(selOffs.some((o) => o.focus) || selBlock.focus) && <button type="button" className="mini-btn" onClick={() => applicaFocus("")}>togli il focus</button>}
                     <span style={{ fontSize: 11, width: "100%" }}>sfondo cella</span>
                     <span className="vol-campioni">
                       {[...new Set([...focusDisponibili.map((f) => f.colore).filter((c): c is string => !!c), ...CAMPIONI])].slice(0, 14).map((c) => (

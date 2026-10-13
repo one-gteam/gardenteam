@@ -93,7 +93,8 @@ export default async function CreaVolantinoPage({
                 : primo.descrizione),
               // voci unite con prezzi diversi: il più basso, "a partire da" (confronto numerico)
               prezzo: prezzoTestoUnione ? "" : piuPrezzi ? prezzoMinimo(prezzi) : dati.prezzo,
-              prezzoTesto: prezzoTestoUnione,
+              // 3x2, 1+1…: senza un prezzo secco la meccanica è l'offerta
+              prezzoTesto: prezzoTestoUnione || (!piuPrezzi && !dati.prezzo && primo.meccanica ? primo.meccanica : undefined),
               aPartireDa: (!prezzoTestoUnione && piuPrezzi) || undefined,
               prezzoListino: piuPrezzi ? undefined : dati.listino || undefined,
               sconto: piuPrezzi ? undefined : dati.sconto || undefined,

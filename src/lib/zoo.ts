@@ -556,6 +556,8 @@ export interface VolBlock {
   label?: string; // etichetta grafica (SOTTOCOSTO, NOVITÀ…)
   commento?: string; // nota per chi impagina, non stampata
   bg?: string; // colore di sfondo della cella (es. quello del focus)
+  /** Focus di una cella senza offerte (es. una cella di presentazione del tema): ne mostra nome e testo. */
+  focus?: string;
   // modifiche "solo per questo volantino" sulla prima offerta: non toccano il database
   descrizione?: string;
   prezzo?: string;
@@ -2012,6 +2014,15 @@ export interface VolantinoCellRow {
   Sezione: string; "Sfondo sezione": string; "Testo sezione": string; "N. offerte": number; EAN: string;
   Descrizione: string; Marca: string; "Prezzo promo": string; "Prezzo listino": string;
   Etichetta: string; Testo: string; Immagine: string; "Commento per il grafico": string;
+  "Titolo offerta": string; Focus: string; "Testo del focus": string; Meccanica: string;
+  "Prezzo al kg/l": string; "File foto": string;
+}
+
+/** Il nome del file di una foto (es. «56058.jpg»), dall'indirizzo. */
+export function nomeFileFoto(url: string): string {
+  if (!url || url.includes("mancante")) return "";
+  const ultimo = url.split("?")[0].split("/").pop() ?? "";
+  try { return decodeURIComponent(ultimo); } catch { return ultimo; }
 }
 
 /** Righe dell'export "per cella": una per ogni cella non vuota della griglia del volantino. */
@@ -2024,11 +2035,16 @@ export function volantinoCellRows(db: ZooDB, campaignId: string): VolantinoCellR
     const nomePagina = page.titolo || `Pagina ${pi + 1}`;
     page.blocks.forEach((b, bi) => {
       const offs = (b.offerIds ?? []).map((id) => db.offers.find((o) => o.id === id)).filter(Boolean) as ZooOffer[];
-      if (offs.length === 0 && !b.testo && !b.imageUrl && !b.label) return; // celle vuote: non servono al grafico
+      if (offs.length === 0 && !b.testo && !b.imageUrl && !b.label && !b.focus) return; // celle vuote: non servono al grafico
       const sez = (page.sezioni ?? []).find(
         (s) => b.r >= s.r && b.r < s.r + s.rs && b.c >= s.c && b.c < s.c + s.cs
       );
       const primo = offs[0];
+      const prodotti = offs.map((o) => db.products.find((p) => p.id === o.productId));
+      const padri = prodotti.map((p) => (p?.parentId ? db.parents.find((x) => x.id === p.parentId) : undefined));
+      const nomeFocus = primo?.focus || b.focus || "";
+      const defFocus = nomeFocus ? db.focusDef.find((f) => f.campaignId === campaignId && f.nome.trim().toLowerCase() === nomeFocus.trim().toLowerCase()) : undefined;
+      const unioneTitolo = primo ? unioneDi(db, primo)?.titolo : undefined;
       rows.push({
         "N. pagina": pi + 1, Pagina: nomePagina, "Note della pagina": page.note ?? "",
         Cella: `${pi + 1}-${bi + 1}`, Riga: b.r + 1, Colonna: b.c + 1,
@@ -2043,6 +2059,12 @@ export function volantinoCellRows(db: ZooDB, campaignId: string): VolantinoCellR
         Testo: b.testo ?? "",
         Immagine: b.imageUrl ?? "",
         "Commento per il grafico": b.commento ?? "",
+        "Titolo offerta": unioneTitolo || [...new Set(offs.map((o, i) => padri[i]?.nome ?? o.descrizione))].join(" / "),
+        Focus: nomeFocus,
+        "Testo del focus": defFocus?.descrizione ?? "",
+        Meccanica: offs.map((o) => o.meccanica ?? "").filter(Boolean).join(" / "),
+        "Prezzo al kg/l": offs.map((o, i) => prezzoUnitaDi(o, prodotti[i], b.prezzo || o.prezzoPromo || (o.meccanica ? o.prezzoListino ?? "" : ""))).filter(Boolean).join(" / "),
+        "File foto": [...new Set(offs.map((o, i) => nomeFileFoto(zooImageUrl(prodotti[i], padri[i]))).filter(Boolean))].join(" / "),
       });
     });
   });
@@ -2072,7 +2094,8 @@ export function volantinoPhotoRefs(db: ZooDB, campaignId: string): VolantinoPhot
         const parent = p?.parentId ? db.parents.find((x) => x.id === p.parentId) : undefined;
         const url = zooImageUrl(p, parent);
         if (url.startsWith("http") && !seen.has(url)) {
-          const nome = `${o.ean}_${(parent?.nome ?? p?.descrizione ?? o.descrizione).slice(0, 40)}`;
+          // il nome del file com'è caricato (es. 56058): è quello scritto nella colonna «File foto» dell'Excel
+          const nome = nomeFileFoto(url).replace(/\.[a-z0-9]{2,5}$/i, "") || `${o.ean}_${(parent?.nome ?? p?.descrizione ?? o.descrizione).slice(0, 40)}`;
           seen.set(url, { url, nome });
         }
       }
