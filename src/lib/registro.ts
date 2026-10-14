@@ -9,7 +9,7 @@ import { supabase, APP_DATA_TABLE } from "./supabase";
  * non riesce a scrivere la modifica vera resta comunque salvata.
  */
 
-export type AreaRegistro = "zoo" | "arredo" | "academy" | "utenti";
+export type AreaRegistro = "zoo" | "arredo" | "academy" | "utenti" | "connettori";
 
 /**
  * Dove sta il valore cambiato, per poterlo rimettere com'era. Solo le

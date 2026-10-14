@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { GraduationCap, Armchair, PawPrint, Flower2, Users, HardDrive, ArrowRight, Newspaper } from "lucide-react";
+import { GraduationCap, Armchair, PawPrint, Flower2, Users, HardDrive, ArrowRight, Newspaper, Plug } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { userSites, postLoginPath, SITE_NAME, isAcademyAdmin, ruoloEsteso, RUOLO_PRINCIPALE, SITE_LABELS_BREVI } from "@/lib/types";
@@ -92,6 +92,12 @@ export default async function ScegliPage() {
       ? [{
           chiave: "archivio", href: "/file", foto: foto("archivio", "/immagini/aree/archivio.jpg"), icona: <HardDrive size={18} />,
           titolo: "Archivio file", desc: "Spazio occupato e pulizia dei file non più usati", attiva: true,
+        }]
+      : []),
+    ...(amministratore
+      ? [{
+          chiave: "connettori", href: "/connettori", foto: foto("connettori", "/immagini/aree/archivio.jpg"), icona: <Plug size={18} />,
+          titolo: "Connettori", desc: "Collegamenti ai gestionali di insegne e punti vendita", attiva: true,
         }]
       : []),
   ];

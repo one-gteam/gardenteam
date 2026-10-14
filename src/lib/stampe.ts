@@ -128,6 +128,8 @@ export interface GiacenzePV {
   quantita: Record<string, number>;
   /** La chiave con cui il gestionale manda le quantità (Authorization: Bearer). */
   token?: string;
+  /** Spenta (false) dall'area Connettori: la chiave c'è ma gli invii si rifiutano. */
+  apiAttiva?: boolean;
 }
 
 /** Un totem nel punto vendita: schermo verticale a tutto schermo, configurato da qui. */

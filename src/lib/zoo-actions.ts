@@ -2477,8 +2477,9 @@ export async function saveZooGiacenze(scopeParam: string, formData: FormData) {
   const scope = resolveScope(user, scopeParam, academyDb);
   if (scope.type === "system" || !gestisceArea(user, "zoo", scope, academyDb)) redirect(backUrl("/stampe/zoo/impostazioni", scopeParam));
   const url = String(formData.get("url") ?? "").trim();
-  db.giacenze = db.giacenze.filter((g) => !(g.scopeType === scope.type && g.scopeId === scope.id));
-  if (/^https:\/\/\S+$/.test(url)) db.giacenze.push({ scopeType: scope.type, scopeId: scope.id, url });
+  const vecchio = db.giacenze.find((g) => g.scopeType === scope.type && g.scopeId === scope.id);
+  db.giacenze = db.giacenze.filter((g) => g !== vecchio);
+  if (/^https:\/\/\S+$/.test(url)) db.giacenze.push({ ...(vecchio ?? {}), scopeType: scope.type, scopeId: scope.id, url, attivo: true });
   await saveZooDb(db);
   rigeneraZoo();
   redirect(backUrl("/stampe/zoo/impostazioni", scopeParam, { giacenze: url ? "1" : "0" }));

@@ -20,6 +20,7 @@ export async function POST(req: NextRequest) {
   const db = await getStampeDb();
   const g = db.giacenze.find((x) => !!x.token && segretoUguale(token, x.token));
   if (!g) return NextResponse.json({ error: "Chiave non valida" }, { status: 403 });
+  if (g.apiAttiva === false) return NextResponse.json({ error: "Collegamento spento in GT One (area Connettori)" }, { status: 403 });
 
   const tipo = req.headers.get("content-type") ?? "";
   let righe: { codice: string; quantita: number }[] = [];

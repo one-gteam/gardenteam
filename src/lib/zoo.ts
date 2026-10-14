@@ -800,6 +800,13 @@ export interface ZooScopeGiacenze {
   scopeType: ScopeType;
   scopeId: string;
   url: string;
+  /** Nome del gestionale («Linfa»), per riconoscerlo nell'area Connettori. */
+  nome?: string;
+  /** Spento (false): resta configurato ma non si usa. Assente = acceso. */
+  attivo?: boolean;
+  /** Ultima prova fatta dall'area Connettori e com'è andata. */
+  provatoIl?: string;
+  esito?: string;
 }
 
 /**
@@ -1393,7 +1400,7 @@ export function giacenzeUrlFor(db: ZooDB, scope: Scope, academyDb: DB): string |
   for (const s of chainFor(scope, academyDb)) {
     if (s.type === "system") continue;
     const g = db.giacenze.find((x) => x.scopeType === s.type && x.scopeId === s.id);
-    if (g?.url) return g.url;
+    if (g?.url && g.attivo !== false) return g.url; // spento dall'area Connettori: come se non ci fosse
   }
   return undefined;
 }

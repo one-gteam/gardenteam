@@ -9,7 +9,7 @@ import { leggiRegistro, ultimiMesi, type AreaRegistro } from "@/lib/registro";
  * prodotti, corsi e utenti, con il valore di prima e quello di dopo. Solo
  * l'amministratore di sistema: vede tutto e può rimettere un valore com'era.
  */
-const NOMI: Record<AreaRegistro, string> = { zoo: "Offerte Zoo", arredo: "Cartelli Arredo", academy: "Academy", utenti: "Utenti e ruoli" };
+const NOMI: Record<AreaRegistro, string> = { zoo: "Offerte Zoo", arredo: "Cartelli Arredo", academy: "Academy", utenti: "Utenti e ruoli", connettori: "Connettori" };
 
 export default async function RegistroPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const user = await getCurrentUser();
