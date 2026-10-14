@@ -2,12 +2,12 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import StampeHeader from "@/components/stampe/StampeHeader";
-import { canAccessArea, resolveScope, scopesForUser } from "@/lib/stampe";
+import { canAccessArea, isZooEditor, resolveScope, scopesForUser } from "@/lib/stampe";
 import {
   prezzoMinimo,
   getZooDb, campagnaInLavorazione, campagnaInCorso, migraVolantinoPages, zooImageUrl, effectiveParentText,
   datiPrezzoOfferta,
-  unioneDi,
+  unioneDi, giacenzePer,
 } from "@/lib/zoo";
 import { aggiungiNotaBozza, risolviNotaBozza } from "@/lib/zoo-actions";
 import TabellaVolantino from "@/components/stampe/TabellaVolantino";
@@ -44,6 +44,10 @@ export default async function ZooBozzaPage({
   const layout = campaign ? db.volantinoLayouts.find((l) => l.campaignId === campaign.id) : undefined;
   const pages = layout ? migraVolantinoPages(layout.pages) : [];
   const offerById = new Map(db.offers.map((o) => [o.id, o]));
+  // il prezzo di partenza dell'insegna/PV dal suo gestionale, come sui cartelli
+  const gestionale = campaign ? await giacenzePer(db, scope, academyDb, db.offers.filter((o) => o.campaignId === campaign.id).map((o) => o.ean)) : {};
+  const focusDefs = campaign ? db.focusDef.filter((f) => f.campaignId === campaign.id) : [];
+  const defDi = (nome: string) => focusDefs.find((f) => f.nome.trim().toLowerCase() === nome.trim().toLowerCase());
   // le doppie pagine, come in Crea Volantino: copertina da sola, poi a coppie
   const spreads: number[][] = pages.length > 0 ? [[0]] : [];
   for (let i = 1; i < pages.length; i += 2) spreads.push(pages[i + 1] ? [i, i + 1] : [i]);
@@ -95,7 +99,9 @@ export default async function ZooBozzaPage({
               <EsportaVolantino campaignId={campaign.id}
                 excelHref={`/stampe/zoo/crea-volantino/excel?campagna=${campaign.id}`}
                 fotoZipHref={`/stampe/zoo/crea-volantino/foto?campagna=${campaign.id}`}
-                selettorePagine=".bozza-pagine .vol-page" />
+                selettorePagine=".bozza-pagine .vol-page"
+                perGrafico={isZooEditor(user) || (db.settings.volantinoEditors ?? []).includes(user.id)}
+                nomeFile={`bozza-${campaign.nome.replace(/[^\p{L}\p{N}]+/gu, "-").toLowerCase()}`} />
               <AvvisaColleghi tipo="bozza" scopeParam={scopeParam} colleghi={colleghiZoo} />
             </div>
           )}
@@ -129,7 +135,7 @@ export default async function ZooBozzaPage({
         )}
 
         {campaign && sp.vista === "tabella" && (
-          <TabellaVolantino db={db} academyDb={academyDb} scope={scope} scopeParam={scopeParam} campaign={campaign} sp={sp} base="/stampe/zoo/bozza" />
+          <TabellaVolantino gestionale={gestionale} db={db} academyDb={academyDb} scope={scope} scopeParam={scopeParam} campaign={campaign} sp={sp} base="/stampe/zoo/bozza" />
         )}
         {sp.vista !== "tabella" && pages.length === 0 && (
           <div className="card"><p className="empty">Non c&apos;è ancora una bozza: si compone in Crea Volantino.</p></div>
@@ -171,6 +177,9 @@ export default async function ZooBozzaPage({
                     ))}
                     {page.blocks.filter((b) => (b.offerIds?.length ?? 0) > 0 || b.testo || b.imageUrl).map((b) => {
                       const offerte = (b.offerIds ?? []).map((id) => offerById.get(id)).filter(Boolean);
+                      // il focus della cella: quello messo sulla cella vuota, o quello delle sue offerte
+                      const nomeFocus = b.focus || offerte.map((o) => (o!.focus ?? "").trim()).find(Boolean) || "";
+                      const defFocus = nomeFocus ? defDi(nomeFocus) : undefined;
                       // dentro uno sfondo di sezione la cella è trasparente: prima il bianco copriva la sezione
                       const dentroSezione = (page.sezioni ?? []).some((sz) => b.r >= sz.r && b.r < sz.r + sz.rs && b.c >= sz.c && b.c < sz.c + sz.cs);
                       return (
@@ -179,8 +188,14 @@ export default async function ZooBozzaPage({
                           background: b.imageUrl ? `center/cover no-repeat url(${b.imageUrl})` : b.bg ? b.bg : dentroSezione ? "transparent" : "#fff",
                           border: dentroSezione ? "1px dashed rgba(0,0,0,.12)" : "1px solid #e6e6e6",
                         }}>
-                          {b.commento && <span className="nota-cella no-print" title={b.commento}>nota: {b.commento}</span>}
                           {b.label && <span className="vol-label">{b.label}</span>}
+                          {nomeFocus && (
+                            <div className="bozza-focus" style={{ borderColor: defFocus?.colore || undefined }}>
+                              <strong>{nomeFocus}</strong>
+                              {defFocus?.descrizione && <span>{defFocus.descrizione}</span>}
+                              {defFocus?.notaGrafico && <em className="no-print">Per il grafico: {defFocus.notaGrafico}</em>}
+                            </div>
+                          )}
                           {b.testo && <div className="vol-testo">{b.testo}</div>}
                           <div style={{ display: "grid", gap: 2, gridTemplateColumns: offerte.length > 1 ? "1fr 1fr" : "1fr", textAlign: "center" }}>
                             {offerte.map((o) => {
@@ -195,12 +210,12 @@ export default async function ZooBozzaPage({
                                * deve poter dire se l'offerta è buona, non solo se è nella pagina
                                * giusta. Il prezzo del punto vendita, se c'è, vale su quello comune.
                                */
-                              const dati = datiPrezzoOfferta(db, o!, scope, academyDb, b.prezzo);
+                              const dati = datiPrezzoOfferta(db, o!, scope, academyDb, b.prezzo, gestionale);
                               // voce unita solo per il volantino: il prezzo più basso dell'unione, "a partire da"
                               const unite = o!.unioneVolantino && !b.prezzo
                                 ? db.offers.filter((x) => x.campaignId === o!.campaignId && x.unioneVolantino === o!.unioneVolantino)
                                 : [];
-                              const prezziUniti = [...new Set(unite.map((x) => datiPrezzoOfferta(db, x, scope, academyDb).prezzo).filter(Boolean))];
+                              const prezziUniti = [...new Set(unite.map((x) => datiPrezzoOfferta(db, x, scope, academyDb, undefined, gestionale).prezzo).filter(Boolean))];
                               const aPartireDa = prezziUniti.length > 1;
                               if (aPartireDa) { dati.prezzo = prezzoMinimo(prezziUniti); dati.listino = ""; dati.sconto = ""; }
                               // voce unita a mano: titolo e prezzo a parole decisi in Scelta offerte Volantino
@@ -242,6 +257,7 @@ export default async function ZooBozzaPage({
                               );
                             })}
                           </div>
+                          {b.commento && <div className="nota-cella-intera no-print">nota: {b.commento}</div>}
                         </div>
                       );
                     })}

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { canAccessArea, isZooEditor } from "@/lib/stampe";
+import { getZooDb } from "@/lib/zoo";
 import { createSignedUploadUrl } from "@/lib/supabase";
 
 /**
@@ -12,7 +13,9 @@ import { createSignedUploadUrl } from "@/lib/supabase";
  */
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
-  if (!user || !canAccessArea(user, "zoo") || !isZooEditor(user)) {
+  if (!user || !canAccessArea(user, "zoo")) return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
+  // come l'Excel e lo ZIP: chi cura lo Zoo e chi è abilitato a Crea Volantino
+  if (!isZooEditor(user) && !((await getZooDb()).settings.volantinoEditors ?? []).includes(user.id)) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
   }
   const body = (await req.json().catch(() => null)) as { campaignId?: string } | null;

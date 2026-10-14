@@ -1254,6 +1254,23 @@ export async function toggleZooHidden(scopeParam: string, kind: "fornitore" | "m
   redirect(backUrl(back, scopeParam));
 }
 
+/** Come toggleZooHidden, ma senza ricaricare la pagina (marche e fornitori nelle Regole). */
+export async function toggleZooHiddenInline(scopeParam: string, kind: "fornitore" | "marca" | "articolo", value: string): Promise<{ ok: boolean; error?: string }> {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  if (scope.type === "system") return { ok: false, error: "Scegli un'insegna o un punto vendita." };
+  const existing = db.hidden.find(
+    (h) => h.scopeType === scope.type && h.scopeId === scope.id && h.kind === kind && h.value === value
+  );
+  if (existing) db.hidden = db.hidden.filter((h) => h !== existing);
+  else db.hidden.push({ scopeType: scope.type, scopeId: scope.id, kind, value });
+  await saveZooDb(db);
+  rigeneraZoo();
+  return { ok: true };
+}
+
 /** Nasconde in blocco gli articoli selezionati (checkbox "sel") per l'ambito corrente. */
 export async function toggleZooHiddenBulk(back: string, scopeParam: string, formData: FormData) {
   const user = await requireZooUser();

@@ -1275,6 +1275,15 @@ th.ordinata[data-ordine="desc"]::after { content: " ▼"; font-size: 9px; }
 /* Bozza: note per il grafico ben visibili */
 .nota-grafico { margin: 0 0 6px; font-size: 12px; background: #fff8e1; border: 1px solid #f3d77a; border-radius: 6px; padding: 4px 8px; }
 /* Bozza: nota per il grafico su una cella, in fondo e su due righe al massimo (passandoci sopra si legge tutta) */
+/* Bozza: le celle crescono col testo (focus e note si leggono per intero), la pagina resta almeno A4 */
+.bozza-pagine .vol-cell { overflow: visible; justify-content: flex-start; }
+.bozza-focus { display: flex; flex-direction: column; gap: 2px; text-align: center; padding: 3px 4px; margin-bottom: 3px;
+  border: 1px solid #d9d9d9; border-left-width: 3px; border-radius: 4px; background: rgba(255, 255, 255, .85); }
+.bozza-focus strong { font-size: 10.5px; font-weight: 800; line-height: 1.15; }
+.bozza-focus span { font-size: 8.5px; line-height: 1.25; color: #333; white-space: pre-line; }
+.bozza-focus em { font-size: 8.5px; line-height: 1.25; color: #7a5a00; white-space: pre-line; font-style: normal; background: #fff8e1; border-radius: 3px; padding: 1px 3px; }
+.nota-cella-intera { margin-top: 3px; background: #fff8e1; border: 1px solid #f3d77a; border-radius: 4px; font-size: 8.5px; line-height: 1.25;
+  padding: 2px 4px; color: #7a5a00; white-space: pre-line; overflow-wrap: anywhere; }
 .nota-cella { position: absolute; left: 2px; right: 2px; bottom: 2px; z-index: 3; background: #fff8e1; border: 1px solid #f3d77a; border-radius: 4px;
   font-size: 8px; line-height: 1.2; padding: 1px 3px; color: #7a5a00; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 

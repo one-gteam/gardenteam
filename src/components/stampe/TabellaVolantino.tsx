@@ -5,7 +5,7 @@ import type { DB } from "@/lib/types";
 import type { Scope } from "@/lib/stampe";
 import {
   type ZooDB, type ZooCampaign, type ZooOffer, zooImageUrl, effectiveParentText, animaliDi, caratteristicheProdottoDi,
-  chiavePrezzo, datiPrezzoOfferta, migraVolantinoPages, NO_VOLANTINO, marcaEffettiva, nomeDestinazione,
+  chiavePrezzo, datiPrezzoOfferta, migraVolantinoPages, NO_VOLANTINO, marcaEffettiva, nomeDestinazione, type Giacenza,
 } from "@/lib/zoo";
 
 /**
@@ -15,9 +15,11 @@ import {
  * l'elenco invece delle pagine.
  */
 export default function TabellaVolantino({
-  db, academyDb, scope, scopeParam, campaign, sp, base,
+  db, academyDb, scope, scopeParam, campaign, sp, base, gestionale,
 }: {
   db: ZooDB; academyDb: DB; scope: Scope; scopeParam: string; campaign: ZooCampaign;
+  /** Prezzi del gestionale dell'insegna/PV (prezzo di partenza). */
+  gestionale?: Record<string, Giacenza>;
   sp: Record<string, string | undefined>;
   /** Pagina che ospita la tabella (per i link dei filtri). */
   base: string;
@@ -80,7 +82,7 @@ export default function TabellaVolantino({
       case "fornitore": return (product?.fornitore ?? "").toLowerCase();
       case "animale": return animaliDi(db, g.parent?.caratteristiche ?? []).join(", ");
       case "caratt": return caratteristicheProdottoDi(db, g.parent?.caratteristiche ?? []).join(", ");
-      case "prezzo": return Number.parseFloat((datiPrezzoOfferta(db, o, scope, academyDb).prezzo || "0").replace(",", ".")) || 0;
+      case "prezzo": return Number.parseFloat((datiPrezzoOfferta(db, o, scope, academyDb, undefined, gestionale).prezzo || "0").replace(",", ".")) || 0;
       case "focus": return (o.focus ?? "").toLowerCase();
       case "etichetta": return (o.label ?? "").toLowerCase();
       case "voti": return new Set(db.votes.filter((v) => v.tipo === "preferita" && g.offs.some((x) => x.id === v.offerId)).map((v) => v.userId)).size;
@@ -190,7 +192,7 @@ export default function TabellaVolantino({
             {gruppi.map(({ parent, offs }) => {
               const first = offs[0];
               const product = prodById.get(first.productId ?? "");
-              const dati = datiPrezzoOfferta(db, first, scope, academyDb);
+              const dati = datiPrezzoOfferta(db, first, scope, academyDb, undefined, gestionale);
               const nome = parent ? effectiveParentText(db, scope, parent, "nome", academyDb).value : first.descrizione;
               const descr = parent ? effectiveParentText(db, scope, parent, "descVolantino", academyDb).value : "";
               const voti = new Set(db.votes.filter((v) => v.tipo === "preferita" && offs.some((o) => o.id === v.offerId)).map((v) => v.userId)).size;

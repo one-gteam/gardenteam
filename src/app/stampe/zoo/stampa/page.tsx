@@ -1,3 +1,4 @@
+import { PulsanteAzione } from "@/components/AzioneSenzaRicarica";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
@@ -26,7 +27,7 @@ import {
   ZOO_FIELDS, ZOO_FORMATS, marcaEffettiva, condizioniPer, ownScopeVisible, pvPromoFor, noPrintSets, offertePerStampa, tagsPerLayout, valoriPerStampa, giacenzePer, tagsPerStampa,
 } from "@/lib/zoo";
 import {
-  importPvPricesRighe, markZooPrinted, resetZooPrinted, toggleZooHidden, importZooNoPrintRighe, svuotaZooNoPrint,
+  importPvPricesRighe, markZooPrinted, resetZooPrinted, toggleZooHidden, toggleZooHiddenInline, importZooNoPrintRighe, svuotaZooNoPrint,
   toggleZooNoPrint, rimettiInCodaMulti, svuotaStampatiCoda, rimettiInStampaMulti,
   rimettiInCodaInline, segnaArrivatoInline, togliNonConformeInline, rimettiInStampaInline,
   creaOffertaPropria, eliminaOffertaPropria, stampaCoda,
@@ -1143,13 +1144,11 @@ export default async function ZooStampaPage({
                       {marche.map((m) => {
                         const esclusa = marcheEscluse.includes(m);
                         return (
-                          <form key={`ex_${m}`} action={toggleZooHidden.bind(null, scopeParam, "marca", m, "/stampe/zoo/stampa?tab=regole")}>
-                            <button type="submit" className={`pill ${esclusa ? "pill-gray" : "pill-green"}`}
-                              style={{ cursor: "pointer", border: "none" }}
-                              title={esclusa ? `Rimetti ${m} fra quelle trattate` : `Segna ${m} come non trattata`}>
-                              {esclusa ? `✕ ${m} — non trattata` : `${m}`}
-                            </button>
-                          </form>
+                          <PulsanteAzione key={`ex_${m}`} azione={toggleZooHiddenInline.bind(null, scopeParam, "marca", m)}
+                            className={`pill ${esclusa ? "pill-gray" : "pill-green"}`} style={{ cursor: "pointer", border: "none" }}
+                            title={esclusa ? `Rimetti ${m} fra quelle trattate` : `Segna ${m} come non trattata`}>
+                            {esclusa ? `✕ ${m} — non trattata` : `${m}`}
+                          </PulsanteAzione>
                         );
                       })}
                     </div>

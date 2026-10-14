@@ -1221,6 +1221,14 @@ export function valoriPerStampa(
    */
   const pvL = pvListinoFor(db, scope, o.ean, academyDb) || prezzoDaNumero(gestionale?.[o.ean]?.prezzo);
   if (pvL) vals.prezzoListino = `€ ${pvL}`;
+  // offerta a percentuale sul loro prezzo di partenza: il promo si rifà su quello (vedi prezziOffertaPer)
+  if (pvL && !pv && !prezzoManuale && o.scontoPerc) {
+    const ricalcolato = prezzoScontato(pvL, o.scontoPerc);
+    if (ricalcolato) {
+      vals.prezzoPromo = `€ ${ricalcolato}`;
+      vals.prezzoUnita = prezzoUnitaDi(o, db.products.find((p) => p.id === o.productId), ricalcolato);
+    }
+  }
   const prezzo = sp[`prezzo_${o.id}`];
   if (prezzo !== undefined && prezzo !== "") vals.prezzoPromo = `€ ${prezzo}`;
   const listino = sp[`listino_${o.id}`];
@@ -1907,13 +1915,33 @@ function numeroPrezzo(v: string): number {
  * vendita (che nel listino del Consorzio non hanno prezzo) mostravano un euro
  * solitario. Il prezzo dell'insegna/PV, se caricato, vale su quello comune.
  */
+/**
+ * Prezzo promo e prezzo di partenza di un'offerta per un'insegna/PV.
+ * Partenza: quello scritto dall'insegna/PV, altrimenti il prezzo di vendita del
+ * suo gestionale (se collegato), altrimenti quello del Consorzio.
+ * Promo: quello dell'insegna/PV, altrimenti quello del Consorzio; ma se
+ * l'offerta è una percentuale («-15%») e la partenza è la loro, lo sconto si
+ * rifà sul loro prezzo: 10,99 -15% = 9,34, non il 9,77 calcolato sull'11,49
+ * del Consorzio (che sul cartello diventava un -11%).
+ */
+export function prezziOffertaPer(
+  db: ZooDB, offer: ZooOffer, scope: Scope, academyDb: DB, gestionale?: Record<string, Giacenza>,
+): { prezzo: string; listino: string; listinoProprio: boolean } {
+  const pv = pvPriceFor(db, scope, offer.ean, academyDb);
+  const pvL = pvListinoFor(db, scope, offer.ean, academyDb) || prezzoDaNumero(gestionale?.[offer.ean]?.prezzo);
+  let prezzo = (pv || offer.prezzoPromo || "").trim();
+  if (!pv && pvL && offer.scontoPerc) prezzo = prezzoScontato(pvL, offer.scontoPerc) || prezzo;
+  return { prezzo, listino: (pvL || offer.prezzoListino || "").trim(), listinoProprio: Boolean(pvL) };
+}
+
 export function datiPrezzoOfferta(
-  db: ZooDB, offer: ZooOffer, scope?: Scope, academyDb?: DB, override?: string
+  db: ZooDB, offer: ZooOffer, scope?: Scope, academyDb?: DB, override?: string,
+  /** Prezzi del gestionale dell'insegna/PV (giacenzePer): danno il prezzo di partenza. */
+  gestionale?: Record<string, Giacenza>,
 ): DatiPrezzoOfferta {
-  const pv = scope && academyDb ? pvPriceFor(db, scope, offer.ean, academyDb) : undefined;
-  const prezzo = (override || pv || offer.prezzoPromo || "").trim();
-  const pvL = scope && academyDb ? pvListinoFor(db, scope, offer.ean, academyDb) : undefined;
-  const listino = (pvL || offer.prezzoListino || "").trim();
+  const per = scope && academyDb ? prezziOffertaPer(db, offer, scope, academyDb, gestionale) : undefined;
+  const prezzo = (override || per?.prezzo || offer.prezzoPromo || "").trim();
+  const listino = (per?.listino || offer.prezzoListino || "").trim();
   const a = numeroPrezzo(listino);
   const b = numeroPrezzo(prezzo);
   const sconto = a > 0 && b > 0 && a > b ? `-${Math.round((1 - b / a) * 100)}%` : "";

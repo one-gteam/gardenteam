@@ -7,7 +7,7 @@ import { canAccessArea, resolveScope, scopesForUser } from "@/lib/stampe";
 import {
   chiaveGruppoOfferta, padreDaChiave,
   getZooDb, campagnaPerStampa, offertePerStampa, effectiveParentText, effectiveParentTag, isZooHidden, marcaEffettiva,
-  noPrintSets, printedAt, ZOO_FIELDS, ZOO_FORMATS, giacenzePer, nonConformiDi, pvPriceFor,
+  noPrintSets, printedAt, ZOO_FIELDS, ZOO_FORMATS, giacenzePer, nonConformiDi, pvPriceFor, prezziOffertaPer,
 } from "@/lib/zoo";
 
 /**
@@ -77,7 +77,7 @@ export default async function ZooRepartoPage({
         id: g.id,
         ean: g.ean,
         descrizione: g.descrizione,
-        prezzo: pvPriceFor(db, scope, g.ean, academyDb) ?? g.prezzoPromo,
+        prezzo: prezziOffertaPer(db, g, scope, academyDb, giacenze).prezzo,
         giacenza: giacenze[g.ean]?.giacenza,
         codice: giacenze[g.ean]?.codice,
         nonConforme: nonConformi.has(g.id),

@@ -24,7 +24,7 @@ import {
 } from "@/lib/zoo";
 import {
   importZooProducts, finalizeZooPhotoUpload, confirmZooPhotoTargets, createZooParent, associaConAI,
-  rigeneraTestiAI, saveParentTexts, setParentImage, toggleParentCaratteristica, scioglieParent, toggleZooHidden,
+  rigeneraTestiAI, saveParentTexts, setParentImage, toggleParentCaratteristica, scioglieParent, toggleZooHidden, toggleZooHiddenInline,
   toggleZooHiddenBulk, updateParentFieldInline, updateProductFieldInline, setParentTagInline, moveProductToParent,
   setParentImageFromFile, mergeParentsForm, promuoviProdottoAConsorzio, adottaProdotto, staccaZooFoto, setTipologiaInline, setParentAnimaliInline, setAnimaliArticolo } from "@/lib/zoo-actions";
 
@@ -802,21 +802,19 @@ export default async function CatalogoProdotti({ user, sp }: { user: User; sp: R
               {fornitoriList(db).map((f) => {
                 const off = hiddenHere.some((h) => h.kind === "fornitore" && h.value === f);
                 return (
-                  <form key={`f_${f}`} action={toggleZooHidden.bind(null, scopeParam, "fornitore", f, "/stampe/zoo/dati")}>
-                    <button type="submit" className={`pill ${off ? "pill-gray" : "pill-green"}`} style={{ cursor: "pointer", border: "none" }}>
-                      {off ? "✕ " : ""}Fornitore: {f}
-                    </button>
-                  </form>
+                  <PulsanteAzione key={`f_${f}`} azione={toggleZooHiddenInline.bind(null, scopeParam, "fornitore", f)}
+                    className={`pill ${off ? "pill-gray" : "pill-green"}`} style={{ cursor: "pointer", border: "none" }}>
+                    {off ? "✕ " : ""}Fornitore: {f}
+                  </PulsanteAzione>
                 );
               })}
               {marcheList(db).map((m) => {
                 const off = hiddenHere.some((h) => h.kind === "marca" && h.value === m);
                 return (
-                  <form key={`m_${m}`} action={toggleZooHidden.bind(null, scopeParam, "marca", m, "/stampe/zoo/dati")}>
-                    <button type="submit" className={`pill ${off ? "pill-gray" : "pill-blue"}`} style={{ cursor: "pointer", border: "none" }}>
-                      {off ? "✕ " : ""}Marca: {m}
-                    </button>
-                  </form>
+                  <PulsanteAzione key={`m_${m}`} azione={toggleZooHiddenInline.bind(null, scopeParam, "marca", m)}
+                    className={`pill ${off ? "pill-gray" : "pill-blue"}`} style={{ cursor: "pointer", border: "none" }}>
+                    {off ? "✕ " : ""}Marca: {m}
+                  </PulsanteAzione>
                 );
               })}
             </div>

@@ -6,7 +6,7 @@ import { canAccessArea, isZooEditor, scopesForUser, resolveScope } from "@/lib/s
 import { getDb } from "@/lib/db";
 import {
   getZooDb, campagnaInLavorazione, zooImageUrl, effectiveParentText, animaliDi, caratteristicheProdottoDi,
-  chiavePrezzo, datiPrezzoOfferta, migraVolantinoPages, storicoOfferteByEan, periodoBreve, NO_VOLANTINO, nomeDestinazione,
+  chiavePrezzo, datiPrezzoOfferta, giacenzePer, migraVolantinoPages, storicoOfferteByEan, periodoBreve, NO_VOLANTINO, nomeDestinazione,
 } from "@/lib/zoo";
 import {
   updateOfferVolantino,
@@ -53,6 +53,8 @@ export default async function ZooVolantinoPage({
   // solo il volantino IN LAVORAZIONE: su quelli chiusi o archiviati non si sceglie più
   const campaign = campagnaInLavorazione(db);
   const allOffers = campaign ? db.offers.filter((o) => o.campaignId === campaign.id) : [];
+  // prezzo di partenza dal gestionale dell'insegna/PV, come sui cartelli
+  const gestionale = await giacenzePer(db, scope, academyDb, allOffers.map((o) => o.ean));
   // i focus già scritti in questo volantino, per riusare lo stesso testo su altri prodotti
   const focusEsistenti = [...new Set(allOffers.map((o) => (o.focus ?? "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   const schedaFilter = sp.scheda ?? "";
@@ -452,7 +454,7 @@ export default async function ZooVolantinoPage({
                     const product = prodOf(first);
                     const animaliOfferta = animaliDi(db, parent?.caratteristiche ?? []);
                     // una riga = un prezzo (padre + prezzo): partenza, sconto e tipologia vengono dalla prima offerta
-                    const dati = datiPrezzoOfferta(db, first, scope, academyDb);
+                    const dati = datiPrezzoOfferta(db, first, scope, academyDb, undefined, gestionale);
                     const carattProdotto = caratteristicheProdottoDi(db, parent?.caratteristiche ?? []);
                     // già in altri volantini (escluso questo): per non riproporre sempre gli stessi prodotti
                     const giaVisti = [...new Map(offs.flatMap((o) => storico.get(o.ean)?.volantino ?? [])
