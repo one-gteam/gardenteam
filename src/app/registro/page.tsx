@@ -1,29 +1,21 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
-import { getDb } from "@/lib/db";
-import { gestisce, isAcademyAdmin, SITE_NAME } from "@/lib/types";
-import { canManageUsers } from "@/lib/logic";
+import RuoliHeader from "@/components/RuoliHeader";
+import RipristinaVoce from "@/components/RipristinaVoce";
 import { leggiRegistro, ultimiMesi, type AreaRegistro } from "@/lib/registro";
 
 /*
  * Registro delle modifiche: chi ha cambiato offerte, titoli, descrizioni,
- * prodotti, corsi e utenti, con il valore di prima e quello di dopo. Ognuno
- * vede le aree che gestisce; l'amministratore di sistema tutte.
+ * prodotti, corsi e utenti, con il valore di prima e quello di dopo. Solo
+ * l'amministratore di sistema: vede tutto e può rimettere un valore com'era.
  */
 const NOMI: Record<AreaRegistro, string> = { zoo: "Offerte Zoo", arredo: "Cartelli Arredo", academy: "Academy", utenti: "Utenti e ruoli" };
 
 export default async function RegistroPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  const db = await getDb();
-  const visibili = (Object.keys(NOMI) as AreaRegistro[]).filter((a) =>
-    user.role === "system_admin" ||
-    (a === "zoo" && gestisce(user, "zoo")) ||
-    (a === "arredo" && gestisce(user, "arredo")) ||
-    (a === "academy" && isAcademyAdmin(user) && gestisce(user, "academy")) ||
-    (a === "utenti" && canManageUsers(db, user)));
-  if (visibili.length === 0) redirect("/scegli");
+  if (user.role !== "system_admin") redirect("/scegli");
+  const visibili = Object.keys(NOMI) as AreaRegistro[];
   const sp = await searchParams;
   const mesi = ultimiMesi(6);
   const mese = sp.mese && mesi.includes(sp.mese) ? sp.mese : "";
@@ -41,21 +33,10 @@ export default async function RegistroPage({ searchParams }: { searchParams: Pro
 
   return (
     <div>
-      <header className="site-header">
-        <div className="site-header-inner">
-          <div className="header-top">
-            <Link href="/scegli" className="brand">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <span className="brand-logo"><img src={db.settings.logoUrl} alt={SITE_NAME} /></span>
-              <span className="area-name">Registro modifiche</span>
-            </Link>
-            <Link href="/scegli" className="cambia-area">⇄ Cambia area</Link>
-          </div>
-        </div>
-      </header>
+      <RuoliHeader user={user} active="registro" />
       <div className="container">
         <h1 style={{ marginBottom: 4 }}>Registro modifiche</h1>
-        <p className="subtitle">Chi ha cambiato cosa, con il valore di prima e quello di dopo{visibili.length < 4 ? `: ${visibili.map((a) => NOMI[a]).join(", ")}` : ""}. Le modifiche si registrano dal 13 ottobre 2026.</p>
+        <p className="subtitle">Chi ha cambiato cosa, con il valore di prima e quello di dopo{visibili.length < 4 ? `: ${visibili.map((a) => NOMI[a]).join(", ")}` : ""}. Le modifiche si registrano dal 13 ottobre 2026; «Ripristina» c&apos;è per i campi cambiati dal 14 ottobre.</p>
 
         <form method="get" className="card rt-filtro" style={{ position: "static" }}>
           <input type="search" name="q" defaultValue={sp.q ?? ""} placeholder="Cerca: prodotto, titolo, valore…" style={{ flex: "1 1 220px" }} />
@@ -79,9 +60,9 @@ export default async function RegistroPage({ searchParams }: { searchParams: Pro
 
         <div className="card table-wrap" style={{ padding: 0 }}>
           <table className="data rt-tab">
-            <thead><tr><th>Quando</th><th>Chi</th><th>Area</th><th>Cosa</th><th>Su</th><th>Prima</th><th>Dopo</th></tr></thead>
+            <thead><tr><th>Quando</th><th>Chi</th><th>Area</th><th>Cosa</th><th>Su</th><th>Prima</th><th>Dopo</th><th></th></tr></thead>
             <tbody>
-              {voci.length === 0 && <tr><td colSpan={7} className="empty">Nessuna modifica con questi filtri.</td></tr>}
+              {voci.length === 0 && <tr><td colSpan={8} className="empty">Nessuna modifica con questi filtri.</td></tr>}
               {voci.slice(0, MAX).map((v, i) => (
                 <tr key={`${v.il}_${i}`}>
                   <td style={{ whiteSpace: "nowrap", fontSize: 12 }}>{quando(v.il)}</td>
@@ -91,6 +72,11 @@ export default async function RegistroPage({ searchParams }: { searchParams: Pro
                   <td style={{ fontSize: 12.5, maxWidth: 260 }}>{v.oggetto}</td>
                   <td style={{ fontSize: 12, color: "var(--muted)", maxWidth: 260, whiteSpace: "pre-line" }}>{v.prima || "—"}</td>
                   <td style={{ fontSize: 12, maxWidth: 260, whiteSpace: "pre-line" }}>{v.dopo || "—"}</td>
+                  <td style={{ whiteSpace: "nowrap" }}>
+                    {v.ripristinataIl
+                      ? <span className="pill pill-gray" title={`Ripristinata da ${v.ripristinataDa ?? ""} il ${quando(v.ripristinataIl)}`}>ripristinata</span>
+                      : v.id && v.rif ? <RipristinaVoce id={v.id} il={v.il} prima={v.rif.tipo === "utente-attivo" ? (v.rif.prima ? "attivo" : "cessato") : (v.prima ?? "")} /> : null}
+                  </td>
                 </tr>
               ))}
             </tbody>

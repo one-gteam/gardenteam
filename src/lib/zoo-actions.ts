@@ -10,7 +10,7 @@ import { requireUser } from "./auth";
 import { getDb } from "./db";
 import { canAccessArea, gestisceArea, isZooEditor, resolveScope, sanitizeMargins, puoModificareLayout } from "./stampe";
 import { postLoginPath } from "./types";
-import { LAYOUT_FONTS } from "./layout-fonts";
+import { sanitizeLayoutItems } from "./layout-pulizia";
 import {
   getZooDb, saveZooDb, ZooDB, ZooParent, ZooProduct, campagnaInLavorazione, campagnaInCorso, campaignStato, NO_VOLANTINO,
   formatiDi, descrizioneConFormati, prezziDelPadre, contenutoDa, chiavePrezzo, type PassoVolantinoId,
@@ -302,7 +302,7 @@ export async function togliFotoInline(target: { parentId?: string; productId?: s
     if (!p) return { ok: false, error: "Articolo non trovato." };
     const suo = p.scopeType === scope.type && (p.scopeId ?? "") === scope.id;
     if (!(isZooEditor(user) || (suo && gestisceArea(user, "zoo", scope, academyDb)))) return { ok: false, error: "La foto la toglie chi cura lo Zoo per il Consorzio." };
-    registra(user, { area: "zoo", cosa: "Foto tolta dall'articolo", oggetto: `${p.descrizione} (${p.ean})`, prima: p.image ?? "" });
+    registra(user, { area: "zoo", cosa: "Foto tolta dall'articolo", oggetto: `${p.descrizione} (${p.ean})`, prima: p.image ?? "", dopo: "", rif: { tipo: "zoo-foto", articoli: [p.id] } });
     p.image = undefined;
   } else if (target.parentId) {
     if (!isZooEditor(user)) return { ok: false, error: "La foto la toglie chi cura lo Zoo per il Consorzio." };
@@ -311,7 +311,7 @@ export async function togliFotoInline(target: { parentId?: string; productId?: s
     const figli = db.products.filter((x) => x.parentId === parent.id);
     const url = parent.image ?? figli.find((f) => f.image)?.image;
     if (!url) return { ok: true };
-    registra(user, { area: "zoo", cosa: "Foto tolta dal padre", oggetto: parent.nome, prima: url });
+    registra(user, { area: "zoo", cosa: "Foto tolta dal padre", oggetto: parent.nome, prima: url, dopo: "", rif: { tipo: "zoo-foto", padre: parent.image === url ? parent.id : undefined, articoli: figli.filter((f) => f.image === url).map((f) => f.id) } });
     if (parent.image === url) parent.image = undefined;
     for (const f of figli) if (f.image === url) f.image = undefined;
   } else return { ok: false };
@@ -583,7 +583,7 @@ export async function updateParentFieldInline(
       db.textOverrides = db.textOverrides.filter((o) => o !== existing);
     }
   }
-  registra(user, { area: "zoo", cosa: { nome: "Titolo del padre", descVolantino: "Descrizione volantino", descCartello: "Descrizione cartello" }[field], oggetto: parent.nome, prima: primaTesto ?? "", dopo: value, ambito: scope.type === "system" ? undefined : scope.label });
+  registra(user, { area: "zoo", cosa: { nome: "Titolo del padre", descVolantino: "Descrizione volantino", descCartello: "Descrizione cartello" }[field], oggetto: parent.nome, prima: primaTesto ?? "", dopo: value, ambito: scope.type === "system" ? undefined : scope.label, rif: { tipo: "zoo-padre-testo", id: parent.id, campo: field, scope: `${scope.type}:${scope.id}` } });
   await saveZooDb(db);
   return { ok: true };
 }
@@ -603,7 +603,7 @@ export async function setParentAnimaliInline(parentId: string, values: string[])
   if (!parent) return { ok: false };
   const dominio = db.settings.categorieAnimali;
   const scelti = dominio.filter((a) => values.includes(a)); // nell'ordine delle impostazioni
-  registra(user, { area: "zoo", cosa: "Animale del padre", oggetto: parent.nome, prima: parent.caratteristiche.filter((c) => dominio.includes(c)).join(", "), dopo: scelti.join(", ") });
+  registra(user, { area: "zoo", cosa: "Animale del padre", oggetto: parent.nome, prima: parent.caratteristiche.filter((c) => dominio.includes(c)).join(", "), dopo: scelti.join(", "), rif: { tipo: "zoo-animale", id: parent.id } });
   parent.caratteristiche = [...parent.caratteristiche.filter((c) => !dominio.includes(c)), ...scelti];
   await saveZooDb(db);
   return { ok: true };
@@ -629,7 +629,7 @@ export async function setAnimaliArticolo(productId: string, values: string[]): P
     db.parents.push(parent);
     prod.parentId = parent.id;
   }
-  registra(user, { area: "zoo", cosa: "Animale", oggetto: parent.nome, prima: parent.caratteristiche.filter((c) => dominio.includes(c)).join(", "), dopo: scelti.join(", ") });
+  registra(user, { area: "zoo", cosa: "Animale", oggetto: parent.nome, prima: parent.caratteristiche.filter((c) => dominio.includes(c)).join(", "), dopo: scelti.join(", "), rif: { tipo: "zoo-animale", id: parent.id } });
   parent.caratteristiche = [...parent.caratteristiche.filter((c) => !dominio.includes(c)), ...scelti];
   await saveZooDb(db);
   revalidatePath("/stampe/zoo/prodotti");
@@ -669,7 +669,7 @@ export async function setTipologiaInline(id: string, padre: boolean, value: stri
   if (v && !db.settings.tipologieProdotto.includes(v)) return { ok: false };
   const x = padre ? db.parents.find((p) => p.id === id) : db.products.find((p) => p.id === id);
   if (!x) return { ok: false };
-  registra(user, { area: "zoo", cosa: padre ? "Tipologia del padre" : "Tipologia dell'articolo", oggetto: "nome" in x ? x.nome : (x as { descrizione: string }).descrizione, prima: x.tipologia ?? "", dopo: v });
+  registra(user, { area: "zoo", cosa: padre ? "Tipologia del padre" : "Tipologia dell'articolo", oggetto: "nome" in x ? x.nome : (x as { descrizione: string }).descrizione, prima: x.tipologia ?? "", dopo: v, rif: { tipo: "zoo-tipologia", id, padre } });
   x.tipologia = v || undefined;
   await saveZooDb(db);
   return { ok: true };
@@ -713,7 +713,7 @@ export async function updateOfferFieldInline(
     // assegnare una pagina significa sceglierla per il volantino; "no volantino" la scarta
     o.selezionata = Boolean(v) && v !== NO_VOLANTINO;
   } else o[field] = v || undefined;
-  registra(user, { area: "zoo", cosa: `Offerta: ${field}`, oggetto: `${o.descrizione} (${o.ean})`, prima: primaCampo, dopo: String((o as unknown as Record<string, unknown>)[field] ?? "") });
+  registra(user, { area: "zoo", cosa: `Offerta: ${field}`, oggetto: `${o.descrizione} (${o.ean})`, prima: primaCampo, dopo: String((o as unknown as Record<string, unknown>)[field] ?? ""), rif: { tipo: "zoo-offerta", id: o.id, campo: field } });
   await saveZooDb(db);
   return { ok: true };
 }
@@ -860,7 +860,7 @@ export async function updateProductFieldInline(
   const p = db.products.find((x) => x.id === productId);
   if (!p) return { ok: false };
   const v = value.trim();
-  registra(user, { area: "zoo", cosa: "Descrizione dell'articolo", oggetto: `${p.ean} ${p.codice}`, prima: p.descrizione, dopo: v || p.descrizione });
+  registra(user, { area: "zoo", cosa: "Descrizione dell'articolo", oggetto: `${p.ean} ${p.codice}`, prima: p.descrizione, dopo: v || p.descrizione, rif: { tipo: "zoo-articolo", id: p.id } });
   if (field === "descrizione") p.descrizione = v || p.descrizione;
   await saveZooDb(db);
   return { ok: true };
@@ -1714,7 +1714,7 @@ export async function salvaDeadlineGrafico(campaignId: string, fd: FormData): Pr
   const c = db.campaigns.find((x) => x.id === campaignId);
   if (!c) return { ok: false, error: "Volantino non trovato." };
   const d = String(fd.get("deadline") ?? "");
-  registra(user, { area: "zoo", cosa: "Invio al grafico", oggetto: c.nome, prima: c.deadlineGrafico ?? "", dopo: /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : "" });
+  registra(user, { area: "zoo", cosa: "Invio al grafico", oggetto: c.nome, prima: c.deadlineGrafico ?? "", dopo: /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : "", rif: { tipo: "zoo-deadline", id: c.id } });
   c.deadlineGrafico = /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : undefined;
   await saveZooDb(db);
   revalidatePath("/stampe/zoo/dashboard");
@@ -2536,8 +2536,8 @@ export async function updateZooOfferQuick(offerId: string, descrizione: string, 
   if (!allowed) return { ok: false as const };
   const o = db.offers.find((x) => x.id === offerId);
   if (!o) return { ok: false as const };
-  if (descrizione.trim()) registra(user, { area: "zoo", cosa: "Descrizione dell'offerta", oggetto: o.ean, prima: o.descrizione, dopo: descrizione.trim() });
-  if (prezzo.trim()) registra(user, { area: "zoo", cosa: "Prezzo dell'offerta", oggetto: `${o.descrizione} (${o.ean})`, prima: o.prezzoPromo ?? "", dopo: prezzo.trim() });
+  if (descrizione.trim()) registra(user, { area: "zoo", cosa: "Descrizione dell'offerta", oggetto: o.ean, prima: o.descrizione, dopo: descrizione.trim(), rif: { tipo: "zoo-offerta", id: o.id, campo: "descrizione" } });
+  if (prezzo.trim()) registra(user, { area: "zoo", cosa: "Prezzo dell'offerta", oggetto: `${o.descrizione} (${o.ean})`, prima: o.prezzoPromo ?? "", dopo: prezzo.trim(), rif: { tipo: "zoo-offerta", id: o.id, campo: "prezzoPromo" } });
   if (descrizione.trim()) o.descrizione = descrizione.trim();
   if (prezzo.trim()) o.prezzoPromo = prezzo.trim();
   await saveZooDb(db);
@@ -2546,29 +2546,6 @@ export async function updateZooOfferQuick(offerId: string, descrizione: string, 
 
 /** Salva il layout cartello zoo per formato+ambito (stessa firma di saveLayout dell'Arredo). */
 /** Ripulisce un array di LayoutItem grezzo dal client (stessa validazione per il foglio normale e per quello senza foto). */
-function sanitizeZooLayoutItems(raw: unknown, isKnownField: (fieldId: string) => boolean) {
-  if (!Array.isArray(raw)) return [];
-  return (raw as Record<string, unknown>[])
-    .filter((i) => typeof i.fieldId === "string" && (i.fieldId === "__img" ? typeof i.imageUrl === "string" : isKnownField(i.fieldId as string)))
-    .map((i) => ({
-      fieldId: i.fieldId as string,
-      x: Math.max(0, Math.min(95, Number(i.x) || 0)),
-      y: Math.max(0, Math.min(95, Number(i.y) || 0)),
-      w: Math.max(3, Math.min(100, Number(i.w) || 10)),
-      h: Math.max(2, Math.min(100, Number(i.h) || 5)),
-      ...(typeof i.color === "string" && /^#[0-9a-fA-F]{3,8}$/.test(i.color) ? { color: i.color as string } : {}),
-      ...(typeof i.imageUrl === "string" ? { imageUrl: i.imageUrl as string } : {}),
-      ...(Number.isFinite(Number(i.size)) ? { size: Math.max(4, Math.min(120, Number(i.size))) } : {}),
-      ...(typeof i.bold === "boolean" ? { bold: i.bold as boolean } : {}),
-      ...(typeof i.italic === "boolean" ? { italic: i.italic as boolean } : {}),
-      ...(["left", "center", "right"].includes(i.align as string) ? { align: i.align as "left" | "center" | "right" } : {}),
-      ...(["top", "middle", "bottom"].includes(i.valign as string) ? { valign: i.valign as "top" | "middle" | "bottom" } : {}),
-      ...(typeof i.font === "string" && LAYOUT_FONTS.some((f) => f.id === i.font) ? { font: i.font as string } : {}),
-      ...(typeof i.bg === "string" && /^#[0-9a-fA-F]{3,8}$/.test(i.bg) ? { bg: i.bg as string } : {}),
-      ...(Number.isFinite(Number(i.radius)) ? { radius: Math.max(0, Math.min(40, Number(i.radius))) } : {}),
-      ...(i.sticker && typeof i.sticker === "object" ? { sticker: i.sticker as import("./stampe").StickerStyle } : {}),
-    }));
-}
 
 /**
  * Salva il layout cartello zoo per formato+ambito+tag: come `saveLayout`
@@ -2595,10 +2572,10 @@ export async function saveZooLayout(
   if (!Array.isArray(items)) return { ok: false };
   const { ZOO_FIELDS } = await import("./zoo");
   const isKnownField = (fieldId: string) => ZOO_FIELDS.some((f) => f.id === fieldId);
-  const clean = sanitizeZooLayoutItems(items, isKnownField);
+  const clean = sanitizeLayoutItems(items, isKnownField);
   let itemsNoPhotoRaw: unknown;
   try { itemsNoPhotoRaw = JSON.parse(itemsNoPhotoJson); } catch { itemsNoPhotoRaw = []; }
-  const cleanNoPhoto = sanitizeZooLayoutItems(itemsNoPhotoRaw, isKnownField);
+  const cleanNoPhoto = sanitizeLayoutItems(itemsNoPhotoRaw, isKnownField);
   const margins = sanitizeMargins(marginsJson);
   const tipologie = tipologieCsv.split(",").map((t) => t.trim()).filter(Boolean);
   const nomePulito = nome.trim().slice(0, 60);

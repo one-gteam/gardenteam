@@ -627,6 +627,8 @@ export interface Registration {
   tenantId: string;
   storeId: string;
   departmentId?: string;
+  /** Ha scelto «Altro»: non lavora in un reparto (amministratore, gestore…), il ruolo lo dà chi approva. */
+  repartoAltro?: boolean;
   birthDate: string;
   taxCode: string;
   date: string;

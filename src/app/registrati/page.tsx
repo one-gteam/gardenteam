@@ -6,6 +6,7 @@ const ERRORS: Record<string, string> = {
   segreta: "Parola segreta non corretta per il punto vendita selezionato. Chiedila al tuo responsabile.",
   pv: "Seleziona il tuo punto vendita.",
   dati: "Compila tutti i dati richiesti.",
+  reparto: "Scegli il tuo reparto (o «Altro» se non lavori in un reparto).",
   esiste: "Esiste già un account con questa email: usa il login o Attiva utente.",
   incorso: "Hai già una richiesta in attesa di approvazione per questa email.",
 };
@@ -73,7 +74,7 @@ export default async function RegisterPage({
                   </select>
                 </label>
               </div>
-              <label className="field">Email personale o di lavoro<input type="email" name="email" required /></label>
+              <label className="field">Email<input type="email" name="email" required /></label>
               <label className="field">
                 Punto vendita
                 <select name="storeId" required defaultValue="">
@@ -89,12 +90,14 @@ export default async function RegisterPage({
               </label>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
                 <label className="field">Data di nascita<input type="date" name="birthDate" required /></label>
-                <label className="field">Codice fiscale<input type="text" name="taxCode" required minLength={16} maxLength={16} style={{ textTransform: "uppercase" }} /></label>
+                <label className="field">Codice fiscale <span style={{ fontWeight: 400, color: "var(--muted)" }}>(facoltativo)</span><input type="text" name="taxCode" minLength={16} maxLength={16} style={{ textTransform: "uppercase" }} /></label>
                 <label className="field">
                   Reparto
-                  <select name="departmentId" defaultValue="">
-                    <option value="">— Non so / da definire —</option>
+                  <select name="departmentId" defaultValue="" required>
+                    <option value="" disabled>— Scegli —</option>
                     {db.departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                    {/* chi non lavora in un reparto: amministratori d'insegna o di PV, gestori… il ruolo lo dà chi approva */}
+                    <option value="altro">Altro</option>
                   </select>
                 </label>
               </div>

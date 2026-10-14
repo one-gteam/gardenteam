@@ -100,7 +100,10 @@ export default async function CatalogoProdotti({ user, sp }: { user: User; sp: R
       if (sp.animale && !caratts.includes(sp.animale)) return false;
       if (sp.caratt && !caratts.includes(sp.caratt)) return false;
     }
-    if (q && !`${p.descrizione} ${p.ean} ${p.codice} ${marcaEffettiva(p)}`.toLowerCase().includes(q)) return false;
+    if (q) {
+      const testo = `${p.descrizione} ${p.ean} ${p.codice} ${marcaEffettiva(p)} ${p.fornitore ?? ""} ${p.parentId ? parentById.get(p.parentId)?.nome ?? "" : ""}`.toLowerCase();
+      if (!q.split(/\s+/).filter(Boolean).every((parola) => testo.includes(parola))) return false;
+    }
     return true;
   });
   const hiddenHere = hiddenEntriesFor(db, scope);

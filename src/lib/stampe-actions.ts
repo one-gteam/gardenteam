@@ -19,10 +19,10 @@ import {
   effectiveValue,
   ScopeType,
   sanitizeMargins,
-  Cornice, puoModificareLayout } from "./stampe";
-import { ELEMENTO_IMMAGINE, ELEMENTO_QR, ELEMENTO_RIQUADRO, gruppoDi } from "./cartello-campi";
+  puoModificareLayout } from "./stampe";
+import { gruppoDi } from "./cartello-campi";
 import { postLoginPath } from "./types";
-import { LAYOUT_FONTS } from "./layout-fonts";
+import { sanitizeLayoutItems } from "./layout-pulizia";
 
 /* Stesso principio dello Zoo: qui si lavora sui Cartelli Arredo e serve quell'area. */
 async function requireStampeUser() {
@@ -72,7 +72,7 @@ export async function autosaveField(productId: string, fieldId: string, scopePar
   if (!product) return { ok: false as const, error: "prodotto non trovato" };
   value = value.trim();
   const primaCampo = scope.type === "system" ? (product.fields[fieldId] ?? "") : (db.overrides.find((o) => o.scopeType === scope.type && o.scopeId === scope.id && o.productId === productId && o.fieldId === fieldId)?.value ?? product.fields[fieldId] ?? "");
-  const annota = () => registra(user, { area: "arredo", cosa: db.fields.find((f) => f.id === fieldId)?.label ?? fieldId, oggetto: `${product.fields.titolo ?? ""} (${product.codice})`, prima: primaCampo, dopo: value, ambito: scope.type === "system" ? undefined : scope.label });
+  const annota = () => registra(user, { area: "arredo", cosa: db.fields.find((f) => f.id === fieldId)?.label ?? fieldId, oggetto: `${product.fields.titolo ?? ""} (${product.codice})`, prima: primaCampo, dopo: value, ambito: scope.type === "system" ? undefined : scope.label, rif: { tipo: "arredo-campo", id: product.id, campo: fieldId, scope: `${scope.type}:${scope.id}` } });
 
   if (scope.type === "system") {
     if (!isConsortiumEditor(user)) return { ok: false as const, error: "non autorizzato" };
@@ -752,68 +752,6 @@ export async function uploadLayoutImage(scopeParam: string, formData: FormData) 
 
 /* ================== Layout ================== */
 
-const COLORE = /^#[0-9a-fA-F]{3,8}$/;
-
-/** La cornice del riquadro, entro limiti ragionevoli; se non resta niente di valido non si salva. */
-function sanitizeCornice(c: Record<string, unknown>): { cornice?: Cornice } {
-  const out: Cornice = {};
-  if (typeof c.titolo === "string" && c.titolo.trim()) out.titolo = c.titolo.slice(0, 80);
-  if (typeof c.icona === "string" && c.icona.trim()) out.icona = [...c.icona.trim()].slice(0, 2).join("");
-  if (["linee", "fascia", "semplice"].includes(c.stile as string)) out.stile = c.stile as Cornice["stile"];
-  if (typeof c.colore === "string" && COLORE.test(c.colore)) out.colore = c.colore;
-  if (typeof c.sfondo === "string" && COLORE.test(c.sfondo)) out.sfondo = c.sfondo;
-  if (Number.isFinite(Number(c.size)) && Number(c.size) > 0) out.size = Math.max(4, Math.min(120, Number(c.size)));
-  if (typeof c.bordoColore === "string" && COLORE.test(c.bordoColore)) out.bordoColore = c.bordoColore;
-  if (Number.isFinite(Number(c.bordoSpessore)) && Number(c.bordoSpessore) > 0) out.bordoSpessore = Math.max(0.1, Math.min(10, Number(c.bordoSpessore)));
-  if (["tutti", "sopra", "sotto", "sopra-sotto"].includes(c.bordoLati as string)) out.bordoLati = c.bordoLati as Cornice["bordoLati"];
-  if (Number.isFinite(Number(c.padding)) && Number(c.padding) > 0) out.padding = Math.max(0, Math.min(30, Number(c.padding)));
-  return Object.keys(out).length ? { cornice: out } : {};
-}
-
-/** Ripulisce un array di LayoutItem grezzo dal client: stessa validazione per il foglio normale e per quello senza foto. */
-function sanitizeLayoutItems(raw: unknown, isKnownField: (fieldId: string) => boolean) {
-  if (!Array.isArray(raw)) return [];
-  return (raw as Record<string, unknown>[])
-    .filter(
-      (i) =>
-        typeof i.fieldId === "string" &&
-        (i.fieldId === ELEMENTO_IMMAGINE ? typeof i.imageUrl === "string"
-          : i.fieldId === ELEMENTO_RIQUADRO || i.fieldId === ELEMENTO_QR ? true
-          : isKnownField(i.fieldId))
-    )
-    .map((i) => ({
-      fieldId: i.fieldId as string,
-      x: Math.max(0, Math.min(95, Number(i.x) || 0)),
-      y: Math.max(0, Math.min(95, Number(i.y) || 0)),
-      w: Math.max(3, Math.min(100, Number(i.w) || 10)),
-      h: Math.max(2, Math.min(100, Number(i.h) || 5)),
-      ...(typeof i.color === "string" && /^#[0-9a-fA-F]{3,8}$/.test(i.color) ? { color: i.color } : {}),
-      ...(i.fieldId === "__img" ? { imageUrl: String(i.imageUrl).slice(0, 300) } : {}),
-      ...(Number.isFinite(Number(i.size)) ? { size: Math.max(4, Math.min(120, Number(i.size))) } : {}),
-      ...(typeof i.bold === "boolean" ? { bold: i.bold } : {}),
-      ...(typeof i.italic === "boolean" ? { italic: i.italic } : {}),
-      ...(["left", "center", "right"].includes(i.align as string) ? { align: i.align as "left" | "center" | "right" } : {}),
-      ...(typeof i.font === "string" && LAYOUT_FONTS.some((f) => f.id === i.font) ? { font: i.font as string } : {}),
-      ...(typeof i.bg === "string" && /^#[0-9a-fA-F]{3,8}$/.test(i.bg) ? { bg: i.bg } : {}),
-      ...(Number.isFinite(Number(i.radius)) ? { radius: Math.max(0, Math.min(40, Number(i.radius))) } : {}),
-      ...(typeof i.testo === "string" && i.testo.trim() ? { testo: i.testo.slice(0, 200) } : {}),
-      ...(typeof i.prefisso === "string" && i.prefisso.trim() ? { prefisso: i.prefisso.trim().slice(0, 6) } : {}),
-      ...(i.cornice && typeof i.cornice === "object" ? sanitizeCornice(i.cornice as Record<string, unknown>) : {}),
-      ...(i.sticker && typeof i.sticker === "object"
-        ? {
-            sticker: {
-              shape: ["cerchio", "quadrato", "stella", "nastro"].includes((i.sticker as Record<string, unknown>).shape as string)
-                ? ((i.sticker as Record<string, unknown>).shape as "cerchio")
-                : "cerchio",
-              bg: /^#[0-9a-fA-F]{3,8}$/.test(String((i.sticker as Record<string, unknown>).bg)) ? String((i.sticker as Record<string, unknown>).bg) : "#e8481c",
-              rotation: Math.max(-180, Math.min(180, Number((i.sticker as Record<string, unknown>).rotation) || 0)),
-              size: Math.max(6, Math.min(120, Number((i.sticker as Record<string, unknown>).size) || 16)),
-              ...((i.sticker as Record<string, unknown>).font === "cn" ? { font: "cn" as const } : {}),
-            },
-          }
-        : {}),
-    }));
-}
 
 /**
  * Salva un layout: se `layoutId` esiste già (nel proprio ambito) lo aggiorna,

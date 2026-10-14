@@ -5,6 +5,8 @@ import type { Cornice, LayoutItem, LayoutMargins, PrintField, PrintFormat, Stick
 import { LAYOUT_FONTS, layoutFontCss } from "@/lib/layout-fonts";
 import { saveLayout } from "@/lib/stampe-actions";
 import { saveZooLayout } from "@/lib/zoo-actions";
+import { applicaCampoATuttiILayout } from "@/lib/layout-actions";
+import { copiaStileCampo } from "@/lib/layout-pulizia";
 import { ELEMENTO_IMMAGINE, ELEMENTO_QR, ELEMENTO_RIQUADRO } from "@/lib/cartello-campi";
 import QrSvg from "./QrSvg";
 import {
@@ -397,6 +399,30 @@ export default function LayoutEditor({
 
   const selItem = selected !== null ? activeItems[selected] : null;
 
+  /*
+   * «Applica a tutti i layout»: l'aspetto del campo scelto va sullo stesso
+   * campo negli altri layout di questo ambito (lato server) e, qui, sulle sue
+   * altre copie in questo layout, in tutti e due i fogli.
+   */
+  const [conPosizione, setConPosizione] = useState(false);
+  const [esitoTutti, setEsitoTutti] = useState("");
+  const applicaATutti = () => {
+    if (!selItem || !canEdit) return;
+    const etichetta = fields.find((f) => f.id === selItem.fieldId)?.label ?? selItem.fieldId;
+    if (!confirm(`Applicare l'aspetto di «${etichetta}»${conPosizione ? ", con posizione e misure," : ""} a tutti i layout di questo ambito in cui c'è questo campo?`)) return;
+    const modello = JSON.parse(JSON.stringify(selItem)) as LayoutItem;
+    const copia = (lista: LayoutItem[]) => { const nuova = lista.map((x) => ({ ...x })); copiaStileCampo(nuova, modello, conPosizione); return nuova; };
+    setEsitoTutti("");
+    startTransition(async () => {
+      const r = await applicaCampoATuttiILayout(area, scopeParam, layoutId, format.id, JSON.stringify(modello), conPosizione);
+      // il layout aperto si cambia dopo: il suo salvataggio automatico rilegge gli altri già aggiornati
+      if (r.ok) { setTocco(true); setItems((v) => copia(v)); setItemsNoPhoto((v) => copia(v)); }
+      setEsitoTutti(!r.ok ? r.error
+        : r.layout === 0 ? "Negli altri layout il campo era già così (o non c'è)."
+        : `Aggiornati ${r.layout} layout: ${r.nomi.join(", ")}.`);
+    });
+  };
+
   const removeSelected = () => {
     if (selected === null) return;
     const next = activeItems.filter((_, i) => i !== selected);
@@ -519,6 +545,20 @@ export default function LayoutEditor({
           {selItem && fields.find((f) => f.id === selItem.fieldId)?.nota && (
             <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 4, lineHeight: 1.3 }}>
               {fields.find((f) => f.id === selItem.fieldId)?.nota}
+            </div>
+          )}
+          {/* le immagini libere e i riquadri sono tutti diversi fra loro: si copia solo un campo vero (o il QR) */}
+          {selItem && canEdit && selItem.fieldId !== ELEMENTO_IMMAGINE && selItem.fieldId !== ELEMENTO_RIQUADRO && (
+            <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid var(--line)" }}>
+              <button type="button" className="btn btn-outline btn-sm" style={{ width: "100%" }} disabled={pending} onClick={applicaATutti}
+                title="Carattere, misura, colori, allineamento, cornice, prefisso e sticker di questo campo vanno su tutti i layout di questo ambito che lo contengono">
+                Applica a tutti i layout
+              </button>
+              <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 11.5, marginTop: 5, color: "var(--muted)" }}>
+                <input type="checkbox" checked={conPosizione} onChange={(e) => setConPosizione(e.target.checked)} />
+                anche posizione e misure (solo layout dello stesso formato)
+              </label>
+              {esitoTutti && <div style={{ fontSize: 11.5, marginTop: 5 }}>{esitoTutti}</div>}
             </div>
           )}
         </div>

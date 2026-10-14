@@ -199,6 +199,11 @@ export default async function UsersPage({
                               {db.departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
                             </select>
                           </form>
+                          {r.repartoAltro && (
+                            <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 4 }}>
+                              Ha scelto <strong>Altro</strong>: dopo l&apos;approvazione dagli il ruolo giusto (amministratore d&apos;insegna o di PV, gestore…).
+                            </div>
+                          )}
                         </td>
                         <td style={{ whiteSpace: "nowrap" }}>
                           <button className="btn btn-sm" type="submit" form={`approve_${r.id}`}>✓ Approva</button>{" "}

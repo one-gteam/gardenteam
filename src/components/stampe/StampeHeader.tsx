@@ -41,7 +41,7 @@ export default async function StampeHeader({
         ...(isZooEditor(user) ? [{ href: "/stampe/zoo/archivio", label: "Archivio volantini", key: "archivio" }] : []),
         ...(gestZoo ? [{ href: "/stampe/zoo/focus", label: "Focus", key: "focus" }] : []),
         ...(gestZoo ? [{ href: "/stampe/zoo/impostazioni", label: "Impostazioni", key: "impostazioni" }] : []),
-        ...(gestZoo ? [{ href: "/registro?area=zoo", label: "Registro modifiche", key: "registro" }] : []),
+        ...(user.role === "system_admin" ? [{ href: "/registro?area=zoo", label: "Registro modifiche", key: "registro" }] : []),
         // una voce sola per uscire: la scelta dell'area si fa in /scegli, non dal menu
       ]
     : [
@@ -53,7 +53,7 @@ export default async function StampeHeader({
         ...(gestArredo ? [{ href: "/stampe/arredo/totem", label: "Totem", key: "totem" }] : []),
         { href: "/stampe/arredo/linee-guida", label: "Linee guida", key: "linee-guida" },
         ...(gestArredo ? [{ href: "/stampe/impostazioni", label: "Impostazioni", key: "impostazioni" }] : []),
-        ...(gestArredo ? [{ href: "/registro?area=arredo", label: "Registro modifiche", key: "registro" }] : []),
+        ...(user.role === "system_admin" ? [{ href: "/registro?area=arredo", label: "Registro modifiche", key: "registro" }] : []),
       ];
 
   return (

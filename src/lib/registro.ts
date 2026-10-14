@@ -11,7 +11,28 @@ import { supabase, APP_DATA_TABLE } from "./supabase";
 
 export type AreaRegistro = "zoo" | "arredo" | "academy" | "utenti";
 
+/**
+ * Dove sta il valore cambiato, per poterlo rimettere com'era. Solo le
+ * modifiche di un campo hanno un riferimento: import, cancellazioni e corsi no.
+ * vPrima/vDopo = valori interi quando quelli da mostrare sono tagliati.
+ */
+export type RifRegistro = { vPrima?: string; vDopo?: string } & (
+  | { tipo: "zoo-padre-testo"; id: string; campo: "nome" | "descVolantino" | "descCartello"; scope: string }
+  | { tipo: "zoo-animale"; id: string }
+  | { tipo: "zoo-tipologia"; id: string; padre: boolean }
+  | { tipo: "zoo-offerta"; id: string; campo: "descrizione" | "prezzoPromo" | "prezzoListino" | "focus" | "label" | "paginaId" | "meccanica" | "condizioni" | "prezzoUnita" }
+  | { tipo: "zoo-articolo"; id: string }
+  | { tipo: "zoo-foto"; padre?: string; articoli: string[] }
+  | { tipo: "zoo-deadline"; id: string }
+  | { tipo: "arredo-campo"; id: string; campo: string; scope: string }
+  | { tipo: "utente-ruolo"; id: string; prima: string; dopo: string }
+  | { tipo: "utente-aree"; id: string; prima: string[]; dopo: string[] }
+  | { tipo: "utente-attivo"; id: string; prima: boolean }
+);
+
 export interface VoceRegistro {
+  /** Dal 14/10/2026: serve per ripristinare (le voci più vecchie non ce l'hanno). */
+  id?: string;
   il: string;
   chi: string;
   chiNome: string;
@@ -24,6 +45,10 @@ export interface VoceRegistro {
   dopo?: string;
   /** Ambito, se non è il Consorzio: «Flover», «Il Germoglio». */
   ambito?: string;
+  rif?: RifRegistro;
+  /** Rimessa com'era dall'amministratore di sistema. */
+  ripristinataIl?: string;
+  ripristinataDa?: string;
 }
 
 const MAX_TESTO = 400;
@@ -60,12 +85,18 @@ async function scriviVoci(voci: VoceRegistro[]): Promise<void> {
  */
 export function registra(
   user: { id: string; firstName: string; lastName: string },
-  voce: Omit<VoceRegistro, "il" | "chi" | "chiNome">,
+  voce: Omit<VoceRegistro, "il" | "chi" | "chiNome" | "id" | "ripristinataIl" | "ripristinataDa">,
 ): void {
   if (voce.prima !== undefined && voce.dopo !== undefined && voce.prima === voce.dopo) return; // nessun cambiamento vero
+  let rif = voce.rif;
+  // il valore intero serve per ripristinare un testo lungo (quello mostrato è tagliato)
+  if (rif && ((voce.prima?.length ?? 0) > MAX_TESTO || (voce.dopo?.length ?? 0) > MAX_TESTO)) {
+    rif = { ...rif, vPrima: voce.prima?.slice(0, 5000), vDopo: voce.dopo?.slice(0, 5000) };
+  }
   const v: VoceRegistro = {
-    ...voce, il: new Date().toISOString(), chi: user.id, chiNome: `${user.firstName} ${user.lastName}`.trim(),
-    oggetto: taglia(voce.oggetto) ?? "", prima: taglia(voce.prima), dopo: taglia(voce.dopo),
+    ...voce, id: `r_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`,
+    il: new Date().toISOString(), chi: user.id, chiNome: `${user.firstName} ${user.lastName}`.trim(),
+    oggetto: taglia(voce.oggetto) ?? "", prima: taglia(voce.prima), dopo: taglia(voce.dopo), rif,
   };
   /*
    * Le voci della stessa richiesta (es. 20 persone cancellate insieme) vanno in
@@ -77,6 +108,37 @@ export function registra(
   programmato = true;
   const lavoro = () => { const tutte = coda; coda = []; programmato = false; return scriviVoci(tutte).catch(() => undefined); };
   try { after(lavoro); } catch { void lavoro(); }
+}
+
+/** Il mese (dominio) in cui cercare una voce: il suo e quello dopo, se è stata scritta a cavallo. */
+function dominiDi(il: string): string[] {
+  const d = new Date(il);
+  return [dominioRegistro(d), dominioRegistro(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1)))];
+}
+
+/** Una voce per id (il = la sua data, per sapere in che mese cercarla). */
+export async function trovaVoce(id: string, il: string): Promise<VoceRegistro | undefined> {
+  const { data } = await supabase().from(APP_DATA_TABLE).select("data").in("domain", dominiDi(il));
+  return (data ?? []).flatMap((r) => ((r.data as { voci?: VoceRegistro[] })?.voci ?? [])).find((v) => v.id === id);
+}
+
+/** Segna una voce come ripristinata (scrittura condizionata, come le altre). */
+export async function segnaRipristinata(id: string, il: string, chiNome: string): Promise<void> {
+  for (const dominio of dominiDi(il)) {
+    for (let tentativo = 0; tentativo < 8; tentativo++) {
+      if (tentativo) await new Promise((r) => setTimeout(r, 50 + Math.random() * 150 * tentativo));
+      const { data: riga } = await supabase().from(APP_DATA_TABLE).select("data, updated_at").eq("domain", dominio).maybeSingle();
+      const voci = ((riga?.data as { voci?: VoceRegistro[] })?.voci ?? []);
+      const v = voci.find((x) => x.id === id);
+      if (!riga || !v) break; // non è in questo mese
+      v.ripristinataIl = new Date().toISOString();
+      v.ripristinataDa = chiNome;
+      const { data: scritte } = await supabase().from(APP_DATA_TABLE)
+        .update({ data: { voci }, updated_at: new Date().toISOString() })
+        .eq("domain", dominio).eq("updated_at", riga.updated_at).select("updated_at");
+      if (scritte && scritte.length) return;
+    }
+  }
 }
 
 /** Le voci dei mesi chiesti (es. ["2026_10", "2026_09"]), dalla più recente. */

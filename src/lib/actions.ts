@@ -1112,7 +1112,7 @@ export async function toggleUserActive(userId: string): Promise<{ ok: boolean; e
   if (!target || target.id === admin.id || target.role === "system_admin") return { ok: false, error: "Non consentito" };
   if (!canTouchUser(db, admin, target)) return { ok: false, error: "Fuori dal tuo ambito" };
   target.active = target.active === false;
-  registra(admin, { area: "utenti", cosa: target.active ? "Riattivato" : "Cessato", oggetto: `${target.firstName} ${target.lastName}` });
+  registra(admin, { area: "utenti", cosa: target.active ? "Riattivato" : "Cessato", oggetto: `${target.firstName} ${target.lastName}`, rif: { tipo: "utente-attivo", id: target.id, prima: !target.active } });
   await saveDb(db);
   revalidatePath("/admin/utenti");
   revalidatePath("/ruoli");
@@ -1469,7 +1469,7 @@ export async function quickSetRole(userId: string, role: Role) {
   if (!target || target.id === admin.id) return { ok: false as const, error: "Non consentito" };
   if (!canTouchUser(db, admin, target)) return { ok: false as const, error: "Fuori dal tuo ambito" };
   if (!assignableRolesFor(admin).includes(role)) return { ok: false as const, error: "Ruolo non assegnabile dal tuo profilo" };
-  registra(admin, { area: "utenti", cosa: "Ruolo", oggetto: `${target.firstName} ${target.lastName}`, prima: ROLE_LABELS[target.role], dopo: ROLE_LABELS[role] });
+  registra(admin, { area: "utenti", cosa: "Ruolo", oggetto: `${target.firstName} ${target.lastName}`, prima: ROLE_LABELS[target.role], dopo: ROLE_LABELS[role], rif: { tipo: "utente-ruolo", id: target.id, prima: target.role, dopo: role } });
   target.role = role;
   await saveDb(db);
   revalidatePath("/admin/ruoli");
@@ -1583,9 +1583,10 @@ export async function quickSetSites(userId: string, sites: SiteId[]) {
   const target = db.users.find((u) => u.id === userId);
   if (!target) return { ok: false as const, error: "Utente non trovato" };
   if (!canTouchUser(db, admin, target)) return { ok: false as const, error: "Fuori dal tuo ambito" };
-  const primaAree = (target.sites ?? []).join(", ");
+  const primaSiti = [...(target.sites ?? [])];
+  const primaAree = primaSiti.join(", ");
   target.sites = sitesAssegnabili(admin, target, sites);
-  registra(admin, { area: "utenti", cosa: "Aree", oggetto: `${target.firstName} ${target.lastName}`, prima: primaAree, dopo: target.sites.join(", ") });
+  registra(admin, { area: "utenti", cosa: "Aree", oggetto: `${target.firstName} ${target.lastName}`, prima: primaAree, dopo: target.sites.join(", "), rif: { tipo: "utente-aree", id: target.id, prima: primaSiti, dopo: [...target.sites] } });
   await saveDb(db);
   revalidatePath("/admin/ruoli");
   return { ok: true as const };
@@ -1617,7 +1618,7 @@ export async function quickToggleActive(userId: string) {
   if (!target || target.id === admin.id) return { ok: false as const, error: "Non consentito" };
   if (!canTouchUser(db, admin, target)) return { ok: false as const, error: "Fuori dal tuo ambito" };
   target.active = !target.active;
-  registra(admin, { area: "utenti", cosa: target.active ? "Riattivato" : "Cessato", oggetto: `${target.firstName} ${target.lastName}` });
+  registra(admin, { area: "utenti", cosa: target.active ? "Riattivato" : "Cessato", oggetto: `${target.firstName} ${target.lastName}`, rif: { tipo: "utente-attivo", id: target.id, prima: !target.active } });
   await saveDb(db);
   revalidatePath("/admin/ruoli");
   return { ok: true as const };
@@ -2452,6 +2453,10 @@ export async function registerRequest(formData: FormData) {
   const birthDate = String(formData.get("birthDate") ?? "");
   const taxCode = String(formData.get("taxCode") ?? "").trim().toUpperCase();
   if (!firstName || !lastName || !email.includes("@")) redirect("/registrati?errore=dati");
+  // reparto obbligatorio: uno vero, oppure «Altro» (amministratori, gestori: il ruolo lo dà chi approva)
+  const repartoScelto = String(formData.get("departmentId") ?? "");
+  const repartoAltro = repartoScelto === "altro";
+  if (!repartoAltro && !db.departments.some((d) => d.id === repartoScelto)) redirect("/registrati?errore=reparto");
   if (db.users.some((u) => u.email.toLowerCase() === email.toLowerCase())) redirect("/registrati?errore=esiste");
   if (db.registrations.some((r) => r.email.toLowerCase() === email.toLowerCase() && r.status === "pending"))
     redirect("/registrati?errore=incorso");
@@ -2465,7 +2470,8 @@ export async function registerRequest(formData: FormData) {
     gender: regGender === "m" || regGender === "f" ? regGender : undefined,
     tenantId: tenant.id,
     storeId: store!.id,
-    departmentId: String(formData.get("departmentId") ?? "") || undefined,
+    departmentId: repartoAltro ? undefined : repartoScelto,
+    repartoAltro: repartoAltro || undefined,
     birthDate,
     taxCode,
     date: new Date().toISOString(),

@@ -176,6 +176,21 @@ export default async function OfferteInCorso({ user, sp }: { user: User; sp: Rec
     return true;
   });
 
+  // la ricerca guarda anche i volantini passati (o futuri): così un'offerta
+  // vecchia non «sparisce» solo perché sta in un altro volantino
+  const altriVolantini = q
+    ? db.offers
+      .filter((o) => o.campaignId !== campaign?.id)
+      .filter((o) => {
+        const prod = prodById.get(o.productId ?? "");
+        const parent = parentOf(o);
+        const testo = `${o.descrizione} ${o.ean} ${prod?.descrizione ?? ""} ${prod?.codice ?? ""} ${parent?.nome ?? ""} ${parent?.descVolantino ?? ""} ${prod ? marcaEffettiva(prod) : ""} ${prod?.fornitore ?? ""}`.toLowerCase();
+        return q.split(/\s+/).filter(Boolean).every((parola) => testo.includes(parola));
+      })
+      .map((o) => ({ o, c: db.campaigns.find((c) => c.id === o.campaignId) }))
+      .sort((a, b) => (b.c?.dal ?? "").localeCompare(a.c?.dal ?? ""))
+    : [];
+
   /*
    * Vista raggruppata (default): una riga per padre invece che una per articolo.
    * Con centinaia di offerte è molto più leggera da caricare e da scorrere, ed è
@@ -1022,6 +1037,37 @@ export default async function OfferteInCorso({ user, sp }: { user: User; sp: Rec
                 <p className="hint" style={{ marginTop: 6 }}>
                   Mostrate le prime {RIGHE_MAX} righe: usa la ricerca per restringere l&apos;elenco.
                 </p>
+              )}
+              {altriVolantini.length > 0 && (
+                <div style={{ marginTop: 18 }}>
+                  <h3 style={{ fontSize: 15, margin: "0 0 4px" }}>Trovate in altri volantini ({altriVolantini.length})</h3>
+                  <p className="hint" style={{ marginTop: 0 }}>
+                    Non sono in questo volantino: si vedono qui perché rispondono alla ricerca. Per riprenderle, Archivio volantini.
+                  </p>
+                  <div className="table-wrap">
+                    <table className="table">
+                      <thead>
+                        <tr><th>Volantino</th><th>Offerta</th><th>EAN</th><th>Meccanica</th><th>Prezzo promo</th><th>Listino</th></tr>
+                      </thead>
+                      <tbody>
+                        {altriVolantini.slice(0, 100).map(({ o, c }) => (
+                          <tr key={o.id}>
+                            <td>
+                              {c ? c.nome : "—"}
+                              {c && <div className="hint" style={{ margin: 0 }}>{c.dal.split("-").reverse().join("/")} – {c.al.split("-").reverse().join("/")}{c.stato ? ` · ${c.stato}` : ""}</div>}
+                            </td>
+                            <td>{parentOf(o)?.nome ?? o.descrizione}{parentOf(o) && <div className="hint" style={{ margin: 0 }}>{o.descrizione}</div>}</td>
+                            <td>{o.ean}</td>
+                            <td>{o.meccanica || "—"}</td>
+                            <td>{o.prezzoPromo ? `€ ${o.prezzoPromo}` : "—"}</td>
+                            <td>{o.prezzoListino ? `€ ${o.prezzoListino}` : "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {altriVolantini.length > 100 && <p className="hint">Mostrate le prime 100: aggiungi una parola alla ricerca per restringere.</p>}
+                </div>
               )}
             </form>
           </>
