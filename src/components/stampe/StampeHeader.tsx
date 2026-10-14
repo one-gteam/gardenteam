@@ -1,8 +1,9 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 import { getDb } from "@/lib/db";
 import { User, userSites, gestisce, ruoloEsteso } from "@/lib/types";
 import { logout } from "@/lib/actions";
-import { isConsortiumEditor, isZooEditor, vedeLayout } from "@/lib/stampe";
+import { isConsortiumEditor, isZooEditor, vedeLayout, resolveScope, scopesForUser } from "@/lib/stampe";
 import HeaderMenu from "@/components/HeaderMenu";
 
 export default async function StampeHeader({
@@ -25,6 +26,21 @@ export default async function StampeHeader({
   const gestZoo = gestisce(user, "zoo");
   const gestArredo = gestisce(user, "arredo");
   const sites = userSites(user);
+
+  /*
+   * In che insegna/PV si sta lavorando (lo passa il middleware, che ricorda
+   * l'ultima scelta). Chi può scegliere fra più ambiti e non è sul Consorzio
+   * vede la testata in un altro colore e una fascia che lo dice: le modifiche
+   * valgono solo lì. Le voci del menu portano con sé lo stesso ambito.
+   */
+  const h = await headers();
+  const scopes = scopesForUser(user, db);
+  const scope = resolveScope(user, h.get("x-gt-scope") ?? undefined, db);
+  const scopeParam = `${scope.type}:${scope.id}`;
+  const percorso = h.get("x-gt-path") ?? "/stampe";
+  const piuAmbiti = scopes.length > 1;
+  const inAmbito = piuAmbiti && scope.type !== "system";
+  const primo = scopes[0];
 
   const links = area === "zoo"
     ? [
@@ -55,9 +71,19 @@ export default async function StampeHeader({
         ...(gestArredo ? [{ href: "/stampe/impostazioni", label: "Impostazioni", key: "impostazioni" }] : []),
         ...(user.role === "system_admin" ? [{ href: "/registro?area=arredo", label: "Registro modifiche", key: "registro" }] : []),
       ];
+  // ogni voce resta nello stesso ambito (il Registro no: non è una pagina Stampe)
+  const voci = piuAmbiti
+    ? links.map((l) => l.href.startsWith("/stampe") ? { ...l, href: `${l.href}${l.href.includes("?") ? "&" : "?"}scope=${encodeURIComponent(scopeParam)}` } : l)
+    : links;
+  const tipoAmbito = scope.type === "store" ? "Punto vendita" : "Insegna";
+  const nomeAmbito = scope.label.replace(/ \(tutta l'insegna\)$/, "");
 
   return (
-    <header className={`site-header stampe-header${compatta ? " compatta" : ""}`} style={{ background: "linear-gradient(120deg, #1a2b45, #274b7a)" }}>
+    <>
+    <header className={`site-header stampe-header${compatta ? " compatta" : ""}${inAmbito ? " in-ambito" : ""}`}
+      style={{ background: inAmbito
+        ? (scope.type === "store" ? "linear-gradient(120deg, #6b2e0f, #b4531c)" : "linear-gradient(120deg, #4a1d5c, #7b3a8f)")
+        : "linear-gradient(120deg, #1a2b45, #274b7a)" }}>
       <div className="site-header-inner">
         <div className="header-top">
           <Link href="/stampe" className="brand">
@@ -96,8 +122,21 @@ export default async function StampeHeader({
             </form>
           </div>
         </div>
-        <HeaderMenu voci={links} active={active} />
+        <HeaderMenu voci={voci} active={active} />
       </div>
     </header>
+    {inAmbito && (
+      <div className={`fascia-ambito ${scope.type === "store" ? "pv" : "insegna"}`}>
+        <span>
+          Stai lavorando come <strong>{tipoAmbito} {nomeAmbito}</strong>: quello che cambi vale solo per {scope.type === "store" ? "questo punto vendita" : "questa insegna"}.
+        </span>
+        {primo && primo.type !== scope.type && (
+          <Link href={`${percorso}?scope=${encodeURIComponent(`${primo.type}:${primo.id}`)}`}>
+            Torna a {primo.type === "system" ? "Consorzio" : primo.label.replace(/ \(tutta l'insegna\)$/, "")}
+          </Link>
+        )}
+      </div>
+    )}
+    </>
   );
 }

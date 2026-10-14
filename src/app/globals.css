@@ -475,6 +475,13 @@ table.data td { overflow-wrap: anywhere; }
 .hamburger .nav { display: flex; flex-direction: column; gap: 2px; padding-bottom: 6px; }
 .hamburger .nav a { display: block; padding: 8px 10px; }
 
+/* fascia sotto la testata quando si lavora per un'insegna o un punto vendita */
+.fascia-ambito { display: flex; gap: 12px; align-items: center; justify-content: center; flex-wrap: wrap;
+  padding: 7px 16px; font-size: 13.5px; color: #fff; }
+.fascia-ambito.insegna { background: #7b3a8f; }
+.fascia-ambito.pv { background: #b4531c; }
+.fascia-ambito a { color: #fff; font-weight: 700; text-decoration: underline; white-space: nowrap; }
+@media print { .fascia-ambito { display: none; } }
 .stampe-header.compatta .header-top { flex-wrap: wrap; gap: 6px; padding-bottom: 4px; }
 .stampe-header.compatta .user-chip > div:nth-child(2) { display: none; }
 .stampe-header.compatta .hamburger { display: block; }
