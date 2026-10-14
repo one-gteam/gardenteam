@@ -413,6 +413,11 @@ export function prezzoScontato(listino: string, perc: number): string {
  * 3x2 e simili vanno nella meccanica. Il testo originale resta in promoTesto.
  * Ritorna cosa ha fatto (per i conteggi), o null se il testo non si capisce.
  */
+/** «Sconto 20%», «Sconto 12,5%»: la meccanica di un'offerta che è solo uno sconto. */
+export function meccanicaSconto(perc: number): string {
+  return `Sconto ${String(perc).replace(".", ",")}%`;
+}
+
 export function applicaPromoTesto(o: ZooOffer, testo: string): PromoLetta["tipo"] | null {
   const letta = promoDaTesto(testo);
   if (letta.tipo === "sconosciuta") return null;
@@ -431,6 +436,12 @@ export function applicaPromoTesto(o: ZooOffer, testo: string): PromoLetta["tipo"
   if (/^sconto \d+([.,]\d+)?%$/i.test(o.meccanica ?? "")) o.meccanica = undefined;
   // col prezzo di vendita si calcola il prezzo scontato; senza, il cartello dice solo "SCONTO 20%"
   o.prezzoPromo = o.prezzoListino ? prezzoScontato(o.prezzoListino, letta.perc) : "";
+  /*
+   * Senza prezzo di partenza l'offerta È lo sconto: la meccanica diventa
+   * «Sconto 20%», così si legge nelle offerte, il volantino lo scrive al posto
+   * del prezzo e la stampa usa il layout «Offerte - sconto».
+   */
+  if (!o.prezzoListino) o.meccanica = meccanicaSconto(letta.perc);
   if ((o.condizioni ?? "").trim() === testo.trim()) o.condizioni = "";
   return "sconto";
 }
