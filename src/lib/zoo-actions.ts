@@ -285,6 +285,41 @@ export async function associateZooPhoto(back: string, scopeParam: string, produc
  * resta nella raccolta e torna fra quelli da abbinare, l'articolo torna senza
  * foto. Serve per disfare un abbinamento sbagliato.
  */
+/**
+ * Toglie una foto sbagliata senza ricaricare la pagina (pannello del padre).
+ * Sul padre si toglie la foto che si vede: la sua, oppure quella del primo
+ * articolo se il padre non ne ha una propria, e con lei la stessa foto da
+ * tutti i suoi articoli (spesso è finita su tutti insieme). Il file resta fra
+ * le foto da abbinare, per darlo al prodotto giusto.
+ */
+export async function togliFotoInline(target: { parentId?: string; productId?: string }, scopeParam: string): Promise<{ ok: boolean; error?: string }> {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  if (target.productId) {
+    const p = db.products.find((x) => x.id === target.productId);
+    if (!p) return { ok: false, error: "Articolo non trovato." };
+    const suo = p.scopeType === scope.type && (p.scopeId ?? "") === scope.id;
+    if (!(isZooEditor(user) || (suo && gestisceArea(user, "zoo", scope, academyDb)))) return { ok: false, error: "La foto la toglie chi cura lo Zoo per il Consorzio." };
+    registra(user, { area: "zoo", cosa: "Foto tolta dall'articolo", oggetto: `${p.descrizione} (${p.ean})`, prima: p.image ?? "" });
+    p.image = undefined;
+  } else if (target.parentId) {
+    if (!isZooEditor(user)) return { ok: false, error: "La foto la toglie chi cura lo Zoo per il Consorzio." };
+    const parent = db.parents.find((x) => x.id === target.parentId);
+    if (!parent) return { ok: false, error: "Padre non trovato." };
+    const figli = db.products.filter((x) => x.parentId === parent.id);
+    const url = parent.image ?? figli.find((f) => f.image)?.image;
+    if (!url) return { ok: true };
+    registra(user, { area: "zoo", cosa: "Foto tolta dal padre", oggetto: parent.nome, prima: url });
+    if (parent.image === url) parent.image = undefined;
+    for (const f of figli) if (f.image === url) f.image = undefined;
+  } else return { ok: false };
+  await saveZooDb(db);
+  rigeneraZoo();
+  return { ok: true };
+}
+
 export async function staccaZooFoto(target: string, scopeParam: string, back: string) {
   const user = await requireZooUser();
   const db = await getZooDb();

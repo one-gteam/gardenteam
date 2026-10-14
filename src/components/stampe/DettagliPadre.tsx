@@ -6,7 +6,7 @@ import InlineSelect from "./InlineSelect";
 import ParentQuickEdit from "./ParentQuickEdit";
 import {
   updateParentFieldInline, updateProductFieldInline, setParentTagScoped, toggleParentCaratteristicaInline, moveProductToParent,
-  setParentImageFromFile, segnalaProblemaInline, setParentImage, rigeneraTestiAI, scioglieParent,
+  setParentImageFromFile, segnalaProblemaInline, setParentImage, rigeneraTestiAI, scioglieParent, togliFotoInline,
 } from "@/lib/zoo-actions";
 
 interface Valore { value: string; custom: boolean }
@@ -115,6 +115,14 @@ export function PannelloPadre({ parentId, scopeParam, back }: { parentId: string
         <div>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img loading="lazy" decoding="async" src={parent.image} alt="" style={{ width: "100%", borderRadius: 8, background: "#fff", border: "1px solid #e4e4e4" }} />
+          {consortium && !parent.image.includes("mancante") && (
+            <button type="button" className="btn btn-outline btn-sm" style={{ width: "100%", marginTop: 6, color: "var(--red, #b42318)" }} disabled={pending}
+              title="Toglie questa foto dal padre e dagli articoli che hanno la stessa: il file torna fra le foto da abbinare"
+              onClick={() => { if (!confirm("Togliere questa foto dal prodotto padre (e dagli articoli che hanno la stessa)? Il file resta fra le foto da abbinare.")) return;
+                startTransition(async () => { const r = await togliFotoInline({ parentId: parent.id }, scopeParam); if (r.ok) await carica(); else alert(r.error ?? "Non riuscito"); }); }}>
+              Togli la foto
+            </button>
+          )}
           {consortium && (
             <>
               <form action={setParentImage.bind(null, back, parent.id, scopeParam)} style={{ marginTop: 8, display: "grid", gap: 6 }}>
@@ -224,8 +232,17 @@ export function PannelloPadre({ parentId, scopeParam, back }: { parentId: string
                     <tr key={a.id}>
                       <td>
                         {a.image
-                          // eslint-disable-next-line @next/next/no-img-element
-                          ? <img loading="lazy" decoding="async" src={a.image} alt="" style={{ width: 30, height: 30, objectFit: "contain", background: "#fff", border: "1px solid #eee", borderRadius: 4 }} />
+                          ? (
+                            <span style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img loading="lazy" decoding="async" src={a.image} alt="" style={{ width: 30, height: 30, objectFit: "contain", background: "#fff", border: "1px solid #eee", borderRadius: 4 }} />
+                              {consortium && (
+                                <button type="button" className="mini-btn" title="Togli la foto da questo articolo" disabled={pending}
+                                  onClick={() => { if (!confirm(`Togliere la foto da «${a.descrizione}»?`)) return;
+                                    startTransition(async () => { const r = await togliFotoInline({ productId: a.id }, scopeParam); if (r.ok) await carica(); else alert(r.error ?? "Non riuscito"); }); }}>×</button>
+                              )}
+                            </span>
+                          )
                           : <span className="pill pill-gray" style={{ fontSize: 9.5 }}>no foto</span>}
                       </td>
                       <td>{a.descrizione}</td>

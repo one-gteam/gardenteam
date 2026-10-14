@@ -1924,7 +1924,7 @@ export function datiPrezzoOfferta(
     ...(promoPv ? [promoPv] : []),
     ...(offer.scontoPerc ? [] : listino ? ["prezzo barrato"] : prezzo ? ["A SOLI"] : []),
   ];
-  return { prezzo, listino, sconto, tipi };
+  return { prezzo, listino, sconto, tipi: [...new Set(tipi)] };
 }
 
 /** Una riga dell'export per il grafico: stesse chiavi delle intestazioni del foglio Excel. */
