@@ -3,29 +3,38 @@
 import { randomBytes } from "crypto";
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "./auth";
-import { getDb } from "./db";
+import { getDb, saveDb } from "./db";
 import { getZooDb, saveZooDb, campagnaInLavorazione, campagnaInCorso, type ZooScopeGiacenze } from "./zoo";
 import { getStampeDb, saveStampeDb } from "./stampe";
 import { registra } from "./registro";
-import type { DB } from "./types";
+import { permessoRuolo, type DB, type User } from "./types";
 
 /*
- * Area Connettori: i collegamenti fra GT One e i gestionali delle insegne e
- * dei punti vendita, tutti in una pagina, solo per l'amministratore di sistema.
- * Due famiglie:
+ * Area Connettori: i collegamenti fra GT One e i sistemi delle insegne e dei
+ * punti vendita, tutti in una pagina. Tre famiglie:
  *  - Zoo, «interroga»: GT One chiede al gestionale giacenze e prezzi per EAN
  *    (per Rosàflor: Linfa). Si accende, si spegne, si prova.
  *  - Arredo, «riceve»: il gestionale del PV manda le quantità del catalogo
  *    online con una chiave (Authorization: Bearer). Si crea, si rigenera, si spegne.
+ *  - SSO: il sistema dell'insegna fa entrare i suoi collaboratori con un link
+ *    firmato con la chiave dell'insegna (come My Rosaflor fa per Rosàflor).
+ * Chi entra: per permesso del ruolo (accesso_connettori), ciascuno sulla
+ * propria insegna; l'amministratore di sistema su tutte.
  */
 
 type Esito = { ok: boolean; error?: string };
 type TipoAmbito = "tenant" | "store";
 
-async function amministratore() {
+/** Chi può toccare questo ambito: l'amministratore di sistema, o chi ha il permesso ed è di quell'insegna. */
+async function autorizzato(tipo: TipoAmbito, id: string): Promise<User | null> {
   const u = await getCurrentUser();
-  return u && u.role === "system_admin" ? u : null;
+  if (!u || !permessoRuolo(u.role, "accesso_connettori")) return null;
+  if (u.role === "system_admin") return u;
+  const academyDb = await getDb();
+  const insegna = tipo === "tenant" ? id : academyDb.stores.find((s) => s.id === id)?.tenantId;
+  return u.tenantId && insegna === u.tenantId ? u : null;
 }
+const NEGATO = "Non puoi toccare i connettori di questa insegna.";
 
 function nomeAmbito(academyDb: DB, tipo: TipoAmbito, id: string): string {
   return tipo === "tenant"
@@ -43,8 +52,8 @@ const trova = (lista: ZooScopeGiacenze[], tipo: TipoAmbito, id: string) =>
 /* ================== Zoo: giacenze e prezzi, GT One interroga ================== */
 
 export async function salvaConnettoreZoo(tipo: TipoAmbito, id: string, fd: FormData): Promise<Esito> {
-  const user = await amministratore();
-  if (!user) return { ok: false, error: "Solo l'amministratore di sistema." };
+  const user = await autorizzato(tipo, id);
+  if (!user) return { ok: false, error: NEGATO };
   const academyDb = await getDb();
   if (!ambitoValido(academyDb, tipo, id)) return { ok: false, error: "Ambito non trovato." };
   const url = String(fd.get("url") ?? "").trim();
@@ -68,8 +77,8 @@ export async function salvaConnettoreZoo(tipo: TipoAmbito, id: string, fd: FormD
 }
 
 export async function accendiConnettoreZoo(tipo: TipoAmbito, id: string, acceso: boolean): Promise<Esito> {
-  const user = await amministratore();
-  if (!user) return { ok: false, error: "Solo l'amministratore di sistema." };
+  const user = await autorizzato(tipo, id);
+  if (!user) return { ok: false, error: NEGATO };
   const db = await getZooDb();
   const g = trova(db.giacenze, tipo, id);
   if (!g) return { ok: false, error: "Connettore non trovato." };
@@ -82,8 +91,8 @@ export async function accendiConnettoreZoo(tipo: TipoAmbito, id: string, acceso:
 }
 
 export async function scollegaConnettoreZoo(tipo: TipoAmbito, id: string): Promise<Esito> {
-  const user = await amministratore();
-  if (!user) return { ok: false, error: "Solo l'amministratore di sistema." };
+  const user = await autorizzato(tipo, id);
+  if (!user) return { ok: false, error: NEGATO };
   const db = await getZooDb();
   const g = trova(db.giacenze, tipo, id);
   if (!g) return { ok: false, error: "Connettore non trovato." };
@@ -101,8 +110,8 @@ export async function scollegaConnettoreZoo(tipo: TipoAmbito, id: string): Promi
  * scritto sul connettore, così si vede quando è stato provato l'ultima volta.
  */
 export async function provaConnettoreZoo(tipo: TipoAmbito, id: string): Promise<Esito & { esito?: string }> {
-  const user = await amministratore();
-  if (!user) return { ok: false, error: "Solo l'amministratore di sistema." };
+  const user = await autorizzato(tipo, id);
+  if (!user) return { ok: false, error: NEGATO };
   const db = await getZooDb();
   const g = trova(db.giacenze, tipo, id);
   if (!g) return { ok: false, error: "Connettore non trovato." };
@@ -138,8 +147,8 @@ export async function provaConnettoreZoo(tipo: TipoAmbito, id: string): Promise<
 /* ================== Arredo: quantità del catalogo, il gestionale le manda ================== */
 
 export async function creaChiaveArredo(storeId: string): Promise<Esito> {
-  const user = await amministratore();
-  if (!user) return { ok: false, error: "Solo l'amministratore di sistema." };
+  const user = await autorizzato("store", storeId);
+  if (!user) return { ok: false, error: NEGATO };
   const academyDb = await getDb();
   if (!academyDb.stores.some((s) => s.id === storeId)) return { ok: false, error: "Punto vendita non trovato." };
   const db = await getStampeDb();
@@ -156,8 +165,8 @@ export async function creaChiaveArredo(storeId: string): Promise<Esito> {
 }
 
 export async function accendiApiArredo(storeId: string, acceso: boolean): Promise<Esito> {
-  const user = await amministratore();
-  if (!user) return { ok: false, error: "Solo l'amministratore di sistema." };
+  const user = await autorizzato("store", storeId);
+  if (!user) return { ok: false, error: NEGATO };
   const db = await getStampeDb();
   const g = db.giacenze.find((x) => x.storeId === storeId);
   if (!g?.token) return { ok: false, error: "Nessuna chiave per questo punto vendita." };
@@ -170,8 +179,8 @@ export async function accendiApiArredo(storeId: string, acceso: boolean): Promis
 }
 
 export async function togliChiaveArredo(storeId: string): Promise<Esito> {
-  const user = await amministratore();
-  if (!user) return { ok: false, error: "Solo l'amministratore di sistema." };
+  const user = await autorizzato("store", storeId);
+  if (!user) return { ok: false, error: NEGATO };
   const db = await getStampeDb();
   const g = db.giacenze.find((x) => x.storeId === storeId);
   if (!g?.token) return { ok: false, error: "Nessuna chiave per questo punto vendita." };
@@ -182,5 +191,67 @@ export async function togliChiaveArredo(storeId: string): Promise<Esito> {
   registra(user, { area: "connettori", cosa: "Chiave Arredo tolta", oggetto: nomeAmbito(academyDb, "store", storeId) });
   revalidatePath("/connettori");
   revalidatePath("/stampe/arredo/catalogo");
+  return { ok: true };
+}
+
+/* ================== SSO: il sistema dell'insegna fa entrare i suoi ================== */
+
+export async function generaChiaveSso(tenantId: string): Promise<Esito> {
+  const user = await autorizzato("tenant", tenantId);
+  if (!user) return { ok: false, error: NEGATO };
+  const db = await getDb();
+  const t = db.tenants.find((x) => x.id === tenantId);
+  if (!t) return { ok: false, error: "Insegna non trovata." };
+  const nuova = !t.ssoSecret;
+  t.ssoSecret = randomBytes(32).toString("base64url");
+  t.ssoAttivo = true;
+  await saveDb(db);
+  registra(user, { area: "connettori", cosa: nuova ? "Chiave SSO creata" : "Chiave SSO rigenerata", oggetto: t.name });
+  revalidatePath("/connettori");
+  return { ok: true };
+}
+
+export async function accendiSso(tenantId: string, acceso: boolean): Promise<Esito> {
+  const user = await autorizzato("tenant", tenantId);
+  if (!user) return { ok: false, error: NEGATO };
+  const db = await getDb();
+  const t = db.tenants.find((x) => x.id === tenantId);
+  if (!t?.ssoSecret) return { ok: false, error: "Questa insegna non ha una chiave SSO." };
+  t.ssoAttivo = acceso;
+  await saveDb(db);
+  registra(user, { area: "connettori", cosa: acceso ? "SSO acceso" : "SSO spento", oggetto: t.name });
+  revalidatePath("/connettori");
+  return { ok: true };
+}
+
+export async function togliChiaveSso(tenantId: string): Promise<Esito> {
+  const user = await autorizzato("tenant", tenantId);
+  if (!user) return { ok: false, error: NEGATO };
+  const db = await getDb();
+  const t = db.tenants.find((x) => x.id === tenantId);
+  if (!t?.ssoSecret) return { ok: false, error: "Questa insegna non ha una chiave SSO." };
+  t.ssoSecret = undefined;
+  t.ssoAttivo = undefined;
+  await saveDb(db);
+  registra(user, { area: "connettori", cosa: "Chiave SSO tolta", oggetto: t.name });
+  revalidatePath("/connettori");
+  return { ok: true };
+}
+
+/** Il punto vendita in cui finiscono i collaboratori creati dall'SSO dell'insegna (vuoto = solo l'insegna). */
+export async function salvaPvSso(tenantId: string, fd: FormData): Promise<Esito> {
+  const user = await autorizzato("tenant", tenantId);
+  if (!user) return { ok: false, error: NEGATO };
+  const db = await getDb();
+  const t = db.tenants.find((x) => x.id === tenantId);
+  if (!t) return { ok: false, error: "Insegna non trovata." };
+  const storeId = String(fd.get("storeId") ?? "");
+  if (storeId && !db.stores.some((s) => s.id === storeId && s.tenantId === tenantId)) return { ok: false, error: "Punto vendita non dell'insegna." };
+  const prima = t.ssoStoreId;
+  t.ssoStoreId = storeId || undefined;
+  await saveDb(db);
+  const nome = (id?: string) => (id ? db.stores.find((s) => s.id === id)?.name : "") ?? "";
+  registra(user, { area: "connettori", cosa: "PV dell'SSO", oggetto: t.name, prima: nome(prima), dopo: nome(t.ssoStoreId) });
+  revalidatePath("/connettori");
   return { ok: true };
 }

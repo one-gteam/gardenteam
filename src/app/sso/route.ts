@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { AUTH_COOKIE, RUOLO_COOKIE, OPZIONI_SESSIONE, valoreSessione } from "@/lib/auth";
-import { verifySsoToken } from "@/lib/sso";
+import { verifySsoToken, insegneSso } from "@/lib/sso";
 import { provisionSsoUser } from "@/lib/actions";
 import { getDb } from "@/lib/db";
 import { postLoginPath } from "@/lib/types";
@@ -14,8 +14,7 @@ import { postLoginPath } from "@/lib/types";
  */
 export async function GET(req: NextRequest) {
   const token = req.nextUrl.searchParams.get("token") ?? "";
-  const payload = verifySsoToken(token);
-  if (!payload) return NextResponse.redirect(new URL("/login?errore=sso", req.url));
+  if (!verifySsoToken(token, insegneSso((await getDb()).tenants))) return NextResponse.redirect(new URL("/login?errore=sso", req.url));
 
   const result = await provisionSsoUser(token);
   if (!result.ok) return NextResponse.redirect(new URL(result.reason === "amministratore" ? "/login?errore=sso-amministratore" : "/login?errore=disattivato", req.url));

@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { GraduationCap, Armchair, PawPrint, Flower2, Users, HardDrive, ArrowRight, Newspaper, Plug } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
-import { userSites, postLoginPath, SITE_NAME, isAcademyAdmin, ruoloEsteso, RUOLO_PRINCIPALE, SITE_LABELS_BREVI } from "@/lib/types";
+import { userSites, postLoginPath, SITE_NAME, isAcademyAdmin, ruoloEsteso, RUOLO_PRINCIPALE, SITE_LABELS_BREVI, permessoRuolo } from "@/lib/types";
 import { canManageUsers } from "@/lib/logic";
 import { puoVedereArchivio } from "@/lib/storage-audit";
 import { logout, scegliRuolo } from "@/lib/actions";
@@ -39,11 +39,13 @@ export default async function ScegliPage() {
   // gli articoli informativi: chi rientra nei destinatari dell'area, chi pubblica, chi gestisce
   const articoliDb = await getArticoliDb();
   const showArticoli = vedeArticoli(user, articoliDb);
+  // Connettori: per ruolo (Permessi); chi non è al Consorzio deve avere un'insegna di cui mostrarli
+  const showConnettori = permessoRuolo(user.role, "accesso_connettori") && (user.role === "system_admin" || !!user.tenantId);
   const articoliDaLeggere = showArticoli ? articoliVisibili(user, articoliDb).filter((a) => !a.letture[user.id]).length : 0;
   // con una sola area si entra dritti, ma non se la sua destinazione è questa pagina
   // (è il caso di "piante", ancora in preparazione): si finirebbe in un rimbalzo infinito
   const casa = postLoginPath(user);
-  if (!daScegliere && sites.length === 1 && !showRuoli && !showArchivio && !showArticoli && casa !== "/scegli") redirect(casa);
+  if (!daScegliere && sites.length === 1 && !showRuoli && !showArchivio && !showArticoli && !showConnettori && casa !== "/scegli") redirect(casa);
 
   // chi non gestisce la formazione entra dalla parte del corsista, non dal pannello
   const academyHome = isAcademyAdmin(user) ? "/admin" : "/studente";
@@ -94,10 +96,10 @@ export default async function ScegliPage() {
           titolo: "Archivio file", desc: "Spazio occupato e pulizia dei file non più usati", attiva: true,
         }]
       : []),
-    ...(amministratore
+    ...(showConnettori
       ? [{
           chiave: "connettori", href: "/connettori", foto: foto("connettori", "/immagini/aree/archivio.jpg"), icona: <Plug size={18} />,
-          titolo: "Connettori", desc: "Collegamenti ai gestionali di insegne e punti vendita", attiva: true,
+          titolo: "Connettori", desc: "Gestionali, giacenze e prezzi, accesso diretto (SSO)", attiva: true,
         }]
       : []),
   ];

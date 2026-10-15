@@ -22,7 +22,7 @@ export type Condizione = "accesso" | "ambito" | "gestione" | "layout" | "consorz
   | "articoli-vede" | "articoli-pubblica" | "articoli-gestisce" | PermessoRuolo;
 
 export interface Capacita { testo: string; condizione: Condizione; nota?: string }
-export interface SezioneCatalogo { area: SiteId | "articoli" | "portale"; titolo: string; icona: string; capacita: Capacita[] }
+export interface SezioneCatalogo { area: SiteId | "articoli" | "connettori" | "portale"; titolo: string; icona: string; capacita: Capacita[] }
 
 export const CATALOGO: SezioneCatalogo[] = [
   {
@@ -79,6 +79,13 @@ export const CATALOGO: SezioneCatalogo[] = [
       { testo: "Scrivere e pubblicare articoli, descrizione con l'AI, statistiche dei propri", condizione: "articoli-pubblica" },
       { testo: "Categorie, modelli, newsletter, permessi, statistiche di tutti", condizione: "articoli-gestisce" },
       { testo: "Casella email da cui arrivano gli articoli", condizione: "sistema" },
+    ],
+  },
+  {
+    area: "connettori", titolo: "Connettori", icona: "🔌",
+    capacita: [
+      { testo: "Collegamenti della propria insegna: gestionale Zoo (giacenze e prezzi), chiave Arredo dei PV, accesso diretto (SSO)", condizione: "accesso_connettori" },
+      { testo: "Tutte le insegne e la chiave condivisa di My Rosaflor", condizione: "sistema" },
     ],
   },
   {

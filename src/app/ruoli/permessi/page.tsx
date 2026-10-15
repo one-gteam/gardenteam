@@ -7,7 +7,7 @@ import { PulsanteAzione } from "@/components/AzioneSenzaRicarica";
 import ProvaProfilo from "@/components/ProvaProfilo";
 import { livelloGestioneUtenti } from "@/lib/logic";
 import {
-  PERMESSI_AREA, PERMESSI_PREDEFINITI, PERMESSI_RUOLO, ROLE_LABELS, permessoRuolo,
+  PERMESSI_AREA, PERMESSI_ACCESSO, PERMESSI_PREDEFINITI, PERMESSI_RUOLO, ROLE_LABELS, permessoRuolo,
   type PermessoRuolo, type Role, type SiteId,
 } from "@/lib/types";
 import { CATALOGO, RUOLI_CONFIGURABILI, type Capacita } from "@/lib/permessi-catalogo";
@@ -26,7 +26,7 @@ export default async function PermessiPage() {
   const modifica = user.role === "system_admin";
 
   const tutti: Role[] = ["system_admin", ...RUOLI_CONFIGURABILI];
-  const chiavi = [...PERMESSI_AREA.map((p) => p.chiave), ...PERMESSI_RUOLO.map((p) => p.chiave)];
+  const chiavi = [...PERMESSI_AREA.map((p) => p.chiave), ...PERMESSI_ACCESSO.map((p) => p.chiave), ...PERMESSI_RUOLO.map((p) => p.chiave)];
   const matrice = Object.fromEntries(
     tutti.map((r) => [r, Object.fromEntries(chiavi.map((k) => [k, permessoRuolo(r, k)]))])
   ) as Record<Role, Record<PermessoRuolo, boolean>>;
@@ -47,8 +47,8 @@ export default async function PermessiPage() {
   };
 
   /** Cosa c'è scritto nella cella "ruolo × capacità": dipende dalla condizione. */
-  const cella = (c: Capacita, area: SiteId | "articoli" | "portale", r: Role) => {
-    const gestisceRuolo = area !== "articoli" && area !== "portale" && matrice[r][`gestisce_${area}` as PermessoRuolo];
+  const cella = (c: Capacita, area: SiteId | "articoli" | "connettori" | "portale", r: Role) => {
+    const gestisceRuolo = area !== "articoli" && area !== "portale" && area !== "connettori" && matrice[r][`gestisce_${area}` as PermessoRuolo];
     switch (c.condizione) {
       case "accesso": return <span className="si">✓</span>;
       case "ambito": return <span className="si" title="lavorando per la propria insegna o il proprio PV">✓ insegna/PV</span>;
@@ -104,13 +104,14 @@ export default async function PermessiPage() {
         </div>
 
         {CATALOGO.map((sez) => {
-          const permessoArea = PERMESSI_AREA.find((p) => p.area === sez.area);
+          // per Articoli e Connettori l'ingresso è un permesso del ruolo (non un'area abilitata persona per persona)
+          const permessoArea = PERMESSI_AREA.find((p) => p.area === sez.area) ?? PERMESSI_ACCESSO.find((p) => p.area === sez.area);
           return (
             <div key={sez.area} className="card table-wrap" style={{ marginBottom: 16, padding: 14 }}>
               <h2 style={{ marginTop: 0 }}>{sez.icona} {sez.titolo}</h2>
               {sez.area === "articoli" && (
                 <p className="hint" style={{ marginTop: -6 }}>
-                  Chi vede, chi pubblica e chi gestisce gli Articoli si sceglie in <a href="/articoli/gestione">Articoli → Gestione</a>, per ruolo, gruppo, insegna o persona.
+                  Entra chi ha il permesso del ruolo qui sotto. Dentro, <a href="/articoli/gestione">Articoli → Gestione</a> può restringere chi vede e scegliere chi pubblica e chi gestisce.
                 </p>
               )}
               <table className="data permessi-ruoli">
@@ -126,7 +127,7 @@ export default async function PermessiPage() {
                       <td>
                         <strong>{permessoArea.etichetta}</strong>
                         <div className="hint" style={{ fontSize: 11.5 }}>
-                          Per tutto il ruolo. Per il gestore, se è spento, vale la scelta fatta persona per persona (gestisce / usa).
+                          {"spiegazione" in permessoArea ? permessoArea.spiegazione : "Per tutto il ruolo. Per il gestore, se è spento, vale la scelta fatta persona per persona (gestisce / usa)."}
                         </div>
                       </td>
                       {RUOLI_CONFIGURABILI.map((r) => <td key={r} style={{ textAlign: "center" }}>{casella(r, permessoArea.chiave, permessoArea.etichetta)}</td>)}

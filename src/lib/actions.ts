@@ -7,14 +7,15 @@ import { randomBytes, scryptSync, timingSafeEqual } from "crypto";
 import { getDb, saveDb } from "./db";
 import { uploadPublicFile } from "./supabase";
 import { mailerConfig, sendMail, nomeMarchio, type Marchio } from "./mailer";
-import { verifySsoToken } from "./sso";
+import { verifySsoToken, insegneSso } from "./sso";
 import { AUTH_COOKIE, RUOLO_COOKIE, OPZIONI_SESSIONE, requireUser, valoreSessione, tokenReimposta, idDaTokenReimposta } from "./auth";
 import { attesaMinuti, azzera, ipChiamante, prenota, Regola, segnaErrore } from "./tentativi";
 import { registra } from "./registro";
 import { assignableRolesFor, canManageUsers, delegatoUtenti, livelloGestioneUtenti, RUOLI_AMMINISTRATORE, coursesForUser, courseVisibleTo, dueDate, getProgress, hasStartedCourse, isCourseCompleted, pathsForUser } from "./logic";
 import {
   Course, CourseLevel, CourseSession, DB, DEFAULT_HOME_BLOCKS, DEFAULT_REMINDER_RULES, DEFAULT_WATCH_THRESHOLD,
-  EmailType, Lesson, LessonAttachment, LessonType, ReminderRule, ReminderStage, Role, SiteId, User, postLoginPath, ruoliDi, RUOLO_PRINCIPALE, ruoloEsteso, userSites, gestisce, gestisceConsorzio, livelloDi, isAcademyAdmin, permessoRuolo, PermessoRuolo, PERMESSI_RUOLO, PERMESSI_PREDEFINITI, ROLE_LABELS, PERMESSI_AREA, DEFAULT_TEMPLATES } from "./types";
+  EmailType, Lesson, LessonAttachment, LessonType, ReminderRule, ReminderStage, Role, SiteId, User, postLoginPath, ruoliDi, RUOLO_PRINCIPALE, ruoloEsteso, userSites, gestisce, gestisceConsorzio, livelloDi, isAcademyAdmin, permessoRuolo, PermessoRuolo, PERMESSI_RUOLO, PERMESSI_PREDEFINITI, ROLE_LABELS, PERMESSI_AREA, DEFAULT_TEMPLATES, PERMESSI_ACCESSO,
+} from "./types";
 
 /** Sostituisce variabili {{...}} e declina il genere: [maschile|femminile]. */
 /** Solo formazione → "Academy GT"; qualsiasi altra area → "GT One". */
@@ -257,9 +258,10 @@ export async function provisionSsoUser(
    * richiamabile dal browser come tutte le altre, e senza questo controllo
    * bastava conoscere un'email per farsi creare (o restituire) un account.
    */
-  const payload = verifySsoToken(token);
-  if (!payload) return { ok: false, reason: "token" };
   const db = await getDb();
+  const esito = verifySsoToken(token, insegneSso(db.tenants));
+  if (!esito) return { ok: false, reason: "token" };
+  const { payload, tenantId: insegnaSso } = esito;
   const email = payload.email.toLowerCase().trim();
   let user = db.users.find((u) => u.email.toLowerCase() === email);
 
@@ -276,8 +278,9 @@ export async function provisionSsoUser(
       email,
       role: "student",
       sites: ["academy"], // arriva da My Rosaflor per la formazione: quella area, non altre
-      tenantId: db.settings.ssoDefaultTenantId,
-      storeId: db.settings.ssoDefaultStoreId,
+      // firmato da un'insegna: la sua, col PV scelto nei Connettori; altrimenti i valori di My Rosaflor
+      tenantId: insegnaSso ?? db.settings.ssoDefaultTenantId,
+      storeId: insegnaSso ? db.tenants.find((t) => t.id === insegnaSso)?.ssoStoreId : db.settings.ssoDefaultStoreId,
       departmentId: dept?.id,
       jobTitle: payload.reparto,
       hireDate: /^\d{4}-\d{2}-\d{2}$/.test(payload.assunzione ?? "") ? payload.assunzione! : unAnnoFa,
@@ -1232,6 +1235,41 @@ export async function updateTenant(tenantId: string, formData: FormData): Promis
 }
 
 /** Un'insegna aggiunge un suo punto vendita (o il Consorzio per lei). */
+/** Nuova insegna con i suoi punti vendita (uno per riga: «Nome; Città»). Solo l'amministratore di sistema. */
+export async function creaInsegna(formData: FormData): Promise<{ ok: boolean; error?: string }> {
+  const admin = await requireUser();
+  if (admin.role !== "system_admin") return { ok: false, error: "Solo l'amministratore di sistema crea le insegne" };
+  const db = await getDb();
+  const name = String(formData.get("name") ?? "").trim().slice(0, 60);
+  if (!name) return { ok: false, error: "Serve il nome dell'insegna" };
+  if (db.tenants.some((t) => t.name.toLowerCase() === name.toLowerCase())) return { ok: false, error: "C'è già un'insegna con questo nome" };
+  const righe = String(formData.get("puntiVendita") ?? "").split(/\r?\n/).map((r) => r.trim()).filter(Boolean);
+  if (righe.length === 0) return { ok: false, error: "Serve almeno un punto vendita (uno per riga)" };
+  const colore = String(formData.get("color") ?? "");
+  const emoji = String(formData.get("emoji") ?? "").trim();
+  // id progressivi come gli altri (t1, s12…): il primo numero libero
+  const usatiT = new Set(db.tenants.map((t) => t.id));
+  let n = db.tenants.length + 1;
+  while (usatiT.has(`t${n}`)) n++;
+  const tenant = { id: `t${n}`, name, color: /^#[0-9a-fA-F]{6}$/.test(colore) ? colore : "#2f6b4a", emoji: emoji ? [...emoji].slice(0, 2).join("") : "🏬" };
+  db.tenants.push(tenant);
+  const usatiS = new Set(db.stores.map((st) => st.id));
+  let m = db.stores.length + 1;
+  let creati = 0;
+  for (const riga of righe) {
+    const [nome, citta = ""] = riga.split(/[;|]/).map((x) => x.trim());
+    if (!nome) continue;
+    while (usatiS.has(`s${m}`)) m++;
+    db.stores.push({ id: `s${m}`, tenantId: tenant.id, name: nome.slice(0, 60), city: citta.slice(0, 60) });
+    usatiS.add(`s${m}`);
+    creati++;
+  }
+  await saveDb(db);
+  registra(admin, { area: "utenti", cosa: "Insegna creata", oggetto: name, dopo: `${creati} punti vendita` });
+  revalidatePath("/ruoli", "layout");
+  return { ok: true };
+}
+
 export async function creaPuntoVendita(tenantId: string, formData: FormData): Promise<{ ok: boolean; error?: string }> {
   const admin = await requireUser();
   if (!canManageTenant(admin, tenantId)) return { ok: false, error: "Non puoi aggiungere punti vendita a questa insegna" };
@@ -2457,6 +2495,7 @@ export async function registerRequest(formData: FormData) {
   const repartoScelto = String(formData.get("departmentId") ?? "");
   const repartoAltro = repartoScelto === "altro";
   if (!repartoAltro && !db.departments.some((d) => d.id === repartoScelto)) redirect("/registrati?errore=reparto");
+  const notaAltro = repartoAltro ? String(formData.get("notaAltro") ?? "").trim().slice(0, 300) : "";
   if (db.users.some((u) => u.email.toLowerCase() === email.toLowerCase())) redirect("/registrati?errore=esiste");
   if (db.registrations.some((r) => r.email.toLowerCase() === email.toLowerCase() && r.status === "pending"))
     redirect("/registrati?errore=incorso");
@@ -2472,6 +2511,7 @@ export async function registerRequest(formData: FormData) {
     storeId: store!.id,
     departmentId: repartoAltro ? undefined : repartoScelto,
     repartoAltro: repartoAltro || undefined,
+    notaAltro: notaAltro || undefined,
     birthDate,
     taxCode,
     date: new Date().toISOString(),
@@ -2586,7 +2626,7 @@ export async function salvaPermessoRuolo(role: Role, chiave: PermessoRuolo, fd: 
   const admin = await requireUser();
   if (admin.role !== "system_admin") return { ok: false, error: "Solo l'amministratore di sistema cambia i permessi dei ruoli." };
   if (role === "system_admin") return { ok: false, error: "L'amministratore di sistema ha sempre tutti i permessi." };
-  if (!(role in ROLE_LABELS) || !(PERMESSI_RUOLO.some((p) => p.chiave === chiave) || PERMESSI_AREA.some((p) => p.chiave === chiave))) return { ok: false, error: "Permesso sconosciuto" };
+  if (!(role in ROLE_LABELS) || !(PERMESSI_RUOLO.some((p) => p.chiave === chiave) || PERMESSI_AREA.some((p) => p.chiave === chiave) || PERMESSI_ACCESSO.some((p) => p.chiave === chiave))) return { ok: false, error: "Permesso sconosciuto" };
   const db = await getDb();
   const acceso = fd.get("v") === "on";
   const tabella = { ...(db.settings.permessiRuoli ?? {}) };

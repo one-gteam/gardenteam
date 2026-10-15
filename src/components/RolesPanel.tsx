@@ -117,6 +117,8 @@ export default function RolesPanel({
   });
   const ruoliPresenti = [...new Set(tutte.flatMap((u) => [u.ruolo, ...u.extra.map((x) => x.ruolo)]))];
   const filtroAttivo = !!(filtro.q || filtro.insegna || filtro.ruolo || filtro.area || filtro.stato);
+  // il filtro si apre e si chiude: chiuso lascia spazio alla tabella, aperto da subito se si arriva già filtrati
+  const [filtroAperto, setFiltroAperto] = useState(!!(filtroIniziale.q || filtroIniziale.insegna));
   // col filtro cambiano le righe: l'intervallo con Maiusc riparte da capo (prima selezionava righe mai viste)
   useEffect(() => { setLastIndex(null); }, [filtro]);
 
@@ -460,6 +462,10 @@ export default function RolesPanel({
       )}
 
       <div className="rt-filtro card">
+        <button type="button" className="btn btn-outline btn-sm" onClick={() => setFiltroAperto((v) => !v)} aria-expanded={filtroAperto}>
+          {filtroAperto ? "▾" : "▸"} Filtri{!filtroAperto && filtroAttivo ? " (attivi)" : ""}
+        </button>
+        {filtroAperto && <>
         <label className="rt-cerca">
           <input type="search" value={filtro.q} onChange={(e) => setFiltro({ ...filtro, q: e.target.value })} placeholder="Cerca nome o email…" aria-label="Cerca nome o email" />
         </label>
@@ -484,6 +490,7 @@ export default function RolesPanel({
           <option value="nonattivati">Non ancora attivati</option>
           <option value="cessati">Solo cessati</option>
         </select>
+        </>}
         <span className="hint" style={{ marginLeft: "auto" }}>{righe.length === tutte.length ? `${tutte.length} persone` : `${righe.length} di ${tutte.length}`}</span>
         {filtroAttivo && <button type="button" className="mini-btn" onClick={() => setFiltro({ q: "", insegna: "", ruolo: "", area: "", stato: "" })}>azzera</button>}
       </div>

@@ -1,3 +1,4 @@
+import { permessoRuolo } from "./types";
 import sanitizeHtml from "sanitize-html";
 import { stessaLettura, readDomain, writeDomain } from "./supabase";
 import type { DB, Role, User } from "./types";
@@ -239,6 +240,8 @@ export function pubblicaArticoli(user: User, db: ArticoliDB): boolean {
 /** Entra nell'area: chi è fra i destinatari dell'accesso, chi pubblica, chi gestisce. */
 export function vedeArticoli(user: User, db: ArticoliDB): boolean {
   if (user.active === false) return false;
+  // l'ingresso lo dà il ruolo (Utenti e ruoli → Permessi): predefinito amministratore d'insegna e grafico
+  if (!permessoRuolo(user.role, "accesso_articoli")) return false;
   return pubblicaArticoli(user, db) || (destinatariVuoti(db.accesso) ? true : corrisponde(user, db.accesso));
 }
 

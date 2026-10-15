@@ -201,7 +201,7 @@ export default async function UsersPage({
                           </form>
                           {r.repartoAltro && (
                             <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 4 }}>
-                              Ha scelto <strong>Altro</strong>: dopo l&apos;approvazione dagli il ruolo giusto (amministratore d&apos;insegna o di PV, gestore…).
+                              Ha scelto <strong>Altro</strong>{r.notaAltro ? <> («{r.notaAltro}»)</> : null}: dopo l&apos;approvazione dagli il ruolo giusto (amministratore d&apos;insegna o di PV, gestore…).
                             </div>
                           )}
                         </td>

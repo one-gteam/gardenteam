@@ -41,7 +41,8 @@ export const RUOLI_STORICI: Record<string, { role: Role; manages: SiteId[] }> = 
 export type PermessoRuolo =
   | "gestisce_academy" | "gestisce_arredo" | "gestisce_zoo" | "gestisce_piante"
   | "pannelloFormazione" | "gestioneUtenti" | "organizzazione"
-  | "corsi" | "percorsi" | "modelliEmail";
+  | "corsi" | "percorsi" | "modelliEmail"
+  | "accesso_articoli" | "accesso_connettori";
 
 /** Gestione di ciascuna area, per ruolo: cosa sblocca lo spiega il catalogo (lib/permessi-catalogo). */
 export const PERMESSI_AREA: { chiave: PermessoRuolo; area: SiteId; etichetta: string }[] = [
@@ -60,17 +61,23 @@ export const PERMESSI_RUOLO: { chiave: PermessoRuolo; etichetta: string; spiegaz
   { chiave: "modelliEmail", etichetta: "Modelli delle email", spiegazione: "Personalizza i testi delle email automatiche per la sua insegna o il suo punto vendita." },
 ];
 
+/** Ingresso nelle aree che non sono «siti» abilitati persona per persona: dipende dal ruolo. */
+export const PERMESSI_ACCESSO: { chiave: PermessoRuolo; area: "articoli" | "connettori"; etichetta: string; spiegazione: string }[] = [
+  { chiave: "accesso_articoli", area: "articoli", etichetta: "Entra negli Articoli", spiegazione: "Vede l'area Articoli. Dentro, Articoli → Gestione decide chi pubblica e chi gestisce." },
+  { chiave: "accesso_connettori", area: "connettori", etichetta: "Entra nei Connettori", spiegazione: "Collegamenti della propria insegna ai gestionali e accesso diretto (SSO). L'amministratore di sistema vede tutte le insegne." },
+];
+
 const TUTTI_NO: Record<PermessoRuolo, boolean> = {
   gestisce_academy: false, gestisce_arredo: false, gestisce_zoo: false, gestisce_piante: false, pannelloFormazione: false, gestioneUtenti: false, organizzazione: false,
-  corsi: false, percorsi: false, modelliEmail: false,
+  corsi: false, percorsi: false, modelliEmail: false, accesso_articoli: false, accesso_connettori: false,
 };
 export const PERMESSI_PREDEFINITI: Record<Role, Record<PermessoRuolo, boolean>> = {
-  system_admin: { gestisce_academy: true, gestisce_arredo: true, gestisce_zoo: true, gestisce_piante: true, pannelloFormazione: true, gestioneUtenti: true, organizzazione: true, corsi: true, percorsi: true, modelliEmail: true },
-  group_admin: { gestisce_academy: true, gestisce_arredo: true, gestisce_zoo: true, gestisce_piante: true, pannelloFormazione: true, gestioneUtenti: true, organizzazione: true, corsi: true, percorsi: true, modelliEmail: true },
-  store_admin: { gestisce_academy: true, gestisce_arredo: true, gestisce_zoo: true, gestisce_piante: true, pannelloFormazione: true, gestioneUtenti: true, organizzazione: true, corsi: true, percorsi: false, modelliEmail: true },
+  system_admin: { gestisce_academy: true, gestisce_arredo: true, gestisce_zoo: true, gestisce_piante: true, pannelloFormazione: true, gestioneUtenti: true, organizzazione: true, corsi: true, percorsi: true, modelliEmail: true, accesso_articoli: true, accesso_connettori: true },
+  group_admin: { gestisce_academy: true, gestisce_arredo: true, gestisce_zoo: true, gestisce_piante: true, pannelloFormazione: true, gestioneUtenti: true, organizzazione: true, corsi: true, percorsi: true, modelliEmail: true, accesso_articoli: true, accesso_connettori: true },
+  store_admin: { gestisce_academy: true, gestisce_arredo: true, gestisce_zoo: true, gestisce_piante: true, pannelloFormazione: true, gestioneUtenti: true, organizzazione: true, corsi: true, percorsi: false, modelliEmail: true, accesso_articoli: false, accesso_connettori: false },
   manager: { ...TUTTI_NO, corsi: true, modelliEmail: true },
   dept_head: { ...TUTTI_NO, pannelloFormazione: true },
-  grafico: { ...TUTTI_NO },
+  grafico: { ...TUTTI_NO, accesso_articoli: true },
   student: { ...TUTTI_NO },
 };
 
@@ -126,6 +133,10 @@ export interface Tenant {
    * Assente = delegata (comportamento storico); false = solo l'insegna gestisce.
    */
   pvGestioneUtenti?: boolean;
+  /** Accesso diretto (SSO) dell'insegna: chiave condivisa col suo sistema, PV dato ai nuovi, acceso/spento. */
+  ssoSecret?: string;
+  ssoStoreId?: string;
+  ssoAttivo?: boolean;
 }
 
 export interface Store {
@@ -629,6 +640,8 @@ export interface Registration {
   departmentId?: string;
   /** Ha scelto «Altro»: non lavora in un reparto (amministratore, gestore…), il ruolo lo dà chi approva. */
   repartoAltro?: boolean;
+  /** Con «Altro»: di cosa si occupa, in due parole. */
+  notaAltro?: string;
   birthDate: string;
   taxCode: string;
   date: string;

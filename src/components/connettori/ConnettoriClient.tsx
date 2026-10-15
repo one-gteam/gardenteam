@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   salvaConnettoreZoo, accendiConnettoreZoo, scollegaConnettoreZoo, provaConnettoreZoo,
   creaChiaveArredo, accendiApiArredo, togliChiaveArredo,
+  generaChiaveSso, accendiSso, togliChiaveSso, salvaPvSso,
 } from "@/lib/connettori-actions";
 
 type TipoAmbito = "tenant" | "store";
@@ -140,6 +141,71 @@ export function ConnettoreArredo({ storeId, token, apiAttiva, aggiornatoIl, font
         </button>
       </div>
       <span className="hint" style={{ fontSize: 12 }}>{ultimo}</span>
+      {errore && <span className="errore-inline">{errore}</span>}
+    </div>
+  );
+}
+
+/** SSO dell'insegna: la chiave con cui il suo sistema firma i link d'ingresso, e il PV dato ai nuovi. */
+export function ConnettoreSso({ tenantId, chiave, attivo, storeId, negozi }: {
+  tenantId: string; chiave?: string; attivo: boolean; storeId?: string; negozi: { id: string; nome: string }[];
+}) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [mostra, setMostra] = useState(false);
+  const [errore, setErrore] = useState("");
+  const [copiata, setCopiata] = useState(false);
+
+  const fai = (azione: () => Promise<{ ok: boolean; error?: string }>, conferma?: string) => {
+    if (conferma && !confirm(conferma)) return;
+    setErrore("");
+    startTransition(async () => {
+      const r = await azione().catch(() => ({ ok: false, error: "Non riuscito: riprova." }));
+      if (!r.ok) setErrore(r.error ?? "Non riuscito");
+      else router.refresh();
+    });
+  };
+
+  if (!chiave) {
+    return (
+      <div style={{ display: "grid", gap: 4 }}>
+        <div><span className="hint">Nessuna chiave: i collaboratori entrano con email e password</span>{" "}
+          <button type="button" className="btn btn-outline btn-sm" disabled={pending} onClick={() => fai(() => generaChiaveSso(tenantId))}>＋ Crea chiave SSO</button></div>
+        {errore && <span className="errore-inline">{errore}</span>}
+      </div>
+    );
+  }
+  return (
+    <div style={{ display: "grid", gap: 6 }}>
+      <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+        <span className={`pill ${attivo ? "pill-green" : "pill-gray"}`}>{attivo ? "acceso" : "spento"}</span>
+        <code style={{ fontSize: 11.5, wordBreak: "break-all" }}>{mostra ? chiave : `${chiave.slice(0, 6)}${"•".repeat(16)}`}</code>
+        <button type="button" className="mini-btn" onClick={() => setMostra((v) => !v)}>{mostra ? "nascondi" : "mostra"}</button>
+        <button type="button" className="mini-btn" onClick={() => { navigator.clipboard?.writeText(chiave).then(() => { setCopiata(true); setTimeout(() => setCopiata(false), 1500); }); }}>
+          {copiata ? "copiata ✓" : "copia"}
+        </button>
+      </div>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+        <button type="button" className="btn btn-outline btn-sm" disabled={pending} onClick={() => fai(() => accendiSso(tenantId, !attivo))}>
+          {attivo ? "Spegni" : "Accendi"}
+        </button>
+        <button type="button" className="btn btn-outline btn-sm" disabled={pending}
+          onClick={() => fai(() => generaChiaveSso(tenantId), "Rigenerare la chiave? Quella vecchia smette di valere: va aggiornata nel vostro sistema.")}>
+          Rigenera
+        </button>
+        <button type="button" className="btn btn-outline btn-sm" disabled={pending} style={{ color: "var(--red, #b42318)" }}
+          onClick={() => fai(() => togliChiaveSso(tenantId), "Togliere la chiave SSO? I link del vostro sistema non faranno più entrare (gli account creati restano).")}>
+          Togli
+        </button>
+        <label style={{ display: "inline-flex", gap: 6, alignItems: "center", fontSize: 12.5 }}>
+          PV dei nuovi:
+          <select defaultValue={storeId ?? ""} disabled={pending}
+            onChange={(e) => { const fd = new FormData(); fd.set("storeId", e.target.value); fai(() => salvaPvSso(tenantId, fd)); }}>
+            <option value="">— solo l&apos;insegna —</option>
+            {negozi.map((n) => <option key={n.id} value={n.id}>{n.nome}</option>)}
+          </select>
+        </label>
+      </div>
       {errore && <span className="errore-inline">{errore}</span>}
     </div>
   );
