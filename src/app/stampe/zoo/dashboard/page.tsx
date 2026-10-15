@@ -122,7 +122,7 @@ export default async function ZooDashboardPage() {
 
   /* le cose da sistemare: una riga per voce, solo quelle che hanno qualcosa; si aprono per vedere i nomi */
   const daFare = [
-    { titolo: "Voci a volantino senza foto", righe: senzaFoto.map(nome), href: `/stampe/zoo/foto?campagna=${campaign.id}`, cta: "Raccolta foto", urgente: true },
+    { titolo: "Voci a volantino senza foto", righe: senzaFoto.map(nome), href: `/stampe/zoo/foto?campagna=${campaign.id}&senzafoto=1`, cta: "Raccolta foto", urgente: true },
     { titolo: "Offerte senza prezzo", righe: senzaPrezzo.map((o) => o.descrizione), href: "/stampe/zoo/prodotti", cta: "Completa i prezzi", urgente: true },
     { titolo: "Padri senza animale", righe: senzaAnimale.map((p) => p.nome), href: `/stampe/zoo/prodotti?vista=catalogo&senzaanimale=1&volantino=${campaign.id}`, cta: "Assegna l'animale", urgente: false },
     { titolo: "Offerte senza padre", righe: senzaPadre.map((o) => o.descrizione), href: "/stampe/zoo/prodotti?senzapadre=1", cta: "Raggruppa", urgente: false },
