@@ -189,13 +189,15 @@ export default async function ZooBozzaPage({
                           border: dentroSezione ? "1px dashed rgba(0,0,0,.12)" : "1px solid #e6e6e6",
                         }}>
                           {b.label && <span className="vol-label">{b.label}</span>}
-                          {nomeFocus && (
+                          {/* casella libera del focus: tutto il testo; celle con offerte: solo il titolo */}
+                          {nomeFocus && offerte.length === 0 && (
                             <div className="bozza-focus" style={{ borderColor: defFocus?.colore || undefined }}>
                               <strong>{nomeFocus}</strong>
                               {defFocus?.descrizione && <span>{defFocus.descrizione}</span>}
                               {defFocus?.notaGrafico && <em className="no-print">Per il grafico: {defFocus.notaGrafico}</em>}
                             </div>
                           )}
+                          {nomeFocus && offerte.length > 0 && <div className="vol-focus-titolo">{nomeFocus}</div>}
                           {b.testo && <div className="vol-testo">{b.testo}</div>}
                           <div style={{ display: "grid", gap: 2, gridTemplateColumns: offerte.length > 1 ? "1fr 1fr" : "1fr", textAlign: "center" }}>
                             {offerte.map((o) => {

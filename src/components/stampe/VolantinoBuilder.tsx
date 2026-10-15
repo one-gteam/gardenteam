@@ -821,6 +821,11 @@ export default function VolantinoBuilder({
           );
         })}
         {b.label && <span className="vol-label">{b.label}</span>}
+        {/* il focus: sulle celle con offerte solo il titolo; il testo intero sta nella casella libera del focus */}
+        {offs.length > 0 && (() => {
+          const nomi = [...new Set(offs.map((o) => (o.focus ?? "").trim()).filter(Boolean))];
+          return nomi.length > 0 ? <div className="vol-focus-titolo" title="focus">{nomi.join(" · ")}</div> : null;
+        })()}
         {offs.length > 0 && (
           <div style={{ display: "grid", gap: 2, gridTemplateColumns: offs.length > 1 ? "1fr 1fr" : "1fr", textAlign: "center" }}>
             {offs.map((o, i) => (
