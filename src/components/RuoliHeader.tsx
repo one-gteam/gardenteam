@@ -21,6 +21,10 @@ export default async function RuoliHeader({ user, active }: { user: User; active
       : []),
     { href: "/ruoli/permessi", label: "Permessi", key: "permessi" as const },
     ...(user.role === "system_admin" ? [{ href: "/registro", label: "Registro modifiche", key: "registro" as const }] : []),
+    // le richieste di registrazione si approvano nel pannello Academy: qui il richiamo, quando ce ne sono
+    ...(user.role === "system_admin" && db.registrations.some((r) => r.status === "pending")
+      ? [{ href: "/admin/utenti", label: `🔔 Richieste (${db.registrations.filter((r) => r.status === "pending").length})`, key: "richieste" as const }]
+      : []),
     // l'email di benvenuto GT One: il Consorzio quella comune, insegna e PV la loro versione
     ...(user.role === "system_admin" || (["group_admin", "store_admin"].includes(user.role) && permessoRuolo(user.role, "modelliEmail"))
       ? [{ href: "/ruoli/email", label: "Email", key: "email" as const }]

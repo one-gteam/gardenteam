@@ -1,6 +1,15 @@
 {
-  "regions": ["dub1"],
+  "regions": [
+    "dub1"
+  ],
   "crons": [
-    { "path": "/api/articoli/newsletter", "schedule": "0 6 * * *" }
+    {
+      "path": "/api/articoli/newsletter",
+      "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/registrazioni/riepilogo",
+      "schedule": "0 6 * * *"
+    }
   ]
 }

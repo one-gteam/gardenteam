@@ -5,11 +5,14 @@ import { getDb } from "@/lib/db";
 import { userSites, postLoginPath, SITE_NAME, isAcademyAdmin, ruoloEsteso, RUOLO_PRINCIPALE, SITE_LABELS_BREVI, permessoRuolo } from "@/lib/types";
 import { canManageUsers } from "@/lib/logic";
 import { puoVedereArchivio } from "@/lib/storage-audit";
+import { richiesteInAttesa } from "@/lib/registrazioni-riepilogo";
 import { logout, scegliRuolo } from "@/lib/actions";
 import CambiaFotoArea from "@/components/CambiaFotoArea";
 import { getArticoliDb, vedeArticoli, articoliVisibili } from "@/lib/articoli";
 
 /** Schede delle macroaree, con fotografia di copertina in stile My Rosaflor. */
+const amministratoreSistema = (u: { role: string }) => u.role === "system_admin";
+
 export default async function ScegliPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
@@ -40,6 +43,8 @@ export default async function ScegliPage() {
   const articoliDb = await getArticoliDb();
   const showArticoli = vedeArticoli(user, articoliDb);
   // Connettori: per ruolo (Permessi); chi non è al Consorzio deve avere un'insegna di cui mostrarli
+  // richieste di registrazione in attesa: l'avviso è per l'amministratore di sistema
+  const richieste = amministratoreSistema(user) ? richiesteInAttesa(db) : [];
   const showConnettori = permessoRuolo(user.role, "accesso_connettori") && (user.role === "system_admin" || !!user.tenantId);
   const articoliDaLeggere = showArticoli ? articoliVisibili(user, articoliDb).filter((a) => !a.letture[user.id]).length : 0;
   // con una sola area si entra dritti, ma non se la sua destinazione è questa pagina
@@ -123,6 +128,19 @@ export default async function ScegliPage() {
         </p>
       </div>
       <div className="login-cards" style={{ maxWidth: 1180 }}>
+        {richieste.length > 0 && (
+          <div className="card avviso-richieste">
+            <span style={{ fontSize: 22 }}>🔔</span>
+            <span>
+              <strong>{richieste.length} {richieste.length === 1 ? "richiesta di registrazione" : "richieste di registrazione"} in attesa</strong>
+              <span className="hint" style={{ display: "block" }}>
+                {richieste.slice(0, 3).map((r) => `${r.firstName} ${r.lastName} (${db.tenants.find((t) => t.id === r.tenantId)?.name ?? ""})`).join(", ")}
+                {richieste.length > 3 ? ` e altre ${richieste.length - 3}` : ""}
+              </span>
+            </span>
+            <a className="btn btn-sm" href="/admin/utenti">Approva o rifiuta</a>
+          </div>
+        )}
         {ruoli.length > 0 && (
           <div className="card scelta-ruolo">
             <strong>{daScegliere ? "Scegli il ruolo" : "Stai lavorando come"}</strong>

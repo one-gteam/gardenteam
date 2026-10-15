@@ -326,9 +326,21 @@ export function gestisce(user: User, area: SiteId): boolean {
   return user.role === "manager" && (user.manages ?? []).includes(area);
 }
 
+/**
+ * Il livello con cui si lavora nelle aree Stampe (Arredo, Zoo, Piante). Il
+ * gestore è trasversale: opera sulla versione del Consorzio anche se la sua
+ * scheda è collocata in un'insegna o un PV (es. un amministratore d'insegna
+ * che ha anche il ruolo di gestore). Per l'Academy vale la collocazione.
+ */
+export function livelloStampe(user: User): "consorzio" | "insegna" | "pv" {
+  return user.role === "manager" ? "consorzio" : livelloDi(user);
+}
+
 /** Gestisce l'area a livello di Consorzio (quindi ovunque)? */
 export function gestisceConsorzio(user: User, area: SiteId): boolean {
-  return user.role === "system_admin" || (livelloDi(user) === "consorzio" && gestisce(user, area));
+  if (user.role === "system_admin") return true;
+  const livello = area === "academy" ? livelloDi(user) : livelloStampe(user);
+  return livello === "consorzio" && gestisce(user, area);
 }
 
 /**
@@ -668,6 +680,9 @@ export interface PortalSettings {
   reminderRules?: Partial<Record<ReminderStage, ReminderRule>>; // sovrascrive DEFAULT_REMINDER_RULES stadio per stadio
   homeBlocks?: HomeBlockConfig[]; // ordine e visibilità dei blocchi nella home dello studente
   leaderboardAnonymous?: boolean; // classifica generale: se true, ognuno vede solo la propria posizione
+  /** Ultimo riepilogo giornaliero delle richieste di registrazione (giorno, e da quando contano come nuove). */
+  riepilogoRegistrazioniIl?: string;
+  riepilogoRegistrazioniDal?: string;
   ssoDefaultTenantId?: string; // insegna assegnata a chi entra via SSO da My Rosaflor
   ssoDefaultStoreId?: string; // punto vendita assegnato a chi entra via SSO da My Rosaflor
   /** Segna che le macroaree sono state scritte su ogni utente (migrazione fatta una volta sola). */

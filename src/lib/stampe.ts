@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { DB, SiteId, User, gestisce, gestisceConsorzio, livelloDi, userSites } from "./types";
+import { DB, SiteId, User, gestisce, gestisceConsorzio, livelloDi, livelloStampe, userSites } from "./types";
 import { readDomain, writeDomain } from "./supabase";
 import { ELEMENTO_QR, isImageField } from "./cartello-campi";
 
@@ -364,7 +364,7 @@ export function canAccessArea(user: User, area: "arredo" | "zoo" | "piante"): bo
 export function gestisceArea(user: User, area: SiteId, scope: { type: ScopeType; id: string }, academyDb: DB): boolean {
   if (user.role === "system_admin") return true;
   if (!gestisce(user, area)) return false;
-  const livello = livelloDi(user);
+  const livello = livelloStampe(user); // il gestore è trasversale: lavora sulla versione del Consorzio
   if (livello === "consorzio") return true;
   if (scope.type === "system") return false;
   if (livello === "insegna") {
@@ -426,7 +426,8 @@ export interface Scope {
  */
 export function scopesForUser(user: User, academyDb: DB): Scope[] {
   // chi sta al Consorzio (amministratore o gestore) lavora sulla versione comune e vede le insegne
-  if (user.role === "system_admin" || (livelloDi(user) === "consorzio" && user.role === "manager")) {
+  // il gestore è trasversale: versione del Consorzio e tutte le insegne, ovunque sia collocato
+  if (user.role === "system_admin" || user.role === "manager") {
     return [
       { type: "system" as const, id: "", label: "Consorzio (comune a tutti)" },
       ...academyDb.tenants.map((t) => ({ type: "tenant" as const, id: t.id, label: t.name })),

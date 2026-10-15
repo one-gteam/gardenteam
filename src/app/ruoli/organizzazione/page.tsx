@@ -167,18 +167,29 @@ export default async function OrgPage({
             {user.role === "system_admin" && (
               <details className="card" style={{ marginTop: 12 }}>
                 <summary style={{ cursor: "pointer", fontWeight: 700 }}>＋ Nuova insegna con i suoi punti vendita</summary>
-                <ModuloInvio azione={creaInsegna} style={{ display: "grid", gap: 10, marginTop: 10, maxWidth: 560 }}>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 90px 110px", gap: 10 }}>
-                    <label className="field" style={{ marginBottom: 0 }}>Nome dell&apos;insegna<input name="name" required maxLength={60} placeholder="es. Garden Verde" /></label>
-                    <label className="field" style={{ marginBottom: 0 }}>Emoji<input name="emoji" maxLength={4} placeholder="🌿" /></label>
-                    <label className="field" style={{ marginBottom: 0 }}>Colore<input name="color" type="color" defaultValue="#2f6b4a" /></label>
+                <ModuloInvio azione={creaInsegna} className="nuova-insegna">
+                  <div className="ni-riga">
+                    <label className="ni-campo ni-nome">
+                      <span>Nome dell&apos;insegna</span>
+                      <input name="name" required maxLength={60} placeholder="es. Garden Verde" />
+                    </label>
+                    <label className="ni-campo ni-emoji">
+                      <span>Emoji</span>
+                      <input name="emoji" maxLength={4} placeholder="🌿" />
+                    </label>
+                    <label className="ni-campo ni-colore">
+                      <span>Colore</span>
+                      <input name="color" type="color" defaultValue="#2f6b4a" />
+                    </label>
                   </div>
-                  <label className="field" style={{ marginBottom: 0 }}>
-                    Punti vendita, uno per riga: <span className="hint">Nome; Città</span>
+                  <label className="ni-campo">
+                    <span>Punti vendita, uno per riga <em>Nome; Città</em></span>
                     <textarea name="puntiVendita" required rows={4} placeholder={"Garden Verde Treviso; Treviso\nGarden Verde Padova; Padova"} />
                   </label>
-                  <div><button className="btn btn-sm" type="submit">Crea insegna</button></div>
-                  <p className="hint" style={{ margin: 0 }}>Logo, parola segreta ed email di approvazione si impostano dopo, nella scheda dell&apos;insegna. Il collegamento al gestionale e l&apos;SSO nei Connettori.</p>
+                  <div className="ni-piede">
+                    <button className="btn btn-sm" type="submit">Crea insegna</button>
+                    <span className="hint">Logo, parola segreta ed email di approvazione si impostano dopo, nella scheda dell&apos;insegna. Gestionale e SSO nei Connettori.</span>
+                  </div>
                 </ModuloInvio>
               </details>
             )}
