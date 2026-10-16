@@ -817,7 +817,7 @@ export default function LayoutEditor({
                 >
                   {imgSrc ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={imgSrc} alt="" style={{ width: "100%", height: "100%", objectFit: "contain", objectPosition: "left top", pointerEvents: "none", mixBlendMode: "multiply" }} />
+                    <img src={imgSrc} alt="" style={{ width: "100%", height: "100%", objectFit: "contain", objectPosition: `${item.fieldId === ELEMENTO_IMMAGINE ? item.align ?? "left" : "left"} top`, pointerEvents: "none", mixBlendMode: "multiply" }} />
                   ) : (
                     <span style={{ fontSize: 11, color: "#999" }}>{meta?.label ?? "Immagine"}</span>
                   )}

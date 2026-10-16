@@ -2143,7 +2143,7 @@ export async function mettiInCoda(
   const db = await getZooDb();
   const academyDb = await getDb();
   const scope = resolveScope(user, scopeParam, academyDb);
-  let voci: { offerId: string; impostazioni: Record<string, string> }[] = [];
+  let voci: { offerId: string; impostazioni: Record<string, string>; lista?: string }[] = [];
   try { voci = JSON.parse(vociJson); } catch { return { ok: false, n: 0 }; }
   let n = 0;
   if (!Array.isArray(voci)) return { ok: false, n: 0 };
@@ -2152,13 +2152,15 @@ export async function mettiInCoda(
     if (!v || typeof v.offerId !== "string" || !offerteEsistenti.has(v.offerId)) continue;
     if (v.impostazioni && JSON.stringify(v.impostazioni).length > 4000) v.impostazioni = {};
     const esistente = db.coda.find((c) => c.scopeType === scope.type && c.scopeId === scope.id && c.offerId === v.offerId && !c.stampato);
+    const lista = typeof v.lista === "string" ? v.lista.trim().slice(0, 60) || undefined : undefined;
     if (esistente) {
       esistente.stato = stato;
       esistente.impostazioni = v.impostazioni ?? {};
+      if (lista) esistente.lista = lista;
     } else {
       db.coda.push({
         id: `zq_${Date.now()}_${n}`, scopeType: scope.type, scopeId: scope.id, offerId: v.offerId, stato,
-        impostazioni: v.impostazioni ?? {}, userName: `${user.firstName} ${user.lastName}`, creato: new Date().toISOString(),
+        impostazioni: v.impostazioni ?? {}, userName: `${user.firstName} ${user.lastName}`, creato: new Date().toISOString(), lista,
       });
     }
     n++;

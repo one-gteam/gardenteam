@@ -535,6 +535,8 @@ export interface ZooCoda {
   userName: string;
   creato: string; // ISO
   stampato?: string; // ISO: già mandato in stampa
+  /** Nome della lista scelto al momento di metterla in coda («Scaffale cani», «Giro del lunedì»). */
+  lista?: string;
 }
 
 /** Proposta di correzione inviata al Consorzio (come le 🚩 dell'Arredo). */
@@ -1651,7 +1653,8 @@ export function conTestataDiScopo(layout: ZooLayout, testata: string): ZooLayout
     const liberi = items.map((it, i) => ({ it, i })).filter(({ it }) => it.fieldId === "__img" && it.imageUrl);
     if (liberi.length === 0) return items;
     const piuInAlto = liberi.reduce((a, b) => (b.it.y < a.it.y ? b : a), liberi[0]);
-    return items.map((it, i) => (i === piuInAlto.i ? { ...it, imageUrl: testata } : it));
+    // la testata dell'insegna ha proporzioni sue: si centra nel riquadro di quella del Consorzio
+    return items.map((it, i) => (i === piuInAlto.i ? { ...it, imageUrl: testata, align: "center" as const } : it));
   };
   return { ...layout, items: sostituisci(layout.items) ?? layout.items, itemsNoPhoto: sostituisci(layout.itemsNoPhoto) };
 }

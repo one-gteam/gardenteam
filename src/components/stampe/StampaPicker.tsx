@@ -246,9 +246,17 @@ export default function StampaPicker({
   };
   const inCoda = async (stato: "dopo" | "arrivo") => {
     if (!onQueue || selected.length === 0) return;
-    const r = await onQueue(stato, JSON.stringify(selected.map((id) => ({ offerId: id, impostazioni: impostazioniDi(id) }))));
+    // un nome alla lista: nella scheda Liste si ritrova e si spunta con un clic
+    let lista = "";
+    if (stato === "dopo") {
+      const proposta = `Lista del ${new Date().toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit" })}`;
+      const scelto = window.prompt("Nome della lista (es. «Scaffale cani», «Giro del lunedì»):", proposta);
+      if (scelto === null) return; // annullato
+      lista = scelto.trim().slice(0, 60);
+    }
+    const r = await onQueue(stato, JSON.stringify(selected.map((id) => ({ offerId: id, impostazioni: impostazioniDi(id), ...(lista ? { lista } : {}) }))));
     setEsitoCoda(r.ok
-      ? (stato === "dopo" ? `✓ ${r.n} cartelli messi da parte: li stampi quando vuoi da «Da stampare più tardi».` : `✓ ${r.n} cartelli segnati come merce in arrivo.`)
+      ? (stato === "dopo" ? `✓ ${r.n} cartelli messi da parte${lista ? ` nella lista «${lista}»` : ""}: li stampi quando vuoi da «Da stampare più tardi».` : `✓ ${r.n} cartelli segnati come merce in arrivo.`)
       : "Non sono riuscito a metterli in coda.");
     if (r.ok) setSelected([]);
   };
@@ -483,11 +491,28 @@ export default function StampaPicker({
                             ⧉ Duplica
                           </button>
                         )}
-                        <details className="flag-details">
+                        <details className="flag-details"
+                          onToggle={(e) => {
+                            // la tabella dei selezionati scorre e taglia ciò che esce: la finestrella si apre «sopra» la pagina
+                            const d = e.currentTarget;
+                            const pop = d.querySelector<HTMLElement>(".flag-popover");
+                            const sum = d.querySelector("summary");
+                            if (!d.open || !pop || !sum) return;
+                            const r = sum.getBoundingClientRect();
+                            const alto = Math.min(260, pop.scrollHeight || 260);
+                            const sotto = window.innerHeight - r.bottom > alto + 8;
+                            Object.assign(pop.style, {
+                              position: "fixed", right: "auto",
+                              top: `${sotto ? r.bottom + 4 : Math.max(8, r.top - alto - 4)}px`,
+                              left: `${Math.max(8, Math.min(r.left, window.innerWidth - 310))}px`,
+                            });
+                            const chiudi = (ev: Event) => { if (pop.contains(ev.target as Node)) return; d.open = false; window.removeEventListener("scroll", chiudi, true); };
+                            window.addEventListener("scroll", chiudi, true);
+                          }}>
                           <summary className="chip" style={{ opacity: 1 }} title="Nascondi alcuni campi in questo cartello">
                             Campi{hiddenFields[p.id]?.length ? ` (−${hiddenFields[p.id].length})` : ""}
                           </summary>
-                          <div className="flag-popover" style={{ maxHeight: 240, overflowY: "auto" }}>
+                          <div className="flag-popover" style={{ maxHeight: 240, overflowY: "auto", zIndex: 60 }}>
                             {fields.map((f) => (
                               <label key={f.id} style={{ fontSize: 12.5, display: "flex", gap: 6, alignItems: "center" }}>
                                 <input

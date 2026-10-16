@@ -1725,3 +1725,6 @@ img.tt-media.on { animation: sp-kb 12s linear forwards; }
 .bozza-pagine .bozza-rif { opacity: 1; z-index: 4; }
 .bozza-pagine .vol-page { height: auto; }
 .bozza-pagine .vol-cell { min-height: 0; }
+
+/* filtri a chip: i pulsanti d'azione («spunta tutte», «togli le spunte») si distinguono dalle marche */
+.chips .chip-azione { background: #fff; border: 1.5px dashed var(--green-500, #2f6b4a); color: var(--green-700, #1f4d33); font-weight: 700; cursor: pointer; }

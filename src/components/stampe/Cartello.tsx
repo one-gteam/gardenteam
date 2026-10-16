@@ -98,7 +98,7 @@ export default function Cartello({
         if (item.fieldId === ELEMENTO_IMMAGINE && item.imageUrl) {
           return (
             // eslint-disable-next-line @next/next/no-img-element
-            <img key={i} src={item.imageUrl} alt="" style={{ ...riquadro(item), objectFit: "contain", objectPosition: "left top", mixBlendMode: "multiply" }} />
+            <img key={i} src={item.imageUrl} alt="" style={{ ...riquadro(item), objectFit: "contain", objectPosition: `${item.align ?? "left"} top`, mixBlendMode: "multiply" }} />
           );
         }
         // riquadro libero: fascia colorata, cornice o scritta fissa — si stampa sempre

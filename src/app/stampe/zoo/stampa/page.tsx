@@ -1,4 +1,5 @@
 import { PulsanteAzione } from "@/components/AzioneSenzaRicarica";
+import SpuntaLista from "@/components/stampe/SpuntaLista";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
@@ -319,10 +320,11 @@ export default async function ZooStampaPage({
     };
   };
   const ordCoda = sp.ordcoda ?? "";
-  const ordinaCoda = <T extends { nome: string; marca: string; fornitore: string; animale: string; promo: string }>(righe: T[]): T[] => {
+  const ordinaCoda = <T extends { nome: string; marca: string; fornitore: string; animale: string; promo: string; lista?: string }>(righe: T[]): T[] => {
     if (!ordCoda) return righe;
     const chiave = (r: T) =>
-      ordCoda === "marca" ? r.marca
+      ordCoda === "lista" ? r.lista ?? ""
+        : ordCoda === "marca" ? r.marca
         : ordCoda === "fornitore" ? r.fornitore
         : ordCoda === "animale" ? r.animale
         : ordCoda === "promo" ? r.promo
@@ -331,7 +333,7 @@ export default async function ZooStampaPage({
   };
   const codaMia = db.coda
     .filter((c) => c.scopeType === scope.type && c.scopeId === scope.id)
-    .map((c) => ({ ...c, ...datiCartello(c.offerId) }));
+    .map((c) => ({ ...c, ...datiCartello(c.offerId), lista: c.lista ?? "" }));
   const codaDopo = codaMia.filter((c) => c.stato === "dopo" && !c.stampato);
   const codaArrivo = codaMia.filter((c) => c.stato === "arrivo" && !c.stampato);
   /* I cartelli gia' mandati in stampa restano in elenco, segnati: serve a
@@ -615,7 +617,7 @@ export default async function ZooStampaPage({
                         </label>
                       )}
                       <div className="chips filtri-marche"
-                        title="Spunta una o più marche; nessuna spunta = tutte. La marca è quella del listino o, se manca, il fornitore.">
+                        title="Spunta una o più marche; nessuna spunta = tutte. Per toglierne solo una: «✓ spunta tutte», poi clic su quella da togliere. La marca è quella del listino o, se manca, il fornitore.">
                         <span className="hint" style={{ marginRight: 4 }}>
                           Marche{marcheScelte.length > 0 ? ` (${marcheScelte.length} scelte)` : " (tutte)"}:
                         </span>
@@ -626,9 +628,14 @@ export default async function ZooStampaPage({
                             {m}
                           </label>
                         ))}
+                        {marche.length > 1 && marcheScelte.length < marche.length && (
+                          <button type="button" className="chip chip-azione" data-tutte="marca" title="Spunta tutte le marche: poi togli con un clic quelle che non vuoi">
+                            ✓ spunta tutte
+                          </button>
+                        )}
                         {marcheScelte.length > 0 && (
-                          <button type="button" className="chip" data-svuota="marca" title="Torna a tutte le marche">
-                            ✕ tutte le marche
+                          <button type="button" className="chip chip-azione" data-svuota="marca" title="Toglie tutte le spunte: torna a tutte le marche">
+                            ✕ togli le spunte
                           </button>
                         )}
                       </div>
@@ -712,6 +719,15 @@ export default async function ZooStampaPage({
                       <strong style={{ fontSize: 13 }}>{g.formato.name}</strong>
                       <span className="pill pill-orange" id={`conta-${g.formato.id}`}>{g.voci.length}</span>
                       <span className="hint">Clic per spuntare, Maiusc+clic per un intervallo.</span>
+                      {(() => {
+                        const liste = [...new Map(g.voci.filter((c) => c.lista).map((c) => [c.lista, g.voci.filter((x) => x.lista === c.lista).length])).entries()];
+                        return liste.length > 0 ? (
+                          <span style={{ display: "inline-flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+                            <span className="hint">Liste:</span>
+                            {liste.map(([nome, n]) => <SpuntaLista key={nome} lista={nome} n={n} />)}
+                          </span>
+                        ) : null;
+                      })()}
                       {g.formato.id === "za5" && (
                         <label className="interruttore-grande acceso"
                           title="Gli A5 escono sempre due per foglio A4 orizzontale. Acceso: ogni cartello due volte sullo stesso foglio. Spento: due cartelli diversi per foglio.">
@@ -732,6 +748,7 @@ export default async function ZooStampaPage({
                           <tr>
                             <th style={{ width: 28 }}><BulkCheckbox name="coda" /></th>
                             <ColonnaOrdinabile campo="nome">Prodotto</ColonnaOrdinabile>
+                            <ColonnaOrdinabile campo="lista">Lista</ColonnaOrdinabile>
                             <ColonnaOrdinabile campo="marca">Marca</ColonnaOrdinabile>
                             <ColonnaOrdinabile campo="fornitore">Fornitore</ColonnaOrdinabile>
                             <ColonnaOrdinabile campo="animale">Animale</ColonnaOrdinabile>
@@ -745,12 +762,13 @@ export default async function ZooStampaPage({
                             <Fragment key={c.id}>
                               <RigaCoda id={c.id} scopeParam={scopeParam} contatoreId={`conta-dopo,conta-${g.formato.id}`} tabella
                                 dati={{ nome: c.nome, marca: c.marca, fornitore: c.fornitore, animale: c.animale, promo: c.promo }}>
-                                <td><input type="checkbox" name="coda" value={c.id} title="Spunta per stampare solo alcuni" /></td>
+                                <td><input type="checkbox" name="coda" value={c.id} data-lista={c.lista} title="Spunta per stampare solo alcuni" /></td>
                                 <td>
                                   {c.nome}
                                   {c.impostazioni[`senzafoto_${c.offerId}`] === "1" && <span className="pill pill-gray" style={{ marginLeft: 6 }}>senza foto</span>}
                                   {c.parentId && <> <DettagliPadre parentId={c.parentId} /></>}
                                 </td>
+                                <td>{c.lista ? <span className="pill pill-blue">{c.lista}</span> : <span className="hint">—</span>}</td>
                                 <td>{c.marca}</td>
                                 <td>{c.fornitore}</td>
                                 <td>{c.animale}</td>
@@ -758,7 +776,7 @@ export default async function ZooStampaPage({
                                 <td className="hint">{new Date(c.creato).toLocaleDateString("it-IT", { timeZone: FUSO })} · {c.userName}</td>
                               </RigaCoda>
                               {c.parentId && (
-                                <tr><td colSpan={8} style={{ padding: 0 }}>
+                                <tr><td colSpan={9} style={{ padding: 0 }}>
                                   <PannelloPadre parentId={c.parentId} scopeParam={scopeParam} back="/stampe/zoo/stampa?tab=liste" />
                                 </td></tr>
                               )}

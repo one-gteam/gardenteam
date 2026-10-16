@@ -10,7 +10,8 @@ import type { CSSProperties, ReactNode } from "react";
  * modulo non tocca — i cartelli selezionati con formati e prezzi, la scheda —
  * e sostituisce solo i suoi. Prima cambiare un filtro svuotava i selezionati.
  *
- * Un pulsante con `data-svuota="nome"` toglie tutte le spunte con quel nome.
+ * Un pulsante con `data-svuota="nome"` toglie tutte le spunte con quel nome;
+ * uno con `data-tutte="nome"` le mette tutte (poi si toglie quella che non serve).
  */
 export default function FormAutoInvia({
   children, className, style,
@@ -43,11 +44,12 @@ export default function FormAutoInvia({
         if (t.tagName === "SELECT" || t.type === "checkbox" || t.type === "radio") invia(e.currentTarget);
       }}
       onClick={(e) => {
-        const b = (e.target as HTMLElement).closest<HTMLElement>("[data-svuota]");
+        const b = (e.target as HTMLElement).closest<HTMLElement>("[data-svuota], [data-tutte]");
         if (!b) return;
         e.preventDefault();
-        const nome = b.dataset.svuota;
-        for (const el of e.currentTarget.querySelectorAll<HTMLInputElement>(`input[name="${nome}"]`)) el.checked = false;
+        const metti = b.dataset.tutte !== undefined;
+        const nome = metti ? b.dataset.tutte : b.dataset.svuota;
+        for (const el of e.currentTarget.querySelectorAll<HTMLInputElement>(`input[name="${nome}"]`)) el.checked = metti;
         invia(e.currentTarget);
       }}
     >
