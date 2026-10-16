@@ -166,7 +166,8 @@ export default async function ZooBozzaPage({
 
                   <div className="vol-page" style={{
                     gridTemplateColumns: colonneGriglia(),
-                    gridTemplateRows: `repeat(${page.rows}, 1fr)`,
+                    // le righe crescono col contenuto (note e testi dei focus si leggono interi), la pagina resta almeno A4
+                    gridTemplateRows: `repeat(${page.rows}, minmax(min-content, 1fr))`,
                   }}>
                     {(page.sezioni ?? []).map((sz) => (
                       <div key={sz.id} className="vol-sezione"
@@ -175,7 +176,10 @@ export default async function ZooBozzaPage({
                         {sz.titolo && <div className="vol-sezione-titolo">{sz.titolo}</div>}
                       </div>
                     ))}
-                    {page.blocks.filter((b) => (b.offerIds?.length ?? 0) > 0 || b.testo || b.imageUrl).map((b) => {
+                    {/* anche le celle con solo il focus o solo la nota per il grafico: prima sparivano */}
+                    {page.blocks.map((b, bi) => ({ b, num: `${i + 1}-${bi + 1}` }))
+                      .filter(({ b }) => (b.offerIds?.length ?? 0) > 0 || b.testo || b.imageUrl || b.focus || b.commento || b.label)
+                      .map(({ b, num }) => {
                       const offerte = (b.offerIds ?? []).map((id) => offerById.get(id)).filter(Boolean);
                       // il focus della cella: quello messo sulla cella vuota, o quello delle sue offerte
                       const nomeFocus = b.focus || offerte.map((o) => (o!.focus ?? "").trim()).find(Boolean) || "";
@@ -188,6 +192,7 @@ export default async function ZooBozzaPage({
                           background: b.imageUrl ? `center/cover no-repeat url(${b.imageUrl})` : b.bg ? b.bg : dentroSezione ? "transparent" : "#fff",
                           border: dentroSezione ? "1px dashed rgba(0,0,0,.12)" : "1px solid #e6e6e6",
                         }}>
+                          <span className="vol-rif bozza-rif">{num}</span>
                           {b.label && <span className="vol-label">{b.label}</span>}
                           {/* casella libera del focus: tutto il testo; celle con offerte: solo il titolo */}
                           {nomeFocus && offerte.length === 0 && (
