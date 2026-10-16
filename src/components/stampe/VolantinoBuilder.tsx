@@ -1414,8 +1414,9 @@ export default function VolantinoBuilder({
                 {selBlock.imageUrl && <button className="btn btn-outline btn-sm" onClick={() => patch(sel!.pi, selBlock.id, { imageUrl: undefined })}>Togli immagine</button>}
               </div>
             )}
-            {(selPage.sezioni ?? []).length > 0 && <strong style={{ fontSize: 12, display: "block", marginTop: 10 }}>Sezioni della pagina</strong>}
-            {(selPage.sezioni ?? []).map((s) => (
+            {/* solo la sezione (o le sezioni) di questa cella: le altre della pagina non servono qui */}
+            {(selPage.sezioni ?? []).some((s) => cellaInSezione(selPage, selBlock, s)) && <strong style={{ fontSize: 12, display: "block", marginTop: 10 }}>Sezione di questa cella</strong>}
+            {(selPage.sezioni ?? []).filter((s) => cellaInSezione(selPage, selBlock, s)).map((s) => (
               <div key={s.id} style={{ marginTop: 6, paddingTop: 6, borderTop: "1px solid var(--line)" }}>
                 <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
                   <input value={s.titolo ?? ""} onChange={(e) => patchSezione(sel!.pi, s.id, { titolo: e.target.value })}
