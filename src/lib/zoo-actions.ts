@@ -14,7 +14,7 @@ import { sanitizeLayoutItems } from "./layout-pulizia";
 import {
   getZooDb, saveZooDb, ZooDB, ZooParent, ZooProduct, campagnaInLavorazione, campagnaInCorso, campaignStato, NO_VOLANTINO,
   formatiDi, descrizioneConFormati, prezziDelPadre, contenutoDa, chiavePrezzo, type PassoVolantinoId,
-  ZOO_FORMATS, PV_PROMO_CODES_DEFAULT, ownScopeVisible, apiKeyFor, contenutoDaTesto, zooCartelloValues, layoutScegliibili, scontoDaTesto, promoDaTesto, applicaPromoTesto, chiaveGruppoOfferta,
+  ZOO_FORMATS, PV_PROMO_CODES_DEFAULT, ownScopeVisible, articoloDaNomeFoto, apiKeyFor, contenutoDaTesto, zooCartelloValues, layoutScegliibili, scontoDaTesto, promoDaTesto, applicaPromoTesto, chiaveGruppoOfferta,
   type ZooOffer,
 } from "./zoo";
 import type { LayoutItem } from "./stampe";
@@ -251,10 +251,7 @@ export async function finalizeZooPhotoUpload(back: string, scopeParam: string, f
   const db = await getZooDb();
   let matched = 0;
   for (const clean of fileNames) {
-    const base = clean.replace(/\.[a-z0-9]+$/, "");
-    const hit = db.products.find(
-      (p) => (p.ean && base.includes(p.ean)) || (p.codice && p.codice.length > 3 && base.includes(p.codice.toLowerCase()))
-    );
+    const hit = articoloDaNomeFoto(db.products, clean);
     if (hit) {
       hit.image = publicUrlFor(`zoo-foto/${clean}`);
       matched++;

@@ -1139,18 +1139,36 @@ export function suggestPhotoMatch(
 }
 
 /**
+ * L'articolo di una foto dal nome del file: prima chi ha quell'EAN, poi chi ha
+ * quel codice fornitore come parola intera del nome. Prima bastava che il
+ * codice comparisse da qualche parte: il codice «1218» del Tonno Natural Line
+ * sta dentro l'EAN 8005852121837 dello Schesir, e la foto Schesir finiva lì.
+ */
+export function articoloDaNomeFoto<T extends { ean: string; codice: string }>(products: T[], nomeFile: string): T | undefined {
+  const base = nomeFile.toLowerCase().replace(/\.[a-z0-9]+$/, "");
+  const pezzi = base.split(/[^a-z0-9]+/).filter(Boolean);
+  return products.find((p) => p.ean && pezzi.includes(p.ean))
+    ?? products.find((p) => p.ean && p.ean.length >= 8 && base.includes(p.ean))
+    ?? products.find((p) => p.codice && p.codice.length > 3 && pezzi.includes(p.codice.toLowerCase()));
+}
+
+/**
  * Articoli la cui foto non c'entra con la descrizione: nel nome del file non
  * compare nessuna delle loro parole. Sono quelli abbinati quando bastava un
  * numero in comune; qui si elencano per poterli staccare e rifare.
  */
 export function fotoDaControllare(products: ZooProduct[]): { product: ZooProduct; file: string }[] {
   const fuori: { product: ZooProduct; file: string }[] = [];
+  const eanEsistenti = new Set(products.map((p) => p.ean).filter((e) => e && e.length >= 8));
   for (const p of products) {
     if (!p.image) continue;
     const file = decodeURIComponent(p.image.split("/").pop() ?? "").replace(/\.[a-z0-9]+$/i, "");
-    // il nome che contiene EAN o codice fornitore e' un abbinamento certo, non si discute
+    // il nome che contiene il SUO EAN o il suo codice (come parola intera) e' un abbinamento certo
+    const pezzi = file.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
     if (p.ean && file.includes(p.ean)) continue;
-    if (p.codice && p.codice.length > 3 && file.toLowerCase().includes(p.codice.toLowerCase())) continue;
+    // nel nome c'è l'EAN di un ALTRO articolo: la foto è sua, qui è finita per sbaglio
+    if (pezzi.some((x) => x !== p.ean && eanEsistenti.has(x))) { fuori.push({ product: p, file }); continue; }
+    if (p.codice && p.codice.length > 3 && pezzi.includes(p.codice.toLowerCase())) continue;
     const fileTokens = new Set(tokenizzaPerAbbinamento(file.replace(/[_-]/g, " ")));
     const suoi = new Set(tokenizzaPerAbbinamento(`${p.marca} ${p.fornitore} ${p.descrizione}`));
     const parole = [...fileTokens].filter((t) => suoi.has(t) && !/^\d+$/.test(t));
