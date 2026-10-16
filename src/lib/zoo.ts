@@ -1054,41 +1054,9 @@ export function pvListinoFor(db: ZooDB, scope: Scope, ean: string, academyDb: DB
   return undefined;
 }
 
-/**
- * Foto del prodotto zoo: immagine del padre, altrimenti dell'articolo, altrimenti
- * il segnaposto "mancante".
- *
- * Nessuna ricerca su disco: le foto vivono nel bucket Supabase (zoo-foto) e il
- * percorso finisce in `image`. La vecchia sonda su `public/zoo-foto` provava 8
- * `fs.existsSync` per ogni articolo senza foto — 1.200+ articoli su questo
- * volantino, ripetuti ad ogni riga di ogni tabella — su una cartella che non
- * esiste nemmeno: era il costo maggiore nel render delle pagine offerte.
- */
 /** La prima foto fra gli articoli di un padre (si cerca solo quando padre e articolo non ne hanno). */
 function fotoDiUnFratello(db: { products: ZooProduct[] }, parentId: string): string | undefined {
   return db.products.find((x) => x.parentId === parentId && x.image)?.image;
-}
-
-/**
- * Foto del prodotto zoo: immagine del padre, altrimenti dell'articolo, altrimenti
- * il segnaposto "mancante".
- *
- * Nessuna ricerca su disco: le foto vivono nel bucket Supabase (zoo-foto) e il
- * percorso finisce in `image`. La vecchia sonda su `public/zoo-foto` provava 8
- * `fs.existsSync` per ogni articolo senza foto — 1.200+ articoli su questo
- * volantino, ripetuti ad ogni riga di ogni tabella — su una cartella che non
- * esiste nemmeno: era il costo maggiore nel render delle pagine offerte.
- */
-/** Per ogni padre, la prima foto fra i suoi articoli (calcolata una volta per database letto). */
-const fotoFratelli = new WeakMap<ZooProduct[], Map<string, string>>();
-function fotoDiUnFratello(db: { products: ZooProduct[] }, parentId: string): string | undefined {
-  let indice = fotoFratelli.get(db.products);
-  if (!indice) {
-    indice = new Map();
-    for (const x of db.products) if (x.parentId && x.image && !indice.has(x.parentId)) indice.set(x.parentId, x.image);
-    fotoFratelli.set(db.products, indice);
-  }
-  return indice.get(parentId);
 }
 
 /**
@@ -1096,6 +1064,9 @@ function fotoDiUnFratello(db: { products: ZooProduct[] }, parentId: string): str
  * altrimenti (passando il database) quella di un altro articolo dello stesso
  * padre — capita di caricare la foto su un gusto e di mettere nella cella un
  * altro gusto — altrimenti il segnaposto "mancante".
+ *
+ * Nessuna ricerca su disco: le foto vivono nel bucket Supabase (zoo-foto) e il
+ * percorso finisce in `image`.
  */
 export function zooImageUrl(p?: ZooProduct, parent?: ZooParent, db?: { products: ZooProduct[] }): string {
   const propria = parent?.image ?? p?.image;
