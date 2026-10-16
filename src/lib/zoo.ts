@@ -717,17 +717,31 @@ export interface ZooTestataScopo {
   scopeType: ScopeType;
   scopeId: string;
   url: string;
+  /**
+   * Come entra nel cartello:
+   *  riquadro — al posto di quella del Consorzio, centrata nel suo riquadro (predefinito);
+   *  piena    — a tutta larghezza dal bordo in alto, il resto del cartello scende;
+   *  nessuna  — niente testata, nemmeno quella del Consorzio: il cartello sale.
+   */
+  modo?: "riquadro" | "piena" | "nessuna";
+  /** Altezza/larghezza dell'immagine: serve per la testata a tutta larghezza. */
+  rapporto?: number;
 }
 
-/** La testata da usare in questo ambito: la propria, o quella dell'insegna sopra. */
-export function testataPer(db: ZooDB, scope?: Scope, academyDb?: DB): string {
-  if (!scope || !academyDb) return "";
+/** La scelta di testata che vale in questo ambito: la propria, o quella dell'insegna sopra. */
+export function testataScopoPer(db: ZooDB, scope?: Scope, academyDb?: DB): ZooTestataScopo | undefined {
+  if (!scope || !academyDb) return undefined;
   for (const s of chainFor(scope, academyDb)) {
     if (s.type === "system") break;
     const mia = db.testate.find((t) => t.scopeType === s.type && t.scopeId === s.id);
-    if (mia?.url) return mia.url;
+    if (mia && (mia.url || mia.modo === "nessuna")) return mia;
   }
-  return "";
+  return undefined;
+}
+
+/** L'immagine della testata da usare in questo ambito ("" = quella del Consorzio, o nessuna). */
+export function testataPer(db: ZooDB, scope?: Scope, academyDb?: DB): string {
+  return testataScopoPer(db, scope, academyDb)?.url ?? "";
 }
 
 /** Cartello che un'insegna/PV ha deciso di non stampare (l'offerta resta per gli altri). */
@@ -1567,7 +1581,7 @@ export function effectiveZooLayout(
    * senza che il layout salvato cambi. È il modo per personalizzare la fascia
    * in cima restando su quello comune del Consorzio.
    */
-  const conTestata = (l: ZooLayout) => conTestataDiScopo(l, testataPer(db, scope, academyDb));
+  const conTestata = (l: ZooLayout) => conTestataDiScopo(l, testataScopoPer(db, scope, academyDb));
   const chain = chainFor(scope, academyDb);
   const di = (l: ZooLayout, s: { type: ScopeType; id: string }) => l.scopeType === s.type && l.scopeId === s.id;
   /*
@@ -1618,7 +1632,7 @@ export function layoutPerOfferta(
 ): ZooLayout {
   const scelto = offer.layoutId ? db.zooLayouts.find((l) => l.id === offer.layoutId) : undefined;
   if (scelto && ownScopeVisible(scope, academyDb, scelto)) {
-    if (scelto.formatId === formatId) return conTestataDiScopo(scelto, testataPer(db, scope, academyDb));
+    if (scelto.formatId === formatId) return conTestataDiScopo(scelto, testataScopoPer(db, scope, academyDb));
     if ((scelto.tipologie ?? []).length > 0) return effectiveZooLayout(db, scope, formatId, academyDb, scelto.tipologie);
   }
   return effectiveZooLayout(db, scope, formatId, academyDb, tags);
@@ -1646,17 +1660,63 @@ export function layoutScegliibili(
  * Consorzio. Così un'insegna cambia la fascia col proprio logo senza doversi
  * tenere una copia di tutto il cartello.
  */
-export function conTestataDiScopo(layout: ZooLayout, testata: string): ZooLayout {
-  if (!testata) return layout;
+export function conTestataDiScopo(layout: ZooLayout, testata: ZooTestataScopo | string | undefined): ZooLayout {
+  const t = typeof testata === "string" ? (testata ? { url: testata, modo: "riquadro" as const } : undefined) : testata;
+  if (!t || (!t.url && t.modo !== "nessuna")) return layout;
+  const formato = ZOO_FORMATS.find((f) => f.id === layout.formatId);
   const sostituisci = (items: LayoutItem[] | undefined) => {
     if (!items || items.length === 0) return items;
     const liberi = items.map((it, i) => ({ it, i })).filter(({ it }) => it.fieldId === "__img" && it.imageUrl);
-    if (liberi.length === 0) return items;
+    if (liberi.length === 0) {
+      // il layout non ha una testata: a tutta larghezza la si aggiunge comunque
+      if (t.modo === "piena" && t.url && formato) return mettiInCima(items, undefined, t.url, altezzaPiena(t.rapporto, formato));
+      return items;
+    }
     const piuInAlto = liberi.reduce((a, b) => (b.it.y < a.it.y ? b : a), liberi[0]);
+    const vecchia = piuInAlto.it;
+    if (t.modo === "nessuna") {
+      // via la testata: quello che stava sotto sale e si allarga nello spazio liberato
+      return ridistribuisci(items.filter((_, i) => i !== piuInAlto.i), vecchia.y + vecchia.h, vecchia.y);
+    }
+    if (t.modo === "piena" && formato) return mettiInCima(items, piuInAlto.i, t.url, altezzaPiena(t.rapporto, formato));
     // la testata dell'insegna ha proporzioni sue: si centra nel riquadro di quella del Consorzio
-    return items.map((it, i) => (i === piuInAlto.i ? { ...it, imageUrl: testata, align: "center" as const } : it));
+    return items.map((it, i) => (i === piuInAlto.i ? { ...it, imageUrl: t.url, align: "center" as const } : it));
   };
   return { ...layout, items: sostituisci(layout.items) ?? layout.items, itemsNoPhoto: sostituisci(layout.itemsNoPhoto) };
+}
+
+/** Altezza (in % del foglio) di un'immagine larga quanto il foglio. */
+function altezzaPiena(rapporto: number | undefined, formato: { w: number; h: number }): number {
+  const r = rapporto && rapporto > 0 ? rapporto : 0.3; // senza misure: una fascia di proporzioni tipiche
+  return Math.max(5, Math.min(45, Math.round(((r * formato.w) / formato.h) * 1000) / 10));
+}
+
+/**
+ * La testata a tutta larghezza, dal bordo in alto: prende il posto di quella del
+ * Consorzio (o si aggiunge) e il resto del cartello scende in proporzione, così
+ * niente le finisce sotto e niente esce dal foglio.
+ */
+function mettiInCima(items: LayoutItem[], indice: number | undefined, url: string, altezza: number): LayoutItem[] {
+  const vecchia = indice !== undefined ? items[indice] : undefined;
+  const fineVecchia = vecchia ? vecchia.y + vecchia.h : 0;
+  const resto = items.filter((_, i) => i !== indice);
+  const testata: LayoutItem = { fieldId: "__img", imageUrl: url, x: 0, y: 0, w: 100, h: altezza, align: "center" };
+  return [testata, ...ridistribuisci(resto, fineVecchia, altezza)];
+}
+
+/**
+ * Sposta gli elementi che stavano sotto `da` (in % del foglio) perché partano da
+ * `a`, comprimendo o allargando posizioni e altezze nello spazio che resta.
+ * Quello che stava sopra (o accanto) alla vecchia testata resta dov'è.
+ */
+function ridistribuisci(items: LayoutItem[], da: number, a: number): LayoutItem[] {
+  if (Math.abs(da - a) < 0.1 || da >= 99) return items;
+  const fattore = (100 - a) / (100 - da);
+  return items.map((it) => {
+    if (it.y + 0.5 < da) return it;
+    const y = a + (it.y - da) * fattore;
+    return { ...it, y: Math.round(y * 10) / 10, h: Math.max(1, Math.round(it.h * fattore * 10) / 10) };
+  });
 }
 
 /**

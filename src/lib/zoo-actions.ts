@@ -2854,6 +2854,20 @@ export async function uploadZooLayoutImage(scopeParam: string, formData: FormDat
  * copia del layout — sostituisce solo quella fascia, il resto resta del
  * Consorzio e continua a seguirne le modifiche.
  */
+/** Altezza/larghezza di un'immagine (dati o indirizzo); undefined se non si riesce a leggerla. */
+async function rapportoImmagine(sorgente: Buffer | string): Promise<number | undefined> {
+  try {
+    const dati = typeof sorgente === "string"
+      ? Buffer.from(await (await fetch(sorgente, { signal: AbortSignal.timeout(8000) })).arrayBuffer())
+      : sorgente;
+    const { default: sharp } = await import("sharp");
+    const m = await sharp(dati).metadata();
+    return m.width && m.height ? Math.round((m.height / m.width) * 10000) / 10000 : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function saveZooTestata(scopeParam: string, formData: FormData) {
   const { db, scope } = await requireZooGestione(scopeParam, "/stampe/zoo/layout");
   if (scope.type === "system") redirect(backUrl("/stampe/zoo/layout", scopeParam));
@@ -2868,17 +2882,26 @@ export async function saveZooTestata(scopeParam: string, formData: FormData) {
   const mie = db.layoutImages.filter((i) => i.scopeType === scope.type && i.scopeId === scope.id).map((i) => i.url);
   const scelta = mie.includes(richiesta) ? richiesta : "";
   const file = togli ? null : (formData.get("image") as File | null);
-  let url = scelta;
+  const precedente = db.testate.find((t) => t.scopeType === scope.type && t.scopeId === scope.id);
+  const modoRichiesto = String(formData.get("modo") ?? "");
+  const modo = (["riquadro", "piena", "nessuna"] as const).find((m) => m === modoRichiesto) ?? precedente?.modo ?? "riquadro";
+  // senza una nuova immagine si tiene quella di prima (si cambia solo il modo)
+  let url = scelta || (togli ? "" : precedente?.url ?? "");
+  let rapporto = scelta || togli ? undefined : precedente?.rapporto;
   if (file && file.size > 0 && file.type.startsWith("image/")) {
     const ext = (file.name.split(".").pop() || "png").toLowerCase().replace(/[^a-z0-9]/g, "");
     const nomeFile = `zootestata_${scope.type}_${scope.id || "sys"}_${Date.now()}.${ext}`;
-    url = (await uploadPublicFile(`uploads/zoo-layout/${nomeFile}`, Buffer.from(await file.arrayBuffer()), file.type)) ?? "";
+    const dati = Buffer.from(await file.arrayBuffer());
+    url = (await uploadPublicFile(`uploads/zoo-layout/${nomeFile}`, dati, file.type)) ?? "";
+    rapporto = await rapportoImmagine(dati);
   }
+  // a tutta larghezza servono le proporzioni dell'immagine: se mancano si misurano adesso
+  if (url && !rapporto) rapporto = await rapportoImmagine(url);
   db.testate = db.testate.filter((t) => !(t.scopeType === scope.type && t.scopeId === scope.id));
-  if (url) db.testate.push({ scopeType: scope.type, scopeId: scope.id, url });
+  if (!togli && (url || modo === "nessuna")) db.testate.push({ scopeType: scope.type, scopeId: scope.id, url: modo === "nessuna" ? url : url, modo, rapporto });
   await saveZooDb(db);
   rigeneraZoo();
-  redirect(backUrl("/stampe/zoo/layout", scopeParam, { formato, testata: url ? "1" : "0" }));
+  redirect(backUrl("/stampe/zoo/layout", scopeParam, { formato, testata: url || modo === "nessuna" ? "1" : "0" }));
 }
 
 export async function deleteZooLayoutImage(imageId: string, scopeParam: string, formato: string) {

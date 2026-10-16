@@ -50,7 +50,7 @@ export function sanitizeLayoutItems(raw: unknown, isKnownField: (fieldId: string
       ...(typeof i.italic === "boolean" ? { italic: i.italic } : {}),
       ...(["left", "center", "right"].includes(i.align as string) ? { align: i.align as "left" | "center" | "right" } : {}),
       ...(["top", "middle", "bottom"].includes(i.valign as string) ? { valign: i.valign as "top" | "middle" | "bottom" } : {}),
-      ...(typeof i.font === "string" && LAYOUT_FONTS.some((f) => f.id === i.font) ? { font: i.font as string } : {}),
+      ...(typeof i.font === "string" && (LAYOUT_FONTS.some((f) => f.id === i.font) || /^u_[a-z0-9]{4,24}$/.test(i.font)) ? { font: i.font as string } : {}),
       ...(typeof i.bg === "string" && /^#[0-9a-fA-F]{3,8}$/.test(i.bg) ? { bg: i.bg } : {}),
       ...(Number.isFinite(Number(i.radius)) ? { radius: Math.max(0, Math.min(40, Number(i.radius))) } : {}),
       ...(typeof i.testo === "string" && i.testo.trim() ? { testo: i.testo.slice(0, 200) } : {}),

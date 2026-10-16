@@ -90,6 +90,7 @@ export default function LayoutEditor({
   images = [],
   area = "arredo",
   ambiti = [],
+  fontPropri = [],
 }: {
   format: PrintFormat;
   fields: PrintField[];
@@ -118,6 +119,8 @@ export default function LayoutEditor({
   area?: "arredo" | "zoo"; // dove salvare il layout (default: arredo)
   /** Insegne/PV a cui chi gestisce può assegnare una copia di questo layout. */
   ambiti?: { value: string; label: string }[];
+  /** Font caricati dall'ambito (o dalla sua insegna, o dal Consorzio): si aggiungono al menu «Carattere». */
+  fontPropri?: { id: string; nome: string }[];
 }) {
   const [layoutId, setLayoutId] = useState(initialLayoutId ?? "");
   const [nome, setNome] = useState(initialNome ?? "");
@@ -1119,6 +1122,11 @@ export default function LayoutEditor({
               Carattere
               <select value={selItem.font ?? ""} onChange={(e) => updateSelected({ font: e.target.value })}>
                 {LAYOUT_FONTS.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
+                {fontPropri.length > 0 && (
+                  <optgroup label="Font caricati">
+                    {fontPropri.map((f) => <option key={f.id} value={f.id}>{f.nome}</option>)}
+                  </optgroup>
+                )}
               </select>
             </label>
             <label className="field">

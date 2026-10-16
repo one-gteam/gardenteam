@@ -3,11 +3,13 @@ import { getCurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import StampeHeader from "@/components/stampe/StampeHeader";
 import LayoutEditor from "@/components/stampe/LayoutEditor";
+import FontPropriCard from "@/components/stampe/FontPropriCard";
+import { fontPerAmbito } from "@/lib/font-propri";
 import AutoSubmitSelect from "@/components/stampe/AutoSubmitSelect";
 import { canAccessArea, scopesForUser, resolveScope, layoutMargins, vedeLayout, puoModificareLayout } from "@/lib/stampe";
 import {
   getZooDb, activeCampaign, zooCartelloValues, ZOO_FIELDS, ZOO_FORMATS, ZOO_TIPI_OFFERTA, pvPromoCodesFor,
-  pvPromoFor, tagsOfferta, testataPer,
+  pvPromoFor, tagsOfferta, testataPer, testataScopoPer,
 } from "@/lib/zoo";
 import {
   deleteZooLayout, uploadZooLayoutImage, deleteZooLayoutImage, copiaZooLayoutSuFormato, saveZooTestata,
@@ -33,6 +35,8 @@ export default async function ZooLayoutPage({
   if (!vedeLayout(user, "zoo")) redirect("/stampe/zoo/stampa");
   const canEdit = puoModificareLayout(user, "zoo", scope, academyDb);
   const testataMia = testataPer(db, scope, academyDb);
+  const sceltaTestata = testataScopoPer(db, scope, academyDb);
+  const modoTestata = sceltaTestata?.modo ?? "riquadro";
 
   const format = ZOO_FORMATS.find((f) => f.id === sp.formato) ?? ZOO_FORMATS[0];
   /*
@@ -168,7 +172,14 @@ export default async function ZooLayoutPage({
           images={db.layoutImages
             .filter((li) => li.scopeType === scope.type && li.scopeId === scope.id)
             .map((li) => ({ name: li.name, url: li.url }))}
+          fontPropri={fontPerAmbito(academyDb, scope).map((f) => ({ id: f.id, nome: f.nome }))}
         />
+
+        {canEdit && (
+          <FontPropriCard area="zoo" scopeParam={scopeParam} scopeLabel={scope.label}
+            fonts={fontPerAmbito(academyDb, scope)}
+            propri={fontPerAmbito(academyDb, scope).filter((f) => f.scopeType === scope.type && f.scopeId === scope.id).map((f) => f.id)} />
+        )}
 
         {/* la testata propria: si cambia la fascia in cima senza copiare tutto il layout */}
         {canEdit && scope.type !== "system" && (
@@ -181,17 +192,28 @@ export default async function ZooLayoutPage({
               una versione vostra del layout.
             </p>
             <div style={{ display: "flex", gap: 14, alignItems: "flex-start", flexWrap: "wrap" }}>
-              {testataMia
+              {modoTestata === "nessuna"
+                ? <span className="pill pill-gray">Testata nascosta: i cartelli escono senza</span>
+                : testataMia
                 ? (
                   <div style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 6, background: "#fff" }}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={testataMia} alt="" style={{ height: 54, maxWidth: 240, objectFit: "contain", display: "block" }} />
-                    <div className="hint" style={{ textAlign: "center" }}>testata in uso</div>
+                    <div className="hint" style={{ textAlign: "center" }}>testata in uso{modoTestata === "piena" ? " · a tutta larghezza" : ""}</div>
                   </div>
                 )
                 : <span className="hint">Nessuna testata vostra: si stampa quella del Consorzio.</span>}
               <form action={saveZooTestata.bind(null, scopeParam)} style={{ display: "grid", gap: 8 }}>
                 <input type="hidden" name="formato" value={format.id} />
+                <fieldset className="modo-testata">
+                  <legend>Come esce sul cartello</legend>
+                  <label><input type="radio" name="modo" value="riquadro" defaultChecked={modoTestata === "riquadro"} />
+                    <span><strong>Nel riquadro del Consorzio</strong><em>al suo posto, centrata; il resto del cartello non si muove</em></span></label>
+                  <label><input type="radio" name="modo" value="piena" defaultChecked={modoTestata === "piena"} />
+                    <span><strong>A tutta larghezza, dal bordo in alto</strong><em>larga quanto il foglio; titolo, prezzi e il resto scendono in proporzione</em></span></label>
+                  <label><input type="radio" name="modo" value="nessuna" defaultChecked={modoTestata === "nessuna"} />
+                    <span><strong>Nessuna testata</strong><em>si nasconde anche quella del Consorzio; il cartello sale nello spazio liberato</em></span></label>
+                </fieldset>
                 <input type="file" name="image" accept="image/*" />
                 {db.layoutImages.filter((li) => li.scopeType === scope.type && li.scopeId === scope.id).length > 0 && (
                   <label className="field" style={{ marginBottom: 0, fontSize: 12.5 }}>
@@ -206,10 +228,10 @@ export default async function ZooLayoutPage({
                 )}
                 <div style={{ display: "flex", gap: 8 }}>
                   <button className="btn btn-sm" type="submit">Salva testata</button>
-                  {testataMia && (
+                  {(testataMia || modoTestata === "nessuna") && (
                     <button className="btn btn-outline btn-sm" type="submit" name="togli" value="1"
-                      title="Torna alla testata del Consorzio">
-                      Togli la nostra
+                      title="Torna alla testata del Consorzio, nel suo riquadro">
+                      Torna a quella del Consorzio
                     </button>
                   )}
                 </div>

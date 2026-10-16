@@ -3,6 +3,8 @@ import { getCurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import StampeHeader from "@/components/stampe/StampeHeader";
 import LayoutEditor from "@/components/stampe/LayoutEditor";
+import FontPropriCard from "@/components/stampe/FontPropriCard";
+import { fontPerAmbito } from "@/lib/font-propri";
 import AutoSubmitSelect from "@/components/stampe/AutoSubmitSelect";
 import {
   getStampeDb,
@@ -129,7 +131,14 @@ export default async function LayoutPage({
           images={db.layoutImages
             .filter((li) => li.scopeType === scope.type && li.scopeId === scope.id)
             .map((li) => ({ name: li.name, url: li.url }))}
+          fontPropri={fontPerAmbito(academyDb, scope).map((f) => ({ id: f.id, nome: f.nome }))}
         />
+
+        {canEdit && (
+          <FontPropriCard area="arredo" scopeParam={scopeParam} scopeLabel={scope.label}
+            fonts={fontPerAmbito(academyDb, scope)}
+            propri={fontPerAmbito(academyDb, scope).filter((f) => f.scopeType === scope.type && f.scopeId === scope.id).map((f) => f.id)} />
+        )}
 
         {canEdit && (
           <div className="section grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))" }}>

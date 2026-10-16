@@ -24,5 +24,7 @@ export const LAYOUT_FONTS: { id: string; label: string; css: string }[] = [
 
 /** Famiglia CSS corrispondente alla chiave salvata nel layout. */
 export function layoutFontCss(id: string | undefined): string | undefined {
+  // font caricato da un'insegna/PV: registrato con @font-face in app/layout.tsx
+  if (id && /^u_[a-z0-9]{4,24}$/.test(id)) return `"GTF ${id}", "Segoe UI", sans-serif`;
   return LAYOUT_FONTS.find((f) => f.id === (id ?? ""))?.css;
 }

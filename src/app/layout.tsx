@@ -4,6 +4,8 @@ import {
   Oswald, Bebas_Neue, Playfair_Display, Montserrat, Roboto_Condensed,
 } from "next/font/google";
 import { getDb } from "@/lib/db";
+import { cssFontPropri } from "@/lib/font-propri";
+import { publicUrlFor } from "@/lib/supabase";
 import "./globals.css";
 
 /**
@@ -56,7 +58,10 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const { settings } = await getDb();
+  const db = await getDb();
+  const { settings } = db;
+  // i font caricati da insegne e PV per i cartelli: registrati una volta, valgono ovunque (editor, anteprime, stampa)
+  const fontCartelli = cssFontPropri(db, publicUrlFor("uploads/fonts/"));
   /*
    * I due colori finiscono dentro a un <style>: si accettano solo colori
    * esadecimali, altrimenti un testo qualunque salvato in Impostazioni
@@ -84,7 +89,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang="it" className={`${interSans.variable} ${poppinsHeading.variable} ${altFont} ${TAG_FONT_VARS}`}>
       <head>
-        <style dangerouslySetInnerHTML={{ __html: themeVars + fontVars }} />
+        <style dangerouslySetInnerHTML={{ __html: themeVars + fontVars + fontCartelli }} />
       </head>
       <body>{children}</body>
     </html>

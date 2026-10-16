@@ -662,6 +662,8 @@ export interface Registration {
 
 /** Impostazioni globali del portale, gestite dall'amministratore di sistema. */
 export interface PortalSettings {
+  /** Font caricati da Consorzio, insegne e PV per i cartelli (lib/font-propri). */
+  fontPropri?: import("./font-propri").FontProprio[];
   /** Permessi dei ruoli scelti dall'amministratore di sistema (assente = quelli predefiniti). */
   permessiRuoli?: PermessiRuoli;
   portalName: string;
