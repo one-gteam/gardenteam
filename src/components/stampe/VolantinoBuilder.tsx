@@ -6,13 +6,13 @@ import { useRouter } from "next/navigation";
 import { SceltaFoto } from "./UnisciNelVolantino";
 import {
   saveVolantinoLayout, updateZooOfferQuick, uploadVolantinoImage, updateParentFieldInline,
-  unisciVociVolantino, separaUnioneVolantino, updateOfferGroupFieldInline,
+  unisciVociVolantino, separaUnioneVolantino, updateOfferGroupFieldInline, setFotoVolantinoPadre,
 } from "@/lib/zoo-actions";
 import { assegnaFocusOfferte, salvaFocusDef } from "@/lib/zoo-focus-actions";
 import { colonneGriglia, colonnaGriglia, colonnaSezione, colonneRiga, righeBloccate, sezioneDaCella, cellaInSezione, allargaSezioneADestra, restringiSezioneDaDestra } from "@/lib/volantino-griglia";
 import type { VolPage, VolBlock, VolSection } from "@/lib/zoo";
 
-export interface ArtLite { ean: string; descrizione: string; marca: string }
+export interface ArtLite { ean: string; descrizione: string; marca: string; foto?: string }
 /**
  * Voce della lista di sinistra: un PRODOTTO PADRE (che raccoglie le offerte dei
  * suoi gusti/formati) oppure una singola offerta senza padre. `articoli` elenca
@@ -38,8 +38,11 @@ export interface OffLite {
   focus?: string;
   animale?: string; // primo animale del padre
   animali?: string[]; // tutti gli animali del padre (per proporre le pagine giuste)
-  /** Voce unita: le foto scelte da mostrare (una o più). */
+  /** Le foto da mostrare quando sono più d'una (voce unita, o foto scelte per il padre). */
   fotoUnione?: string[];
+  /** Le foto scelte per il volantino sul padre (vuoto = regola di sempre) e quelle fra cui scegliere. */
+  fotoScelte?: string[];
+  fotoCandidate?: { url: string; nome: string }[];
   caratt?: string; // prima caratteristica di prodotto del padre
   gruppoGrafico?: string; // stesso valore = da impaginare vicine
 }
@@ -1274,6 +1277,40 @@ export default function VolantinoBuilder({
                     )}
                   </div>
                 ))}
+                {/* le foto del padre nel volantino: una o più, scelte fra quella del padre e quelle dei suoi articoli */}
+                {selOffs[0].padreId && (selOffs[0].fotoCandidate?.length ?? 0) > 1 && (() => {
+                  const o0 = selOffs[0];
+                  const scelte = o0.fotoScelte ?? [];
+                  const salva = async (lista: string[]) => {
+                    const r = await setFotoVolantinoPadre(o0.padreId!, lista);
+                    if (!r.ok) { flash(r.error ?? "Foto non salvate."); return; }
+                    const prima = lista[0] ?? o0.fotoCandidate?.[0]?.url ?? o0.foto;
+                    for (const o of offers) if (o.padreId === o0.padreId && !o.unione) {
+                      sovrascrivi(o.id, { fotoScelte: lista.length ? lista : undefined, foto: lista.length ? prima : o.foto, fotoUnione: lista.length > 1 ? lista : undefined });
+                    }
+                    flash(lista.length ? `Nel volantino: ${lista.length} ${lista.length === 1 ? "foto" : "foto affiancate"}.` : "Foto: torna quella di sempre.");
+                  };
+                  return (
+                    <div className="vol-foto-scelta">
+                      <strong>Foto nel volantino</strong>
+                      <span className="hint" style={{ display: "block", fontSize: 10.5 }}>Clic per scegliere: più foto vanno affiancate nella casella, nell&apos;ordine dei clic. Vale per il padre, anche in Bozza, Excel e ZIP.</span>
+                      <div className="vol-foto-griglia">
+                        {o0.fotoCandidate!.map((f) => {
+                          const n = scelte.indexOf(f.url);
+                          return (
+                            <button key={f.url} type="button" className={`vol-foto-voce${n >= 0 ? " scelta" : ""}`} title={f.nome}
+                              onClick={() => salva(n >= 0 ? scelte.filter((u) => u !== f.url) : [...scelte, f.url])}>
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={f.url} alt="" />
+                              {n >= 0 && <span className="vol-foto-n">{n + 1}</span>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {scelte.length > 0 && <button type="button" className="mini-btn" onClick={() => salva([])}>torna alla foto di sempre</button>}
+                    </div>
+                  );
+                })()}
                 {/* il titolo appartiene al prodotto padre: si salva nel database, non solo qui */}
                 {selOffs[0].padreId && (
                   <label className="field">

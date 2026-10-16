@@ -45,6 +45,12 @@ export interface ZooParent {
   tipologia?: string;
   aiGenerated?: boolean;
   note?: string;
+  /**
+   * Le foto da mettere nel volantino, nell'ordine scelto (una o più: es. i tre
+   * giochi Tao affiancati nella casella). Vuoto = la regola di sempre (foto del
+   * padre, dell'articolo, o di un altro articolo dello stesso padre).
+   */
+  fotoVolantino?: string[];
 }
 
 /** Personalizzazione testi del padre per insegna/PV (la versione comune resta intatta). */
@@ -1068,6 +1074,20 @@ function fotoDiUnFratello(db: { products: ZooProduct[] }, parentId: string): str
  * Nessuna ricerca su disco: le foto vivono nel bucket Supabase (zoo-foto) e il
  * percorso finisce in `image`.
  */
+/** Le foto della voce nel volantino: quelle scelte per il padre, altrimenti la foto di sempre. */
+export function fotoVolantinoDi(db: { products: ZooProduct[] }, p?: ZooProduct, parent?: ZooParent): string[] {
+  const scelte = (parent?.fotoVolantino ?? []).filter(Boolean);
+  return scelte.length ? scelte : [zooImageUrl(p, parent, db)];
+}
+
+/** Le foto fra cui scegliere per il volantino: quella del padre e quelle dei suoi articoli. */
+export function fotoCandidateDi(db: { products: ZooProduct[] }, parent: ZooParent): { url: string; nome: string }[] {
+  const out = new Map<string, string>();
+  if (parent.image) out.set(parent.image, "foto del padre");
+  for (const x of db.products) if (x.parentId === parent.id && x.image && !out.has(x.image)) out.set(x.image, x.descrizione);
+  return [...out.entries()].map(([url, nome]) => ({ url, nome }));
+}
+
 export function zooImageUrl(p?: ZooProduct, parent?: ZooParent, db?: { products: ZooProduct[] }): string {
   const propria = parent?.image ?? p?.image;
   if (propria) return propria;
@@ -2275,7 +2295,7 @@ export function volantinoCellRows(db: ZooDB, campaignId: string): VolantinoCellR
         Focus: nomeFocus,
         "Testo del focus": defFocus?.descrizione ?? "",
         "Nota del focus per il grafico": defFocus?.notaGrafico ?? "",
-        "File foto": [...new Set(offs.flatMap((o, i) => { const u = unioneDi(db, o); return u?.foto?.length ? u.foto.map(nomeFileFoto) : [nomeFileFoto(zooImageUrl(prodotti[i], padri[i], db))]; }).filter(Boolean))].join(" / "),
+        "File foto": [...new Set(offs.flatMap((o, i) => { const u = unioneDi(db, o); return u?.foto?.length ? u.foto.map(nomeFileFoto) : fotoVolantinoDi(db, prodotti[i], padri[i]).map(nomeFileFoto); }).filter(Boolean))].join(" / "),
       });
     });
   });
@@ -2305,7 +2325,11 @@ export function volantinoPhotoRefs(db: ZooDB, campaignId: string): VolantinoPhot
         const parent = p?.parentId ? db.parents.find((x) => x.id === p.parentId) : undefined;
         const unione = unioneDi(db, o);
         for (const u of unione?.foto ?? []) if (u.startsWith("http") && !seen.has(u)) seen.set(u, { url: u, nome: nomeFileFoto(u).replace(/\.[a-z0-9]{2,5}$/i, "") });
-        const url = zooImageUrl(p, parent, db);
+        // le foto scelte per il volantino (anche più d'una), o quella di sempre
+        for (const extra of fotoVolantinoDi(db, p, parent).slice(1)) {
+          if (extra.startsWith("http") && !seen.has(extra)) seen.set(extra, { url: extra, nome: nomeFileFoto(extra).replace(/\.[a-z0-9]{2,5}$/i, "") });
+        }
+        const url = fotoVolantinoDi(db, p, parent)[0];
         if (url.startsWith("http") && !seen.has(url)) {
           // il nome del file com'è caricato (es. 56058): è quello scritto nella colonna «File foto» dell'Excel
           const nome = nomeFileFoto(url).replace(/\.[a-z0-9]{2,5}$/i, "") || `${o.ean}_${(parent?.nome ?? p?.descrizione ?? o.descrizione).slice(0, 40)}`;

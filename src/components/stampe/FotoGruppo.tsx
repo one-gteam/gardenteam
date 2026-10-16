@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { caricaFotoOfferta } from "@/lib/zoo-actions";
+import { caricaFotoOfferta, setFotoVolantinoPadre } from "@/lib/zoo-actions";
 
 const MANCANTE = "/immagini/mancante.jpg";
 
@@ -21,11 +21,21 @@ export interface RigaFotoGruppo {
  * ognuno con la sua foto.
  */
 export default function FotoGruppo({
-  titolo, sottotitolo, foto, righe, tipo, puoCaricare,
+  titolo, sottotitolo, foto, righe, tipo, puoCaricare, parentId, scelte: scelteIniziali, candidate = [],
 }: {
   titolo: string; sottotitolo: string; foto: string; righe: RigaFotoGruppo[];
   tipo: "padre" | "unione" | "articolo"; puoCaricare: boolean;
+  /** Padre: le foto scelte per il volantino e quelle fra cui scegliere. */
+  parentId?: string; scelte?: string[]; candidate?: { url: string; nome: string }[];
 }) {
+  const [scelte, setScelte] = useState<string[]>(scelteIniziali ?? []);
+  const scegli = async (url: string) => {
+    if (!parentId) return;
+    const nuove = scelte.includes(url) ? scelte.filter((u) => u !== url) : [...scelte, url];
+    const r = await setFotoVolantinoPadre(parentId, nuove).catch(() => ({ ok: false as const, error: "errore di rete" }));
+    if (r.ok) { setScelte(nuove); setStato(nuove.length ? `✓ nel volantino: ${nuove.length} foto` : "✓ nel volantino: la foto di sempre"); }
+    else setStato(("error" in r && r.error) || "non salvato");
+  };
   const [principale, setPrincipale] = useState(foto);
   const [proprie, setProprie] = useState<Record<string, string | undefined>>(Object.fromEntries(righe.map((r) => [r.offerId, r.foto])));
   const [sopra, setSopra] = useState(false);
@@ -100,6 +110,25 @@ export default function FotoGruppo({
           </label>
         </div>
       ) : null}
+      {tipo === "padre" && parentId && candidate.length > 1 && (
+        <div style={{ marginTop: 8, paddingTop: 6, borderTop: "1px solid var(--line)" }}>
+          <div style={{ fontSize: 11, fontWeight: 700 }}>Nel volantino <span className="hint" style={{ fontWeight: 400 }}>— clic per sceglierne una o più (affiancate, in ordine)</span></div>
+          <div className="vol-foto-griglia">
+            {candidate.map((f) => {
+              const n = scelte.indexOf(f.url);
+              return (
+                <button key={f.url} type="button" className={`vol-foto-voce${n >= 0 ? " scelta" : ""}`} title={f.nome} disabled={!puoCaricare}
+                  onClick={() => scegli(f.url)}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={f.url} alt="" />
+                  {n >= 0 && <span className="vol-foto-n">{n + 1}</span>}
+                </button>
+              );
+            })}
+          </div>
+          {scelte.length === 0 && <span className="hint" style={{ fontSize: 10.5 }}>Nessuna scelta: va la foto del padre (o del primo articolo che ne ha una).</span>}
+        </div>
+      )}
       {puoCaricare && <span className="hint" style={{ display: "block", marginTop: 4, fontSize: 10.5, textAlign: "center" }}>{stato || "oppure trascinala sulla scheda"}</span>}
     </div>
   );

@@ -1740,3 +1740,11 @@ img.tt-media.on { animation: sp-kb 12s linear forwards; }
 /* editor del layout: la testata dell'insegna/PV in anteprima */
 .testata-ambito-badge { position: absolute; right: 2px; top: 2px; z-index: 3; font-size: 9.5px; font-weight: 700; background: rgba(255,255,255,.92);
   color: #7b3a8f; border: 1px solid #c9a6d3; border-radius: 4px; padding: 0 4px; pointer-events: none; white-space: nowrap; }
+
+/* Crea Volantino: scelta delle foto del padre per la casella */
+.vol-foto-scelta { margin: 8px 0; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: #fafaf8; font-size: 12px; }
+.vol-foto-griglia { display: grid; grid-template-columns: repeat(auto-fill, minmax(54px, 1fr)); gap: 6px; margin: 6px 0; }
+.vol-foto-voce { position: relative; padding: 2px; border: 2px solid var(--line); border-radius: 6px; background: #fff; cursor: pointer; height: 58px; }
+.vol-foto-voce img { width: 100%; height: 100%; object-fit: contain; }
+.vol-foto-voce.scelta { border-color: var(--green-600, #2f6b4a); box-shadow: 0 0 0 2px var(--green-50, #eaf3e2); }
+.vol-foto-n { position: absolute; top: -6px; right: -6px; background: var(--green-700, #1f4d33); color: #fff; font-size: 10px; font-weight: 800; border-radius: 99px; min-width: 16px; height: 16px; line-height: 16px; text-align: center; }

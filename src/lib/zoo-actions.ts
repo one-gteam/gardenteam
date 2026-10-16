@@ -14,7 +14,7 @@ import { sanitizeLayoutItems } from "./layout-pulizia";
 import {
   getZooDb, saveZooDb, ZooDB, ZooParent, ZooProduct, campagnaInLavorazione, campagnaInCorso, campaignStato, NO_VOLANTINO,
   formatiDi, descrizioneConFormati, prezziDelPadre, contenutoDa, chiavePrezzo, type PassoVolantinoId,
-  ZOO_FORMATS, PV_PROMO_CODES_DEFAULT, ownScopeVisible, articoloDaNomeFoto, apiKeyFor, contenutoDaTesto, zooCartelloValues, layoutScegliibili, scontoDaTesto, promoDaTesto, applicaPromoTesto, chiaveGruppoOfferta,
+  ZOO_FORMATS, PV_PROMO_CODES_DEFAULT, ownScopeVisible, articoloDaNomeFoto, fotoCandidateDi, apiKeyFor, contenutoDaTesto, zooCartelloValues, layoutScegliibili, scontoDaTesto, promoDaTesto, applicaPromoTesto, chiaveGruppoOfferta,
   type ZooOffer,
 } from "./zoo";
 import type { LayoutItem } from "./stampe";
@@ -261,6 +261,26 @@ export async function finalizeZooPhotoUpload(back: string, scopeParam: string, f
   // le miniature per le tabelle si fanno dopo la risposta: chi carica non aspetta
   after(() => creaMiniature(fileNames).then(() => undefined));
   redirect(backUrl(back, scopeParam, { foto: String(fileNames.length), abbinate: String(matched) }));
+}
+
+/**
+ * Le foto del padre da mettere nel volantino, nell'ordine dato: solo fra la sua
+ * foto e quelle dei suoi articoli. Lista vuota = torna alla regola di sempre.
+ */
+export async function setFotoVolantinoPadre(parentId: string, urls: string[]): Promise<{ ok: boolean; error?: string }> {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  if (!isZooEditor(user) && !(db.settings.volantinoEditors ?? []).includes(user.id)) return { ok: false, error: "Solo chi compone il volantino." };
+  const parent = db.parents.find((p) => p.id === parentId);
+  if (!parent) return { ok: false, error: "Padre non trovato." };
+  const ammesse = new Set(fotoCandidateDi(db, parent).map((f) => f.url));
+  const scelte = [...new Set((Array.isArray(urls) ? urls : []).filter((u) => typeof u === "string" && ammesse.has(u)))].slice(0, 6);
+  const prima = (parent.fotoVolantino ?? []).length;
+  parent.fotoVolantino = scelte.length ? scelte : undefined;
+  registra(user, { area: "zoo", cosa: "Foto nel volantino", oggetto: parent.nome, prima: `${prima} scelte`, dopo: scelte.length ? `${scelte.length} scelte` : "regola di sempre" });
+  await saveZooDb(db);
+  rigeneraZoo();
+  return { ok: true };
 }
 
 /** Associa manualmente una foto già caricata (nel bucket zoo-foto) a un prodotto. */

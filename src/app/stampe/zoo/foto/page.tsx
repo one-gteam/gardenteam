@@ -5,7 +5,7 @@ import { canAccessArea, isZooEditor, resolveScope } from "@/lib/stampe";
 import FotoTrascinabile from "@/components/stampe/FotoTrascinabile";
 import FotoGruppo, { type RigaFotoGruppo } from "@/components/stampe/FotoGruppo";
 import { getDb } from "@/lib/db";
-import { getZooDb, activeCampaign, zooImageUrl, NO_VOLANTINO, type ZooOffer } from "@/lib/zoo";
+import { getZooDb, activeCampaign, zooImageUrl, NO_VOLANTINO, fotoCandidateDi, type ZooOffer } from "@/lib/zoo";
 
 const MANCANTE = "/immagini/mancante.jpg";
 
@@ -47,7 +47,7 @@ export default async function ZooFotoPage({
     : [];
 
   /* ---------- gruppi: voce unita, poi padre, poi offerta da sola ---------- */
-  type Gruppo = { key: string; tipo: "padre" | "unione" | "articolo"; titolo: string; sotto: string; foto: string; righe: RigaFotoGruppo[] };
+  type Gruppo = { key: string; tipo: "padre" | "unione" | "articolo"; titolo: string; sotto: string; foto: string; righe: RigaFotoGruppo[]; parentId?: string; scelte?: string[]; candidate?: { url: string; nome: string }[] };
   const perChiave = new Map<string, ZooOffer[]>();
   for (const o of offers) {
     const pid = prodById.get(o.productId ?? "")?.parentId;
@@ -86,7 +86,11 @@ export default async function ZooFotoPage({
       });
       // la foto di riferimento: quella del padre, altrimenti la prima di un suo articolo
       const foto = parent?.image ?? righe.find((r) => r.foto)?.foto ?? MANCANTE;
-      return { key, tipo: "padre" as const, titolo: parent?.nome ?? prima.descrizione, sotto: `${offs.length} ${offs.length === 1 ? "articolo" : "articoli"}`, foto, righe };
+      return {
+        key, tipo: "padre" as const, titolo: parent?.nome ?? prima.descrizione, sotto: `${offs.length} ${offs.length === 1 ? "articolo" : "articoli"}`, foto, righe,
+        // le foto per il volantino: scelte sul padre (anche più d'una), fra la sua e quelle dei suoi articoli
+        parentId: parent?.id, scelte: parent?.fotoVolantino, candidate: parent ? fotoCandidateDi(db, parent) : undefined,
+      };
     }
     const p = prodById.get(prima.productId ?? "");
     return {
@@ -145,7 +149,8 @@ export default async function ZooFotoPage({
         <div style={{ display: "grid", gridTemplateColumns: `repeat(auto-fill, minmax(${vista === "padri" ? 240 : 200}px, 1fr))`, gap: 14, alignItems: "start" }}>
           {vista === "padri"
             ? gruppi.map((g) => (
-              <FotoGruppo key={g.key} titolo={g.titolo} sottotitolo={g.sotto} foto={g.foto} righe={g.righe} tipo={g.tipo} puoCaricare={editor} />
+              <FotoGruppo key={g.key} titolo={g.titolo} sottotitolo={g.sotto} foto={g.foto} righe={g.righe} tipo={g.tipo} puoCaricare={editor}
+                parentId={g.parentId} scelte={g.scelte} candidate={g.candidate} />
             ))
             : articoli.map((o) => {
               const p = prodById.get(o.productId ?? "");

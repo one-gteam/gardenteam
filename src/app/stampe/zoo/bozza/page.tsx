@@ -7,7 +7,7 @@ import {
   prezzoMinimo,
   getZooDb, campagnaInLavorazione, campagnaInCorso, migraVolantinoPages, zooImageUrl, effectiveParentText,
   datiPrezzoOfferta,
-  unioneDi, giacenzePer,
+  unioneDi, giacenzePer, fotoVolantinoDi,
 } from "@/lib/zoo";
 import { aggiungiNotaBozza, risolviNotaBozza } from "@/lib/zoo-actions";
 import TabellaVolantino from "@/components/stampe/TabellaVolantino";
@@ -229,7 +229,7 @@ export default async function ZooBozzaPage({
                               const unione = unioneDi(db, o!);
                               const prezzoTestoUnione = !b.prezzo && unione?.prezzo && unione.prezzo !== "minimo" ? unione.prezzoTesto : undefined;
                               const nomeVoce = unione?.titolo || nome;
-                              const fotoVoce = unione?.foto?.length ? unione.foto : [foto];
+                              const fotoVoce = unione?.foto?.length ? unione.foto : fotoVolantinoDi(db, prod, parent);
                               return (
                                 <div key={o!.id} style={{ minWidth: 0 }}>
                                   {fotoVoce[0] !== "/immagini/mancante.jpg" && (

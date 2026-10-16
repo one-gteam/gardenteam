@@ -5,7 +5,7 @@ import VolantinoBuilder from "@/components/stampe/VolantinoBuilder";
 import { canAccessArea, isZooEditor, resolveScope, scopesForUser } from "@/lib/stampe";
 import { getDb } from "@/lib/db";
 import {
-  getZooDb, campagnaInLavorazione, zooImageUrl, migraVolantinoPages, effectiveParentText, datiPrezzoOfferta,
+  getZooDb, campagnaInLavorazione, zooImageUrl, fotoVolantinoDi, fotoCandidateDi, migraVolantinoPages, effectiveParentText, datiPrezzoOfferta,
   chiavePrezzo, padreDaChiave, prezzoMinimo, pvPriceFor,
   unioneDi, animaliDi, caratteristicheProdottoDi, focusDelVolantino,
 } from "@/lib/zoo";
@@ -77,7 +77,7 @@ export default async function CreaVolantinoPage({
             // gli articoli della voce: quelli delle sue offerte (stesso prezzo, o tutti quelli dell'unione)
             const idsArticoli = new Set(gruppo.map((g) => g.productId));
             const articoli = db.products.filter((p) => idsArticoli.has(p.id))
-              .map((p) => ({ ean: p.ean, descrizione: p.descrizione, marca: p.marca }));
+              .map((p) => ({ ean: p.ean, descrizione: p.descrizione, marca: p.marca, foto: p.image }));
             const prezzi = [...new Set(gruppo.map((g) => pvPriceFor(db, scope, g.ean, academyDb) ?? g.prezzoPromo).filter(Boolean))];
             const piuPrezzi = prezzi.length > 1;
             // prezzo di partenza, sconto e tipologia: servono anche a chi compone, non solo in stampa
@@ -100,8 +100,11 @@ export default async function CreaVolantinoPage({
               sconto: piuPrezzi ? undefined : dati.sconto || undefined,
               unione: primo.unioneVolantino,
               tipi: dati.tipi,
-              foto: zooImageUrl(product, parent, db),
-              fotoUnione: unione?.foto?.length ? unione.foto : undefined,
+              // le foto scelte per il padre (anche più d'una), altrimenti la foto di sempre
+              foto: fotoVolantinoDi(db, product, parent)[0],
+              fotoUnione: unione?.foto?.length ? unione.foto : fotoVolantinoDi(db, product, parent).length > 1 ? fotoVolantinoDi(db, product, parent) : undefined,
+              fotoScelte: parent?.fotoVolantino,
+              fotoCandidate: parent && !unione ? fotoCandidateDi(db, parent) : undefined,
               animali: animaliDi(db, parent?.caratteristiche ?? []),
               voti: votes.filter((v) => v.tipo === "preferita").length,
               nonTrattati: votes.filter((v) => v.tipo === "nontrattato").length,
