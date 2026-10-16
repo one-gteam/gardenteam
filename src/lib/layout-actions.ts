@@ -4,7 +4,7 @@ import { requireUser } from "./auth";
 import { getDb } from "./db";
 import { getStampeDb, saveStampeDb, isStoreBlocked, puoModificareLayout, resolveScope, type LayoutItem } from "./stampe";
 import { getZooDb, saveZooDb, ZOO_FIELDS } from "./zoo";
-import { copiaStileCampo, sanitizeLayoutItems } from "./layout-pulizia";
+import { copiaStileCampo, elementoLibero, sanitizeLayoutItems } from "./layout-pulizia";
 import { registra } from "./registro";
 
 /**
@@ -17,6 +17,8 @@ import { registra } from "./registro";
  */
 export async function applicaCampoATuttiILayout(
   area: "arredo" | "zoo", scopeParam: string, layoutIdAperto: string, formatId: string, itemJson: string, conPosizione: boolean,
+  /** Solo i layout dello stesso formato (predefinito), e se aggiungere l'elemento dove manca. */
+  opzioni: { soloFormato?: boolean; aggiungi?: boolean } = {},
 ): Promise<{ ok: true; layout: number; nomi: string[] } | { ok: false; error: string }> {
   const user = await requireUser();
   const academyDb = await getDb();
@@ -29,10 +31,15 @@ export async function applicaCampoATuttiILayout(
     const modello = sanitizeLayoutItems([grezzo], noto)[0];
     if (!modello) return null;
     const nomi: string[] = [];
+    // immagini e riquadri si riconoscono dal punto in cui stanno: valgono solo sullo stesso formato
+    const soloFormato = opzioni.soloFormato !== false || elementoLibero(modello.fieldId);
     for (const l of layouts) {
       if (l.id === layoutIdAperto || l.scopeType !== scope.type || l.scopeId !== scope.id) continue;
-      const pos = conPosizione && l.formatId === formatId;
-      const n = copiaStileCampo(l.items, modello, pos) + (l.itemsNoPhoto ? copiaStileCampo(l.itemsNoPhoto, modello, pos) : 0);
+      const stessoFormato = l.formatId === formatId;
+      if (soloFormato && !stessoFormato) continue;
+      // posizione e aggiunta hanno senso solo sullo stesso formato (le percentuali di un altro foglio non tornano)
+      const o = { conPosizione: conPosizione && stessoFormato, aggiungi: !!opzioni.aggiungi && stessoFormato };
+      const n = copiaStileCampo(l.items, modello, o) + (l.itemsNoPhoto ? copiaStileCampo(l.itemsNoPhoto, modello, o) : 0);
       if (n > 0) nomi.push(l.nome || l.formatId);
     }
     return { modello, nomi };

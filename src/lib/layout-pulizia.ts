@@ -75,14 +75,58 @@ export function sanitizeLayoutItems(raw: unknown, isKnownField: (fieldId: string
 /** Le proprietà di aspetto di un elemento (tutto tranne campo e posizione). */
 export const CHIAVI_STILE = ["color", "sticker", "size", "bold", "italic", "align", "valign", "font", "bg", "radius", "cornice", "prefisso"] as const;
 
+/** Opzioni di «Applica a tutti i layout». */
+export interface OpzioniCopia {
+  /** Anche posizione e misure (per i campi; immagini e riquadri le copiano sempre). */
+  conPosizione: boolean;
+  /** Se nel layout il campo (o l'immagine in quel punto) non c'è, lo aggiunge uguale. */
+  aggiungi: boolean;
+}
+
+/** Immagini libere e riquadri: non sono «un campo», si riconoscono da dove stanno. */
+export function elementoLibero(fieldId: string): boolean {
+  return fieldId === ELEMENTO_IMMAGINE || fieldId === ELEMENTO_RIQUADRO;
+}
+
+/** Quanto si sovrappongono due riquadri (0 = per niente, 1 = uguali). */
+function sovrapposizione(a: LayoutItem, b: LayoutItem): number {
+  const x = Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x));
+  const y = Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+  const comune = x * y;
+  const unione = a.w * a.h + b.w * b.h - comune;
+  return unione > 0 ? comune / unione : 0;
+}
+
 /**
- * Copia l'aspetto (e, se chiesto, posizione e misure) di `modello` su tutti gli
- * elementi con lo stesso campo. Ritorna quanti elementi sono cambiati.
+ * Copia `modello` sugli elementi corrispondenti di un foglio. Ritorna quanti
+ * elementi sono cambiati (o aggiunti).
+ *  - Un campo (titolo, prezzo, meccanica…): corrisponde chi ha lo stesso campo;
+ *    si copia l'aspetto, e con `conPosizione` anche posizione e misure.
+ *  - Un'immagine libera (la testata, un logo) o un riquadro: corrisponde quello
+ *    dello stesso tipo che sta più o meno nello stesso punto (sovrapposto per
+ *    almeno metà); si sostituisce per intero, immagine o scritta comprese.
+ *  - Con `aggiungi`, se non c'è niente di corrispondente si aggiunge una copia.
  */
-export function copiaStileCampo(items: LayoutItem[], modello: LayoutItem, conPosizione: boolean): number {
+export function copiaStileCampo(items: LayoutItem[], modello: LayoutItem, opzioni: OpzioniCopia | boolean): number {
+  const { conPosizione, aggiungi } = typeof opzioni === "boolean" ? { conPosizione: opzioni, aggiungi: false } : opzioni;
+  const copiaDi = () => JSON.parse(JSON.stringify(modello)) as LayoutItem;
   let n = 0;
+  if (elementoLibero(modello.fieldId)) {
+    const corrispondenti = items
+      .map((it, i) => ({ it, i, s: it.fieldId === modello.fieldId ? sovrapposizione(it, modello) : 0 }))
+      .filter((c) => c.s >= 0.5);
+    for (const c of corrispondenti) {
+      if (JSON.stringify(c.it) === JSON.stringify(modello)) continue;
+      items[c.i] = copiaDi();
+      n++;
+    }
+    if (corrispondenti.length === 0 && aggiungi) { items.push(copiaDi()); n++; }
+    return n;
+  }
+  let trovato = false;
   for (const it of items) {
     if (it.fieldId !== modello.fieldId) continue;
+    trovato = true;
     const prima = JSON.stringify(it);
     const rec = it as unknown as Record<string, unknown>;
     for (const k of CHIAVI_STILE) {
@@ -93,5 +137,6 @@ export function copiaStileCampo(items: LayoutItem[], modello: LayoutItem, conPos
     if (conPosizione) { it.x = modello.x; it.y = modello.y; it.w = modello.w; it.h = modello.h; }
     if (JSON.stringify(it) !== prima) n++;
   }
+  if (!trovato && aggiungi) { items.push(copiaDi()); n++; }
   return n;
 }

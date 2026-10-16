@@ -405,21 +405,29 @@ export default function LayoutEditor({
    * altre copie in questo layout, in tutti e due i fogli.
    */
   const [conPosizione, setConPosizione] = useState(false);
+  const [soloFormato, setSoloFormato] = useState(true);
+  const [aggiungiDoveManca, setAggiungiDoveManca] = useState(false);
   const [esitoTutti, setEsitoTutti] = useState("");
+  const libero = !!selItem && (selItem.fieldId === ELEMENTO_IMMAGINE || selItem.fieldId === ELEMENTO_RIQUADRO);
   const applicaATutti = () => {
     if (!selItem || !canEdit) return;
-    const etichetta = fields.find((f) => f.id === selItem.fieldId)?.label ?? selItem.fieldId;
-    if (!confirm(`Applicare l'aspetto di «${etichetta}»${conPosizione ? ", con posizione e misure," : ""} a tutti i layout di questo ambito in cui c'è questo campo?`)) return;
+    const etichetta = selItem.fieldId === ELEMENTO_IMMAGINE ? "immagine (testata, logo…)"
+      : selItem.fieldId === ELEMENTO_RIQUADRO ? (selItem.testo ? "scritta fissa" : "riquadro")
+      : fields.find((f) => f.id === selItem.fieldId)?.label ?? selItem.fieldId;
+    const dove = soloFormato || libero ? `i layout ${format.name} di questo ambito` : "tutti i layout di questo ambito";
+    const cosa = libero ? `l'elemento «${etichetta}» (immagine/scritta, posizione e aspetto)` : `l'aspetto di «${etichetta}»${conPosizione ? ", con posizione e misure," : ""}`;
+    if (!confirm(`Applicare ${cosa} a ${dove}, foglio con foto e senza foto?${aggiungiDoveManca ? "\nDove manca, viene aggiunto." : ""}`)) return;
     const modello = JSON.parse(JSON.stringify(selItem)) as LayoutItem;
-    const copia = (lista: LayoutItem[]) => { const nuova = lista.map((x) => ({ ...x })); copiaStileCampo(nuova, modello, conPosizione); return nuova; };
+    const opzioni = { conPosizione, aggiungi: aggiungiDoveManca };
+    const copia = (lista: LayoutItem[]) => { const nuova = lista.map((x) => ({ ...x })); copiaStileCampo(nuova, modello, opzioni); return nuova; };
     setEsitoTutti("");
     startTransition(async () => {
-      const r = await applicaCampoATuttiILayout(area, scopeParam, layoutId, format.id, JSON.stringify(modello), conPosizione);
+      const r = await applicaCampoATuttiILayout(area, scopeParam, layoutId, format.id, JSON.stringify(modello), conPosizione, { soloFormato, aggiungi: aggiungiDoveManca });
       // il layout aperto si cambia dopo: il suo salvataggio automatico rilegge gli altri già aggiornati
       if (r.ok) { setTocco(true); setItems((v) => copia(v)); setItemsNoPhoto((v) => copia(v)); }
       setEsitoTutti(!r.ok ? r.error
-        : r.layout === 0 ? "Negli altri layout il campo era già così (o non c'è)."
-        : `Aggiornati ${r.layout} layout: ${r.nomi.join(", ")}.`);
+        : r.layout === 0 ? `Negli altri layout era già così${aggiungiDoveManca ? "" : " (o non c'è: spunta «aggiungilo dove manca»)"}. Aggiornato il foglio ${mode === "normal" ? "senza foto" : "con foto"} di questo layout.`
+        : `Aggiornati ${r.layout} layout: ${r.nomi.join(", ")}; e l'altro foglio di questo.`);
     });
   };
 
@@ -547,17 +555,34 @@ export default function LayoutEditor({
               {fields.find((f) => f.id === selItem.fieldId)?.nota}
             </div>
           )}
-          {/* le immagini libere e i riquadri sono tutti diversi fra loro: si copia solo un campo vero (o il QR) */}
-          {selItem && canEdit && selItem.fieldId !== ELEMENTO_IMMAGINE && selItem.fieldId !== ELEMENTO_RIQUADRO && (
+          {/* applica a tutti: per i campi l'aspetto; per immagini (testata) e riquadri l'elemento intero, riconosciuto dal punto in cui sta */}
+          {selItem && canEdit && (
             <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid var(--line)" }}>
               <button type="button" className="btn btn-outline btn-sm" style={{ width: "100%" }} disabled={pending} onClick={applicaATutti}
-                title="Carattere, misura, colori, allineamento, cornice, prefisso e sticker di questo campo vanno su tutti i layout di questo ambito che lo contengono">
-                Applica a tutti i layout
+                title={libero
+                  ? "Sostituisce l'immagine o il riquadro che sta nello stesso punto negli altri layout del formato (e nel foglio senza foto)"
+                  : "Carattere, misura, colori, allineamento, cornice, prefisso e sticker di questo campo vanno sugli altri layout (e sul foglio senza foto)"}>
+                {pending ? "Applico…" : "Applica a tutti i layout"}
               </button>
-              <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 11.5, marginTop: 5, color: "var(--muted)" }}>
-                <input type="checkbox" checked={conPosizione} onChange={(e) => setConPosizione(e.target.checked)} />
-                anche posizione e misure (solo layout dello stesso formato)
-              </label>
+              <div style={{ display: "grid", gap: 3, marginTop: 5, fontSize: 11.5, color: "var(--muted)" }}>
+                {!libero && (
+                  <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <input type="checkbox" checked={soloFormato} onChange={(e) => setSoloFormato(e.target.checked)} />
+                    solo i layout {format.name}
+                  </label>
+                )}
+                {!libero && (
+                  <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <input type="checkbox" checked={conPosizione} onChange={(e) => setConPosizione(e.target.checked)} />
+                    anche posizione e misure (stesso formato)
+                  </label>
+                )}
+                <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <input type="checkbox" checked={aggiungiDoveManca} onChange={(e) => setAggiungiDoveManca(e.target.checked)} />
+                  aggiungilo dove manca (stesso formato)
+                </label>
+                {libero && <span>Vale per i layout {format.name}: si sostituisce l&apos;elemento che sta nello stesso punto.</span>}
+              </div>
               {esitoTutti && <div style={{ fontSize: 11.5, marginTop: 5 }}>{esitoTutti}</div>}
             </div>
           )}
