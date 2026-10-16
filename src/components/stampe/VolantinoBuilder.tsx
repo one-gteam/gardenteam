@@ -755,7 +755,8 @@ export default function VolantinoBuilder({
   // pannello della cella: testo e «altro» (commento per il grafico, immagine) si aprono a richiesta
   const [apriTesto, setApriTesto] = useState(false);
   const [apriAltro, setApriAltro] = useState(false);
-  useEffect(() => { setApriTesto(false); setApriAltro(false); }, [sel?.id]);
+  // aprendo un'altra cella si riparte puliti: prima restava proposto il focus scelto sulla cella precedente
+  useEffect(() => { setApriTesto(false); setApriAltro(false); setFocusScelto(""); setFocusNuovo(""); setFocusNuovoTesto(""); }, [sel?.pi, sel?.id]);
   /** Il testo di un focus, scritto dal pannello: vale per tutto il volantino. */
   const salvaTestoFocus = async (nome: string, descrizione: string) => {
     const def = focusDisponibili.find((f) => f.nome === nome);
