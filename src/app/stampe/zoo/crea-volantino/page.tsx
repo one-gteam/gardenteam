@@ -100,7 +100,7 @@ export default async function CreaVolantinoPage({
               sconto: piuPrezzi ? undefined : dati.sconto || undefined,
               unione: primo.unioneVolantino,
               tipi: dati.tipi,
-              foto: zooImageUrl(product, parent),
+              foto: zooImageUrl(product, parent, db),
               fotoUnione: unione?.foto?.length ? unione.foto : undefined,
               animali: animaliDi(db, parent?.caratteristiche ?? []),
               voti: votes.filter((v) => v.tipo === "preferita").length,

@@ -1064,8 +1064,44 @@ export function pvListinoFor(db: ZooDB, scope: Scope, ean: string, academyDb: DB
  * volantino, ripetuti ad ogni riga di ogni tabella — su una cartella che non
  * esiste nemmeno: era il costo maggiore nel render delle pagine offerte.
  */
-export function zooImageUrl(p?: ZooProduct, parent?: ZooParent): string {
-  return parent?.image ?? p?.image ?? "/immagini/mancante.jpg";
+/** La prima foto fra gli articoli di un padre (si cerca solo quando padre e articolo non ne hanno). */
+function fotoDiUnFratello(db: { products: ZooProduct[] }, parentId: string): string | undefined {
+  return db.products.find((x) => x.parentId === parentId && x.image)?.image;
+}
+
+/**
+ * Foto del prodotto zoo: immagine del padre, altrimenti dell'articolo, altrimenti
+ * il segnaposto "mancante".
+ *
+ * Nessuna ricerca su disco: le foto vivono nel bucket Supabase (zoo-foto) e il
+ * percorso finisce in `image`. La vecchia sonda su `public/zoo-foto` provava 8
+ * `fs.existsSync` per ogni articolo senza foto — 1.200+ articoli su questo
+ * volantino, ripetuti ad ogni riga di ogni tabella — su una cartella che non
+ * esiste nemmeno: era il costo maggiore nel render delle pagine offerte.
+ */
+/** Per ogni padre, la prima foto fra i suoi articoli (calcolata una volta per database letto). */
+const fotoFratelli = new WeakMap<ZooProduct[], Map<string, string>>();
+function fotoDiUnFratello(db: { products: ZooProduct[] }, parentId: string): string | undefined {
+  let indice = fotoFratelli.get(db.products);
+  if (!indice) {
+    indice = new Map();
+    for (const x of db.products) if (x.parentId && x.image && !indice.has(x.parentId)) indice.set(x.parentId, x.image);
+    fotoFratelli.set(db.products, indice);
+  }
+  return indice.get(parentId);
+}
+
+/**
+ * Foto del prodotto zoo: immagine del padre, altrimenti dell'articolo,
+ * altrimenti (passando il database) quella di un altro articolo dello stesso
+ * padre — capita di caricare la foto su un gusto e di mettere nella cella un
+ * altro gusto — altrimenti il segnaposto "mancante".
+ */
+export function zooImageUrl(p?: ZooProduct, parent?: ZooParent, db?: { products: ZooProduct[] }): string {
+  const propria = parent?.image ?? p?.image;
+  if (propria) return propria;
+  const pid = parent?.id ?? p?.parentId;
+  return (db && pid ? fotoDiUnFratello(db, pid) : undefined) ?? "/immagini/mancante.jpg";
 }
 
 const STOPWORDS_ABBINAMENTO = new Set([
@@ -1787,7 +1823,7 @@ export function zooCartelloValues(
   };
   const testoOfferta = (field: "descrizione" | "condizioni") =>
     perScope ? effectiveOfferText(db, scope, offer, field, academyDb).value : offer[field] ?? "";
-  const foto = offer.immagine || zooImageUrl(product, parent);
+  const foto = offer.immagine || zooImageUrl(product, parent, db);
   const campaign = db.campaigns.find((c) => c.id === offer.campaignId);
   const validita = testoValidita(campaign);
   /*
@@ -2096,7 +2132,7 @@ export function volantinoExportRows(
         "DESCRIZIONE AREA": o.gruppoDescrizione ?? "",
         "TENERE VICINO A": o.tieniVicinoA ? (db.offers.find((x) => x.id === o.tieniVicinoA)?.descrizione ?? "") : "",
         CONDIZIONI: o.condizioni ?? "",
-        FOTO: zooImageUrl(p, parent),
+        FOTO: zooImageUrl(p, parent, db),
         "VALIDITA'": campaign ? `${campaign.dal} - ${campaign.al}` : "",
       };
     });
@@ -2149,14 +2185,14 @@ export function offerteExportRows(
           FOCUS: o.focus ?? "",
           "RAGGRUPPAMENTO GRAFICO": o.gruppoGrafico ?? "",
           "DESCRIZIONE VOLANTINO": parent ? effectiveParentText(db, scope, parent, "descVolantino", academyDb).value : "",
-          FOTO: zooImageUrl(p, parent),
+          FOTO: zooImageUrl(p, parent, db),
         };
       }
       return {
         ...base,
         "SCARTATA DAL VOLANTINO": o.paginaId === NO_VOLANTINO ? "sì" : "",
         "DESCRIZIONE CARTELLO": parent ? effectiveParentText(db, scope, parent, "descCartello", academyDb).value : "",
-        FOTO: zooImageUrl(p, parent),
+        FOTO: zooImageUrl(p, parent, db),
       };
     });
 }
@@ -2250,7 +2286,7 @@ export function volantinoCellRows(db: ZooDB, campaignId: string): VolantinoCellR
         Focus: nomeFocus,
         "Testo del focus": defFocus?.descrizione ?? "",
         "Nota del focus per il grafico": defFocus?.notaGrafico ?? "",
-        "File foto": [...new Set(offs.flatMap((o, i) => { const u = unioneDi(db, o); return u?.foto?.length ? u.foto.map(nomeFileFoto) : [nomeFileFoto(zooImageUrl(prodotti[i], padri[i]))]; }).filter(Boolean))].join(" / "),
+        "File foto": [...new Set(offs.flatMap((o, i) => { const u = unioneDi(db, o); return u?.foto?.length ? u.foto.map(nomeFileFoto) : [nomeFileFoto(zooImageUrl(prodotti[i], padri[i], db))]; }).filter(Boolean))].join(" / "),
       });
     });
   });
@@ -2280,7 +2316,7 @@ export function volantinoPhotoRefs(db: ZooDB, campaignId: string): VolantinoPhot
         const parent = p?.parentId ? db.parents.find((x) => x.id === p.parentId) : undefined;
         const unione = unioneDi(db, o);
         for (const u of unione?.foto ?? []) if (u.startsWith("http") && !seen.has(u)) seen.set(u, { url: u, nome: nomeFileFoto(u).replace(/\.[a-z0-9]{2,5}$/i, "") });
-        const url = zooImageUrl(p, parent);
+        const url = zooImageUrl(p, parent, db);
         if (url.startsWith("http") && !seen.has(url)) {
           // il nome del file com'è caricato (es. 56058): è quello scritto nella colonna «File foto» dell'Excel
           const nome = nomeFileFoto(url).replace(/\.[a-z0-9]{2,5}$/i, "") || `${o.ean}_${(parent?.nome ?? p?.descrizione ?? o.descrizione).slice(0, 40)}`;

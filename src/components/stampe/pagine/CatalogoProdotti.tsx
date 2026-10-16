@@ -593,7 +593,7 @@ export default async function CatalogoProdotti({ user, sp }: { user: User; sp: R
                       )}
                       <td>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <FotoMini src={zooImageUrl(first, parent)} style={{ width: 44, height: 44, objectFit: "contain", background: "#fff", borderRadius: 6, border: "1px solid #eee" }} />
+                        <FotoMini src={zooImageUrl(first, parent, db)} style={{ width: 44, height: 44, objectFit: "contain", background: "#fff", borderRadius: 6, border: "1px solid #eee" }} />
                       </td>
                       <td>
                         {consortium ? (
@@ -697,7 +697,7 @@ export default async function CatalogoProdotti({ user, sp }: { user: User; sp: R
                       {(consortium || scope.type !== "system") && <td><input type="checkbox" name="sel" value={p.id} /></td>}
                       <td>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <FotoMini src={zooImageUrl(p, parent)} style={{ width: 44, height: 44, objectFit: "contain", background: "#fff", borderRadius: 6, border: "1px solid #eee" }} />
+                        <FotoMini src={zooImageUrl(p, parent, db)} style={{ width: 44, height: 44, objectFit: "contain", background: "#fff", borderRadius: 6, border: "1px solid #eee" }} />
                       </td>
                       <td>
                         <strong style={{ fontSize: 13 }}>{p.descrizione}</strong>

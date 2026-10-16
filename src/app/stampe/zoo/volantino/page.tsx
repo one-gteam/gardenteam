@@ -473,7 +473,7 @@ export default async function ZooVolantinoPage({
                           <td>
                             {/* la spunta porta l'id della prima offerta: l'azione in blocco estende
                                 il voto a tutte le varianti dello stesso padre */}
-                            <input type="checkbox" name="zsel" value={first.id} form="bulkform" data-foto={zooImageUrl(product, parent)}
+                            <input type="checkbox" name="zsel" value={first.id} form="bulkform" data-foto={zooImageUrl(product, parent, db)}
                               title={isGroup
                                 ? `Spunta per agire in blocco su tutte le ${offs.length} varianti (Shift+clic per intervalli)`
                                 : "Spunta per agire in blocco (Shift+clic per intervalli)"} />
@@ -481,7 +481,7 @@ export default async function ZooVolantinoPage({
                         )}
                         <td>
                           {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <FotoMini src={zooImageUrl(product, parent)} style={{ width: 44, height: 44, objectFit: "contain", background: "#fff", borderRadius: 6, border: "1px solid #eee" }} />
+                          <FotoMini src={zooImageUrl(product, parent, db)} style={{ width: 44, height: 44, objectFit: "contain", background: "#fff", borderRadius: 6, border: "1px solid #eee" }} />
                         </td>
                         <td>
                           {/* titolo e descrizione del volantino: si correggono qui (nel padre valgono ovunque) */}

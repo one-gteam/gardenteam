@@ -211,7 +211,7 @@ export default async function ZooBozzaPage({
                               const nome = parent
                                 ? effectiveParentText(db, scope, parent, "nome", academyDb).value
                                 : (prod?.descrizione ?? o!.descrizione);
-                              const foto = zooImageUrl(prod, parent);
+                              const foto = zooImageUrl(prod, parent, db);
                               /*
                                * Prezzo, prezzo di partenza, sconto e tipologia: chi rivede la bozza
                                * deve poter dire se l'offerta è buona, non solo se è nella pagina

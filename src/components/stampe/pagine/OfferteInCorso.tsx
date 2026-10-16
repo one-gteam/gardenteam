@@ -758,7 +758,7 @@ export default async function OfferteInCorso({ user, sp }: { user: User; sp: Rec
                           )}
                           <td>
                             {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <FotoMini src={zooImageUrl(product, parent)} style={{ width: 44, height: 44, objectFit: "contain", background: "#fff", borderRadius: 6, border: "1px solid #eee" }} />
+                            <FotoMini src={zooImageUrl(product, parent, db)} style={{ width: 44, height: 44, objectFit: "contain", background: "#fff", borderRadius: 6, border: "1px solid #eee" }} />
                           </td>
                           <td>
                             {consortium ? (
@@ -909,7 +909,7 @@ export default async function OfferteInCorso({ user, sp }: { user: User; sp: Rec
                           )}
                           <td>
                             {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <FotoMini src={zooImageUrl(product, parent)} style={{ width: 44, height: 44, objectFit: "contain", background: "#fff", borderRadius: 6, border: "1px solid #eee" }} />
+                            <FotoMini src={zooImageUrl(product, parent, db)} style={{ width: 44, height: 44, objectFit: "contain", background: "#fff", borderRadius: 6, border: "1px solid #eee" }} />
                           </td>
                           <td>
                             {consortium ? (

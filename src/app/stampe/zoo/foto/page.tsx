@@ -99,7 +99,7 @@ export default async function ZooFotoPage({
   const articoli = offers.filter((o) => {
     if (!soloSenza) return true;
     const p = prodById.get(o.productId ?? "");
-    return zooImageUrl(p, p?.parentId ? parentById.get(p.parentId) : undefined) === MANCANTE;
+    return zooImageUrl(p, p?.parentId ? parentById.get(p.parentId) : undefined, db) === MANCANTE;
   });
 
   const link = (cambia: Record<string, string>) => {
@@ -151,7 +151,7 @@ export default async function ZooFotoPage({
               const p = prodById.get(o.productId ?? "");
               const parent = p?.parentId ? parentById.get(p.parentId) : undefined;
               return (
-                <FotoTrascinabile key={o.id} offerId={o.id} src={zooImageUrl(p, parent)} puoCaricare={editor}
+                <FotoTrascinabile key={o.id} offerId={o.id} src={zooImageUrl(p, parent, db)} puoCaricare={editor}
                   titolo={parent ? `${parent.nome} · ${o.descrizione}` : o.descrizione} sottotitolo={`EAN ${o.ean}`} />
               );
             })}

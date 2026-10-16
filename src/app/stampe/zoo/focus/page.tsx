@@ -132,7 +132,7 @@ export default async function ZooFocusPage({
       const parent = product?.parentId ? parentById.get(product.parentId) : undefined;
       const focus = (o.focus ?? "").trim();
       const chiave = `${focus.toLowerCase()}|${parent?.id ?? o.id}`;
-      const v = voci.get(chiave) ?? { id: chiave, offerIds: [], nome: nomeOfferta(o).nome, animale: animaleFocus(db, o), foto: zooImageUrl(product, parent), prezzo: o.prezzoPromo, focus, articoli: [] };
+      const v = voci.get(chiave) ?? { id: chiave, offerIds: [], nome: nomeOfferta(o).nome, animale: animaleFocus(db, o), foto: zooImageUrl(product, parent, db), prezzo: o.prezzoPromo, focus, articoli: [] };
       v.offerIds.push(o.id);
       // gli articoli della voce (gusti, formati): si vedono con «dettagli»
       v.articoli!.push({ ean: o.ean, descrizione: product?.descrizione ?? o.descrizione, prezzo: o.prezzoPromo || o.meccanica || "", codice: product?.codice ?? "" });
