@@ -19,7 +19,7 @@ import { ignoraZooFoto, ripristinaZooFotoIgnorate } from "@/lib/zoo-focus-action
 import { DettagliPadre, PannelloPadre } from "@/components/stampe/DettagliPadre";
 import {
   getZooDb, zooImageUrl, effectiveParentText, isZooHidden, hiddenEntriesFor, fornitoriList, marcheList, marcaEffettiva,
-  suggestPhotoMatch, buildAbbinamentoIndex, volantinoDiFoto, fotoDaControllare, fotoDaAbbinare, contenutoDa, testoContenuto, animaliDi, caratteristicheProdottoDi, storicoOfferteByEan,
+  suggestPhotoMatch, buildAbbinamentoIndex, volantinoDiFoto, fotoDaControllare, fotoDaAbbinare, contenutoDa, contenutoPer, campagnaInCorso, campagnaInLavorazione, testoContenuto, type ZooOffer, animaliDi, caratteristicheProdottoDi, storicoOfferteByEan,
   periodoBreve, visibleProducts, type ZooProduct, type ZooParent, type ZooStoricoVoce,
 } from "@/lib/zoo";
 import {
@@ -70,8 +70,18 @@ export default async function CatalogoProdotti({ user, sp }: { user: User; sp: R
   const q = (sp.q ?? "").toLowerCase();
   const soloSenzaPadre = sp.senzapadre === "1";
   const soloSenzaAnimale = sp.senzaanimale === "1";
+  // senza peso: niente contenuto da nessuna parte (articolo, sue offerte, padre) = niente prezzo al kg/l
+  const soloSenzaPeso = sp.senzapeso === "1";
+  const offertePerArticolo = new Map<string, ZooOffer[]>();
+  if (soloSenzaPeso) for (const o of db.offers) if (o.productId) offertePerArticolo.set(o.productId, [...(offertePerArticolo.get(o.productId) ?? []), o]);
+  const senzaPeso = (p: ZooProduct) => {
+    const par = p.parentId ? parentById.get(p.parentId) : undefined;
+    const offs = offertePerArticolo.get(p.id) ?? [];
+    return !contenutoPer(undefined, p, par) && !offs.some((o) => contenutoPer(o, p, par));
+  };
   // dalla Dashboard: solo gli articoli in offerta nel volantino indicato
   const volantinoFiltro = sp.volantino ? db.campaigns.find((c) => c.id === sp.volantino) : undefined;
+  const volantinoCorrente = campagnaInLavorazione(db) ?? campagnaInCorso(db);
   const prodottiDelVolantino = volantinoFiltro ? new Set(db.offers.filter((o) => o.campaignId === volantinoFiltro.id && o.productId).map((o) => o.productId!)) : undefined;
   /*
    * Di norma si vede il catalogo comune più i propri articoli. Con "mostra anche
@@ -95,6 +105,7 @@ export default async function CatalogoProdotti({ user, sp }: { user: User; sp: R
       if (!par || animaliDi(db, par.caratteristiche).length > 0) return false;
     }
     if (prodottiDelVolantino && !prodottiDelVolantino.has(p.id)) return false;
+    if (soloSenzaPeso && !senzaPeso(p)) return false;
     if (sp.animale || sp.caratt) {
       const caratts = (p.parentId ? parentById.get(p.parentId) : undefined)?.caratteristiche ?? [];
       if (sp.animale && !caratts.includes(sp.animale)) return false;
@@ -167,7 +178,8 @@ export default async function CatalogoProdotti({ user, sp }: { user: User; sp: R
    * come in Offerte in corso — molto più leggera da caricare con l'intero
    * catalogo, ed è il modo naturale di navigare i prodotti padre.
    */
-  const vistaArticoli = sp.vista === "articoli";
+  // senza peso si lavora articolo per articolo: il contenuto si scrive sulla sua riga
+  const vistaArticoli = sp.vista === "articoli" || soloSenzaPeso;
   const gruppi = (() => {
     const map = new Map<string, { parent?: ZooParent; prods: ZooProduct[] }>();
     for (const p of products) {
@@ -433,12 +445,11 @@ export default async function CatalogoProdotti({ user, sp }: { user: User; sp: R
           <FiltriMobile id="filtri-dati" scelte={[
             vistaArticoli ? "articoli singoli" : "raggruppata",
             sp.q && `«${sp.q}»`, sp.animale, sp.caratt, sp.fornitore, sp.marca,
-            soloSenzaPadre && "solo senza padre", soloSenzaAnimale && "solo padri senza animale", volantinoFiltro && `solo il volantino «${volantinoFiltro.nome}»`, showHidden && "anche i nascosti",
+            soloSenzaPadre && "solo senza padre", soloSenzaAnimale && "solo padri senza animale", soloSenzaPeso && "solo senza peso (niente prezzo al kg/l)", volantinoFiltro && `solo il volantino «${volantinoFiltro.nome}»`, showHidden && "anche i nascosti",
           ]}>
           <form method="get" style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr)) auto", gap: 10, alignItems: "end" }}>
             <input type="hidden" name="scope" value={scopeParam} />
             <input type="hidden" name="vista" value={vistaArticoli ? "articoli" : "raggruppata"} />
-            {volantinoFiltro && <input type="hidden" name="volantino" value={volantinoFiltro.id} />}
             {abbinaAperto && <input type="hidden" name="abbina" value="1" />}
             <label className="field" style={{ marginBottom: 0 }}>Cerca<input type="text" name="q" defaultValue={sp.q ?? ""} placeholder="descrizione, EAN, codice" /></label>
             <label className="field" style={{ marginBottom: 0 }}>
@@ -473,6 +484,11 @@ export default async function CatalogoProdotti({ user, sp }: { user: User; sp: R
             <label style={{ fontSize: 12.5, gridColumn: "1 / -1" }}>
               <input type="checkbox" name="senzapadre" value="1" defaultChecked={soloSenzaPadre} /> solo senza padre
               {" "}<input type="checkbox" name="senzaanimale" value="1" defaultChecked={soloSenzaAnimale} /> solo padri senza animale
+              {" "}<input type="checkbox" name="senzapeso" value="1" defaultChecked={soloSenzaPeso} /> solo senza peso
+              {/* solo gli articoli del volantino: quello indicato (dalla Dashboard) o quello in lavorazione */}
+              {(volantinoFiltro ?? volantinoCorrente) && (
+                <>{" "}<input type="checkbox" name="volantino" value={(volantinoFiltro ?? volantinoCorrente)!.id} defaultChecked={!!volantinoFiltro} /> solo gli articoli di «{(volantinoFiltro ?? volantinoCorrente)!.nome}»</>
+              )}
               {" "}<input type="checkbox" name="altrui" value="1" defaultChecked={mostraAltrui} /> mostra anche gli articoli di altre insegne/PV
               {scope.type !== "system" && (
                 <>
@@ -710,7 +726,7 @@ export default async function CatalogoProdotti({ user, sp }: { user: User; sp: R
                           {p.prezzo && <span>prezzo base € {p.prezzo}</span>}
                           <span title="Contenuto della confezione, per il prezzo al chilo/litro">
                             {consortium
-                              ? <InlineEdit value={testoContenuto(p.contenuto ?? contenutoDa(p.descrizione))} placeholder="contenuto (es. 1,5 kg)"
+                              ? <InlineEdit value={testoContenuto(p.contenuto ?? contenutoDa(p.descrizione))} placeholder={soloSenzaPeso ? "✎ scrivi il peso (es. 400 g, 1,5 kg, 4x85 g)" : "contenuto (es. 1,5 kg)"}
                                   onSave={updateProductFieldInline.bind(null, p.id, "contenuto")} />
                               : (testoContenuto(p.contenuto ?? contenutoDa(p.descrizione)) || "")}
                           </span>

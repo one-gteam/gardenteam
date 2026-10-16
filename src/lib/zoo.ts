@@ -1939,23 +1939,31 @@ export function testoContenuto(c?: { quantita: number; unita: "kg" | "l" }): str
  * Prezzo al chilo o al litro di un'offerta: quello scritto a mano se c'è,
  * altrimenti calcolato dal prezzo (promo) e dal contenuto dell'articolo.
  */
-export function prezzoUnitaDi(offer: ZooOffer, product: ZooProduct | undefined, prezzo: string, parent?: ZooParent): string {
-  if (offer.prezzoUnita) return offer.prezzoUnita;
-  /*
-   * Il peso: scritto a mano sull'offerta o sull'articolo, altrimenti letto dalla
-   * descrizione dell'articolo, poi da quella dell'offerta, poi dal padre. Dal
-   * padre solo se ne dice uno (un padre «in diverse misure» darebbe un peso falso).
-   */
+/**
+ * Il peso (o il volume) di un articolo: scritto a mano sull'offerta o
+ * sull'articolo, altrimenti letto dalla descrizione dell'articolo, poi da
+ * quella dell'offerta, poi dal padre. Dal padre solo se ne dice uno (un padre
+ * «in diverse misure» darebbe un peso falso). undefined = non si sa: senza,
+ * niente prezzo al kg/l (filtro «senza peso» nella pagina Prodotti).
+ */
+export function contenutoPer(
+  offer: Pick<ZooOffer, "contenuto" | "descrizione"> | undefined, product: ZooProduct | undefined, parent?: ZooParent,
+): { quantita: number; unita: "kg" | "l" } | undefined {
   const unicoNelPadre = (testo?: string) => {
     if (!testo) return undefined;
     const pesi = testo.toLowerCase().match(/\d+(?:[.,]\d+)?\s*(?:kg|g|gr|grammi|ml|cl|l|lt|litri)\b/g) ?? [];
     const confezione = /\d+\s*(?:lattine|buste|bustine|vaschette|scatolette|pezzi|pz|confezioni|sacchetti)\s*(?:da|x)/i.test(testo);
     return pesi.length === 1 || confezione ? contenutoDa(testo) : undefined;
   };
-  const c = offer.contenuto ?? product?.contenuto
+  return offer?.contenuto ?? product?.contenuto
     ?? (product ? contenutoDa(product.descrizione) : undefined)
-    ?? contenutoDa(offer.descrizione ?? "")
+    ?? contenutoDa(offer?.descrizione ?? "")
     ?? unicoNelPadre(parent?.descVolantino) ?? unicoNelPadre(parent?.descCartello);
+}
+
+export function prezzoUnitaDi(offer: ZooOffer, product: ZooProduct | undefined, prezzo: string, parent?: ZooParent): string {
+  if (offer.prezzoUnita) return offer.prezzoUnita;
+  const c = contenutoPer(offer, product, parent);
   const n = Number((prezzo || "").replace(/[^\d,.-]/g, "").replace(/\.(?=\d{3})/g, "").replace(",", "."));
   if (!c || !Number.isFinite(n) || n <= 0) return "";
   const unitario = n / c.quantita;
