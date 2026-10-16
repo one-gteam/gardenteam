@@ -1235,7 +1235,8 @@ export function valoriPerStampa(
   const prezzoManuale = sp[`prezzo_${o.id}`];
   const prezzoEffettivo = prezzoManuale || pv || o.prezzoPromo;
   if (prezzoEffettivo !== o.prezzoPromo) {
-    vals.prezzoUnita = prezzoUnitaDi(o, db.products.find((p) => p.id === o.productId), prezzoEffettivo);
+    const pr = db.products.find((p) => p.id === o.productId);
+    vals.prezzoUnita = prezzoUnitaDi(o, pr, prezzoEffettivo, pr?.parentId ? db.parents.find((x) => x.id === pr.parentId) : undefined);
   }
   /*
    * Prezzo di partenza: quello scritto dall'insegna/PV, altrimenti quello di
@@ -1249,7 +1250,8 @@ export function valoriPerStampa(
     const ricalcolato = prezzoScontato(pvL, o.scontoPerc);
     if (ricalcolato) {
       vals.prezzoPromo = `€ ${ricalcolato}`;
-      vals.prezzoUnita = prezzoUnitaDi(o, db.products.find((p) => p.id === o.productId), ricalcolato);
+      const pr = db.products.find((p) => p.id === o.productId);
+      vals.prezzoUnita = prezzoUnitaDi(o, pr, ricalcolato, pr?.parentId ? db.parents.find((x) => x.id === pr.parentId) : undefined);
     }
   }
   const prezzo = sp[`prezzo_${o.id}`];
@@ -1901,8 +1903,9 @@ export function zooCartelloValues(
  */
 export function contenutoDa(descrizione: string): { quantita: number; unita: "kg" | "l" } | undefined {
   const t = descrizione.toLowerCase().replace(/\s+/g, " ");
-  // "4x85 g", "4 x 85g", "6x400ml"
-  const multi = t.match(/(\d+)\s*x\s*(\d+(?:[.,]\d+)?)\s*(kg|g|gr|grammi|ml|cl|l|lt|litri)\b/);
+  // "4x85 g", "4 x 85g", "6x400ml", e anche "24 lattine da 85 g", "12 buste da 100g"
+  const multi = t.match(/(\d+)\s*x\s*(\d+(?:[.,]\d+)?)\s*(kg|g|gr|grammi|ml|cl|l|lt|litri)\b/)
+    ?? t.match(/(\d+)\s*(?:lattine|buste|bustine|vaschette|scatolette|pezzi|pz|confezioni|sacchetti|barattoli|flaconi)\s*(?:da|x)\s*(\d+(?:[.,]\d+)?)\s*(kg|g|gr|grammi|ml|cl|l|lt|litri)\b/);
   const singolo = t.match(/(\d+(?:[.,]\d+)?)\s*(kg|g|gr|grammi|ml|cl|l|lt|litri)\b/);
   const m = multi ?? singolo;
   if (!m) return undefined;
@@ -1936,9 +1939,23 @@ export function testoContenuto(c?: { quantita: number; unita: "kg" | "l" }): str
  * Prezzo al chilo o al litro di un'offerta: quello scritto a mano se c'è,
  * altrimenti calcolato dal prezzo (promo) e dal contenuto dell'articolo.
  */
-export function prezzoUnitaDi(offer: ZooOffer, product: ZooProduct | undefined, prezzo: string): string {
+export function prezzoUnitaDi(offer: ZooOffer, product: ZooProduct | undefined, prezzo: string, parent?: ZooParent): string {
   if (offer.prezzoUnita) return offer.prezzoUnita;
-  const c = offer.contenuto ?? product?.contenuto ?? (product ? contenutoDa(product.descrizione) : undefined);
+  /*
+   * Il peso: scritto a mano sull'offerta o sull'articolo, altrimenti letto dalla
+   * descrizione dell'articolo, poi da quella dell'offerta, poi dal padre. Dal
+   * padre solo se ne dice uno (un padre «in diverse misure» darebbe un peso falso).
+   */
+  const unicoNelPadre = (testo?: string) => {
+    if (!testo) return undefined;
+    const pesi = testo.toLowerCase().match(/\d+(?:[.,]\d+)?\s*(?:kg|g|gr|grammi|ml|cl|l|lt|litri)\b/g) ?? [];
+    const confezione = /\d+\s*(?:lattine|buste|bustine|vaschette|scatolette|pezzi|pz|confezioni|sacchetti)\s*(?:da|x)/i.test(testo);
+    return pesi.length === 1 || confezione ? contenutoDa(testo) : undefined;
+  };
+  const c = offer.contenuto ?? product?.contenuto
+    ?? (product ? contenutoDa(product.descrizione) : undefined)
+    ?? contenutoDa(offer.descrizione ?? "")
+    ?? unicoNelPadre(parent?.descVolantino) ?? unicoNelPadre(parent?.descCartello);
   const n = Number((prezzo || "").replace(/[^\d,.-]/g, "").replace(/\.(?=\d{3})/g, "").replace(",", "."));
   if (!c || !Number.isFinite(n) || n <= 0) return "";
   const unitario = n / c.quantita;
@@ -2129,8 +2146,8 @@ export function offerteExportRows(
 export interface VolantinoCellRow {
   "N. pagina": number; Pagina: string; "Note della pagina": string; Cella: string;
   Riga: number; Colonna: number; "Righe occupate": number; "Colonne occupate": number;
-  Sezione: string; "Sfondo sezione": string; "Testo sezione": string; "N. offerte": number; EAN: string;
-  Descrizione: string; Marca: string; "Prezzo promo": string; "Prezzo listino": string;
+  Sezione: string; "Sfondo sezione": string; "Testo sezione": string;
+  Descrizione: string; "Prezzo promo": string; "Prezzo listino": string;
   Etichetta: string; Testo: string; Immagine: string; "Commento per il grafico": string;
   "Titolo offerta": string; Focus: string; "Testo del focus": string; "Nota del focus per il grafico": string; Meccanica: string;
   "Prezzo al kg/l": string; "File foto": string;
@@ -2182,7 +2199,8 @@ export function volantinoCellRows(db: ZooDB, campaignId: string): VolantinoCellR
       const primeDellaCella = (b.offerIds ?? []).map((id) => db.offers.find((o) => o.id === id)).filter(Boolean) as ZooOffer[];
       // tutte le offerte delle voci della cella (i gusti dello stesso padre), non solo la prima
       const offs = [...new Map(primeDellaCella.flatMap((o) => voci.offerteDi.get(voci.voceDi.get(o.id) ?? "") ?? [o]).map((o) => [o.id, o])).values()];
-      if (offs.length === 0 && !b.testo && !b.imageUrl && !b.label && !b.focus) return; // celle vuote: non servono al grafico
+      // celle vuote: non servono al grafico (ma una nota per lui su una cella senza offerte sì)
+      if (offs.length === 0 && !b.testo && !b.imageUrl && !b.label && !b.focus && !b.commento) return;
       const sez = (page.sezioni ?? []).find(
         (s) => b.r >= s.r && b.r < s.r + s.rs && b.c >= s.c && b.c < s.c + s.cs
       );
@@ -2192,27 +2210,29 @@ export function volantinoCellRows(db: ZooDB, campaignId: string): VolantinoCellR
       const nomeFocus = primo?.focus || b.focus || "";
       const defFocus = nomeFocus ? db.focusDef.find((f) => f.campaignId === campaignId && f.nome.trim().toLowerCase() === nomeFocus.trim().toLowerCase()) : undefined;
       const unioneTitolo = primo ? unioneDi(db, primo)?.titolo : undefined;
+      // la voce è il padre: descrizione e meccanica sono le sue, non quelle dei singoli gusti
+      const padriUnici = [...new Map(padri.filter((x): x is ZooParent => !!x).map((x) => [x.id, x])).values()];
+      const descrizionePadre = padriUnici.map((x) => x.descVolantino).filter(Boolean).join(" / ");
+      const senzaPadre = offs.filter((_, i) => !padri[i]).map((o) => o.descrizione);
       rows.push({
         "N. pagina": pi + 1, Pagina: nomePagina, "Note della pagina": page.note ?? "",
         Cella: `${pi + 1}-${bi + 1}`, Riga: b.r + 1, Colonna: b.c + 1,
         "Righe occupate": b.rs, "Colonne occupate": b.cs,
         Sezione: sez?.titolo ?? "", "Sfondo sezione": sez?.bg ?? "", "Testo sezione": sez?.testo ?? "",
-        "N. offerte": offs.length, EAN: offs.map((o) => o.ean).join(" / "),
-        Descrizione: b.descrizione ?? offs.map((o) => o.descrizione).join(" / "),
-        Marca: offs.map((o) => db.products.find((p) => p.id === o.productId)?.marca ?? "").join(" / "),
+        "Titolo offerta": unioneTitolo || [...new Set(offs.map((o, i) => padri[i]?.nome ?? o.descrizione))].join(" / "),
+        Descrizione: b.descrizione ?? [descrizionePadre, ...new Set(senzaPadre)].filter(Boolean).join(" / "),
         "Prezzo promo": b.prezzo ?? [...new Set(offs.map((o) => o.prezzoPromo).filter(Boolean))].join(" / "),
         "Prezzo listino": [...new Set(offs.map((o) => o.prezzoListino ?? "").filter(Boolean))].join(" / "),
+        Meccanica: [...new Set(offs.map((o) => (o.meccanica ?? "").trim()).filter(Boolean))].join(" / "),
+        // il prezzo cambiato nella cella vale per la prima offerta, come nel volantino
+        "Prezzo al kg/l": [...new Set(offs.map((o, i) => prezzoUnitaDi(o, prodotti[i], (i === 0 && b.prezzo) || o.prezzoPromo || (o.meccanica ? o.prezzoListino ?? "" : ""), padri[i])).filter(Boolean))].join(" / "),
         Etichetta: b.label ?? primo?.label ?? "",
         Testo: b.testo ?? "",
         Immagine: b.imageUrl ?? "",
         "Commento per il grafico": b.commento ?? "",
-        "Titolo offerta": unioneTitolo || [...new Set(offs.map((o, i) => padri[i]?.nome ?? o.descrizione))].join(" / "),
         Focus: nomeFocus,
         "Testo del focus": defFocus?.descrizione ?? "",
         "Nota del focus per il grafico": defFocus?.notaGrafico ?? "",
-        Meccanica: offs.map((o) => o.meccanica ?? "").filter(Boolean).join(" / "),
-        // il prezzo cambiato nella cella vale per la prima offerta, come nel volantino
-        "Prezzo al kg/l": [...new Set(offs.map((o, i) => prezzoUnitaDi(o, prodotti[i], (i === 0 && b.prezzo) || o.prezzoPromo || (o.meccanica ? o.prezzoListino ?? "" : ""))).filter(Boolean))].join(" / "),
         "File foto": [...new Set(offs.flatMap((o, i) => { const u = unioneDi(db, o); return u?.foto?.length ? u.foto.map(nomeFileFoto) : [nomeFileFoto(zooImageUrl(prodotti[i], padri[i]))]; }).filter(Boolean))].join(" / "),
       });
     });
