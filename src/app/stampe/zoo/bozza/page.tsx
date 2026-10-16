@@ -12,7 +12,7 @@ import {
 import { aggiungiNotaBozza, risolviNotaBozza } from "@/lib/zoo-actions";
 import TabellaVolantino from "@/components/stampe/TabellaVolantino";
 import EsportaVolantino from "@/components/stampe/EsportaVolantino";
-import { colonneGriglia, colonnaGriglia, colonnaSezione } from "@/lib/volantino-griglia";
+import { colonneGriglia, colonnaGriglia, colonnaSezione, cellaInSezione } from "@/lib/volantino-griglia";
 import AvvisaColleghi from "@/components/stampe/AvvisaColleghi";
 import { userSites } from "@/lib/types";
 
@@ -185,7 +185,7 @@ export default async function ZooBozzaPage({
                       const nomeFocus = b.focus || offerte.map((o) => (o!.focus ?? "").trim()).find(Boolean) || "";
                       const defFocus = nomeFocus ? defDi(nomeFocus) : undefined;
                       // dentro uno sfondo di sezione la cella è trasparente: prima il bianco copriva la sezione
-                      const dentroSezione = (page.sezioni ?? []).some((sz) => b.r >= sz.r && b.r < sz.r + sz.rs && b.c >= sz.c && b.c < sz.c + sz.cs);
+                      const dentroSezione = (page.sezioni ?? []).some((sz) => cellaInSezione(page, b, sz));
                       return (
                         <div key={b.id} className="vol-cell" style={{
                           gridColumn: colonnaGriglia(page, b), gridRow: `${b.r + 1} / span ${b.rs}`,

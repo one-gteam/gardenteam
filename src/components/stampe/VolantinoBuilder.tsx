@@ -9,7 +9,7 @@ import {
   unisciVociVolantino, separaUnioneVolantino, updateOfferGroupFieldInline,
 } from "@/lib/zoo-actions";
 import { assegnaFocusOfferte, salvaFocusDef } from "@/lib/zoo-focus-actions";
-import { colonneGriglia, colonnaGriglia, colonnaSezione, colonneRiga, righeBloccate } from "@/lib/volantino-griglia";
+import { colonneGriglia, colonnaGriglia, colonnaSezione, colonneRiga, righeBloccate, sezioneDaCella, cellaInSezione, allargaSezioneADestra, restringiSezioneDaDestra } from "@/lib/volantino-griglia";
 import type { VolPage, VolBlock, VolSection } from "@/lib/zoo";
 
 export interface ArtLite { ean: string; descrizione: string; marca: string }
@@ -722,14 +722,11 @@ export default function VolantinoBuilder({
 
   const aggiungiSezione = (pi: number, b: VolBlock) => {
     upd((ps) => {
-      // la sezione sta sulla griglia della pagina (cols), la cella su quella della sua riga: si converte
-      const n = b.rs > 1 ? ps[pi].cols : colonneRiga(ps[pi], b.r);
-      const c = Math.min(ps[pi].cols - 1, Math.floor((b.c * ps[pi].cols) / n));
-      const cs = Math.max(1, Math.min(ps[pi].cols - c, Math.round((b.cs * ps[pi].cols) / n)));
-      ps[pi].sezioni = [...(ps[pi].sezioni ?? []), { id: uid("vs"), r: b.r, c, rs: b.rs, cs, bg: "#eaf3e2", titolo: "Sezione" }];
+      // esattamente le colonne della cella, anche in una riga con un numero di celle diverso
+      ps[pi].sezioni = [...(ps[pi].sezioni ?? []), { id: uid("vs"), ...sezioneDaCella(ps[pi], b), bg: "#eaf3e2", titolo: "Sezione" }];
       return ps;
     });
-    flash("Sezione creata su questa cella: allargala con → e ↓ qui sotto, o cambiale colore e titolo.");
+    flash("Sezione creata su questa cella: allargala con → e ↓ qui sotto, dalle un titolo e un colore.");
   };
   const patchSezione = (pi: number, id: string, dati: Partial<VolSection>) => upd((ps) => {
     const s = (ps[pi].sezioni ?? []).find((x) => x.id === id);
@@ -779,9 +776,7 @@ export default function VolantinoBuilder({
      * bianco: le celle stanno sopra (z-index 1) e coprivano completamente il
      * colore della sezione, che quindi sembrava non venire creata.
      */
-    const dentroSezione = (pages[pi].sezioni ?? []).some(
-      (s) => b.r >= s.r && b.r < s.r + s.rs && b.c >= s.c && b.c < s.c + s.cs
-    );
+    const dentroSezione = (pages[pi].sezioni ?? []).some((s) => cellaInSezione(pages[pi], b, s));
     return (
       <div
         key={b.id}
@@ -1388,12 +1383,12 @@ export default function VolantinoBuilder({
               );
             })()}
 
-            {/* in fondo: il testo, le altre cose (commento, immagine) e lo sfondo di gruppo, a richiesta */}
+            {/* in fondo: il testo, le altre cose (commento, immagine) e la sezione, a richiesta */}
             <div className="vol-side-azioni">
               <button type="button" className={`btn btn-outline btn-sm${apriTesto || selBlock.testo ? " attivo" : ""}`} onClick={() => setApriTesto((v) => !v)}
                 title="Un testo nella cella, anche sopra l'immagine">{selBlock.testo ? "Testo" : "+ Testo"}</button>
               <button type="button" className="btn btn-sm" onClick={() => aggiungiSezione(sel!.pi, selBlock)}
-                title="Colora un'area della pagina dietro le celle, a partire da questa">Sfondo di gruppo</button>
+                title="Crea una sezione (titolo, testo e colore) che parte da questa cella: poi la allarghi con → e ↓">Sezione</button>
               <button type="button" className={`btn btn-outline btn-sm vol-rotella${apriAltro ? " attivo" : ""}`} onClick={() => setApriAltro((v) => !v)}
                 aria-label="Altro: commento per il grafico e immagine di sfondo" title="Commento per il grafico e immagine di sfondo">
                 <Settings size={15} style={{ verticalAlign: -3 }} />
@@ -1419,16 +1414,18 @@ export default function VolantinoBuilder({
                 {selBlock.imageUrl && <button className="btn btn-outline btn-sm" onClick={() => patch(sel!.pi, selBlock.id, { imageUrl: undefined })}>Togli immagine</button>}
               </div>
             )}
-            {(selPage.sezioni ?? []).length > 0 && <strong style={{ fontSize: 12, display: "block", marginTop: 10 }}>Sfondi di gruppo della pagina</strong>}
+            {(selPage.sezioni ?? []).length > 0 && <strong style={{ fontSize: 12, display: "block", marginTop: 10 }}>Sezioni della pagina</strong>}
             {(selPage.sezioni ?? []).map((s) => (
               <div key={s.id} style={{ marginTop: 6, paddingTop: 6, borderTop: "1px solid var(--line)" }}>
                 <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
                   <input value={s.titolo ?? ""} onChange={(e) => patchSezione(sel!.pi, s.id, { titolo: e.target.value })}
-                    placeholder="Titolo" style={{ marginTop: 0, flex: 1, fontSize: 11 }} />
+                    placeholder="Titolo della sezione" style={{ marginTop: 0, flex: 1, fontSize: 11 }} />
                   <input type="color" value={s.bg} onChange={(e) => patchSezione(sel!.pi, s.id, { bg: e.target.value })}
                     style={{ marginTop: 0, width: 30, height: 26, padding: 0 }} />
-                  <button className="mini-btn" title="Allarga a destra" onClick={() => patchSezione(sel!.pi, s.id, { cs: Math.min(s.cs + 1, selPage.cols - s.c) })}>→</button>
-                  <button className="mini-btn" title="Allarga in basso" onClick={() => patchSezione(sel!.pi, s.id, { rs: Math.min(s.rs + 1, selPage.rows - s.r) })}>↓</button>
+                  <button className="mini-btn" title="Una cella in meno a destra" onClick={() => patchSezione(sel!.pi, s.id, restringiSezioneDaDestra(selPage, s))}>←</button>
+                  <button className="mini-btn" title="Una cella in più a destra" onClick={() => patchSezione(sel!.pi, s.id, allargaSezioneADestra(selPage, s))}>→</button>
+                  <button className="mini-btn" title="Una riga in meno" disabled={s.rs <= 1} onClick={() => patchSezione(sel!.pi, s.id, { rs: Math.max(1, s.rs - 1) })}>↑</button>
+                  <button className="mini-btn" title="Una riga in più" onClick={() => patchSezione(sel!.pi, s.id, { rs: Math.min(s.rs + 1, selPage.rows - s.r) })}>↓</button>
                   <button className="mini-btn" title="Elimina sezione"
                     onClick={() => upd((ps) => { ps[sel!.pi].sezioni = (ps[sel!.pi].sezioni ?? []).filter((x) => x.id !== s.id); return ps; })}>✕</button>
                 </div>

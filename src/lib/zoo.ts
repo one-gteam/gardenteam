@@ -1,3 +1,4 @@
+import { cellaInSezione } from "./volantino-griglia";
 import { Scope, ScopeType } from "./stampe";
 import { DB } from "./types";
 import { readDomain, writeDomain } from "./supabase";
@@ -582,6 +583,8 @@ export interface VolBlock {
 export interface VolSection {
   id: string;
   r: number; c: number; rs: number; cs: number;
+  /** Colonne nella griglia fine (lib/volantino-griglia): seguono le celle di righe con un numero di celle diverso. */
+  cu?: number; cus?: number;
   titolo?: string;
   testo?: string; // testo libero mostrato sopra lo sfondo, oltre al titolo
   bg: string; // colore di sfondo
@@ -2209,9 +2212,7 @@ export function volantinoCellRows(db: ZooDB, campaignId: string): VolantinoCellR
       const offs = [...new Map(primeDellaCella.flatMap((o) => voci.offerteDi.get(voci.voceDi.get(o.id) ?? "") ?? [o]).map((o) => [o.id, o])).values()];
       // celle vuote: non servono al grafico (ma una nota per lui su una cella senza offerte sì)
       if (offs.length === 0 && !b.testo && !b.imageUrl && !b.label && !b.focus && !b.commento) return;
-      const sez = (page.sezioni ?? []).find(
-        (s) => b.r >= s.r && b.r < s.r + s.rs && b.c >= s.c && b.c < s.c + s.cs
-      );
+      const sez = (page.sezioni ?? []).find((s) => cellaInSezione(page, b, s));
       const primo = offs[0];
       const prodotti = offs.map((o) => db.products.find((p) => p.id === o.productId));
       const padri = prodotti.map((p) => (p?.parentId ? db.parents.find((x) => x.id === p.parentId) : undefined));
