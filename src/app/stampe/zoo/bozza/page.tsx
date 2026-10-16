@@ -101,6 +101,7 @@ export default async function ZooBozzaPage({
                 fotoZipHref={`/stampe/zoo/crea-volantino/foto?campagna=${campaign.id}`}
                 selettorePagine=".bozza-pagine .vol-page"
                 perGrafico={isZooEditor(user) || (db.settings.volantinoEditors ?? []).includes(user.id)}
+                chiaveLink={isZooEditor(user) || (db.settings.volantinoEditors ?? []).includes(user.id) ? campaign.linkGrafico?.chiave : undefined}
                 nomeFile={`bozza-${campaign.nome.replace(/[^\p{L}\p{N}]+/gu, "-").toLowerCase()}`} />
               <AvvisaColleghi tipo="bozza" scopeParam={scopeParam} colleghi={colleghiZoo} />
             </div>

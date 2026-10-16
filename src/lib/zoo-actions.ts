@@ -2555,6 +2555,27 @@ export async function saveVolantinoLayout(campaignId: string, pagesJson: string,
   return { ok: true as const, versione: nuova };
 }
 
+/**
+ * Link per il grafico: crea (o rigenera, e quello vecchio smette di valere) la
+ * chiave con cui si scarica lo ZIP del volantino senza login; `togli` lo spegne.
+ */
+export async function linkGraficoVolantino(campaignId: string, togli = false): Promise<{ ok: boolean; chiave?: string; error?: string }> {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  if (!isZooEditor(user) && !(db.settings.volantinoEditors ?? []).includes(user.id)) return { ok: false, error: "Solo chi compone il volantino." };
+  const c = db.campaigns.find((x) => x.id === campaignId);
+  if (!c) return { ok: false, error: "Volantino non trovato." };
+  if (togli) {
+    c.linkGrafico = undefined;
+  } else {
+    const { randomBytes } = await import("crypto");
+    c.linkGrafico = { chiave: randomBytes(24).toString("base64url"), creatoIl: new Date().toISOString(), creatoDa: `${user.firstName} ${user.lastName}`.trim() };
+  }
+  registra(user, { area: "zoo", cosa: togli ? "Link per il grafico spento" : "Link per il grafico creato", oggetto: c.nome });
+  await saveZooDb(db);
+  return { ok: true, chiave: c.linkGrafico?.chiave };
+}
+
 /** Il Gestore Zoo (o sistema) sceglie chi altro può usare Crea Volantino. */
 export async function saveVolantinoEditors(scopeParam: string, formData: FormData) {
   const user = await requireZooUser();

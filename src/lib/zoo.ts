@@ -125,6 +125,8 @@ export interface ZooCampaign {
   focusNote?: string;
   /** I focus di questo volantino sono archiviati: nello Storico non si vedono (si possono riaprire). */
   focusArchiviato?: boolean;
+  /** Link per il grafico (/grafico/<chiave>): scarica lo ZIP senza entrare in GT One. */
+  linkGrafico?: { chiave: string; creatoIl: string; creatoDa: string };
   /** Entro quando il volantino va mandato al grafico (yyyy-mm-dd). */
   deadlineGrafico?: string;
   /** Avvisi mandati alle squadre sulla consegna al grafico. */
