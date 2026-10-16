@@ -4,8 +4,9 @@ import { getDb } from "@/lib/db";
 import Header from "@/components/Header";
 import { PulsanteAzione } from "@/components/AzioneSenzaRicarica";
 import { importUsersCsv, toggleUserActive, approveRegistration, rejectRegistration } from "@/lib/actions";
-import { scopeUsers, coursesForUser, getProgress, isCourseCompleted, isNewHire, canManageUsers } from "@/lib/logic";
-import { isAcademyAdmin, ruoloEsteso } from "@/lib/types";
+import { scopeUsers, coursesForUser, getProgress, isCourseCompleted, isNewHire, canManageUsers, assignableRolesFor } from "@/lib/logic";
+import { isAcademyAdmin, ruoloEsteso, ROLE_LABELS } from "@/lib/types";
+import RuoloApprovazione from "@/components/RuoloApprovazione";
 
 export default async function UsersPage({
   searchParams,
@@ -13,6 +14,7 @@ export default async function UsersPage({
   searchParams: Promise<{
     import?: string;
     approvato?: string;
+    errore?: string;
     rifiutato?: string;
     q?: string;
     insegna?: string;
@@ -29,7 +31,7 @@ export default async function UsersPage({
   const user = await requireAreaUser("academy");
   if (!isAcademyAdmin(user)) redirect("/studente");
   const sp = await searchParams;
-  const { import: imported, approvato, rifiutato } = sp;
+  const { import: imported, approvato, rifiutato, errore } = sp;
 
   const db = await getDb();
   const allUsers = scopeUsers(db, user).sort((a, b) => a.lastName.localeCompare(b.lastName));
@@ -165,6 +167,7 @@ export default async function UsersPage({
         {imported === "0" && (
           <div className="alert alert-amber">Nessun collaboratore importato: controlla il formato del CSV.</div>
         )}
+        {errore === "ruolo" && <div className="alert alert-amber">Questo ruolo non lo puoi assegnare dal tuo profilo: scegline un altro.</div>}
         {approvato && <div className="alert alert-green">✓ Richiesta approvata: il collaboratore è stato creato e ha ricevuto l&apos;email di benvenuto.</div>}
         {rifiutato && <div className="alert alert-amber">Richiesta rifiutata.</div>}
 
@@ -174,7 +177,7 @@ export default async function UsersPage({
             <div className="table-wrap">
               <table className="data">
                 <thead>
-                  <tr><th>Richiedente</th><th>Punto vendita</th><th>Dati</th><th>Reparto</th><th></th></tr>
+                  <tr><th>Richiedente</th><th>Punto vendita</th><th>Dati</th><th>Reparto e ruolo</th><th></th></tr>
                 </thead>
                 <tbody>
                   {pending.map((r) => {
@@ -201,9 +204,11 @@ export default async function UsersPage({
                           </form>
                           {r.repartoAltro && (
                             <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 4 }}>
-                              Ha scelto <strong>Altro</strong>{r.notaAltro ? <> («{r.notaAltro}»)</> : null}: dopo l&apos;approvazione dagli il ruolo giusto (amministratore d&apos;insegna o di PV, gestore…).
+                              Ha scelto <strong>Altro</strong>{r.notaAltro ? <> («{r.notaAltro}»)</> : null}: scegli qui sotto il ruolo giusto.
                             </div>
                           )}
+                          <RuoloApprovazione formId={`approve_${r.id}`} proposto="student"
+                            ruoli={[{ value: "student", label: ROLE_LABELS.student }, ...assignableRolesFor(user).filter((x) => x !== "system_admin" && x !== "student").map((x) => ({ value: x, label: ROLE_LABELS[x] }))]} />
                         </td>
                         <td style={{ whiteSpace: "nowrap" }}>
                           <button className="btn btn-sm" type="submit" form={`approve_${r.id}`}>✓ Approva</button>{" "}

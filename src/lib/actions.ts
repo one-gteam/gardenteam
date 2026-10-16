@@ -2551,18 +2551,34 @@ export async function approveRegistration(regId: string, formData: FormData) {
   if (!allowed) redirect("/admin/utenti");
 
   const departmentId = String(formData.get("departmentId") ?? "") || reg!.departmentId;
+  /*
+   * Ruolo e aree scelti da chi approva (corsista se non sceglie). Mai
+   * amministratore di sistema da qui, e solo i ruoli che può dare.
+   */
+  const ruoloScelto = String(formData.get("role") ?? "student") as Role;
+  if (ruoloScelto === "system_admin" || !(ruoloScelto in ROLE_LABELS) || (ruoloScelto !== "student" && !assignableRolesFor(admin).includes(ruoloScelto))) {
+    redirect("/admin/utenti?errore=ruolo");
+  }
+  const scelteAree = (formData.getAll("sites") as string[]).filter((x): x is SiteId => ["academy", "arredo", "zoo", "piante"].includes(x));
+  const vuoto = { sites: [], manages: [] } as unknown as User;
+  const aree = sitesAssegnabili(admin, vuoto, scelteAree.length ? scelteAree : ["academy"]);
+  const gestite = ruoloScelto === "manager" ? gestioniAssegnabili(admin, vuoto, aree).filter((x) => aree.includes(x)) : undefined;
+  const corsista = ruoloScelto === "student" || ruoloScelto === "dept_head";
   const newUser: User = {
     id: `u_${Date.now()}_reg`,
     firstName: reg!.firstName,
     lastName: reg!.lastName,
     email: reg!.email,
-    role: "student",
-    sites: ["academy"], // registrazione approvata: entra come corsista
+    role: ruoloScelto,
+    sites: aree.length ? aree : ["academy"],
+    manages: gestite,
     tenantId: reg!.tenantId,
-    storeId: reg!.storeId,
+    // l'amministratore d'insegna sta sull'insegna, non sul punto vendita da cui ha chiesto
+    storeId: ruoloScelto === "group_admin" ? undefined : reg!.storeId,
     departmentId: departmentId || undefined,
-    jobTitle: "Addetto vendita",
-    hireDate: new Date().toISOString().slice(0, 10), // neoassunto: entra nei percorsi di onboarding
+    jobTitle: corsista ? "Addetto vendita" : ROLE_LABELS[ruoloScelto],
+    // neoassunto (percorsi di onboarding) solo chi entra come corsista o capo reparto
+    hireDate: corsista ? new Date().toISOString().slice(0, 10) : new Date(Date.now() - 366 * 86400000).toISOString().slice(0, 10),
     points: 0,
     badges: [],
     active: true,
@@ -2572,6 +2588,7 @@ export async function approveRegistration(regId: string, formData: FormData) {
   };
   db.users.push(newUser);
   reg!.status = "approved";
+  registra(admin, { area: "utenti", cosa: "Registrazione approvata", oggetto: `${newUser.firstName} ${newUser.lastName} (${newUser.email})`, dopo: `${ROLE_LABELS[newUser.role]} · ${(newUser.sites ?? []).join(", ")}` });
   await queueEmail(db, newUser, "benvenuto");
   await notifyNewAssignments(db, newUser);
   await saveDb(db);
