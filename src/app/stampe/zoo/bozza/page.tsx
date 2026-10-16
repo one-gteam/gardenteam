@@ -199,7 +199,7 @@ export default async function ZooBozzaPage({
                             <div className="bozza-focus" style={{ borderColor: defFocus?.colore || undefined }}>
                               <strong>{nomeFocus}</strong>
                               {defFocus?.descrizione && <span>{defFocus.descrizione}</span>}
-                              {defFocus?.notaGrafico && <em className="no-print">Per il grafico: {defFocus.notaGrafico}</em>}
+                              {defFocus?.notaGrafico && <em>Per il grafico: {defFocus.notaGrafico}</em>}
                             </div>
                           )}
                           {nomeFocus && offerte.length > 0 && <div className="vol-focus-titolo">{nomeFocus}</div>}
@@ -264,7 +264,7 @@ export default async function ZooBozzaPage({
                               );
                             })}
                           </div>
-                          {b.commento && <div className="nota-cella-intera no-print">nota: {b.commento}</div>}
+                          {b.commento && <div className="nota-cella-intera">nota: {b.commento}</div>}
                         </div>
                       );
                     })}

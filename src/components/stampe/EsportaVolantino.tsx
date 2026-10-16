@@ -37,10 +37,22 @@ export default function EsportaVolantino({
       if (i > 0) doc.addPage();
       const W = doc.internal.pageSize.getWidth();
       const H = doc.internal.pageSize.getHeight();
-      // una pagina più lunga dell'A4 (celle con tanto testo) si rimpicciolisce per starci
+      // le note per il grafico della pagina stanno fuori dalla pagina disegnata: si scrivono sotto
+      const nota = pagine[i].closest(".vol-page-wrap")?.querySelector(".nota-grafico")?.textContent?.trim() ?? "";
+      doc.setFontSize(9);
+      const righe: string[] = nota ? doc.splitTextToSize(nota, W - 16) : [];
+      const spazio = righe.length ? righe.length * 4 + 6 : 0;
+      // una pagina più lunga dell'A4 (celle con tanto testo) si rimpicciolisce per starci, note comprese
       let w = W, h = (canvas.height * W) / canvas.width;
-      if (h > H) { w = (W * H) / h; h = H; }
+      if (h > H - spazio) { w = (W * (H - spazio)) / h; h = H - spazio; }
       doc.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", (W - w) / 2, 0, w, h);
+      if (righe.length) {
+        doc.setFillColor(255, 248, 225);
+        doc.rect(6, h + 2, W - 12, righe.length * 4 + 3, "F");
+        doc.setTextColor(122, 90, 0);
+        doc.text(righe, 8, h + 5.5);
+        doc.setTextColor(0, 0, 0);
+      }
     }
     return doc;
   };
