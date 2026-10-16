@@ -11,7 +11,7 @@
     "@anthropic-ai/sdk": "^0.113.0",
     "@supabase/supabase-js": "^2.110.8",
     "fflate": "^0.8.3",
-    "html2canvas": "^1.4.1",
+    "html2canvas-pro": "2.4.4",
     "imapflow": "^2.0.8",
     "jspdf": "^4.2.1",
     "lucide-react": "^1.28.0",

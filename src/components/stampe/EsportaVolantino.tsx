@@ -24,7 +24,8 @@ export default function EsportaVolantino({
 
   /** Il PDF delle pagine della bozza, una per foglio A4 (le note restano fuori). */
   const creaPdf = async () => {
-    const [{ jsPDF }, { default: html2canvas }] = await Promise.all([import("jspdf"), import("html2canvas")]);
+    // html2canvas-pro: la 1.4 si fermava sui colori color-mix() del portale (i verdi), e il PDF non usciva
+    const [{ jsPDF }, { default: html2canvas }] = await Promise.all([import("jspdf"), import("html2canvas-pro")]);
     const pagine = Array.from(document.querySelectorAll<HTMLElement>(selettorePagine));
     if (pagine.length === 0) throw new Error("nessuna pagina");
     const doc = new jsPDF({ unit: "mm", format: "a4" });
@@ -50,8 +51,12 @@ export default function EsportaVolantino({
     try {
       const doc = await creaPdf();
       doc.save(`${nomeFile}.pdf`);
-    } catch {
-      setErrore("PDF non generato: apri la vista «Pagine» e riprova.");
+    } catch (e) {
+      console.error("PDF della bozza", e);
+      const motivo = e instanceof Error ? e.message : String(e);
+      setErrore(motivo === "nessuna pagina"
+        ? "PDF non generato: apri la vista «Pagine» e riprova."
+        : `PDF non generato (${motivo.slice(0, 140)}). Riprova; se si ripete, manda questo messaggio.`);
     } finally {
       setPending("");
     }
