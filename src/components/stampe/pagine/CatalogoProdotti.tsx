@@ -19,7 +19,7 @@ import { ignoraZooFoto, ripristinaZooFotoIgnorate } from "@/lib/zoo-focus-action
 import { DettagliPadre, PannelloPadre } from "@/components/stampe/DettagliPadre";
 import {
   getZooDb, zooImageUrl, effectiveParentText, isZooHidden, hiddenEntriesFor, fornitoriList, marcheList, marcaEffettiva,
-  suggestPhotoMatch, buildAbbinamentoIndex, volantinoDiFoto, fotoDaControllare, fotoDaAbbinare, contenutoDa, contenutoPer, campagnaInCorso, campagnaInLavorazione, testoContenuto, type ZooOffer, animaliDi, caratteristicheProdottoDi, storicoOfferteByEan,
+  suggestPhotoMatch, buildAbbinamentoIndex, volantinoDiFoto, fotoDaControllare, fotoDaAbbinare, contenutoDa, contenutoPer, NO_VOLANTINO, campagnaInCorso, campagnaInLavorazione, testoContenuto, type ZooOffer, animaliDi, caratteristicheProdottoDi, storicoOfferteByEan,
   periodoBreve, visibleProducts, type ZooProduct, type ZooParent, type ZooStoricoVoce,
 } from "@/lib/zoo";
 import {
@@ -82,7 +82,10 @@ export default async function CatalogoProdotti({ user, sp }: { user: User; sp: R
   // dalla Dashboard: solo gli articoli in offerta nel volantino indicato
   const volantinoFiltro = sp.volantino ? db.campaigns.find((c) => c.id === sp.volantino) : undefined;
   const volantinoCorrente = campagnaInLavorazione(db) ?? campagnaInCorso(db);
-  const prodottiDelVolantino = volantinoFiltro ? new Set(db.offers.filter((o) => o.campaignId === volantinoFiltro.id && o.productId).map((o) => o.productId!)) : undefined;
+  // «solo scelti»: gli articoli delle offerte scelte e messe in una pagina, non tutto l'Excel delle promo
+  const soloScelti = sp.scelti === "1" && !!volantinoFiltro;
+  const prodottiDelVolantino = volantinoFiltro ? new Set(db.offers.filter((o) => o.campaignId === volantinoFiltro.id && o.productId
+    && (!soloScelti || (o.selezionata && o.paginaId !== NO_VOLANTINO))).map((o) => o.productId!)) : undefined;
   /*
    * Di norma si vede il catalogo comune più i propri articoli. Con "mostra anche
    * quelli di altri" si guardano quelli caricati dalle altre insegne/PV: il
@@ -445,7 +448,7 @@ export default async function CatalogoProdotti({ user, sp }: { user: User; sp: R
           <FiltriMobile id="filtri-dati" scelte={[
             vistaArticoli ? "articoli singoli" : "raggruppata",
             sp.q && `«${sp.q}»`, sp.animale, sp.caratt, sp.fornitore, sp.marca,
-            soloSenzaPadre && "solo senza padre", soloSenzaAnimale && "solo padri senza animale", soloSenzaPeso && "solo senza peso (niente prezzo al kg/l)", volantinoFiltro && `solo il volantino «${volantinoFiltro.nome}»`, showHidden && "anche i nascosti",
+            soloSenzaPadre && "solo senza padre", soloSenzaAnimale && "solo padri senza animale", soloSenzaPeso && "solo senza peso (niente prezzo al kg/l)", volantinoFiltro && `solo il volantino «${volantinoFiltro.nome}»${soloScelti ? " (scelti)" : ""}`, showHidden && "anche i nascosti",
           ]}>
           <form method="get" style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr)) auto", gap: 10, alignItems: "end" }}>
             <input type="hidden" name="scope" value={scopeParam} />
@@ -487,7 +490,8 @@ export default async function CatalogoProdotti({ user, sp }: { user: User; sp: R
               {" "}<input type="checkbox" name="senzapeso" value="1" defaultChecked={soloSenzaPeso} /> solo senza peso
               {/* solo gli articoli del volantino: quello indicato (dalla Dashboard) o quello in lavorazione */}
               {(volantinoFiltro ?? volantinoCorrente) && (
-                <>{" "}<input type="checkbox" name="volantino" value={(volantinoFiltro ?? volantinoCorrente)!.id} defaultChecked={!!volantinoFiltro} /> solo gli articoli di «{(volantinoFiltro ?? volantinoCorrente)!.nome}»</>
+                <>{" "}<input type="checkbox" name="volantino" value={(volantinoFiltro ?? volantinoCorrente)!.id} defaultChecked={!!volantinoFiltro} /> solo gli articoli di «{(volantinoFiltro ?? volantinoCorrente)!.nome}»
+                  {" "}<input type="checkbox" name="scelti" value="1" defaultChecked={soloScelti} /> …solo quelli scelti per il volantino</>
               )}
               {" "}<input type="checkbox" name="altrui" value="1" defaultChecked={mostraAltrui} /> mostra anche gli articoli di altre insegne/PV
               {scope.type !== "system" && (
