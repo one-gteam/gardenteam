@@ -91,6 +91,7 @@ export default function LayoutEditor({
   area = "arredo",
   ambiti = [],
   fontPropri = [],
+  testataAmbito,
 }: {
   format: PrintFormat;
   fields: PrintField[];
@@ -121,6 +122,12 @@ export default function LayoutEditor({
   ambiti?: { value: string; label: string }[];
   /** Font caricati dall'ambito (o dalla sua insegna, o dal Consorzio): si aggiungono al menu «Carattere». */
   fontPropri?: { id: string; nome: string }[];
+  /**
+   * La testata dell'insegna/PV su questo formato: in anteprima si vede al posto
+   * di quella del Consorzio (o in grigio leggero, se è nascosta). Solo vista:
+   * il layout salvato non cambia.
+   */
+  testataAmbito?: { modo: "riquadro" | "piena" | "nessuna"; url?: string; nome: string };
 }) {
   const [layoutId, setLayoutId] = useState(initialLayoutId ?? "");
   const [nome, setNome] = useState(initialNome ?? "");
@@ -401,6 +408,12 @@ export default function LayoutEditor({
   };
 
   const selItem = selected !== null ? activeItems[selected] : null;
+  // la testata è l'immagine libera più in alto del foglio (come in stampa: conTestataDiScopo)
+  const indiceTestata = (() => {
+    let migliore = -1;
+    activeItems.forEach((it, i) => { if (it.fieldId === ELEMENTO_IMMAGINE && it.imageUrl && (migliore < 0 || it.y < activeItems[migliore].y)) migliore = i; });
+    return migliore;
+  })();
 
   /*
    * «Applica a tutti i layout»: l'aspetto del campo scelto va sullo stesso
@@ -753,6 +766,7 @@ export default function LayoutEditor({
           )}
           {activeItems.map((item, i) => {
             const meta = fields.find((f) => f.id === item.fieldId);
+            const eTestata = i === indiceTestata && !!testataAmbito;
             if (item.sticker) {
               return (
                 <div
@@ -809,18 +823,24 @@ export default function LayoutEditor({
               );
             }
             const isImage = isImageField(item.fieldId);
-            const imgSrc = item.fieldId === ELEMENTO_IMMAGINE ? item.imageUrl : previewValues[item.fieldId];
+            const nascosta = eTestata && testataAmbito!.modo === "nessuna";
+            const imgSrc = eTestata && testataAmbito!.url && !nascosta ? testataAmbito!.url
+              : item.fieldId === ELEMENTO_IMMAGINE ? item.imageUrl : previewValues[item.fieldId];
             if (isImage) {
               return (
                 <div
                   key={i}
                   className={`editor-item ${selected === i ? "selected" : ""}`}
-                  style={stileBase}
+                  style={nascosta ? { ...stileBase, opacity: 0.18, filter: "grayscale(1)" } : stileBase}
                   onMouseDown={(e) => onMouseDown(e, i, "move")}
+                  title={eTestata ? (nascosta ? `Testata nascosta per ${testataAmbito!.nome}: in stampa non c'è` : `Testata di ${testataAmbito!.nome}${testataAmbito!.modo === "piena" ? " (in stampa a tutta larghezza)" : ""}`) : undefined}
                 >
+                  {eTestata && (
+                    <span className="testata-ambito-badge">{nascosta ? "nascosta" : `testata di ${testataAmbito!.nome}${testataAmbito!.modo === "piena" ? " · tutta larghezza" : ""}`}</span>
+                  )}
                   {imgSrc ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={imgSrc} alt="" style={{ width: "100%", height: "100%", objectFit: "contain", objectPosition: `${item.fieldId === ELEMENTO_IMMAGINE ? item.align ?? "left" : "left"} top`, pointerEvents: "none", mixBlendMode: "multiply" }} />
+                    <img src={imgSrc} alt="" style={{ width: "100%", height: "100%", objectFit: "contain", objectPosition: `${eTestata ? "center" : item.fieldId === ELEMENTO_IMMAGINE ? item.align ?? "left" : "left"} top`, pointerEvents: "none", mixBlendMode: "multiply" }} />
                   ) : (
                     <span style={{ fontSize: 11, color: "#999" }}>{meta?.label ?? "Immagine"}</span>
                   )}

@@ -2882,9 +2882,14 @@ export async function saveZooTestata(scopeParam: string, formData: FormData) {
   const mie = db.layoutImages.filter((i) => i.scopeType === scope.type && i.scopeId === scope.id).map((i) => i.url);
   const scelta = mie.includes(richiesta) ? richiesta : "";
   const file = togli ? null : (formData.get("image") as File | null);
-  const precedente = db.testate.find((t) => t.scopeType === scope.type && t.scopeId === scope.id);
+  // per un formato solo (quello aperto) o per tutti
+  const soloFormato = String(formData.get("formati") ?? "") === "questo" && /^za\d$/.test(formato) ? formato : undefined;
+  const dellAmbito = db.testate.filter((t) => t.scopeType === scope.type && t.scopeId === scope.id);
+  const generale = dellAmbito.find((t) => !t.formatId);
+  const precedente = (soloFormato ? dellAmbito.find((t) => t.formatId === soloFormato) : undefined) ?? generale;
   const modoRichiesto = String(formData.get("modo") ?? "");
-  const modo = (["riquadro", "piena", "nessuna"] as const).find((m) => m === modoRichiesto) ?? precedente?.modo ?? "riquadro";
+  const modo = (["riquadro", "piena", "nessuna"] as const).find((m) => m === modoRichiesto)
+    ?? (precedente?.modo === "consorzio" ? undefined : precedente?.modo) ?? "riquadro";
   // senza una nuova immagine si tiene quella di prima (si cambia solo il modo)
   let url = scelta || (togli ? "" : precedente?.url ?? "");
   let rapporto = scelta || togli ? undefined : precedente?.rapporto;
@@ -2897,8 +2902,21 @@ export async function saveZooTestata(scopeParam: string, formData: FormData) {
   }
   // a tutta larghezza servono le proporzioni dell'immagine: se mancano si misurano adesso
   if (url && !rapporto) rapporto = await rapportoImmagine(url);
-  db.testate = db.testate.filter((t) => !(t.scopeType === scope.type && t.scopeId === scope.id));
-  if (!togli && (url || modo === "nessuna")) db.testate.push({ scopeType: scope.type, scopeId: scope.id, url: modo === "nessuna" ? url : url, modo, rapporto });
+  const mio = (t: { scopeType: string; scopeId: string }) => t.scopeType === scope.type && t.scopeId === scope.id;
+  if (soloFormato) {
+    // solo questo formato: la sua scelta sostituisce quella generale lì e basta
+    db.testate = db.testate.filter((t) => !(mio(t) && t.formatId === soloFormato));
+    if (togli) {
+      // «torna a quella del Consorzio» su un formato solo: serve una scelta esplicita se ce n'è una per tutti
+      if (generale) db.testate.push({ scopeType: scope.type, scopeId: scope.id, url: "", modo: "consorzio", formatId: soloFormato });
+    } else if (url || modo === "nessuna") {
+      db.testate.push({ scopeType: scope.type, scopeId: scope.id, url, modo, rapporto, formatId: soloFormato });
+    }
+  } else {
+    // per tutti i formati: vale ovunque, le scelte per singolo formato si tolgono
+    db.testate = db.testate.filter((t) => !mio(t));
+    if (!togli && (url || modo === "nessuna")) db.testate.push({ scopeType: scope.type, scopeId: scope.id, url, modo, rapporto });
+  }
   await saveZooDb(db);
   rigeneraZoo();
   redirect(backUrl("/stampe/zoo/layout", scopeParam, { formato, testata: url || modo === "nessuna" ? "1" : "0" }));

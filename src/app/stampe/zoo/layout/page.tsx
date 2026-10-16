@@ -35,8 +35,19 @@ export default async function ZooLayoutPage({
   if (!vedeLayout(user, "zoo")) redirect("/stampe/zoo/stampa");
   const canEdit = puoModificareLayout(user, "zoo", scope, academyDb);
   const testataMia = testataPer(db, scope, academyDb);
-  const sceltaTestata = testataScopoPer(db, scope, academyDb);
+  const format0 = ZOO_FORMATS.find((f) => f.id === sp.formato) ?? ZOO_FORMATS[0];
+  // la testata che vale su questo formato (sua o per tutti) e com'è impostata formato per formato
+  const sceltaTestata = testataScopoPer(db, scope, academyDb, format0.id);
+  const testataFormato = sceltaTestata?.url ?? "";
   const modoTestata = sceltaTestata?.modo ?? "riquadro";
+  const dellAmbito = db.testate.filter((t) => t.scopeType === scope.type && t.scopeId === scope.id);
+  const perQuestoFormato = dellAmbito.some((t) => t.formatId === format0.id);
+  const statoFormato = (fid: string) => {
+    const t = testataScopoPer(db, scope, academyDb, fid);
+    const proprio = dellAmbito.some((x) => x.formatId === fid);
+    const testo = !t ? "quella del Consorzio" : t.modo === "nessuna" ? "nascosta" : t.modo === "piena" ? "vostra, a tutta larghezza" : "vostra, nel riquadro";
+    return { testo, proprio };
+  };
 
   const format = ZOO_FORMATS.find((f) => f.id === sp.formato) ?? ZOO_FORMATS[0];
   /*
@@ -173,6 +184,8 @@ export default async function ZooLayoutPage({
             .filter((li) => li.scopeType === scope.type && li.scopeId === scope.id)
             .map((li) => ({ name: li.name, url: li.url }))}
           fontPropri={fontPerAmbito(academyDb, scope).map((f) => ({ id: f.id, nome: f.nome }))}
+          testataAmbito={scope.type !== "system" && sceltaTestata && sceltaTestata.modo !== "consorzio"
+            ? { modo: sceltaTestata.modo ?? "riquadro", url: sceltaTestata.url, nome: scope.label } : undefined}
         />
 
         {canEdit && (
@@ -192,19 +205,41 @@ export default async function ZooLayoutPage({
               una versione vostra del layout.
             </p>
             <div style={{ display: "flex", gap: 14, alignItems: "flex-start", flexWrap: "wrap" }}>
-              {modoTestata === "nessuna"
-                ? <span className="pill pill-gray">Testata nascosta: i cartelli escono senza</span>
-                : testataMia
-                ? (
-                  <div style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 6, background: "#fff" }}>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={testataMia} alt="" style={{ height: 54, maxWidth: 240, objectFit: "contain", display: "block" }} />
-                    <div className="hint" style={{ textAlign: "center" }}>testata in uso{modoTestata === "piena" ? " · a tutta larghezza" : ""}</div>
-                  </div>
-                )
-                : <span className="hint">Nessuna testata vostra: si stampa quella del Consorzio.</span>}
+              <div style={{ display: "grid", gap: 8 }}>
+                {sceltaTestata?.modo === "nessuna"
+                  ? <span className="pill pill-gray">Su {format0.name}: testata nascosta</span>
+                  : testataFormato
+                  ? (
+                    <div style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 6, background: "#fff" }}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={testataFormato} alt="" style={{ height: 54, maxWidth: 240, objectFit: "contain", display: "block" }} />
+                      <div className="hint" style={{ textAlign: "center" }}>in uso su {format0.name}{modoTestata === "piena" ? " · a tutta larghezza" : ""}</div>
+                    </div>
+                  )
+                  : <span className="hint">Su {format0.name} si stampa quella del Consorzio.</span>}
+                <table className="data" style={{ fontSize: 12 }}>
+                  <tbody>
+                    {ZOO_FORMATS.map((f) => {
+                      const st = statoFormato(f.id);
+                      return (
+                        <tr key={f.id} style={f.id === format0.id ? { background: "var(--green-50)" } : undefined}>
+                          <td><a href={`/stampe/zoo/layout?formato=${f.id}&scope=${scopeParam}`}>{f.name}</a></td>
+                          <td>{st.testo}{st.proprio ? <span className="hint"> · solo per questo formato</span> : ""}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
               <form action={saveZooTestata.bind(null, scopeParam)} style={{ display: "grid", gap: 8 }}>
                 <input type="hidden" name="formato" value={format.id} />
+                <fieldset className="modo-testata">
+                  <legend>Vale per</legend>
+                  <label><input type="radio" name="formati" value="questo" defaultChecked={perQuestoFormato} />
+                    <span><strong>Solo {format0.name}</strong><em>gli altri formati restano come sono</em></span></label>
+                  <label><input type="radio" name="formati" value="tutti" defaultChecked={!perQuestoFormato} />
+                    <span><strong>Tutti i formati</strong><em>toglie le scelte fatte formato per formato</em></span></label>
+                </fieldset>
                 <fieldset className="modo-testata">
                   <legend>Come esce sul cartello</legend>
                   <label><input type="radio" name="modo" value="riquadro" defaultChecked={modoTestata === "riquadro"} />
@@ -228,7 +263,7 @@ export default async function ZooLayoutPage({
                 )}
                 <div style={{ display: "flex", gap: 8 }}>
                   <button className="btn btn-sm" type="submit">Salva testata</button>
-                  {(testataMia || modoTestata === "nessuna") && (
+                  {(testataMia || dellAmbito.length > 0) && (
                     <button className="btn btn-outline btn-sm" type="submit" name="togli" value="1"
                       title="Torna alla testata del Consorzio, nel suo riquadro">
                       Torna a quella del Consorzio

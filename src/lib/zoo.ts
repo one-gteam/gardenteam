@@ -726,17 +726,25 @@ export interface ZooTestataScopo {
    *  piena    — a tutta larghezza dal bordo in alto, il resto del cartello scende;
    *  nessuna  — niente testata, nemmeno quella del Consorzio: il cartello sale.
    */
-  modo?: "riquadro" | "piena" | "nessuna";
+  modo?: "riquadro" | "piena" | "nessuna" | "consorzio";
   /** Altezza/larghezza dell'immagine: serve per la testata a tutta larghezza. */
   rapporto?: number;
+  /**
+   * Solo per questo formato (za4, za5…): vince sulla scelta valida per tutti.
+   * Con modo «consorzio» quel formato torna alla testata del Consorzio.
+   */
+  formatId?: string;
 }
 
 /** La scelta di testata che vale in questo ambito: la propria, o quella dell'insegna sopra. */
-export function testataScopoPer(db: ZooDB, scope?: Scope, academyDb?: DB): ZooTestataScopo | undefined {
+export function testataScopoPer(db: ZooDB, scope?: Scope, academyDb?: DB, formatId?: string): ZooTestataScopo | undefined {
   if (!scope || !academyDb) return undefined;
   for (const s of chainFor(scope, academyDb)) {
     if (s.type === "system") break;
-    const mia = db.testate.find((t) => t.scopeType === s.type && t.scopeId === s.id);
+    const dell = db.testate.filter((t) => t.scopeType === s.type && t.scopeId === s.id);
+    // prima la scelta per questo formato, poi quella valida per tutti
+    const mia = (formatId ? dell.find((t) => t.formatId === formatId) : undefined) ?? dell.find((t) => !t.formatId);
+    if (mia?.modo === "consorzio") return undefined;
     if (mia && (mia.url || mia.modo === "nessuna")) return mia;
   }
   return undefined;
@@ -1586,7 +1594,7 @@ export function effectiveZooLayout(
    * senza che il layout salvato cambi. È il modo per personalizzare la fascia
    * in cima restando su quello comune del Consorzio.
    */
-  const conTestata = (l: ZooLayout) => conTestataDiScopo(l, testataScopoPer(db, scope, academyDb));
+  const conTestata = (l: ZooLayout) => conTestataDiScopo(l, testataScopoPer(db, scope, academyDb, l.formatId));
   const chain = chainFor(scope, academyDb);
   const di = (l: ZooLayout, s: { type: ScopeType; id: string }) => l.scopeType === s.type && l.scopeId === s.id;
   /*
@@ -1637,7 +1645,7 @@ export function layoutPerOfferta(
 ): ZooLayout {
   const scelto = offer.layoutId ? db.zooLayouts.find((l) => l.id === offer.layoutId) : undefined;
   if (scelto && ownScopeVisible(scope, academyDb, scelto)) {
-    if (scelto.formatId === formatId) return conTestataDiScopo(scelto, testataScopoPer(db, scope, academyDb));
+    if (scelto.formatId === formatId) return conTestataDiScopo(scelto, testataScopoPer(db, scope, academyDb, formatId));
     if ((scelto.tipologie ?? []).length > 0) return effectiveZooLayout(db, scope, formatId, academyDb, scelto.tipologie);
   }
   return effectiveZooLayout(db, scope, formatId, academyDb, tags);
@@ -1667,7 +1675,7 @@ export function layoutScegliibili(
  */
 export function conTestataDiScopo(layout: ZooLayout, testata: ZooTestataScopo | string | undefined): ZooLayout {
   const t = typeof testata === "string" ? (testata ? { url: testata, modo: "riquadro" as const } : undefined) : testata;
-  if (!t || (!t.url && t.modo !== "nessuna")) return layout;
+  if (!t || t.modo === "consorzio" || (!t.url && t.modo !== "nessuna")) return layout;
   const formato = ZOO_FORMATS.find((f) => f.id === layout.formatId);
   const sostituisci = (items: LayoutItem[] | undefined) => {
     if (!items || items.length === 0) return items;
