@@ -7,6 +7,7 @@ import { getDb, saveDb } from "./db";
 import { getZooDb, saveZooDb, campagnaInLavorazione, campagnaInCorso, type ZooScopeGiacenze } from "./zoo";
 import { getStampeDb, saveStampeDb } from "./stampe";
 import { registra } from "./registro";
+import { leggiConnettoriFox, scriviConnettoriFox, nuovaChiaveFox } from "./fox-connettore";
 import { permessoRuolo, type DB, type User } from "./types";
 
 /*
@@ -18,6 +19,9 @@ import { permessoRuolo, type DB, type User } from "./types";
  *    online con una chiave (Authorization: Bearer). Si crea, si rigenera, si spegne.
  *  - SSO: il sistema dell'insegna fa entrare i suoi collaboratori con un link
  *    firmato con la chiave dell'insegna (come My Rosaflor fa per Rosàflor).
+ *  - Zoo, «il gestionale legge»: il gestionale legge le offerte Zoo con una
+ *    chiave (GET /api/zoo/offerte), per stampare i cartelli dal proprio
+ *    programma e controllare a scaffale. Si crea, si rigenera, si spegne.
  * Chi entra: per permesso del ruolo (accesso_connettori), ciascuno sulla
  * propria insegna; l'amministratore di sistema su tutte.
  */
@@ -142,6 +146,100 @@ export async function provaConnettoreZoo(tipo: TipoAmbito, id: string): Promise<
   await saveZooDb(db);
   revalidatePath("/connettori");
   return { ok: esito.startsWith("OK"), error: esito.startsWith("OK") ? undefined : esito, esito };
+}
+
+/* ================== Zoo: il gestionale legge le offerte ================== */
+
+export async function creaChiaveLettura(tipo: TipoAmbito, id: string): Promise<Esito> {
+  const user = await autorizzato(tipo, id);
+  if (!user) return { ok: false, error: NEGATO };
+  const academyDb = await getDb();
+  if (!ambitoValido(academyDb, tipo, id)) return { ok: false, error: "Ambito non trovato." };
+  const db = await getZooDb();
+  let k = db.letture.find((x) => x.scopeType === tipo && x.scopeId === id);
+  const nuova = !k;
+  if (!k) { k = { scopeType: tipo, scopeId: id, token: "" }; db.letture.push(k); }
+  k.token = `gtz_${randomBytes(24).toString("base64url")}`;
+  k.attivo = true;
+  k.creataIl = new Date().toISOString();
+  await saveZooDb(db);
+  registra(user, { area: "connettori", cosa: nuova ? "Chiave lettura offerte Zoo creata" : "Chiave lettura offerte Zoo rigenerata", oggetto: nomeAmbito(academyDb, tipo, id) });
+  revalidatePath("/connettori");
+  return { ok: true };
+}
+
+export async function accendiLettura(tipo: TipoAmbito, id: string, acceso: boolean): Promise<Esito> {
+  const user = await autorizzato(tipo, id);
+  if (!user) return { ok: false, error: NEGATO };
+  const db = await getZooDb();
+  const k = db.letture.find((x) => x.scopeType === tipo && x.scopeId === id);
+  if (!k) return { ok: false, error: "Nessuna chiave per questo ambito." };
+  k.attivo = acceso;
+  await saveZooDb(db);
+  const academyDb = await getDb();
+  registra(user, { area: "connettori", cosa: acceso ? "Lettura offerte Zoo accesa" : "Lettura offerte Zoo spenta", oggetto: nomeAmbito(academyDb, tipo, id) });
+  revalidatePath("/connettori");
+  return { ok: true };
+}
+
+export async function togliChiaveLettura(tipo: TipoAmbito, id: string): Promise<Esito> {
+  const user = await autorizzato(tipo, id);
+  if (!user) return { ok: false, error: NEGATO };
+  const db = await getZooDb();
+  const prima = db.letture.length;
+  db.letture = db.letture.filter((x) => !(x.scopeType === tipo && x.scopeId === id));
+  if (db.letture.length === prima) return { ok: false, error: "Nessuna chiave per questo ambito." };
+  await saveZooDb(db);
+  const academyDb = await getDb();
+  registra(user, { area: "connettori", cosa: "Chiave lettura offerte Zoo tolta", oggetto: nomeAmbito(academyDb, tipo, id) });
+  revalidatePath("/connettori");
+  return { ok: true };
+}
+
+/* ================== Zoo: il programma Fox manda giacenze e prezzi ================== */
+
+export async function creaChiaveFox(tipo: TipoAmbito, id: string): Promise<Esito> {
+  const user = await autorizzato(tipo, id);
+  if (!user) return { ok: false, error: NEGATO };
+  const academyDb = await getDb();
+  if (!ambitoValido(academyDb, tipo, id)) return { ok: false, error: "Ambito non trovato." };
+  const voci = await leggiConnettoriFox();
+  let c = voci.find((x) => x.scopeType === tipo && x.scopeId === id);
+  const nuova = !c;
+  if (!c) { c = { scopeType: tipo, scopeId: id, chiave: "", creatoIl: new Date().toISOString() }; voci.push(c); }
+  c.chiave = nuovaChiaveFox();
+  c.attivo = true;
+  await scriviConnettoriFox(voci);
+  registra(user, { area: "connettori", cosa: nuova ? "Chiave programma Fox creata" : "Chiave programma Fox rigenerata", oggetto: nomeAmbito(academyDb, tipo, id) });
+  revalidatePath("/connettori");
+  return { ok: true };
+}
+
+export async function accendiFox(tipo: TipoAmbito, id: string, acceso: boolean): Promise<Esito> {
+  const user = await autorizzato(tipo, id);
+  if (!user) return { ok: false, error: NEGATO };
+  const voci = await leggiConnettoriFox();
+  const c = voci.find((x) => x.scopeType === tipo && x.scopeId === id);
+  if (!c) return { ok: false, error: "Nessuna chiave per questo ambito." };
+  c.attivo = acceso;
+  await scriviConnettoriFox(voci);
+  const academyDb = await getDb();
+  registra(user, { area: "connettori", cosa: acceso ? "Programma Fox acceso" : "Programma Fox spento", oggetto: nomeAmbito(academyDb, tipo, id) });
+  revalidatePath("/connettori");
+  return { ok: true };
+}
+
+export async function togliChiaveFox(tipo: TipoAmbito, id: string): Promise<Esito> {
+  const user = await autorizzato(tipo, id);
+  if (!user) return { ok: false, error: NEGATO };
+  const voci = await leggiConnettoriFox();
+  const resto = voci.filter((x) => !(x.scopeType === tipo && x.scopeId === id));
+  if (resto.length === voci.length) return { ok: false, error: "Nessuna chiave per questo ambito." };
+  await scriviConnettoriFox(resto);
+  const academyDb = await getDb();
+  registra(user, { area: "connettori", cosa: "Chiave programma Fox tolta", oggetto: nomeAmbito(academyDb, tipo, id) });
+  revalidatePath("/connettori");
+  return { ok: true };
 }
 
 /* ================== Arredo: quantità del catalogo, il gestionale le manda ================== */

@@ -845,6 +845,21 @@ export interface ZooScopeGiacenze {
 }
 
 /**
+ * Chiave con cui il GESTIONALE di un'insegna/PV legge le offerte Zoo
+ * (GET /api/zoo/offerte): per stampare i cartelli dal proprio programma e per
+ * controllare a scaffale la promo del giorno dopo. Area Connettori, colonna
+ * «Il gestionale legge». Il verso opposto di `giacenze`.
+ */
+export interface ZooScopeLettura {
+  scopeType: "tenant" | "store";
+  scopeId: string;
+  token: string;
+  /** Spenta (false): la chiave resta ma le richieste vengono rifiutate. Assente = accesa. */
+  attivo?: boolean;
+  creataIl?: string;
+}
+
+/**
  * Nota lasciata sulla bozza del volantino da chi la rivede. Sta a parte dal
  * builder: chi commenta non deve poter spostare le offerte, e chi impagina deve
  * vedere tutte le note in un posto solo, comprese quelle degli altri.
@@ -892,6 +907,7 @@ export interface ZooDB {
   pvPromos: ZooPvPromo[];
   scopeApiKeys: ZooScopeApiKey[];
   giacenze: ZooScopeGiacenze[];
+  letture: ZooScopeLettura[];
   noteBozza: ZooNotaBozza[];
   coda: ZooCoda[];
   nonConformi: ZooNonConforme[];
@@ -928,11 +944,11 @@ export async function getZooDb(): Promise<ZooDB> {
     products: [], parents: [], textOverrides: [], tagOverrides: [], offerOverrides: [], printed: [],
     campaigns: [], offers: [],
     votes: [], hidden: [], pvPrices: [], suggestions: [], volantinoLayouts: [], zooLayouts: [],
-    noPrint: [], layoutImages: [], pvPromoCodes: [], pvPromos: [], scopeApiKeys: [], noteBozza: [], coda: [], giacenze: [], nonConformi: [], condizioniScopo: [], testate: [], focusManuali: [], unioniVolantino: [], focusDef: [],
+    noPrint: [], layoutImages: [], pvPromoCodes: [], pvPromos: [], scopeApiKeys: [], noteBozza: [], coda: [], giacenze: [], letture: [], nonConformi: [], condizioniScopo: [], testate: [], focusManuali: [], unioniVolantino: [], focusDef: [],
   };
   const db = await readDomain<ZooDB>("zoo", empty);
   db.settings = { ...DEFAULT_SETTINGS, ...(db.settings ?? {}) };
-  for (const k of ["products", "parents", "textOverrides", "tagOverrides", "offerOverrides", "printed", "campaigns", "offers", "votes", "hidden", "pvPrices", "suggestions", "volantinoLayouts", "zooLayouts", "noPrint", "layoutImages", "pvPromoCodes", "pvPromos", "scopeApiKeys", "noteBozza", "coda", "giacenze", "nonConformi", "condizioniScopo", "testate", "focusManuali", "unioniVolantino", "focusDef"] as const) {
+  for (const k of ["products", "parents", "textOverrides", "tagOverrides", "offerOverrides", "printed", "campaigns", "offers", "votes", "hidden", "pvPrices", "suggestions", "volantinoLayouts", "zooLayouts", "noPrint", "layoutImages", "pvPromoCodes", "pvPromos", "scopeApiKeys", "noteBozza", "coda", "giacenze", "letture", "nonConformi", "condizioniScopo", "testate", "focusManuali", "unioniVolantino", "focusDef"] as const) {
     if (!db[k]) (db as unknown as Record<string, unknown>)[k] = [];
   }
   // i layout salvati prima delle tipologie non hanno il campo: senza questo la
@@ -1504,7 +1520,20 @@ export async function giacenzePer(db: ZooDB, scope: Scope, academyDb: DB, eans: 
   const url = giacenzeUrlFor(db, scope, academyDb);
   const out: Record<string, Giacenza> = {};
   const unici = [...new Set(eans.filter(Boolean))];
-  if (!url || unici.length === 0) return out;
+  if (unici.length === 0) return out;
+  if (!url) {
+    // nessun indirizzo da interrogare: l'ultima fotografia mandata dal programma Fox (se c'è)
+    const { fotografiaFoxPer } = await import("./fox-connettore");
+    const foto = await fotografiaFoxPer(chainFor(scope, academyDb));
+    if (foto) {
+      const al = (foto.fileAl ?? foto.aggiornatoIl).slice(0, 10);
+      for (const ean of unici) {
+        const g = foto.righe[ean];
+        if (g) out[ean] = { giacenza: g.g, al, prezzo: g.p || undefined, codice: g.c || undefined };
+      }
+    }
+    return out;
+  }
   // i lotti partono tutti insieme: in fila, con mille codici, erano cinque attese una dopo l'altra
   const lotti: string[][] = [];
   for (let i = 0; i < unici.length; i += 200) lotti.push(unici.slice(i, i + 200));

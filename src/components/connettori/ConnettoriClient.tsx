@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import {
   salvaConnettoreZoo, accendiConnettoreZoo, scollegaConnettoreZoo, provaConnettoreZoo,
   creaChiaveArredo, accendiApiArredo, togliChiaveArredo,
+  creaChiaveLettura, accendiLettura, togliChiaveLettura,
+  creaChiaveFox, accendiFox, togliChiaveFox,
   generaChiaveSso, accendiSso, togliChiaveSso, salvaPvSso,
 } from "@/lib/connettori-actions";
 
@@ -146,6 +148,62 @@ export function ConnettoreArredo({ storeId, token, apiAttiva, aggiornatoIl, font
   );
 }
 
+/** Zoo, il gestionale legge le offerte: la chiave che il gestionale manda in Authorization: Bearer. */
+export function ConnettoreLettura({ tipo, id, token, attivo, creataIl }: {
+  tipo: TipoAmbito; id: string; token?: string; attivo: boolean; creataIl?: string;
+}) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [mostra, setMostra] = useState(false);
+  const [errore, setErrore] = useState("");
+  const [copiata, setCopiata] = useState(false);
+  const fai = (azione: () => Promise<{ ok: boolean; error?: string }>, conferma?: string) => {
+    if (conferma && !confirm(conferma)) return;
+    setErrore("");
+    startTransition(async () => {
+      const r = await azione().catch(() => ({ ok: false, error: "Non riuscito: riprova." }));
+      if (!r.ok) setErrore(r.error ?? "Non riuscito");
+      else router.refresh();
+    });
+  };
+  if (!token) {
+    return (
+      <div style={{ display: "grid", gap: 4 }}>
+        <div><span className="hint">Nessuna chiave</span>{" "}
+          <button type="button" className="btn btn-outline btn-sm" disabled={pending} onClick={() => fai(() => creaChiaveLettura(tipo, id))}>＋ Crea chiave</button></div>
+        {errore && <span className="errore-inline">{errore}</span>}
+      </div>
+    );
+  }
+  return (
+    <div style={{ display: "grid", gap: 4 }}>
+      <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+        <span className={`pill ${attivo ? "pill-green" : "pill-gray"}`}>{attivo ? "accesa" : "spenta"}</span>
+        <code style={{ fontSize: 11.5 }}>{mostra ? token : `${token.slice(0, 6)}${"•".repeat(12)}`}</code>
+        <button type="button" className="mini-btn" onClick={() => setMostra((v) => !v)}>{mostra ? "nascondi" : "mostra"}</button>
+        <button type="button" className="mini-btn" onClick={() => { navigator.clipboard?.writeText(token).then(() => { setCopiata(true); setTimeout(() => setCopiata(false), 1500); }); }}>
+          {copiata ? "copiata ✓" : "copia"}
+        </button>
+      </div>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        <button type="button" className="btn btn-outline btn-sm" disabled={pending} onClick={() => fai(() => accendiLettura(tipo, id, !attivo))}>
+          {attivo ? "Spegni" : "Accendi"}
+        </button>
+        <button type="button" className="btn btn-outline btn-sm" disabled={pending}
+          onClick={() => fai(() => creaChiaveLettura(tipo, id), "Rigenerare la chiave? Quella vecchia smette di valere: va aggiornata nel gestionale.")}>
+          Rigenera
+        </button>
+        <button type="button" className="btn btn-outline btn-sm" disabled={pending} style={{ color: "var(--red, #b42318)" }}
+          onClick={() => fai(() => togliChiaveLettura(tipo, id), "Togliere la chiave? Il gestionale non potrà più leggere le offerte Zoo.")}>
+          Togli
+        </button>
+      </div>
+      {creataIl && <span className="hint" style={{ fontSize: 12 }}>creata il {quando(creataIl)}</span>}
+      {errore && <span className="errore-inline">{errore}</span>}
+    </div>
+  );
+}
+
 /** SSO dell'insegna: la chiave con cui il suo sistema firma i link d'ingresso, e il PV dato ai nuovi. */
 export function ConnettoreSso({ tenantId, chiave, attivo, storeId, negozi }: {
   tenantId: string; chiave?: string; attivo: boolean; storeId?: string; negozi: { id: string; nome: string }[];
@@ -205,6 +263,67 @@ export function ConnettoreSso({ tenantId, chiave, attivo, storeId, negozi }: {
             {negozi.map((n) => <option key={n.id} value={n.id}>{n.nome}</option>)}
           </select>
         </label>
+      </div>
+      {errore && <span className="errore-inline">{errore}</span>}
+    </div>
+  );
+}
+
+/**
+ * Programma Fox: per chi ha il gestionale Fox ma non Linfa. Il programmino
+ * GTOne-Fox.exe legge la cartella «db» del gestionale e manda giacenze e
+ * prezzi di vendita con questa chiave.
+ */
+export function ConnettoreFox({ tipo, id, chiave, attivo, ultimoInvio, righe, fileAl }: {
+  tipo: TipoAmbito; id: string; chiave?: string; attivo: boolean; ultimoInvio?: string; righe?: number; fileAl?: string;
+}) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [mostra, setMostra] = useState(false);
+  const [errore, setErrore] = useState("");
+  const [copiata, setCopiata] = useState(false);
+  const fai = (azione: () => Promise<{ ok: boolean; error?: string }>, conferma?: string) => {
+    if (conferma && !confirm(conferma)) return;
+    setErrore("");
+    startTransition(async () => {
+      const r = await azione().catch(() => ({ ok: false, error: "Non riuscito: riprova." }));
+      if (!r.ok) setErrore(r.error ?? "Non riuscito");
+      else router.refresh();
+    });
+  };
+  if (!chiave) {
+    return (
+      <div style={{ marginTop: 8, paddingTop: 6, borderTop: "1px dashed var(--line)" }}>
+        <span className="hint">Gestionale Fox senza Linfa? </span>
+        <button type="button" className="btn btn-outline btn-sm" disabled={pending} onClick={() => fai(() => creaChiaveFox(tipo, id))}>＋ Programma Fox</button>
+        {errore && <span className="errore-inline">{errore}</span>}
+      </div>
+    );
+  }
+  const vecchio = ultimoInvio ? Date.now() - new Date(ultimoInvio).getTime() > 2 * 864e5 : false;
+  return (
+    <div style={{ marginTop: 8, paddingTop: 6, borderTop: "1px dashed var(--line)", display: "grid", gap: 4 }}>
+      <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+        <span className={`pill ${attivo ? "pill-green" : "pill-gray"}`}>{attivo ? "acceso" : "spento"}</span>
+        <strong>Programma Fox</strong>
+        <code style={{ fontSize: 11 }}>{mostra ? chiave : `${chiave.slice(0, 8)}${"•".repeat(10)}`}</code>
+        <button type="button" className="mini-btn" onClick={() => setMostra((v) => !v)}>{mostra ? "nascondi" : "mostra"}</button>
+        <button type="button" className="mini-btn" onClick={() => { navigator.clipboard?.writeText(chiave).then(() => { setCopiata(true); setTimeout(() => setCopiata(false), 1500); }); }}>
+          {copiata ? "copiata ✓" : "copia chiave"}
+        </button>
+        <a className="mini-btn" href="/connettori/GTOne-Fox.exe" download>scarica il programma</a>
+      </div>
+      <span className="hint" style={{ fontSize: 12, color: vecchio ? "#b42318" : undefined }}>
+        {ultimoInvio
+          ? `Ultimo invio ${quando(ultimoInvio)}: ${righe ?? 0} articoli dello Zoo${fileAl ? ` (file Fox del ${quando(fileAl)})` : ""}${vecchio ? " — da più di 2 giorni non arriva niente" : ""}`
+          : "Nessun invio ancora: apri il programma (non si installa), scegli la cartella «db» di Fox e incolla la chiave."}
+      </span>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        <button type="button" className="btn btn-outline btn-sm" disabled={pending} onClick={() => fai(() => accendiFox(tipo, id, !attivo))}>{attivo ? "Spegni" : "Accendi"}</button>
+        <button type="button" className="btn btn-outline btn-sm" disabled={pending}
+          onClick={() => fai(() => creaChiaveFox(tipo, id), "Rigenerare la chiave? Quella vecchia smette di valere: va incollata di nuovo nel programma.")}>Rigenera</button>
+        <button type="button" className="btn btn-outline btn-sm" disabled={pending} style={{ color: "var(--red, #b42318)" }}
+          onClick={() => fai(() => togliChiaveFox(tipo, id), "Togliere il programma Fox? Gli invii verranno rifiutati e giacenze e prezzi tornano quelli del Consorzio.")}>Togli</button>
       </div>
       {errore && <span className="errore-inline">{errore}</span>}
     </div>
