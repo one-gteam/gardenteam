@@ -77,15 +77,6 @@ export default async function LayoutPage({
         <div style={{ display: "flex", gap: 14, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 16 }}>
           <div style={{ flex: 1 }}>
             <h1 style={{ margin: 0 }}>Layout cartelli</h1>
-            <p className="subtitle" style={{ margin: "4px 0 0" }}>
-              {canEdit
-                ? scope.type === "system"
-                  ? "Stai modificando il layout del Consorzio (comune a tutti)."
-                  : `Stai personalizzando il layout di ${scope.label} — parte da quello del Consorzio.`
-                : "Layout del Consorzio in sola lettura."}
-              {" "}Puoi avere più layout per lo stesso formato: scegli o creane uno qui sotto, e duplicalo dal pannello
-              a destra per farne una variante.
-            </p>
           </div>
           <form method="get" style={{ display: "flex", gap: 8, alignItems: "end" }}>
             <label className="field" style={{ marginBottom: 0 }}>

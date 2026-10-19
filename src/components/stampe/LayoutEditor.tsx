@@ -7,7 +7,7 @@ import { saveLayout } from "@/lib/stampe-actions";
 import { saveZooLayout } from "@/lib/zoo-actions";
 import { applicaCampoATuttiILayout } from "@/lib/layout-actions";
 import { copiaStileCampo } from "@/lib/layout-pulizia";
-import { ELEMENTO_IMMAGINE, ELEMENTO_QR, ELEMENTO_RIQUADRO } from "@/lib/cartello-campi";
+import { ELEMENTO_IMMAGINE, ELEMENTO_QR, ELEMENTO_RIQUADRO, DESCRIZIONI_CAMPI } from "@/lib/cartello-campi";
 import QrSvg from "./QrSvg";
 import {
   CorniceCampo, Prezzo, alignPrezzo, bordoRiquadro, coloreCampo, conPrefisso, isPrezzoField, justifyPrezzo,
@@ -31,6 +31,16 @@ function Sezione({
         {titolo}
       </summary>
       <div style={{ marginTop: 8 }}>{children}</div>
+    </details>
+  );
+}
+
+/** Un comando di tutto il layout (nome, foglio, quando usarlo…): pulsante nella barra in alto che apre una finestrella. */
+function Finestrella({ titolo, children }: { titolo: string; children: React.ReactNode }) {
+  return (
+    <details className="editor-pop">
+      <summary className="btn btn-outline btn-sm">{titolo} ▾</summary>
+      <div className="editor-pop-corpo">{children}</div>
     </details>
   );
 }
@@ -408,6 +418,16 @@ export default function LayoutEditor({
   };
 
   const selItem = selected !== null ? activeItems[selected] : null;
+  const barraRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const chiudi = (e: MouseEvent) => {
+      for (const d of barraRef.current?.querySelectorAll<HTMLDetailsElement>("details.editor-pop[open]") ?? []) {
+        if (!d.contains(e.target as Node)) d.open = false;
+      }
+    };
+    document.addEventListener("mousedown", chiudi);
+    return () => document.removeEventListener("mousedown", chiudi);
+  }, []);
   // la testata è l'immagine libera più in alto del foglio (come in stampa: conTestataDiScopo)
   const indiceTestata = (() => {
     let migliore = -1;
@@ -546,6 +566,129 @@ export default function LayoutEditor({
   const usedFields = new Set(activeItems.map((i) => i.fieldId));
 
   return (
+    <div>
+    {/* i comandi che valgono per tutto il layout: pulsanti in alto, ognuno apre la sua finestrella */}
+    <div className="editor-barra" ref={barraRef}>
+        {/* identità del layout: nome, e come farne una copia */}
+        {canEdit && (
+          <div className="panel-layout">
+          <Finestrella titolo="Layout">
+            <label className="field" style={{ marginBottom: 8 }}>
+              Nome
+              <input type="text" value={nome} onChange={(e) => { setTocco(true); setNome(e.target.value); }} placeholder="es. Cartello Gatto" />
+            </label>
+            <label className="field" style={{ marginBottom: 4 }}>
+              Duplica come nuovo layout
+              <input type="text" value={dupName} onChange={(e) => setDupName(e.target.value)} placeholder={`${nome || format.name} (copia)`} />
+            </label>
+            <button type="button" className="btn btn-outline btn-sm" style={{ width: "100%" }} onClick={doDuplicate} disabled={pending}>
+              Crea copia
+            </button>
+          </Finestrella>
+          </div>
+        )}
+        {/* proprietà del foglio: valgono per tutto il cartello, non per il campo selezionato */}
+        {canEdit && (
+          <div className="panel-layout">
+          <Finestrella titolo={`Foglio (${format.w}×${format.h} mm)`}>
+            <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 6 }}>Margini ({unita})</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              {([["top", "Alto"], ["bottom", "Basso"], ["left", "Sinistra"], ["right", "Destra"]] as const).map(
+                ([lato, etichetta]) => (
+                  <label key={lato} className="field" style={{ marginBottom: 0 }}>
+                    {etichetta}
+                    <input
+                      type="number" step={passo} min={0} value={inUnita(margins[lato])}
+                      onChange={(e) =>
+                        { setTocco(true); setMargins((m) => ({ ...m, [lato]: Math.max(0, Math.min(100, daUnita(e.target.value))) })); }
+                      }
+                    />
+                  </label>
+                )
+              )}
+            </div>
+            <p style={{ fontSize: 11.5, color: "var(--muted)", margin: "6px 0 0" }}>
+              Compaiono sul foglio come linee tratteggiate: trascinando un campo lì vicino, si aggancia da solo.
+              Servono ad allineare — non spostano i campi già posizionati.
+            </p>
+          </Finestrella>
+          </div>
+        )}
+        <div className="panel-layout">
+          <Finestrella titolo={`Quando usare${tipologie.length ? ` (${tipologie.length})` : ": sempre"}`}>
+          <p style={{ fontSize: 12, color: "var(--muted)", margin: "0 0 8px" }}>
+            Nessuna spunta = layout valido per tutti i cartelli di questo formato. Spuntando qualcosa il layout
+            viene scelto in stampa solo per i cartelli che corrispondono: così un &quot;A SOLI&quot; può essere
+            impaginato diversamente da un 3x2.
+          </p>
+          {tipologiePromo.length > 0 && (
+            <>
+              <strong style={{ fontSize: 12.5 }}>Tipo di promozione</strong>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, margin: "4px 0 10px" }}>
+                {tipologiePromo.map((t) => (
+                  <label key={t} style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 12.5 }}>
+                    <input
+                      type="checkbox"
+                      checked={tipologie.includes(t)}
+                      disabled={!canEdit}
+                      onChange={(e) =>
+                        { setTocco(true); setTipologie((prev) => (e.target.checked ? [...prev, t] : prev.filter((x) => x !== t))); }
+                      }
+                    />
+                    {t}
+                  </label>
+                ))}
+              </div>
+              <strong style={{ fontSize: 12.5 }}>Tipo di prodotto</strong>
+            </>
+          )}
+          <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 4, maxHeight: 220, overflowY: "auto" }}>
+            {tipologieDisponibili.filter((t) => !tipologiePromo.includes(t)).map((t) => (
+              <label key={t} style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 12.5 }}>
+                <input
+                  type="checkbox"
+                  checked={tipologie.includes(t)}
+                  disabled={!canEdit}
+                  onChange={(e) =>
+                    { setTocco(true); setTipologie((prev) => (e.target.checked ? [...prev, t] : prev.filter((x) => x !== t))); }
+                  }
+                />
+                {t}
+              </label>
+            ))}
+          </div>
+        </Finestrella>
+          </div>
+        {canEdit && ambiti.length > 1 && (
+          <div className="panel-layout">
+            <Finestrella titolo="Assegna a un'insegna / punto vendita">
+              <p style={{ fontSize: 12, color: "var(--muted)", margin: "0 0 8px" }}>
+                Ne salva una copia per l&apos;ambito scelto: da lì in poi quei cartelli usano questo layout
+                invece di quello del Consorzio. L&apos;originale resta dov&apos;è.
+              </p>
+              <select value={assegnaA} onChange={(e) => setAssegnaA(e.target.value)} style={{ marginTop: 0 }}>
+                {ambiti.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
+              </select>
+              <button type="button" className="btn btn-sm" style={{ width: "100%", marginTop: 8 }}
+                disabled={pending || assegnaA === scopeParam} onClick={doAssegna}>
+                Assegna una copia
+              </button>
+            </Finestrella>
+          </div>
+        )}
+        {canEdit ? (
+          <div className="panel-layout">
+            <button type="button" className="btn btn-outline btn-sm" onClick={doSave} disabled={pending} title="Le modifiche si salvano da sole poco dopo ogni cambiamento">
+              {pending ? "Salvataggio…" : "Salva ora"}
+            </button>
+            {saved && !pending && <span style={{ color: "var(--green-700)", fontWeight: 700, fontSize: 13 }}>✓ Salvato</span>}
+          </div>
+        ) : (
+          <span className="hint" style={{ fontSize: 12.5 }}>
+            Stai vedendo il layout del Consorzio: scegli la tua insegna/PV in alto per personalizzarlo.
+          </span>
+        )}
+    </div>
     <div className="layout-editor">
       <div className="card" style={{ padding: 12 }}>
         {/* qual è il campo scelto: sul foglio l'etichetta è piccola e a volte
@@ -616,6 +759,7 @@ export default function LayoutEditor({
               title={[f.nota, usedFields.has(f.id) ? "Già nel cartello (puoi aggiungerlo di nuovo)" : "Aggiungi al cartello"].filter(Boolean).join(" — ")}
             >
               ＋ {f.label}
+              {(f.nota ?? DESCRIZIONI_CAMPI[area][f.id]) && <span className="campo-descr">{f.nota ?? DESCRIZIONI_CAMPI[area][f.id]}</span>}
             </button>
           ))}
         </div>
@@ -925,8 +1069,9 @@ export default function LayoutEditor({
       </div>
 
       <div className="card editor-panel" style={{ padding: 14 }}>
-        {/* colonna dei comandi del campo selezionato: vuota finché non se ne sceglie uno */}
+        {/* i comandi del campo selezionato: tutto il pannello, distribuiti su più colonne */}
         <div className="panel-col panel-col-campo">
+        {!selItem && <p className="hint" style={{ margin: 0 }}>Clicca un campo sul foglio per cambiarne carattere, colori, cornice e posizione.</p>}
         {selItem?.sticker && canEdit && (
           <div className="panel-campo">
           <Sezione titolo="Sticker selezionato">
@@ -1289,132 +1434,8 @@ export default function LayoutEditor({
           </div>
         )}
         </div>
-        {/* colonna dei comandi che valgono per tutto il layout */}
-        <div className="panel-col panel-col-layout">
-        {/* identità del layout: nome, e come farne una copia */}
-        {canEdit && (
-          <div className="panel-layout">
-          <Sezione titolo="Layout">
-            <label className="field" style={{ marginBottom: 8 }}>
-              Nome
-              <input type="text" value={nome} onChange={(e) => { setTocco(true); setNome(e.target.value); }} placeholder="es. Cartello Gatto" />
-            </label>
-            <label className="field" style={{ marginBottom: 4 }}>
-              Duplica come nuovo layout
-              <input type="text" value={dupName} onChange={(e) => setDupName(e.target.value)} placeholder={`${nome || format.name} (copia)`} />
-            </label>
-            <button type="button" className="btn btn-outline btn-sm" style={{ width: "100%" }} onClick={doDuplicate} disabled={pending}>
-              Crea copia
-            </button>
-          </Sezione>
-          </div>
-        )}
-        {/* proprietà del foglio: valgono per tutto il cartello, non per il campo selezionato */}
-        {canEdit && (
-          <div className="panel-layout">
-          <Sezione titolo={`Foglio (${format.w}×${format.h} mm)`} aperta={false}>
-            <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 6 }}>Margini ({unita})</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-              {([["top", "Alto"], ["bottom", "Basso"], ["left", "Sinistra"], ["right", "Destra"]] as const).map(
-                ([lato, etichetta]) => (
-                  <label key={lato} className="field" style={{ marginBottom: 0 }}>
-                    {etichetta}
-                    <input
-                      type="number" step={passo} min={0} value={inUnita(margins[lato])}
-                      onChange={(e) =>
-                        { setTocco(true); setMargins((m) => ({ ...m, [lato]: Math.max(0, Math.min(100, daUnita(e.target.value))) })); }
-                      }
-                    />
-                  </label>
-                )
-              )}
-            </div>
-            <p style={{ fontSize: 11.5, color: "var(--muted)", margin: "6px 0 0" }}>
-              Compaiono sul foglio come linee tratteggiate: trascinando un campo lì vicino, si aggancia da solo.
-              Servono ad allineare — non spostano i campi già posizionati.
-            </p>
-          </Sezione>
-          </div>
-        )}
-        <div className="panel-layout">
-          <Sezione titolo="Quando usare questo layout" aperta>
-          <p style={{ fontSize: 12, color: "var(--muted)", margin: "0 0 8px" }}>
-            Nessuna spunta = layout valido per tutti i cartelli di questo formato. Spuntando qualcosa il layout
-            viene scelto in stampa solo per i cartelli che corrispondono: così un &quot;A SOLI&quot; può essere
-            impaginato diversamente da un 3x2.
-          </p>
-          {tipologiePromo.length > 0 && (
-            <>
-              <strong style={{ fontSize: 12.5 }}>Tipo di promozione</strong>
-              <div style={{ display: "flex", flexDirection: "column", gap: 4, margin: "4px 0 10px" }}>
-                {tipologiePromo.map((t) => (
-                  <label key={t} style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 12.5 }}>
-                    <input
-                      type="checkbox"
-                      checked={tipologie.includes(t)}
-                      disabled={!canEdit}
-                      onChange={(e) =>
-                        { setTocco(true); setTipologie((prev) => (e.target.checked ? [...prev, t] : prev.filter((x) => x !== t))); }
-                      }
-                    />
-                    {t}
-                  </label>
-                ))}
-              </div>
-              <strong style={{ fontSize: 12.5 }}>Tipo di prodotto</strong>
-            </>
-          )}
-          <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 4, maxHeight: 220, overflowY: "auto" }}>
-            {tipologieDisponibili.filter((t) => !tipologiePromo.includes(t)).map((t) => (
-              <label key={t} style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 12.5 }}>
-                <input
-                  type="checkbox"
-                  checked={tipologie.includes(t)}
-                  disabled={!canEdit}
-                  onChange={(e) =>
-                    { setTocco(true); setTipologie((prev) => (e.target.checked ? [...prev, t] : prev.filter((x) => x !== t))); }
-                  }
-                />
-                {t}
-              </label>
-            ))}
-          </div>
-        </Sezione>
-          </div>
-        {canEdit && ambiti.length > 1 && (
-          <div className="panel-layout">
-            <Sezione titolo="Assegna a un'insegna / punto vendita">
-              <p style={{ fontSize: 12, color: "var(--muted)", margin: "0 0 8px" }}>
-                Ne salva una copia per l&apos;ambito scelto: da lì in poi quei cartelli usano questo layout
-                invece di quello del Consorzio. L&apos;originale resta dov&apos;è.
-              </p>
-              <select value={assegnaA} onChange={(e) => setAssegnaA(e.target.value)} style={{ marginTop: 0 }}>
-                {ambiti.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
-              </select>
-              <button type="button" className="btn btn-sm" style={{ width: "100%", marginTop: 8 }}
-                disabled={pending || assegnaA === scopeParam} onClick={doAssegna}>
-                Assegna una copia
-              </button>
-            </Sezione>
-          </div>
-        )}
-        {canEdit ? (
-          <div className="panel-layout">
-            <p style={{ fontSize: 11.5, color: "var(--muted)", margin: "14px 0 6px", textAlign: "center" }}>
-              Le modifiche si salvano da sole poco dopo ogni cambiamento.
-            </p>
-            <button type="button" className="btn btn-outline btn-sm" style={{ width: "100%" }} onClick={doSave} disabled={pending}>
-              {pending ? "Salvataggio…" : "Salva ora"}
-            </button>
-            {saved && !pending && <p style={{ color: "var(--green-700)", fontWeight: 700, fontSize: 13, textAlign: "center", margin: "8px 0 0" }}>✓ Salvato</p>}
-          </div>
-        ) : (
-          <p style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 12 }}>
-            Stai vedendo il layout del Consorzio: seleziona la tua insegna/PV in alto per personalizzarlo.
-          </p>
-        )}
-        </div>
       </div>
+    </div>
     </div>
   );
 }

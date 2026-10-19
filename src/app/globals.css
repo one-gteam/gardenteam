@@ -1748,3 +1748,20 @@ img.tt-media.on { animation: sp-kb 12s linear forwards; }
 .vol-foto-voce img { width: 100%; height: 100%; object-fit: contain; }
 .vol-foto-voce.scelta { border-color: var(--green-600, #2f6b4a); box-shadow: 0 0 0 2px var(--green-50, #eaf3e2); }
 .vol-foto-n { position: absolute; top: -6px; right: -6px; background: var(--green-700, #1f4d33); color: #fff; font-size: 10px; font-weight: 800; border-radius: 99px; min-width: 16px; height: 16px; line-height: 16px; text-align: center; }
+
+/* Layout: comandi di tutto il layout in una barra in alto, ognuno in una finestrella */
+.editor-barra { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: -6px 0 12px; }
+.editor-barra .panel-layout { display: contents; }
+.editor-pop { position: relative; }
+.editor-pop > summary { list-style: none; cursor: pointer; }
+.editor-pop > summary::-webkit-details-marker { display: none; }
+.editor-pop[open] > summary { background: var(--green-50, #eaf3e2); border-color: var(--green-600, #2f6b4a); }
+.editor-pop-corpo { position: absolute; top: calc(100% + 6px); left: 0; z-index: 50; width: 340px; max-height: 70vh; overflow: auto;
+  background: #fff; border: 1.5px solid var(--line); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.14); padding: 12px; }
+/* pannello di destra: tutto per il campo scelto, i riquadri si distribuiscono su due colonne quando c'è spazio */
+@media (min-width: 1650px) {
+  .editor-panel > .panel-col-campo { column-count: 2; column-gap: 14px; }
+  .editor-panel > .panel-col-campo > * { break-inside: avoid; }
+}
+/* campi disponibili: sotto il nome, cosa contiene */
+.editor-fields .campo-descr { display: block; font-size: 10.5px; font-weight: 400; color: var(--muted); line-height: 1.25; margin-top: 2px; white-space: normal; }
