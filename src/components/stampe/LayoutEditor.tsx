@@ -37,11 +37,28 @@ function Sezione({
 }
 
 /** Un comando di tutto il layout (nome, foglio, quando usarlo…): pulsante nella barra in alto che apre una finestrella. */
+/**
+ * Finestrella a comparsa della barra. Si apre sotto il pulsante e, se uscirebbe
+ * dallo schermo (a destra o a sinistra), si sposta quanto basta per starci.
+ */
 function Finestrella({ titolo, children }: { titolo: string; children: React.ReactNode }) {
+  const corpo = useRef<HTMLDivElement>(null);
+  const sistema = (aperta: boolean) => {
+    const el = corpo.current;
+    if (!el) return;
+    el.style.left = "0px";
+    if (!aperta) return;
+    const r = el.getBoundingClientRect();
+    const margine = 8;
+    let sposta = 0;
+    if (r.right > window.innerWidth - margine) sposta = window.innerWidth - margine - r.right;
+    if (r.left + sposta < margine) sposta = margine - r.left;
+    el.style.left = `${sposta}px`;
+  };
   return (
-    <details className="editor-pop">
+    <details className="editor-pop" onToggle={(e) => sistema((e.currentTarget as HTMLDetailsElement).open)}>
       <summary className="btn btn-outline btn-sm">{titolo} ▾</summary>
-      <div className="editor-pop-corpo">{children}</div>
+      <div ref={corpo} className="editor-pop-corpo">{children}</div>
     </details>
   );
 }
