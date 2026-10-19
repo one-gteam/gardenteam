@@ -208,6 +208,15 @@ export interface LayoutItem {
   cornice?: Cornice; // titolo, bordo e spazio interno del riquadro
   testo?: string; // "__box": scritta fissa; "__qr": didascalia sotto al codice
   prefisso?: string; // davanti al valore, es. "€" davanti al prezzo
+  /** Campi raggruppati: stesso valore = si scelgono e si spostano insieme. */
+  gruppo?: string;
+  /** Bloccato: non si sposta né si ridimensiona per sbaglio (si sblocca dal pannello). */
+  bloccato?: boolean;
+  /** Effetti del testo: interlinea (1 = stretta), spaziatura fra lettere (em), contorno (mm), ombra. */
+  interlinea?: number;
+  spaziatura?: number;
+  contorno?: { colore: string; spessore: number };
+  ombra?: boolean;
 }
 
 /** Margini del foglio, in mm, uno per lato. */

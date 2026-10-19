@@ -1781,3 +1781,37 @@ img.tt-media.on { animation: sp-kb 12s linear forwards; }
 .editor-livelli { display: grid; gap: 6px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: #fafaf8; margin-bottom: 10px; font-size: 12px; }
 .editor-allinea { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 .editor-item.insieme { outline: 2px dashed var(--green-600, #2f6b4a); outline-offset: 1px; }
+
+/* Layout: righelli, guide, griglia, rettangolo di selezione, distanze */
+.editor-righelli { position: relative; padding: 22px 0 0 22px; box-sizing: content-box; }
+.righello { position: absolute; background-color: #fbfbf9; color: #6b7280; font-size: 9px; user-select: none; z-index: 5; }
+/* tacche: ogni cm lunga, ogni mm corta (le misure arrivano dallo zoom, nello stile in linea) */
+.righello-x { top: 0; left: 22px; height: 20px; cursor: s-resize; border-bottom: 1px solid #cfcfca;
+  background-image: linear-gradient(90deg, #8a8a85 1px, transparent 1px), linear-gradient(90deg, #c9c9c3 1px, transparent 1px);
+  background-repeat: repeat-x; background-position: 0 0, 0 100%; }
+.righello-y { left: 0; top: 22px; width: 20px; cursor: e-resize; border-right: 1px solid #cfcfca;
+  background-image: linear-gradient(180deg, #8a8a85 1px, transparent 1px), linear-gradient(180deg, #c9c9c3 1px, transparent 1px);
+  background-repeat: repeat-y; background-position: 0 0, 100% 0; }
+.righello span { position: absolute; }
+.righello-x span { top: 2px; transform: translateX(3px); }
+.righello-y span { left: 3px; transform: translateY(2px); }
+.editor-area.mano, .editor-area.mano * { cursor: grab !important; }
+.editor-griglia { position: absolute; inset: 0; pointer-events: none; z-index: 30;
+  background-image: linear-gradient(90deg, rgba(39,75,122,.13) 1px, transparent 1px), linear-gradient(180deg, rgba(39,75,122,.13) 1px, transparent 1px); }
+.guida { position: absolute; z-index: 40; }
+.guida-x.guida, .guida-x.guida-smart { top: 0; bottom: 0; width: 0; border-left: 1px solid #00a6d6; }
+.guida-y.guida, .guida-y.guida-smart { left: 0; right: 0; height: 0; border-top: 1px solid #00a6d6; }
+.guida.guida-x { cursor: ew-resize; padding: 0 3px; margin-left: -3px; background-clip: content-box; }
+.guida.guida-y { cursor: ns-resize; padding: 3px 0; margin-top: -3px; background-clip: content-box; }
+.guida.in-mano { border-color: #e8481c; }
+.guida-smart { position: absolute; z-index: 41; pointer-events: none; }
+.guida-smart.guida-x { border-left: 1px dashed #e8481c; }
+.guida-smart.guida-y { border-top: 1px dashed #e8481c; }
+.editor-rettangolo { position: absolute; z-index: 42; border: 1px dashed #274b7a; background: rgba(39,75,122,.08); pointer-events: none; }
+.distanza { position: absolute; z-index: 43; pointer-events: none; }
+.distanza-x { height: 0; border-top: 1px solid #e8481c; }
+.distanza-y { width: 0; border-left: 1px solid #e8481c; }
+.distanza span { position: absolute; background: #e8481c; color: #fff; font-size: 10px; font-weight: 700; padding: 0 4px; border-radius: 3px; white-space: nowrap; }
+.distanza-x span { left: 50%; top: -9px; transform: translateX(-50%); }
+.distanza-y span { top: 50%; left: 3px; transform: translateY(-50%); }
+.editor-lucchetto { position: absolute; right: 1px; bottom: 0; font-size: 10px; pointer-events: none; }

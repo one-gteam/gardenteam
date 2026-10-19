@@ -55,6 +55,13 @@ export function sanitizeLayoutItems(raw: unknown, isKnownField: (fieldId: string
       ...(Number.isFinite(Number(i.radius)) ? { radius: Math.max(0, Math.min(40, Number(i.radius))) } : {}),
       ...(typeof i.testo === "string" && i.testo.trim() ? { testo: i.testo.slice(0, 200) } : {}),
       ...(typeof i.prefisso === "string" && i.prefisso.trim() ? { prefisso: i.prefisso.trim().slice(0, 6) } : {}),
+      ...(typeof i.gruppo === "string" && /^g_[a-z0-9]{1,20}$/.test(i.gruppo) ? { gruppo: i.gruppo } : {}),
+      ...(i.bloccato === true ? { bloccato: true } : {}),
+      ...(Number.isFinite(Number(i.interlinea)) && Number(i.interlinea) > 0 ? { interlinea: Math.max(0.6, Math.min(3, Number(i.interlinea))) } : {}),
+      ...(Number.isFinite(Number(i.spaziatura)) && Number(i.spaziatura) !== 0 ? { spaziatura: Math.max(-0.2, Math.min(1, Number(i.spaziatura))) } : {}),
+      ...(i.contorno && typeof i.contorno === "object" && COLORE.test(String((i.contorno as Record<string, unknown>).colore)) && Number((i.contorno as Record<string, unknown>).spessore) > 0
+        ? { contorno: { colore: String((i.contorno as Record<string, unknown>).colore), spessore: Math.min(3, Number((i.contorno as Record<string, unknown>).spessore)) } } : {}),
+      ...(i.ombra === true ? { ombra: true } : {}),
       ...(i.cornice && typeof i.cornice === "object" ? sanitizeCornice(i.cornice as Record<string, unknown>) : {}),
       ...(i.sticker && typeof i.sticker === "object"
         ? {
@@ -73,7 +80,7 @@ export function sanitizeLayoutItems(raw: unknown, isKnownField: (fieldId: string
 }
 
 /** Le proprietà di aspetto di un elemento (tutto tranne campo e posizione). */
-export const CHIAVI_STILE = ["color", "sticker", "size", "bold", "italic", "align", "valign", "font", "bg", "radius", "cornice", "prefisso"] as const;
+export const CHIAVI_STILE = ["color", "sticker", "size", "bold", "italic", "align", "valign", "font", "bg", "radius", "cornice", "prefisso", "interlinea", "spaziatura", "contorno", "ombra"] as const;
 
 /** Opzioni di «Applica a tutti i layout». */
 export interface OpzioniCopia {

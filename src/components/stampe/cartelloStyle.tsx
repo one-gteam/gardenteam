@@ -100,6 +100,19 @@ export function isPrezzoField(fieldId: string): boolean {
 }
 
 /** Come si legge un campo di testo sul cartello stampato. */
+/** Spaziatura fra le lettere, contorno e ombra: valgono per i testi e per il prezzo grande. */
+export function effettiTesto(item: LayoutItem, scale: number): React.CSSProperties {
+  const s: React.CSSProperties = {};
+  if (item.spaziatura) s.letterSpacing = `${item.spaziatura}em`;
+  if (item.contorno && item.contorno.spessore > 0) {
+    // il contorno sta dietro al riempimento: la lettera non si assottiglia
+    s.WebkitTextStroke = `${(item.contorno.spessore * scale).toFixed(2)}px ${item.contorno.colore}`;
+    s.paintOrder = "stroke fill";
+  }
+  if (item.ombra) s.textShadow = `${(0.35 * scale).toFixed(1)}px ${(0.35 * scale).toFixed(1)}px ${(0.7 * scale).toFixed(1)}px rgba(0,0,0,.45)`;
+  return s;
+}
+
 export function stileTestoCartello(
   item: LayoutItem, meta: PrintField | undefined, value: string, scale: number
 ): React.CSSProperties {
@@ -114,8 +127,9 @@ export function stileTestoCartello(
     fontWeight: (item.bold ?? meta?.bold) ? 700 : 400,
     fontStyle: item.italic ? "italic" : "normal",
     fontFamily: item.font !== undefined ? layoutFontCss(item.font) : meta?.font === "cn" ? FONT_CN : undefined,
-    lineHeight: 1.2,
+    lineHeight: item.interlinea ?? 1.2,
     color: coloreCampo(item),
+    ...effettiTesto(item, scale),
     textAlign: item.align ?? "left",
     whiteSpace: "pre-line",
     textDecoration: barrato ? "line-through" : undefined,

@@ -11,7 +11,7 @@ import { copiaStileCampo } from "@/lib/layout-pulizia";
 import { ELEMENTO_IMMAGINE, ELEMENTO_QR, ELEMENTO_RIQUADRO, DESCRIZIONI_CAMPI } from "@/lib/cartello-campi";
 import QrSvg from "./QrSvg";
 import {
-  CorniceCampo, Prezzo, alignPrezzo, bordoRiquadro, coloreCampo, conPrefisso, isPrezzoField, justifyPrezzo,
+  CorniceCampo, effettiTesto, Prezzo, alignPrezzo, bordoRiquadro, coloreCampo, conPrefisso, isPrezzoField, justifyPrezzo,
   stileStickerCartello, stileTestoCartello, testoStampato,
 } from "./cartelloStyle";
 
@@ -167,6 +167,21 @@ export default function LayoutEditor({
    * livello tutti insieme.
    */
   const [altri, setAltri] = useState<number[]>([]);
+  const [rettangolo, setRettangolo] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+  const [lineeAttive, setLineeAttive] = useState<{ x?: number; y?: number }>({});
+  const [trascinando, setTrascinando] = useState(false);
+  // lo spazio premuto: si trascina la vista invece dei campi (come in Illustrator)
+  const [spazio, setSpazio] = useState(false);
+  const vista = useRef<{ x: number; y: number; sl: number; st: number } | null>(null);
+  /*
+   * Righelli, guide e griglia: le guide si tirano dai righelli e valgono per
+   * questo formato (si ricordano su questo computer); la griglia è un aiuto a
+   * schermo, in stampa non c'è.
+   */
+  const [righelli, setRighelli] = useState(true);
+  const [griglia, setGriglia] = useState<{ attiva: boolean; passo: number }>({ attiva: false, passo: 5 });
+  const [guideUtente, setGuideUtente] = useState<{ x: number[]; y: number[] }>({ x: [], y: [] });
+  const [guidaInMano, setGuidaInMano] = useState<{ asse: "x" | "y"; indice: number | null; pos: number } | null>(null);
   const scelto = (i: number) => selected === i || altri.includes(i);
   const sceltiTutti = selected === null ? [] : [selected, ...altri.filter((i) => i !== selected)];
   const scegliSolo = (i: number | null) => { setSelected(i); setAltri([]); };
@@ -220,6 +235,72 @@ export default function LayoutEditor({
     const z = Math.min((el.clientWidth - 28) / (format.w * 2.4), (el.clientHeight - 28) / (format.h * 2.4));
     setZoom(Math.max(0.6, Math.min(3.2, Math.floor(z * 20) / 20)));
   };
+  // guide e griglia ricordate per formato, su questo computer
+  const chiaveGuide = `gt-layout-guide-${area}-${format.id}`;
+  useEffect(() => {
+    try {
+      const g = JSON.parse(localStorage.getItem(chiaveGuide) ?? "null");
+      if (g && Array.isArray(g.x) && Array.isArray(g.y)) setGuideUtente({ x: g.x.filter(Number.isFinite), y: g.y.filter(Number.isFinite) });
+      const gr = JSON.parse(localStorage.getItem("gt-layout-griglia") ?? "null");
+      if (gr && typeof gr.attiva === "boolean") setGriglia({ attiva: gr.attiva, passo: Math.max(1, Math.min(50, Number(gr.passo) || 5)) });
+      const ri = localStorage.getItem("gt-layout-righelli");
+      if (ri) setRighelli(ri === "1");
+    } catch { /* niente */ }
+  }, [chiaveGuide]);
+  const salvaGuide = (g: { x: number[]; y: number[] }) => { setGuideUtente(g); try { localStorage.setItem(chiaveGuide, JSON.stringify(g)); } catch { /* niente */ } };
+  useEffect(() => { try { localStorage.setItem("gt-layout-griglia", JSON.stringify(griglia)); } catch { /* niente */ } }, [griglia]);
+  useEffect(() => { try { localStorage.setItem("gt-layout-righelli", righelli ? "1" : "0"); } catch { /* niente */ } }, [righelli]);
+
+  // una guida tirata dal righello (o spostata): segue il mouse, rilasciata fuori dal foglio si toglie
+  useEffect(() => {
+    if (!guidaInMano) return;
+    const muovi = (e: MouseEvent) => {
+      const p = puntoNelFoglio(e);
+      setGuidaInMano((g) => (g ? { ...g, pos: g.asse === "x" ? p.x : p.y } : g));
+    };
+    const lascia = () => {
+      setGuidaInMano((g) => {
+        if (!g) return null;
+        const lista = [...guideUtente[g.asse]];
+        if (g.indice !== null) lista.splice(g.indice, 1);
+        if (g.pos > 0.3 && g.pos < 99.7) lista.push(+g.pos.toFixed(2));
+        salvaGuide({ ...guideUtente, [g.asse]: lista });
+        return null;
+      });
+    };
+    window.addEventListener("mousemove", muovi);
+    window.addEventListener("mouseup", lascia);
+    return () => { window.removeEventListener("mousemove", muovi); window.removeEventListener("mouseup", lascia); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [guidaInMano?.asse, guidaInMano?.indice, guideUtente]);
+
+  // con lo spazio premuto si sposta la vista trascinando
+  useEffect(() => {
+    const muovi = (e: MouseEvent) => {
+      const v = vista.current, el = areaRef.current;
+      if (!v || !el) return;
+      el.scrollLeft = v.sl - (e.clientX - v.x);
+      el.scrollTop = v.st - (e.clientY - v.y);
+    };
+    const lascia = () => { vista.current = null; };
+    window.addEventListener("mousemove", muovi);
+    window.addEventListener("mouseup", lascia);
+    return () => { window.removeEventListener("mousemove", muovi); window.removeEventListener("mouseup", lascia); };
+  }, []);
+
+  // Ctrl + rotellina: zoom
+  useEffect(() => {
+    const el = areaRef.current;
+    if (!el) return;
+    const rotella = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      setZoom((z) => Math.max(0.6, Math.min(3.2, +(z + (e.deltaY < 0 ? 0.1 : -0.1)).toFixed(2))));
+    };
+    el.addEventListener("wheel", rotella, { passive: false });
+    return () => el.removeEventListener("wheel", rotella);
+  }, []);
+
   // all'apertura il cartello si adatta allo spazio, che ora è più grande
   useEffect(() => { adatta(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [format.id]);
   const scale = 2.4 * zoom; // px per mm
@@ -250,86 +331,142 @@ export default function LayoutEditor({
     if (!canEdit) return;
     e.preventDefault();
     e.stopPropagation();
-    // Ctrl/Maiusc + clic: aggiunge o toglie il campo dalla selezione, senza trascinare
+    if (spazio) return; // con lo spazio si sposta la vista, non i campi
+    // i compagni di gruppo del campo cliccato
+    const gid = activeItems[index]?.gruppo;
+    const compagni = gid ? activeItems.map((it, i) => (it.gruppo === gid ? i : -1)).filter((i) => i >= 0) : [index];
+    // Ctrl/Maiusc + clic: aggiunge o toglie il campo (o il suo gruppo) dalla selezione, senza trascinare
     if (mode === "move" && (e.ctrlKey || e.metaKey || e.shiftKey) && selected !== null && selected !== index) {
-      setAltri((a) => (a.includes(index) ? a.filter((x) => x !== index) : [...a, index]));
+      setAltri((a) => (a.includes(index) ? a.filter((x) => !compagni.includes(x)) : [...new Set([...a, ...compagni])]));
       return;
     }
-    // trascinando un campo già scelto insieme ad altri si spostano tutti
-    const gruppo = mode === "move" && scelto(index) && sceltiTutti.length > 1
-      ? sceltiTutti.filter((i) => i !== index).map((i) => ({ i, x: activeItems[i].x, y: activeItems[i].y }))
-      : [];
-    if (gruppo.length === 0) scegliSolo(index); else setSelected(index);
+    // bloccato: si sceglie (per sbloccarlo o cambiarne l'aspetto) ma non si sposta né si ridimensiona
+    if (activeItems[index]?.bloccato) { scegliSolo(index); return; }
+    // trascinando un campo già scelto insieme ad altri, o di un gruppo, si spostano tutti (i bloccati restano)
+    const insieme = new Set<number>(mode === "move" && scelto(index) && sceltiTutti.length > 1 ? sceltiTutti : []);
+    if (mode === "move") for (const c of compagni) insieme.add(c);
+    insieme.delete(index);
+    const gruppo = [...insieme].filter((i) => !activeItems[i]?.bloccato).map((i) => ({ i, x: activeItems[i].x, y: activeItems[i].y }));
+    if (insieme.size === 0) scegliSolo(index);
+    else { setSelected(index); if (!(scelto(index) && sceltiTutti.length > 1)) setAltri([...insieme]); }
+    if (mode === "move") setTrascinando(true);
     drag.current = { index, mode, startX: e.clientX, startY: e.clientY, orig: { ...activeItems[index] }, gruppo };
   };
 
   /*
-   * Aggancio ai margini: quando un bordo del campo arriva vicino a una guida
-   * (margine o bordo del foglio) ci si appoggia esattamente sopra, così i campi
-   * si allineano da soli senza dover azzeccare il pixel al mouse.
+   * Aggancio: mentre si trascina, un bordo (o il centro) del campo si appoggia
+   * esattamente su una guida vicina — margini e bordi del foglio, il centro del
+   * foglio, le guide tirate dai righelli e, come in Illustrator, i bordi e i
+   * centri degli altri campi (guide intelligenti: si vede la linea). Con la
+   * griglia accesa, se non c'è una guida vicina si va a passo di griglia.
    */
   const SOGLIA_MM = 1.5;
-  const guideX = [margins.left, format.w - margins.right, 0, format.w].map(pctFromMmX);
-  const guideY = [margins.top, format.h - margins.bottom, 0, format.h].map(pctFromMmY);
   const sogliaX = pctFromMmX(SOGLIA_MM);
   const sogliaY = pctFromMmY(SOGLIA_MM);
-  /** Avvicina `v` alla guida più vicina entro la soglia; `extent` sposta il confronto sul bordo opposto. */
-  const aggancia = (v: number, guide: number[], soglia: number, extent = 0) => {
-    let best = v;
-    let bestDist = soglia;
-    for (const g of guide) {
-      const dInizio = Math.abs(v - g);
-      if (dInizio < bestDist) { bestDist = dInizio; best = g; }
-      if (extent > 0) {
-        const dFine = Math.abs(v + extent - g);
-        if (dFine < bestDist) { bestDist = dFine; best = g - extent; }
-      }
+  const guideBaseX = [...[margins.left, format.w - margins.right, 0, format.w].map(pctFromMmX), 50, ...guideUtente.x];
+  const guideBaseY = [...[margins.top, format.h - margins.bottom, 0, format.h].map(pctFromMmY), 50, ...guideUtente.y];
+  const passoGrigliaX = pctFromMmX(griglia.passo);
+  const passoGrigliaY = pctFromMmY(griglia.passo);
+  /** Avvicina `v` (inizio del campo) a una guida, provando inizio, centro e fine (`extent` = larghezza o altezza). */
+  const agganciaV = (v: number, guide: number[], soglia: number, extent: number, passoGriglia: number, soloFine = false) => {
+    let best = v, dist = soglia, linea: number | undefined;
+    const punti = soloFine ? [extent] : extent > 0 ? [0, extent / 2, extent] : [0];
+    for (const g of guide) for (const off of punti) {
+      const d = Math.abs(v + off - g);
+      if (d < dist) { dist = d; best = g - off; linea = g; }
     }
-    return best;
+    if (linea === undefined && griglia.attiva && passoGriglia > 0) {
+      const fine = soloFine ? v + extent : v;
+      best = Math.round(fine / passoGriglia) * passoGriglia - (soloFine ? extent : 0);
+    }
+    return { v: best, linea };
   };
 
   const onMouseMove = (e: React.MouseEvent) => {
+    if (rettangolo) {
+      const p = puntoNelFoglio(e);
+      setRettangolo((r) => (r ? { ...r, x1: p.x, y1: p.y } : r));
+      return;
+    }
     if (!drag.current) return;
     const { index, mode, startX, startY, orig, gruppo } = drag.current;
     const dx = ((e.clientX - startX) / W) * 100;
     const dy = ((e.clientY - startY) / H) * 100;
-    setActiveItems((prev) =>
-      prev.map((it, i) => {
-        // gli altri del gruppo seguono il campo trascinato dello stesso spostamento
+    const fermi = new Set([index, ...gruppo.map((g) => g.i)]);
+    // le guide intelligenti: bordi e centri degli altri campi (non di quelli che si stanno spostando)
+    const altriCampi = activeItems.filter((_, i) => !fermi.has(i));
+    const guideX = [...guideBaseX, ...altriCampi.flatMap((o) => [o.x, o.x + o.w / 2, o.x + o.w])];
+    const guideY = [...guideBaseY, ...altriCampi.flatMap((o) => [o.y, o.y + o.h / 2, o.y + o.h])];
+    if (mode === "move") {
+      const ax = agganciaV(Math.max(0, Math.min(100 - orig.w, orig.x + dx)), guideX, sogliaX, orig.w, passoGrigliaX);
+      const ay = agganciaV(Math.max(0, Math.min(100 - orig.h, orig.y + dy)), guideY, sogliaY, orig.h, passoGrigliaY);
+      const nx = Math.max(0, Math.min(100 - orig.w, ax.v));
+      const ny = Math.max(0, Math.min(100 - orig.h, ay.v));
+      setLineeAttive({ x: ax.linea, y: ay.linea });
+      // il gruppo si sposta dello stesso spostamento del campo trascinato, aggancio compreso
+      const ddx = nx - orig.x, ddy = ny - orig.y;
+      setActiveItems((prev) => prev.map((it, i) => {
+        if (i === index) return { ...it, x: +nx.toFixed(2), y: +ny.toFixed(2) };
         const g = gruppo.find((x) => x.i === i);
-        if (g) {
-          return { ...it, x: Math.max(0, Math.min(100 - it.w, +(g.x + dx).toFixed(2))), y: Math.max(0, Math.min(100 - it.h, +(g.y + dy).toFixed(2))) };
-        }
-        if (i !== index) return it;
-        if (mode === "move") {
-          // si aggancia sia il bordo iniziale sia quello finale (extent = larghezza/altezza)
-          const x = aggancia(Math.max(0, Math.min(100 - it.w, orig.x + dx)), guideX, sogliaX, it.w);
-          const y = aggancia(Math.max(0, Math.min(100 - it.h, orig.y + dy)), guideY, sogliaY, it.h);
-          return {
-            ...it,
-            x: Math.max(0, Math.min(100 - it.w, x)),
-            y: Math.max(0, Math.min(100 - it.h, y)),
-          };
-        }
-        // in ridimensionamento si aggancia il bordo che si sta trascinando (destro/inferiore)
-        const wGrezza = Math.max(4, Math.min(100 - it.x, orig.w + dx));
-        const hGrezza = Math.max(2, Math.min(100 - it.y, orig.h + dy));
-        const w = aggancia(it.x + wGrezza, guideX, sogliaX) - it.x;
-        const h = aggancia(it.y + hGrezza, guideY, sogliaY) - it.y;
-        return {
-          ...it,
-          w: Math.max(4, Math.min(100 - it.x, w)),
-          h: Math.max(2, Math.min(100 - it.y, h)),
-        };
-      })
-    );
+        return g ? { ...it, x: Math.max(0, Math.min(100 - it.w, +(g.x + ddx).toFixed(2))), y: Math.max(0, Math.min(100 - it.h, +(g.y + ddy).toFixed(2))) } : it;
+      }));
+      return;
+    }
+    // ridimensionamento: si aggancia il bordo che si trascina (destro/inferiore)
+    const wGrezza = Math.max(4, Math.min(100 - orig.x, orig.w + dx));
+    const hGrezza = Math.max(2, Math.min(100 - orig.y, orig.h + dy));
+    const aw = agganciaV(orig.x, guideX, sogliaX, wGrezza, passoGrigliaX, true);
+    const ah = agganciaV(orig.y, guideY, sogliaY, hGrezza, passoGrigliaY, true);
+    // agganciaV sposta l'inizio perché la FINE cada sulla guida: la nuova misura è quella fine meno l'inizio vero
+    const w = aw.v + wGrezza - orig.x;
+    const h = ah.v + hGrezza - orig.y;
+    setLineeAttive({ x: aw.linea, y: ah.linea });
+    setActiveItems((prev) => prev.map((it, i) => (i !== index ? it : {
+      ...it,
+      w: Math.max(4, Math.min(100 - it.x, +w.toFixed(2))),
+      h: Math.max(2, Math.min(100 - it.y, +h.toFixed(2))),
+    })));
   };
 
   const endDrag = () => {
+    if (rettangolo) {
+      // il rettangolo di selezione: si scelgono i campi che tocca (quelli bloccati no)
+      const r = rettangolo;
+      setRettangolo(null);
+      const x0 = Math.min(r.x0, r.x1), x1 = Math.max(r.x0, r.x1), y0 = Math.min(r.y0, r.y1), y1 = Math.max(r.y0, r.y1);
+      if (x1 - x0 < 0.6 && y1 - y0 < 0.6) return;
+      const dentro = activeItems.map((it, i) => ({ it, i }))
+        .filter(({ it }) => !it.bloccato && it.x < x1 && it.x + it.w > x0 && it.y < y1 && it.y + it.h > y0)
+        .map(({ i }) => i);
+      if (dentro.length) { setSelected(dentro[0]); setAltri(dentro.slice(1)); }
+      return;
+    }
     if (drag.current) {
       drag.current = null;
+      setLineeAttive({});
+      setTrascinando(false);
       pushHistory(activeItems);
     }
+  };
+
+  /** Punto del mouse sul foglio, in % (anche fuori dai bordi). */
+  const puntoNelFoglio = (e: { clientX: number; clientY: number }) => {
+    const r = canvasRef.current?.getBoundingClientRect();
+    if (!r) return { x: 0, y: 0 };
+    return { x: ((e.clientX - r.left) / r.width) * 100, y: ((e.clientY - r.top) / r.height) * 100 };
+  };
+
+  /** Il foglio vuoto: un rettangolo per scegliere più campi, o (con lo spazio premuto) si sposta la vista. */
+  const onMouseDownFoglio = (e: React.MouseEvent) => {
+    if (spazio && areaRef.current) {
+      e.preventDefault();
+      vista.current = { x: e.clientX, y: e.clientY, sl: areaRef.current.scrollLeft, st: areaRef.current.scrollTop };
+      return;
+    }
+    scegliSolo(null);
+    if (!canEdit) return;
+    const p = puntoNelFoglio(e);
+    setRettangolo({ x0: p.x, y0: p.y, x1: p.x, y1: p.y });
   };
 
   const addField = (fieldId: string) => {
@@ -408,7 +545,12 @@ export default function LayoutEditor({
       // annulla / ripristina come in Word
       if ((e.ctrlKey || e.metaKey) && (e.key === "z" || e.key === "Z")) { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
       if ((e.ctrlKey || e.metaKey) && (e.key === "y" || e.key === "Y")) { e.preventDefault(); redo(); return; }
+      if ((e.ctrlKey || e.metaKey) && (e.key === "v" || e.key === "V")) { e.preventDefault(); incolla(); return; }
+      if (e.key === " ") { e.preventDefault(); if (!e.repeat) setSpazio(true); return; }
       if (selected === null) return;
+      if ((e.ctrlKey || e.metaKey) && (e.key === "d" || e.key === "D")) { e.preventDefault(); duplica(); return; }
+      if ((e.ctrlKey || e.metaKey) && (e.key === "c" || e.key === "C")) { copia(); return; }
+      if ((e.ctrlKey || e.metaKey) && (e.key === "g" || e.key === "G")) { e.preventDefault(); raggruppa(!e.shiftKey); return; }
       if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); removeSelected(); return; }
       if (e.key === "Escape") { scegliSolo(null); return; }
       const dx = e.key === "ArrowLeft" ? -1 : e.key === "ArrowRight" ? 1 : 0;
@@ -418,7 +560,7 @@ export default function LayoutEditor({
       const passo = e.shiftKey ? 2 : 0.4;
       setActiveItems((prev) =>
         prev.map((it, i) => {
-          if (!scelto(i)) return it;
+          if (!scelto(i) || it.bloccato) return it;
           return {
             ...it,
             x: Math.min(100 - it.w, Math.max(0, +(it.x + dx * passo).toFixed(2))),
@@ -428,6 +570,7 @@ export default function LayoutEditor({
       );
     };
     const rilasciato = (e: KeyboardEvent) => {
+      if (e.key === " ") setSpazio(false);
       if (selected === null || dentroUnCampo(e.target)) return;
       if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key)) pushHistory(activeItems);
     };
@@ -459,6 +602,26 @@ export default function LayoutEditor({
   };
 
   const selItem = selected !== null ? activeItems[selected] : null;
+  /**
+   * Distanze del campo dai vicini (o dai bordi del foglio), a sinistra, a
+   * destra, sopra e sotto: le mostra mentre lo si sposta, in mm.
+   */
+  const distanzeDi = (it: LayoutItem) => {
+    const altriC = activeItems.filter((o, i) => i !== selected && !altri.includes(i));
+    const out: { asse: "x" | "y"; da: number; a: number; pos: number; mm: number }[] = [];
+    const sovrV = (o: LayoutItem) => o.y < it.y + it.h && o.y + o.h > it.y;
+    const sovrO = (o: LayoutItem) => o.x < it.x + it.w && o.x + o.w > it.x;
+    const sx = Math.max(0, ...altriC.filter((o) => sovrV(o) && o.x + o.w <= it.x + 0.01).map((o) => o.x + o.w));
+    const dx = Math.min(100, ...altriC.filter((o) => sovrV(o) && o.x >= it.x + it.w - 0.01).map((o) => o.x));
+    const su = Math.max(0, ...altriC.filter((o) => sovrO(o) && o.y + o.h <= it.y + 0.01).map((o) => o.y + o.h));
+    const giu = Math.min(100, ...altriC.filter((o) => sovrO(o) && o.y >= it.y + it.h - 0.01).map((o) => o.y));
+    const cy = it.y + it.h / 2, cx = it.x + it.w / 2;
+    if (it.x - sx > 0.05) out.push({ asse: "x", da: sx, a: it.x, pos: cy, mm: mmX(it.x - sx) });
+    if (dx - (it.x + it.w) > 0.05) out.push({ asse: "x", da: it.x + it.w, a: dx, pos: cy, mm: mmX(dx - it.x - it.w) });
+    if (it.y - su > 0.05) out.push({ asse: "y", da: su, a: it.y, pos: cx, mm: mmY(it.y - su) });
+    if (giu - (it.y + it.h) > 0.05) out.push({ asse: "y", da: it.y + it.h, a: giu, pos: cx, mm: mmY(giu - it.y - it.h) });
+    return out;
+  };
   const barraRef = useRef<HTMLDivElement>(null);
   // la barra dei comandi va nella riga del titolo della pagina, accanto a formato/layout/insegna
   const [postoBarra, setPostoBarra] = useState<HTMLElement | null>(null);
@@ -514,11 +677,63 @@ export default function LayoutEditor({
 
   const removeSelected = () => {
     if (selected === null) return;
-    const via = new Set(sceltiTutti);
+    const via = new Set(sceltiTutti.filter((i) => !activeItems[i]?.bloccato));
     const next = activeItems.filter((_, i) => !via.has(i));
     setActiveItems(next);
     pushHistory(next);
     scegliSolo(null);
+  };
+
+  /** Aggiunge campi (copiati o duplicati) un poco spostati, e li sceglie. */
+  const aggiungiCopie = (campi: LayoutItem[], spostamento = 2) => {
+    if (!canEdit || campi.length === 0) return;
+    const nuovoGruppo = new Map<string, string>();
+    const copie = campi.map((c) => {
+      const it: LayoutItem = JSON.parse(JSON.stringify(c));
+      if (it.gruppo) { if (!nuovoGruppo.has(it.gruppo)) nuovoGruppo.set(it.gruppo, `g_${Date.now().toString(36)}${nuovoGruppo.size}`); it.gruppo = nuovoGruppo.get(it.gruppo); }
+      it.bloccato = undefined;
+      it.x = Math.min(100 - it.w, it.x + spostamento);
+      it.y = Math.min(100 - it.h, it.y + spostamento);
+      return it;
+    });
+    const next = [...activeItems, ...copie];
+    setActiveItems(next);
+    pushHistory(next);
+    setSelected(activeItems.length);
+    setAltri(copie.slice(1).map((_, k) => activeItems.length + 1 + k));
+  };
+  const duplica = () => aggiungiCopie(sceltiTutti.map((i) => activeItems[i]));
+  /** Copia negli appunti di GT One (valgono anche per un altro layout, su questo computer). */
+  const copia = () => {
+    if (!sceltiTutti.length) return;
+    try { localStorage.setItem("gt-layout-appunti", JSON.stringify({ area, campi: sceltiTutti.map((i) => activeItems[i]) })); } catch { /* niente */ }
+  };
+  const incolla = () => {
+    try {
+      const a = JSON.parse(localStorage.getItem("gt-layout-appunti") ?? "null") as { area?: string; campi?: LayoutItem[] } | null;
+      if (!a?.campi?.length) return;
+      // solo i campi che esistono in quest'area (Zoo e Arredo hanno campi diversi)
+      const noti = new Set(fields.map((f) => f.id));
+      aggiungiCopie(a.campi.filter((c) => noti.has(c.fieldId) || c.fieldId === ELEMENTO_IMMAGINE || c.fieldId === ELEMENTO_RIQUADRO || c.fieldId === ELEMENTO_QR), a.area === area ? 2 : 0);
+    } catch { /* niente */ }
+  };
+  /** Raggruppa i campi scelti (o separa il gruppo). */
+  const raggruppa = (unisci: boolean) => {
+    if (sceltiTutti.length < (unisci ? 2 : 1)) return;
+    const gid = `g_${Date.now().toString(36)}`;
+    const set = new Set(sceltiTutti);
+    const vecchi = new Set(sceltiTutti.map((i) => activeItems[i].gruppo).filter(Boolean));
+    const next = activeItems.map((it, i) => (unisci
+      ? (set.has(i) ? { ...it, gruppo: gid } : it)
+      : (it.gruppo && vecchi.has(it.gruppo) ? { ...it, gruppo: undefined } : it)));
+    setActiveItems(next);
+    pushHistory(next);
+  };
+  const blocca = (si: boolean) => {
+    const set = new Set(sceltiTutti);
+    const next = activeItems.map((it, i) => (set.has(i) ? { ...it, bloccato: si || undefined } : it));
+    setActiveItems(next);
+    pushHistory(next);
   };
 
   /*
@@ -569,7 +784,7 @@ export default function LayoutEditor({
       for (const i of ordinati) { next[i] = { ...next[i], [asse]: +pos.toFixed(2) }; pos += next[i][dim] + spazio; }
     } else {
       next = next.map((it, i) => {
-        if (!set.includes(i) || i === selected) return it;
+        if (!set.includes(i) || i === selected || it.bloccato) return it;
         switch (come) {
           case "sx": return { ...it, x: rif.x };
           case "dx": return { ...it, x: Math.max(0, rif.x + rif.w - it.w) };
@@ -957,7 +1172,17 @@ export default function LayoutEditor({
             <button type="button" className="btn btn-outline btn-sm" onClick={() => setZoom((z) => Math.max(0.8, +(z - 0.2).toFixed(1)))} title="Rimpicciolisci">－</button>
             <span style={{ fontSize: 12.5, color: "var(--muted)", minWidth: 42, textAlign: "center" }}>{Math.round(zoom * 100)}%</span>
             <button type="button" className="btn btn-outline btn-sm" onClick={() => setZoom((z) => Math.min(3.2, +(z + 0.2).toFixed(1)))} title="Ingrandisci">＋</button>
-            <button type="button" className="btn btn-outline btn-sm" onClick={adatta} title="Il cartello intero nello spazio disponibile">Adatta</button>
+            <button type="button" className="btn btn-outline btn-sm" onClick={adatta} title="Il cartello intero nello spazio disponibile (Ctrl + rotellina per lo zoom, spazio + trascina per spostare la vista)">Adatta</button>
+            <button type="button" className={`btn btn-outline btn-sm${righelli ? " attivo" : ""}`} onClick={() => setRighelli((v) => !v)} title="Righelli in cm: trascina da un righello per tirare una guida">Righelli</button>
+            <button type="button" className={`btn btn-outline btn-sm${griglia.attiva ? " attivo" : ""}`} onClick={() => setGriglia((g) => ({ ...g, attiva: !g.attiva }))} title="Griglia a schermo: i campi si agganciano al passo">Griglia</button>
+            {griglia.attiva && (
+              <select value={griglia.passo} onChange={(e) => setGriglia((g) => ({ ...g, passo: Number(e.target.value) }))} style={{ marginTop: 0, width: 80, fontSize: 12 }} title="Passo della griglia">
+                {[2, 5, 10, 20].map((p) => <option key={p} value={p}>{p} mm</option>)}
+              </select>
+            )}
+            {(guideUtente.x.length + guideUtente.y.length) > 0 && (
+              <button type="button" className="btn btn-outline btn-sm" onClick={() => salvaGuide({ x: [], y: [] })} title="Toglie tutte le guide di questo formato">Togli guide ({guideUtente.x.length + guideUtente.y.length})</button>
+            )}
           </div>
         </div>
         {mode === "noPhoto" && (
@@ -992,7 +1217,22 @@ export default function LayoutEditor({
             )}
           </>
         )}
-        <div ref={areaRef} className="editor-area">
+        <div ref={areaRef} className={`editor-area${spazio ? " mano" : ""}`}>
+        <div className={righelli ? "editor-righelli" : undefined} style={{ width: W + (righelli ? 22 : 0) }}>
+        {righelli && (
+          <>
+            <div className="righello righello-x" style={{ width: W, backgroundSize: `${scale * 10}px 100%, ${scale}px 35%` }}
+              title="Trascina in giù per tirare una guida orizzontale"
+              onMouseDown={(e) => { if (!canEdit) return; e.preventDefault(); setGuidaInMano({ asse: "y", indice: null, pos: -1 }); }}>
+              {Array.from({ length: Math.floor(format.w / 10) + 1 }, (_, k) => <span key={k} style={{ left: k * 10 * scale }}>{k}</span>)}
+            </div>
+            <div className="righello righello-y" style={{ height: H, backgroundSize: `100% ${scale * 10}px, 35% ${scale}px` }}
+              title="Trascina a destra per tirare una guida verticale"
+              onMouseDown={(e) => { if (!canEdit) return; e.preventDefault(); setGuidaInMano({ asse: "x", indice: null, pos: -1 }); }}>
+              {Array.from({ length: Math.floor(format.h / 10) + 1 }, (_, k) => <span key={k} style={{ top: k * 10 * scale }}>{k}</span>)}
+            </div>
+          </>
+        )}
         <div
           ref={canvasRef}
           className="cartello editor-canvas"
@@ -1004,7 +1244,7 @@ export default function LayoutEditor({
           onMouseMove={onMouseMove}
           onMouseUp={endDrag}
           onMouseLeave={endDrag}
-          onMouseDown={() => scegliSolo(null)}
+          onMouseDown={onMouseDownFoglio}
         >
           {(margins.top > 0 || margins.right > 0 || margins.bottom > 0 || margins.left > 0) && (
             /*
@@ -1039,7 +1279,8 @@ export default function LayoutEditor({
                   <div style={stileStickerCartello(item, scale)}>
                     {testoStampato(previewValues[item.fieldId] || meta?.label || "Sticker")}
                   </div>
-                  {canEdit && <span className="resize-handle" onMouseDown={(e) => onMouseDown(e, i, "resize")} />}
+                  {canEdit && !item.bloccato && <span className="resize-handle" onMouseDown={(e) => onMouseDown(e, i, "resize")} />}
+                  {item.bloccato && <span className="editor-lucchetto" title="Bloccato">🔒</span>}
                 </div>
               );
             }
@@ -1048,7 +1289,7 @@ export default function LayoutEditor({
                 {inUnita(mmX(item.w))} × {inUnita(mmY(item.h))} {unita}
               </span>
             );
-            const maniglia = canEdit && <span className="resize-handle" onMouseDown={(e) => onMouseDown(e, i, "resize")} />;
+            const maniglia = canEdit && (item.bloccato ? <span className="editor-lucchetto" title="Bloccato">🔒</span> : <span className="resize-handle" onMouseDown={(e) => onMouseDown(e, i, "resize")} />);
             const stileBase: React.CSSProperties = {
               left: `${item.x}%`, top: `${item.y}%`, width: `${item.w}%`, height: `${item.h}%`,
               cursor: canEdit ? "move" : "default",
@@ -1110,7 +1351,8 @@ export default function LayoutEditor({
                       {inUnita(mmX(item.w))} × {inUnita(mmY(item.h))} {unita}
                     </span>
                   )}
-                  {canEdit && <span className="resize-handle" onMouseDown={(e) => onMouseDown(e, i, "resize")} />}
+                  {canEdit && !item.bloccato && <span className="resize-handle" onMouseDown={(e) => onMouseDown(e, i, "resize")} />}
+                  {item.bloccato && <span className="editor-lucchetto" title="Bloccato">🔒</span>}
                 </div>
               );
             }
@@ -1136,7 +1378,7 @@ export default function LayoutEditor({
                   onMouseDown={(e) => onMouseDown(e, i, "move")}
                 >
                   <CorniceCampo item={item} scale={scale}>
-                    <div style={{ width: "100%", height: "100%", display: "flex", justifyContent: justifyPrezzo(item), alignItems: alignPrezzo(item), overflow: "visible" }}>
+                    <div style={{ width: "100%", height: "100%", display: "flex", justifyContent: justifyPrezzo(item), alignItems: alignPrezzo(item), overflow: "visible", ...effettiTesto(item, scale) }}>
                       {raw && (
                         <Prezzo value={raw} size={item.size ?? meta?.size ?? 11} scale={scale} valign={item.valign} align={item.align}
                           font={item.font !== undefined ? layoutFontCss(item.font) : undefined} />
@@ -1148,7 +1390,8 @@ export default function LayoutEditor({
                       {inUnita(mmX(item.w))} × {inUnita(mmY(item.h))} {unita}
                     </span>
                   )}
-                  {canEdit && <span className="resize-handle" onMouseDown={(e) => onMouseDown(e, i, "resize")} />}
+                  {canEdit && !item.bloccato && <span className="resize-handle" onMouseDown={(e) => onMouseDown(e, i, "resize")} />}
+                  {item.bloccato && <span className="editor-lucchetto" title="Bloccato">🔒</span>}
                 </div>
               );
             }
@@ -1174,14 +1417,51 @@ export default function LayoutEditor({
                     {inUnita(mmX(item.w))} × {inUnita(mmY(item.h))} {unita}
                   </span>
                 )}
-                {canEdit && <span className="resize-handle" onMouseDown={(e) => onMouseDown(e, i, "resize")} />}
+                {canEdit && !item.bloccato && <span className="resize-handle" onMouseDown={(e) => onMouseDown(e, i, "resize")} />}
+                {item.bloccato && <span className="editor-lucchetto" title="Bloccato">🔒</span>}
               </div>
             );
           })}
+          {/* griglia (solo a schermo) */}
+          {griglia.attiva && (
+            <div className="editor-griglia" style={{ backgroundSize: `${griglia.passo * scale}px ${griglia.passo * scale}px` }} />
+          )}
+          {/* guide tirate dai righelli: si spostano trascinandole, fuori dal foglio si tolgono */}
+          {guideUtente.x.map((g, k) => (guidaInMano?.asse === "x" && guidaInMano.indice === k) ? null : (
+            <div key={`gx${k}`} className="guida guida-x" style={{ left: `${g}%` }} title="Trascina per spostare, fuori dal foglio per togliere"
+              onMouseDown={(e) => { if (!canEdit) return; e.stopPropagation(); e.preventDefault(); setGuidaInMano({ asse: "x", indice: k, pos: g }); }} />
+          ))}
+          {guideUtente.y.map((g, k) => (guidaInMano?.asse === "y" && guidaInMano.indice === k) ? null : (
+            <div key={`gy${k}`} className="guida guida-y" style={{ top: `${g}%` }} title="Trascina per spostare, fuori dal foglio per togliere"
+              onMouseDown={(e) => { if (!canEdit) return; e.stopPropagation(); e.preventDefault(); setGuidaInMano({ asse: "y", indice: k, pos: g }); }} />
+          ))}
+          {guidaInMano && guidaInMano.pos >= 0 && guidaInMano.pos <= 100 && (
+            <div className={`guida guida-${guidaInMano.asse} in-mano`} style={guidaInMano.asse === "x" ? { left: `${guidaInMano.pos}%` } : { top: `${guidaInMano.pos}%` }} />
+          )}
+          {/* guide intelligenti: dove il campo si è agganciato */}
+          {lineeAttive.x !== undefined && <div className="guida-smart guida-x" style={{ left: `${lineeAttive.x}%` }} />}
+          {lineeAttive.y !== undefined && <div className="guida-smart guida-y" style={{ top: `${lineeAttive.y}%` }} />}
+          {/* distanze in mm dal vicino più prossimo, mentre si sposta */}
+          {trascinando && selItem && distanzeDi(selItem).map((d, k) => (
+            <div key={`d${k}`} className={`distanza distanza-${d.asse}`}
+              style={d.asse === "x"
+                ? { left: `${d.da}%`, width: `${d.a - d.da}%`, top: `${d.pos}%` }
+                : { top: `${d.da}%`, height: `${d.a - d.da}%`, left: `${d.pos}%` }}>
+              <span>{d.mm.toFixed(1).replace(".", ",")} mm</span>
+            </div>
+          ))}
+          {/* rettangolo di selezione */}
+          {rettangolo && (
+            <div className="editor-rettangolo" style={{
+              left: `${Math.min(rettangolo.x0, rettangolo.x1)}%`, top: `${Math.min(rettangolo.y0, rettangolo.y1)}%`,
+              width: `${Math.abs(rettangolo.x1 - rettangolo.x0)}%`, height: `${Math.abs(rettangolo.y1 - rettangolo.y0)}%`,
+            }} />
+          )}
+        </div>
         </div>
         </div>
         <p style={{ fontSize: 12, color: "var(--muted)", margin: "8px 0 0" }}>
-          Anteprima con un prodotto di esempio · trascina i campi, ridimensiona dall&apos;angolo in basso a destra.
+          Anteprima con un prodotto di esempio · trascina i campi, ridimensiona dall&apos;angolo · trascina sul foglio vuoto per sceglierne più d&apos;uno · Ctrl+D duplica, Ctrl+C/V copia e incolla, Ctrl+G raggruppa, Canc elimina, Ctrl+Z annulla · spazio + trascina sposta la vista, Ctrl + rotellina zoom.
         </p>
       </div>
 
@@ -1211,6 +1491,16 @@ export default function LayoutEditor({
                 </>
               )}
               <div className="editor-allinea">
+                <button type="button" className="mini-btn" title="Duplica (Ctrl+D)" onClick={duplica}>⧉ Duplica</button>
+                <button type="button" className="mini-btn" title="Copia (Ctrl+C): si incolla anche in un altro layout con Ctrl+V" onClick={copia}>Copia</button>
+                <button type="button" className="mini-btn" title="Incolla (Ctrl+V)" onClick={incolla}>Incolla</button>
+                {sceltiTutti.length > 1 && <button type="button" className="mini-btn" title="Raggruppa (Ctrl+G): si scelgono e si spostano insieme" onClick={() => raggruppa(true)}>⊞ Raggruppa</button>}
+                {sceltiTutti.some((i) => activeItems[i]?.gruppo) && <button type="button" className="mini-btn" title="Separa il gruppo (Ctrl+Maiusc+G)" onClick={() => raggruppa(false)}>⊟ Separa</button>}
+                {sceltiTutti.some((i) => activeItems[i]?.bloccato)
+                  ? <button type="button" className="mini-btn" title="Torna a spostarsi e ridimensionarsi" onClick={() => blocca(false)}>🔓 Sblocca</button>
+                  : <button type="button" className="mini-btn" title="Non si sposta né si ridimensiona per sbaglio" onClick={() => blocca(true)}>🔒 Blocca</button>}
+              </div>
+              <div className="editor-allinea">
                 <span className="hint">Livello:</span>
                 <button type="button" className="mini-btn" title="Sopra a tutto" onClick={() => cambiaLivello("primo")}>⤒ Primo piano</button>
                 <button type="button" className="mini-btn" title="Su di un livello" onClick={() => cambiaLivello("avanti")}>↑ Avanti</button>
@@ -1219,6 +1509,34 @@ export default function LayoutEditor({
                 <button type="button" className="mini-btn" style={{ color: "var(--red, #b42318)" }} title="Elimina (tasto Canc)" onClick={removeSelected}>✕ Elimina</button>
               </div>
             </div>
+          </div>
+        )}
+        {/* effetti del testo, come in Word: interlinea, spaziatura, contorno e ombra */}
+        {selItem && canEdit && !selItem.sticker && !isImageField(selItem.fieldId) && selItem.fieldId !== ELEMENTO_QR && (selItem.fieldId !== ELEMENTO_RIQUADRO || !!selItem.testo) && (
+          <div className="panel-campo">
+            <Sezione titolo="Effetti del testo" aperta={!!(selItem.interlinea || selItem.spaziatura || selItem.contorno || selItem.ombra)}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                <label className="field" style={{ marginBottom: 0 }}>Interlinea
+                  <input type="number" step={0.05} min={0.6} max={3} value={selItem.interlinea ?? 1.2}
+                    onChange={(e) => updateSelected({ interlinea: Number(e.target.value) === 1.2 ? undefined : Number(e.target.value) })} />
+                </label>
+                <label className="field" style={{ marginBottom: 0 }}>Spazio fra le lettere
+                  <input type="number" step={0.01} min={-0.2} max={1} value={selItem.spaziatura ?? 0}
+                    onChange={(e) => updateSelected({ spaziatura: Number(e.target.value) || undefined })} />
+                </label>
+                <label className="field" style={{ marginBottom: 0 }}>Contorno (mm)
+                  <input type="number" step={0.1} min={0} max={3} value={selItem.contorno?.spessore ?? 0}
+                    onChange={(e) => updateSelected({ contorno: Number(e.target.value) > 0 ? { colore: selItem.contorno?.colore ?? "#ffffff", spessore: Number(e.target.value) } : undefined })} />
+                </label>
+                <label className="field" style={{ marginBottom: 0 }}>Colore contorno
+                  <input type="color" value={selItem.contorno?.colore ?? "#ffffff"} disabled={!selItem.contorno}
+                    onChange={(e) => updateSelected({ contorno: { colore: e.target.value, spessore: selItem.contorno?.spessore ?? 0.3 } })} />
+                </label>
+              </div>
+              <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12.5, marginTop: 8 }}>
+                <input type="checkbox" checked={!!selItem.ombra} onChange={(e) => updateSelected({ ombra: e.target.checked || undefined })} /> Ombra
+              </label>
+            </Sezione>
           </div>
         )}
         {selItem?.sticker && canEdit && (

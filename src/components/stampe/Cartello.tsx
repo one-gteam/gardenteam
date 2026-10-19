@@ -4,7 +4,7 @@ import FitText from "./FitText";
 import QrSvg from "./QrSvg";
 import { layoutFontCss } from "@/lib/layout-fonts";
 import {
-  CorniceCampo, Prezzo, alignPrezzo, bordoRiquadro, coloreCampo, conPrefisso, isPrezzoField, justifyPrezzo,
+  CorniceCampo, Prezzo, effettiTesto, alignPrezzo, bordoRiquadro, coloreCampo, conPrefisso, isPrezzoField, justifyPrezzo,
   stileStickerCartello, stileTestoCartello, testoStampato,
 } from "./cartelloStyle";
 
@@ -166,7 +166,7 @@ export default function Cartello({
           return (
             <div key={i} style={riquadro(item, { overflow: "visible", color })}>
               <CorniceCampo item={item} scale={scale}>
-                <div style={{ width: "100%", height: "100%", display: "flex", justifyContent: justifyPrezzo(item), alignItems: alignPrezzo(item), overflow: "visible" }}>
+                <div style={{ width: "100%", height: "100%", display: "flex", justifyContent: justifyPrezzo(item), alignItems: alignPrezzo(item), overflow: "visible", ...effettiTesto(item, scale) }}>
                   <Prezzo value={testo} size={item.size ?? meta.size} scale={scale} valign={item.valign} align={item.align}
                     font={item.font !== undefined ? layoutFontCss(item.font) : undefined} />
                 </div>
