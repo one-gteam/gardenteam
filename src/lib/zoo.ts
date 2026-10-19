@@ -1374,6 +1374,9 @@ export function valoriPerStampa(
   // lo sconto si rifà sui prezzi veri del cartello (quelli del PV o scritti a mano)
   const perc = scontoFraPrezzi(vals.prezzoListino ?? "", vals.prezzoPromo ?? "");
   vals.sconto = perc ? `Sconto ${perc}` : "";
+  // il prezzo del pezzo è quello promo se c'è, altrimenti quello di partenza (nei 3x2 di solito è lì)
+  const pezzo = (vals.prezzoPromo ?? "").trim().startsWith("€") ? vals.prezzoPromo : (vals.prezzoListino ?? "").trim().startsWith("€") ? vals.prezzoListino : "";
+  vals.prezziMeccanica = vals.meccanica ? prezziMeccanicaTesto(vals.meccanica, pezzo) : "";
   if (sp[`senzafoto_${o.id}`] === "1") delete vals.immagine;
   for (const fid of (sp[`nascondi_${o.id}`] ?? "").split(",").filter(Boolean)) delete vals[fid];
   return vals;
@@ -1521,6 +1524,24 @@ export interface Giacenza {
 }
 
 /** "12.9" → "12,90": il prezzo del gestionale scritto come gli altri prezzi del cartello. */
+/**
+ * «1 pezzo € 0,99 – 3 pezzi € 1,98»: in un NxM si prendono N pezzi e se ne
+ * pagano M; in un A+B se ne prendono A+B e se ne pagano A. Il prezzo del pezzo
+ * è quello del cartello. Vuoto se la meccanica non è di questo tipo o manca il prezzo.
+ */
+export function prezziMeccanicaTesto(meccanica: string | undefined, prezzoPezzo: string | undefined): string {
+  const m = (meccanica ?? "").toLowerCase().replace(/\s+/g, "");
+  const x = /^(\d{1,2})[x×](\d{1,2})$/.exec(m);
+  const piu = /^(\d)\+(\d)$/.exec(m);
+  const prendi = x ? Number(x[1]) : piu ? Number(piu[1]) + Number(piu[2]) : 0;
+  const paghi = x ? Number(x[2]) : piu ? Number(piu[1]) : 0;
+  if (!(prendi > paghi && paghi > 0)) return "";
+  const n = Number((prezzoPezzo ?? "").replace(/[^\d,.]/g, "").replace(/\.(?=\d{3})/g, "").replace(",", "."));
+  if (!(n > 0)) return "";
+  const euro = (v: number) => `€ ${v.toFixed(2).replace(".", ",")}`;
+  return `1 pezzo ${euro(n)} – ${prendi} pezzi ${euro(Math.round(n * paghi * 100) / 100)}`;
+}
+
 export function prezzoDaNumero(n: number | undefined): string {
   return n && n > 0 ? n.toFixed(2).replace(".", ",") : "";
 }
@@ -1622,6 +1643,10 @@ export const ZOO_FIELDS: PrintField[] = [
   {
     id: "meccanica", label: "Meccanica promo (3x2, 1+1…)", size: 30, bold: true, font: "cn",
     nota: "Solo la meccanica scritta dal Consorzio sull'offerta (3x2, 1+1). Resta vuota se l'offerta è a prezzo o se vale la promozione del punto vendita.",
+  },
+  {
+    id: "prezziMeccanica", label: "Prezzi della meccanica (1 pezzo € 0,99 – 3 pezzi € 1,98)", size: 14, bold: true,
+    nota: "Per le offerte 3x2, 2x1, 1+1…: quanto costa un pezzo e quanto si paga prendendone quanti dice la meccanica (in un 3x2: 3 pezzi al prezzo di 2). Calcolato dal prezzo del cartello; vuoto se l'offerta non è a meccanica.",
   },
   {
     id: "tipoPromo", label: "Tipo di promozione (3x2, 20%, A SOLI…)", size: 20, bold: true, font: "cn",
@@ -1959,6 +1984,7 @@ export function zooCartelloValues(
       ? `€ ${offer.prezzoListino}`
       : offer.prezzoPromo ? "A SOLI" : "",
     meccanica: scontoSecco ? "" : (offer.meccanica ?? ""),
+    prezziMeccanica: scontoSecco ? "" : prezziMeccanicaTesto(offer.meccanica, offer.prezzoPromo || offer.prezzoListino),
     // sconto in percentuale fra i due prezzi: si posa sul layout come gli altri campi
     sconto: (() => {
       const dichiarato = offer.prezzoPromo

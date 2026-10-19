@@ -1,5 +1,6 @@
 "use client";
 
+import { immaginiInLinea } from "@/lib/immagini-in-linea";
 import { useState } from "react";
 import { FileDown, Sheet, ImageDown, Link2 } from "lucide-react";
 import { linkGraficoVolantino } from "@/lib/zoo-actions";
@@ -36,6 +37,7 @@ export default function EsportaVolantino({
     if (pagine.length === 0) throw new Error("nessuna pagina");
     const doc = new jsPDF({ unit: "mm", format: "a4" });
     for (let i = 0; i < pagine.length; i++) {
+      await immaginiInLinea(pagine[i]);
       const canvas = await html2canvas(pagine[i], {
         scale: 2, backgroundColor: "#ffffff", useCORS: true,
         onclone: (d: Document) => { d.querySelectorAll(".no-print").forEach((el) => el.remove()); },

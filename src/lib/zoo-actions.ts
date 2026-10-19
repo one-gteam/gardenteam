@@ -816,12 +816,34 @@ function conIlSuoGruppo(db: ZooDB, offerIds: string[]): string[] {
   return [...out];
 }
 
-export async function markZooPrinted(scopeParam: string, offerIds: string[]): Promise<{ ok: boolean }> {
+export async function markZooPrinted(scopeParam: string, offerIds: string[], vociJson?: string): Promise<{ ok: boolean }> {
   const user = await requireZooUser();
   const db = await getZooDb();
   const academyDb = await getDb();
   const scope = resolveScope(user, scopeParam, academyDb);
   const at = new Date().toISOString();
+  /*
+   * Stampati subito dai selezionati (senza passare dalla coda): prima si
+   * segnavano solo come «già stampati» e la lista «Già stampati» restava
+   * vuota, perché legge la coda. Ora entrano anche lì, in un lotto con l'ora
+   * della stampa e le impostazioni per ristamparli.
+   */
+  let voci: { offerId?: unknown; impostazioni?: unknown }[] = [];
+  try { voci = vociJson ? JSON.parse(vociJson) : []; } catch { voci = []; }
+  if (!Array.isArray(voci)) voci = [];
+  const nome = `${user.firstName} ${user.lastName}`;
+  let n = 0;
+  for (const v of voci.slice(0, 1000)) {
+    const offerId = typeof v?.offerId === "string" ? v.offerId : "";
+    if (!offerId || !offerIds.includes(offerId) || !db.offers.some((o) => o.id === offerId)) continue;
+    const imp = v.impostazioni && typeof v.impostazioni === "object" && JSON.stringify(v.impostazioni).length <= 4000
+      ? Object.fromEntries(Object.entries(v.impostazioni as Record<string, unknown>).filter(([, x]) => typeof x === "string")) as Record<string, string>
+      : {};
+    // se era in coda da stampare, è quella riga che diventa stampata
+    const inCoda = db.coda.find((c) => c.scopeType === scope.type && c.scopeId === scope.id && c.offerId === offerId && !c.stampato);
+    if (inCoda) { inCoda.stampato = at; inCoda.impostazioni = imp; continue; }
+    db.coda.push({ id: `zq_${Date.now()}_p${n++}`, scopeType: scope.type, scopeId: scope.id, offerId, stato: "dopo", impostazioni: imp, userName: nome, creato: at, stampato: at });
+  }
   for (const offerId of conIlSuoGruppo(db, offerIds)) {
     if (!db.offers.some((o) => o.id === offerId)) continue;
     const esistente = db.printed.find(

@@ -1826,3 +1826,8 @@ img.tt-media.on { animation: sp-kb 12s linear forwards; }
 .blocco-spuntati select { margin: 0; font-size: 12px; }
 .articoli-voce { list-style: none; margin: 4px 0 0; padding: 4px 0 0; border-top: 1px dashed var(--line); font-size: 11.5px; }
 .articoli-voce li { display: flex; justify-content: space-between; gap: 8px; padding: 1px 0; }
+
+/* Stampa cartelli → Liste: i nomi delle liste restano in alto mentre si scorre */
+.indice-liste { position: sticky; top: 0; z-index: 20; display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+  background: var(--bg, #fafaf7); padding: 8px 0; margin-bottom: 6px; border-bottom: 1px solid var(--line); }
+.indice-liste .chip { cursor: pointer; }

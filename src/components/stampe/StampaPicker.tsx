@@ -67,7 +67,11 @@ export interface StampaPickerProps {
   globalFormat: string;
   baseUrl?: string; // pagina di stampa da richiamare (default: arredo)
   printed?: Record<string, string>; // id → data ISO dell'ultima stampa in questo ambito
-  onPrint?: (ids: string[]) => Promise<{ ok: boolean }>; // segna come stampati al momento della stampa
+  /** Segna come stampati al momento della stampa; con le impostazioni di ogni cartello, finiscono anche in «Già stampati». */
+  onPrint?: (ids: string[], vociJson?: string) => Promise<{ ok: boolean }>;
+  /** Colonna «Copie»: quante volte stampare ogni cartello (copie_<id> nell'indirizzo). */
+  conCopie?: boolean;
+  initialCopie?: Record<string, number>;
   /** Prezzi di partenza (barrati) scritti a mano per il singolo cartello. */
   initialListini?: Record<string, string>;
   /** Cartelli da stampare senza foto, anche se l'articolo ce l'ha. */
@@ -125,6 +129,8 @@ export default function StampaPicker({
   baseUrl = "/stampe/arredo/stampa",
   printed,
   onPrint,
+  conCopie = false,
+  initialCopie,
   initialListini,
   initialNoPhoto,
   initialNoListino,
@@ -151,6 +157,9 @@ export default function StampaPicker({
   const [esitoCoda, setEsitoCoda] = useState("");
   const [hiddenFields, setHiddenFields] = useState<Record<string, string[]>>(initialHidden);
   const [rowLayout, setRowLayout] = useState<Record<string, string>>(initialLayouts ?? {});
+  const [copie, setCopie] = useState<Record<string, number>>(initialCopie ?? {});
+  const [copieTutti, setCopieTutti] = useState("");
+  const copieDi = (id: string) => Math.max(1, Math.min(99, Math.floor(copie[id] ?? 1)));
   const [aperti, setAperti] = useState<string[]>([]); // voci della lista con gli articoli aperti
   const [applyAll, setApplyAll] = useState(globalFormat);
   /* A5: di serie due cartelli per foglio A4, ognuno stampato due volte */
@@ -225,6 +234,7 @@ export default function StampaPicker({
       // il layout scelto vale solo se è del formato di quel cartello
       const lay = layoutScelte.find((l) => l.id === rowLayout[id]);
       if (lay && lay.formatId === (rowFormat[id] ?? applyAll)) params.set(`layout_${id}`, lay.id);
+      if (conCopie && copieDi(id) > 1) params.set(`copie_${id}`, String(copieDi(id)));
     }
     if (!doppio) params.set("doppio", "0");
     if (print) params.set("print", "1");
@@ -242,7 +252,7 @@ export default function StampaPicker({
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
     const gestiti = (k: string) =>
-      ["sel", "formato", "doppio", "print", "pdf"].includes(k) || /^(formato|prezzo|listino|noprezzo|senzafoto|nolistino|nascondi|layout)_/.test(k);
+      ["sel", "formato", "doppio", "print", "pdf"].includes(k) || /^(formato|prezzo|listino|noprezzo|senzafoto|nolistino|nascondi|layout|copie)_/.test(k);
     for (const k of [...url.searchParams.keys()]) if (gestiti(k)) url.searchParams.delete(k);
     for (const [k, v] of new URLSearchParams(indirizzo)) if (gestiti(k) && v) url.searchParams.set(k, v);
     if (selected.length === 0) url.searchParams.delete("sel");
@@ -262,7 +272,17 @@ export default function StampaPicker({
     if (hiddenFields[id]?.length) out[`nascondi_${id}`] = hiddenFields[id].join(",");
     const lay = layoutScelte.find((l) => l.id === rowLayout[id]);
     if (lay && lay.formatId === (rowFormat[id] ?? applyAll)) out[`layout_${id}`] = lay.id;
+    if (conCopie && copieDi(id) > 1) out[`copie_${id}`] = String(copieDi(id));
     return out;
+  };
+  /** Cosa si manda a onPrint: le impostazioni di ogni cartello, per l'elenco «Già stampati». */
+  const vociStampa = () => JSON.stringify(selected.map((id) => ({ offerId: id, impostazioni: impostazioniDi(id) })));
+  /* Copie: frecce su/giù e Invio passano alla casella del cartello dopo (o prima) */
+  const vaiACopie = (da: HTMLInputElement, passo: number) => {
+    const tutte = Array.from(document.querySelectorAll<HTMLInputElement>("input[data-copie]"));
+    const i = tutte.indexOf(da);
+    const dopo = tutte[i + passo];
+    if (dopo) { dopo.focus(); dopo.select(); }
   };
   const inCoda = async (stato: "dopo" | "arrivo") => {
     if (!onQueue || selected.length === 0) return;
@@ -302,7 +322,7 @@ export default function StampaPicker({
   const vaiAllaStampa = async (nomePdf?: string) => {
     const url = buildUrl(true) + (nomePdf ? `&pdf=${encodeURIComponent(nomePdf)}` : "");
     if (onPrint && selected.length > 0) {
-      try { await onPrint(selected); } catch { /* la stampa non deve fallire per questo */ }
+      try { await onPrint(selected, vociStampa()); } catch { /* la stampa non deve fallire per questo */ }
     }
     router.push(url);
   };
@@ -487,6 +507,23 @@ export default function StampaPicker({
                   </select>
                 </label>
               )}
+              {conCopie && (
+                <label>Copie
+                  <input type="number" min={1} max={99} placeholder="—" style={{ width: 56 }}
+                    onKeyDown={(e) => {
+                      if (e.key !== "Enter") return;
+                      e.preventDefault();
+                      const n = Math.max(1, Math.min(99, Math.floor(Number((e.target as HTMLInputElement).value) || 1)));
+                      setCopie((prev) => ({ ...prev, ...Object.fromEntries(ids.map((id) => [id, n])) }));
+                    }}
+                    onBlur={(e) => {
+                      const v = e.target.value;
+                      if (!v) return;
+                      const n = Math.max(1, Math.min(99, Math.floor(Number(v) || 1)));
+                      setCopie((prev) => ({ ...prev, ...Object.fromEntries(ids.map((id) => [id, n])) }));
+                    }} />
+                </label>
+              )}
               <span className="chips">
                 <button type="button" className="chip" onClick={() => metti(setNoPrice, false)}>€ prezzo sì</button>
                 <button type="button" className="chip" onClick={() => metti(setNoPrice, true)}>senza prezzo</button>
@@ -530,7 +567,24 @@ export default function StampaPicker({
                     <input type="checkbox" title="Spunta tutte" checked={daTogliere.length === selectedProds.length && selectedProds.length > 0}
                       onChange={(e) => setDaTogliere(e.target.checked ? selectedProds.map((p) => p.id) : [])} />
                   </th>
-                  <th>Prodotto</th><th>Formato</th><th>Prezzo cartello</th><th>Prezzo di partenza</th>
+                  <th>Prodotto</th>
+                  {conCopie && (
+                    <th title="Quante copie stampare di ogni cartello. Frecce o Invio: casella del cartello dopo">
+                      Copie
+                      <div style={{ display: "flex", gap: 3, marginTop: 3, fontWeight: 400 }}>
+                        <input type="number" min={1} max={99} value={copieTutti} placeholder="tutti" title="Una quantità uguale per tutti i cartelli"
+                          onChange={(e) => setCopieTutti(e.target.value)} style={{ width: 54, marginTop: 0, fontSize: 12 }}
+                          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); (e.currentTarget.nextElementSibling as HTMLButtonElement | null)?.click(); } }} />
+                        <button type="button" className="mini-btn" disabled={!copieTutti}
+                          onClick={() => {
+                            const n = Math.max(1, Math.min(99, Math.floor(Number(copieTutti) || 1)));
+                            setCopie(Object.fromEntries(selected.map((id) => [id, n])));
+                            setCopieTutti("");
+                          }}>a tutti</button>
+                      </div>
+                    </th>
+                  )}
+                  <th>Formato</th><th>Prezzo cartello</th><th>Prezzo di partenza</th>
                   <th title="Cosa esce sul cartello: acceso = si stampa, spento = no">Sul cartello</th><th></th>
                 </tr></thead>
                 <tbody>
@@ -544,6 +598,18 @@ export default function StampaPicker({
                         <strong>{p.titolo}</strong>
                         <div style={{ fontSize: 11.5, color: "var(--muted)" }}>{p.codice} · {p.tipologia}</div>
                       </td>
+                      {conCopie && (
+                        <td>
+                          <input type="number" min={1} max={99} data-copie value={copie[p.id] ?? 1}
+                            onFocus={(e) => e.currentTarget.select()}
+                            onChange={(e) => { const n = Math.floor(Number(e.target.value)); setCopie((prev) => ({ ...prev, [p.id]: Number.isFinite(n) && n > 0 ? Math.min(99, n) : 1 })); }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === "ArrowDown") { e.preventDefault(); vaiACopie(e.currentTarget, e.shiftKey && e.key === "Enter" ? -1 : 1); }
+                              else if (e.key === "ArrowUp") { e.preventDefault(); vaiACopie(e.currentTarget, -1); }
+                            }}
+                            style={{ width: 54, marginTop: 0, fontWeight: (copie[p.id] ?? 1) > 1 ? 700 : 400 }} />
+                        </td>
+                      )}
                       <td>
                         <select
                           value={rowFormat[p.id] ?? applyAll}
@@ -716,7 +782,7 @@ export default function StampaPicker({
                   if (onPdf) {
                     // il PDF si fa qui e si scarica: niente pagina nuova
                     void (async () => {
-                      if (onPrint && selected.length > 0) { try { await onPrint(selected); } catch { /* niente */ } }
+                      if (onPrint && selected.length > 0) { try { await onPrint(selected, vociStampa()); } catch { /* niente */ } }
                       await onPdf(pulito, buildUrl(false).split("?")[1]);
                     })();
                   } else vaiAllaStampa(pulito);

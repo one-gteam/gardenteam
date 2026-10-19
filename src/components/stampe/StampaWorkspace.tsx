@@ -1,5 +1,6 @@
 "use client";
 
+import { immaginiInLinea } from "@/lib/immagini-in-linea";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { CardLayout, PrintField, PrintFormat } from "@/lib/stampe";
@@ -64,7 +65,10 @@ export default function StampaWorkspace({
       if (!r.ok) throw new Error(String(r.status));
       const d = (await r.json()) as Dettagli;
       if (!d.cartelli.length) { setPdfStato("Nessun cartello da salvare."); return; }
-      setPdfLavoro({ nome, cartelli: d.cartelli });
+      // le copie scelte nella colonna «Copie»: il cartello si ripete
+      const qp = new URLSearchParams(q);
+      const cartelli = d.cartelli.flatMap((c) => Array.from({ length: Math.max(1, Math.min(99, Number(qp.get(`copie_${c.id}`)) || 1)) }, () => c));
+      setPdfLavoro({ nome, cartelli });
     } catch {
       setPdfStato("PDF non preparato: riprova.");
     }
@@ -83,6 +87,8 @@ export default function StampaWorkspace({
           await new Promise((res) => setTimeout(res, 150));
         }
         await (document as Document & { fonts?: FontFaceSet }).fonts?.ready;
+        // foto e testate dal bucket: messe come dati, altrimenti html2canvas le salta
+        await immaginiInLinea(pdfRef.current);
         const fogli = Array.from(pdfRef.current?.querySelectorAll<HTMLElement>("[data-cartello-pdf]") ?? []);
         // un PDF per formato: in stampa ogni formato va col suo foglio (e la stampante col suo cassetto)
         const docs = new Map<string, { nome: string; doc: InstanceType<typeof jsPDF>; n: number }>();

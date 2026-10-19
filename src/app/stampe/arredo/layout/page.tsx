@@ -119,7 +119,7 @@ export default async function LayoutPage({
           tipologieDisponibili={tipologie}
           sampleValues={sampleValues}
           canEdit={canEdit}
-          bloccato={!["system_admin", "group_admin", "store_admin"].includes(user.role)}
+          bloccato={user.role === "manager" /* solo il gestore: lavora sul layout del Consorzio e potrebbe cambiarlo per sbaglio */}
           images={db.layoutImages
             .filter((li) => li.scopeType === scope.type && li.scopeId === scope.id)
             .map((li) => ({ name: li.name, url: li.url }))}
