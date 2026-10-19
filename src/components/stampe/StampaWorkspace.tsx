@@ -84,19 +84,29 @@ export default function StampaWorkspace({
         }
         await (document as Document & { fonts?: FontFaceSet }).fonts?.ready;
         const fogli = Array.from(pdfRef.current?.querySelectorAll<HTMLElement>("[data-cartello-pdf]") ?? []);
-        let doc: InstanceType<typeof jsPDF> | null = null;
+        // un PDF per formato: in stampa ogni formato va col suo foglio (e la stampante col suo cassetto)
+        const docs = new Map<string, { nome: string; doc: InstanceType<typeof jsPDF>; n: number }>();
+        const formati = [...new Set(pdfLavoro.cartelli.map((c) => c.format.id))];
         for (let i = 0; i < fogli.length && !annullato; i++) {
           const c = pdfLavoro.cartelli[i];
           setPdfStato(`Preparo il PDF… ${i + 1} di ${fogli.length}`);
           const canvas = await html2canvas(fogli[i], { scale: 2, backgroundColor: "#ffffff", useCORS: true });
           const orient = c.format.w > c.format.h ? "landscape" : "portrait";
-          if (!doc) doc = new jsPDF({ unit: "mm", format: [c.format.w, c.format.h], orientation: orient });
-          else doc.addPage([c.format.w, c.format.h], orient);
-          doc.addImage(canvas.toDataURL("image/jpeg", 0.93), "JPEG", 0, 0, c.format.w, c.format.h);
+          let voce = docs.get(c.format.id);
+          if (!voce) {
+            const nomeFormato = c.format.name.replace(/\s*\(.*\)\s*/, "").trim() || c.format.id;
+            voce = { nome: formati.length > 1 ? `${pdfLavoro.nome} - ${nomeFormato}` : pdfLavoro.nome, doc: new jsPDF({ unit: "mm", format: [c.format.w, c.format.h], orientation: orient }), n: 0 };
+            docs.set(c.format.id, voce);
+          } else voce.doc.addPage([c.format.w, c.format.h], orient);
+          voce.doc.addImage(canvas.toDataURL("image/jpeg", 0.93), "JPEG", 0, 0, c.format.w, c.format.h);
+          voce.n++;
         }
-        if (doc && !annullato) {
-          doc.save(`${pdfLavoro.nome}.pdf`);
-          setPdfStato(`✓ Scaricato «${pdfLavoro.nome}.pdf» (${fogli.length} cartelli)`);
+        if (!annullato && docs.size) {
+          for (const v of docs.values()) {
+            v.doc.save(`${v.nome}.pdf`);
+            await new Promise((res) => setTimeout(res, 400)); // un attimo fra un file e l'altro: il browser li scarica tutti
+          }
+          setPdfStato(`✓ Scaricat${docs.size === 1 ? "o" : "i"} ${[...docs.values()].map((v) => `«${v.nome}.pdf» (${v.n})`).join(", ")}`);
         }
       } catch (e) {
         console.error("PDF dei cartelli", e);
