@@ -15,6 +15,17 @@ export function richiesteInAttesa(db: DB): Registration[] {
   return db.registrations.filter((r) => r.status === "pending").sort((a, b) => b.date.localeCompare(a.date));
 }
 
+/** Le richieste di account GT One che questa persona può approvare (non le iscrizioni Academy). */
+export function richiesteVisibili(db: DB, user: { role: string; tenantId?: string; storeId?: string }): Registration[] {
+  return richiesteInAttesa(db).filter((r) => {
+    if (r.tipo === "academy") return false;
+    if (user.role === "system_admin") return true;
+    if (user.role === "group_admin") return r.tenantId === user.tenantId;
+    if (user.role === "store_admin") return r.storeId === user.storeId;
+    return false;
+  });
+}
+
 function riga(db: DB, r: Registration, nuova: boolean): string {
   const insegna = db.tenants.find((t) => t.id === r.tenantId)?.name ?? "";
   const pv = db.stores.find((s) => s.id === r.storeId)?.name ?? "";
@@ -22,7 +33,7 @@ function riga(db: DB, r: Registration, nuova: boolean): string {
     ? `Altro${r.notaAltro ? ` («${r.notaAltro}»)` : ""}`
     : db.departments.find((d) => d.id === r.departmentId)?.name ?? "—";
   const quando = new Date(r.date).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" });
-  return `${nuova ? "• NUOVA " : "• "}${r.firstName} ${r.lastName} <${r.email}>\n   ${insegna}${pv && pv !== insegna ? ` · ${pv}` : ""} · reparto: ${reparto} · ${quando}`;
+  return `${nuova ? "• NUOVA " : "• "}${r.tipo === "academy" ? "[Academy] " : ""}${r.firstName} ${r.lastName} <${r.email}>\n   ${insegna}${pv && pv !== insegna ? ` · ${pv}` : ""} · reparto: ${reparto} · ${quando}`;
 }
 
 /** Manda il riepilogo agli amministratori di sistema. `forza` salta il controllo «già mandato oggi». */
@@ -47,7 +58,7 @@ export async function inviaRiepilogoRegistrazioni(forza = false): Promise<{ invi
     "",
     ...attesa.map((r) => riga(db, r, r.date > dal)),
     "",
-    `Per approvarle o rifiutarle: ${ORIGINE}/admin/utenti`,
+    `Per approvarle o rifiutarle: ${ORIGINE}/ruoli/richieste` + (attesa.some((r) => r.tipo === "academy") ? ` (iscrizioni Academy: ${ORIGINE}/admin/utenti)` : ""),
     "",
     "Questa mail arriva una volta al giorno, solo quando ci sono richieste in attesa.",
   ].join("\n");

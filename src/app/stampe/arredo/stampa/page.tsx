@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import SalvaPdf from "@/components/stampe/SalvaPdf";
 import { getCurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import StampeHeader from "@/components/stampe/StampeHeader";
@@ -88,6 +89,7 @@ export default async function StampaPage({
         {doppio && <style>{`@page { size: 297mm 210mm; margin: 0; }`}</style>}
         <div className="no-print" style={{ padding: 14, display: "flex", gap: 10, alignItems: "center", background: "var(--green-50)", flexWrap: "wrap" }}>
           <strong>Anteprima di stampa — {toPrint.length} cartelli</strong>
+          {sp.pdf && <SalvaPdf nome={sp.pdf} />}
           <a className="btn btn-outline btn-sm" href={`/stampe/arredo/stampa?${qsBack()}`}>← Torna alla selezione</a>
           <span style={{ fontSize: 12.5, color: "var(--muted)" }}>
             Usa il pulsante Stampa del browser (Ctrl+P) e scegli &quot;Salva come PDF&quot;.

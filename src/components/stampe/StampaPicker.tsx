@@ -43,6 +43,8 @@ interface ProdLite {
   propria?: string;
   /** Nel volantino la voce è unita ad altre (il cartello resta separato): la nota da mostrare. */
   unione?: string;
+  /** Gli articoli del padre (gusti, formati), da aprire nella lista. */
+  articoli?: { ean: string; descrizione: string; giacenza?: number }[];
 }
 
 export interface StampaPickerProps {
@@ -70,6 +72,9 @@ export interface StampaPickerProps {
   initialListini?: Record<string, string>;
   /** Cartelli da stampare senza foto, anche se l'articolo ce l'ha. */
   initialNoPhoto?: Record<string, boolean>;
+  /** Layout scelto per il singolo cartello (vuoto = quello automatico) e i layout fra cui scegliere. */
+  initialLayouts?: Record<string, string>;
+  layoutScelte?: { id: string; formatId: string; nome: string }[];
   /** Cartelli senza il prezzo di partenza: al suo posto esce «A SOLI». */
   initialNoListino?: Record<string, boolean>;
   /** Mette i cartelli selezionati in coda ("dopo" o "arrivo") con le loro impostazioni. */
@@ -118,6 +123,8 @@ export default function StampaPicker({
   initialListini,
   initialNoPhoto,
   initialNoListino,
+  initialLayouts,
+  layoutScelte = [],
   onQueue,
   onChange,
   onPreview,
@@ -137,6 +144,8 @@ export default function StampaPicker({
   const [noListino, setNoListino] = useState<Record<string, boolean>>(initialNoListino ?? {});
   const [esitoCoda, setEsitoCoda] = useState("");
   const [hiddenFields, setHiddenFields] = useState<Record<string, string[]>>(initialHidden);
+  const [rowLayout, setRowLayout] = useState<Record<string, string>>(initialLayouts ?? {});
+  const [aperti, setAperti] = useState<string[]>([]); // voci della lista con gli articoli aperti
   const [applyAll, setApplyAll] = useState(globalFormat);
   /* A5: di serie due cartelli per foglio A4, ognuno stampato due volte */
   const [doppio, setDoppio] = useState(true);
@@ -207,6 +216,9 @@ export default function StampaPicker({
       if (noPhoto[id]) params.set(`senzafoto_${id}`, "1");
       if (noListino[id]) params.set(`nolistino_${id}`, "1");
       if (hiddenFields[id]?.length) params.set(`nascondi_${id}`, hiddenFields[id].join(","));
+      // il layout scelto vale solo se è del formato di quel cartello
+      const lay = layoutScelte.find((l) => l.id === rowLayout[id]);
+      if (lay && lay.formatId === (rowFormat[id] ?? applyAll)) params.set(`layout_${id}`, lay.id);
     }
     if (!doppio) params.set("doppio", "0");
     if (print) params.set("print", "1");
@@ -224,7 +236,7 @@ export default function StampaPicker({
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
     const gestiti = (k: string) =>
-      ["sel", "formato", "doppio", "print"].includes(k) || /^(formato|prezzo|listino|noprezzo|senzafoto|nolistino|nascondi)_/.test(k);
+      ["sel", "formato", "doppio", "print", "pdf"].includes(k) || /^(formato|prezzo|listino|noprezzo|senzafoto|nolistino|nascondi|layout)_/.test(k);
     for (const k of [...url.searchParams.keys()]) if (gestiti(k)) url.searchParams.delete(k);
     for (const [k, v] of new URLSearchParams(indirizzo)) if (gestiti(k) && v) url.searchParams.set(k, v);
     if (selected.length === 0) url.searchParams.delete("sel");
@@ -242,6 +254,8 @@ export default function StampaPicker({
     if (noListino[id]) out[`nolistino_${id}`] = "1";
     if (noPhoto[id]) out[`senzafoto_${id}`] = "1";
     if (hiddenFields[id]?.length) out[`nascondi_${id}`] = hiddenFields[id].join(",");
+    const lay = layoutScelte.find((l) => l.id === rowLayout[id]);
+    if (lay && lay.formatId === (rowFormat[id] ?? applyAll)) out[`layout_${id}`] = lay.id;
     return out;
   };
   const inCoda = async (stato: "dopo" | "arrivo") => {
@@ -279,8 +293,8 @@ export default function StampaPicker({
     printed?.[id] ? new Date(printed[id]).toLocaleDateString("it-IT") : undefined;
 
   /** Prima di aprire l'anteprima di stampa segna i cartelli come già stampati. */
-  const vaiAllaStampa = async () => {
-    const url = buildUrl(true);
+  const vaiAllaStampa = async (nomePdf?: string) => {
+    const url = buildUrl(true) + (nomePdf ? `&pdf=${encodeURIComponent(nomePdf)}` : "");
     if (onPrint && selected.length > 0) {
       try { await onPrint(selected); } catch { /* la stampa non deve fallire per questo */ }
     }
@@ -367,7 +381,14 @@ export default function StampaPicker({
                   </span>
                 )}
                 <div style={{ fontSize: 11, color: "var(--muted)" }}>
-                  {p.codice} · {p.prezzo ? `€ ${p.prezzo}` : <span style={{ color: "#b45309" }}>prezzo da definire</span>} · {p.tipologia}
+                  {p.articoli?.length
+                    ? (
+                      <button type="button" className="link-btn" title="Mostra gli articoli di questo cartello"
+                        onClick={(e) => { e.stopPropagation(); setAperti((a) => (a.includes(p.id) ? a.filter((x) => x !== p.id) : [...a, p.id])); }}>
+                        {aperti.includes(p.id) ? "▾" : "▸"} {p.codice}
+                      </button>
+                    )
+                    : p.codice} · {p.prezzo ? `€ ${p.prezzo}` : <span style={{ color: "#b45309" }}>prezzo da definire</span>} · {p.tipologia}
                   {p.giacenza !== undefined && (
                     <span className={`pill ${Number(p.giacenza) > 0 ? "pill-green" : "pill-red"}`} style={{ marginLeft: 6, fontSize: 9.5 }}
                       title="Giacenza dal gestionale">
@@ -376,6 +397,16 @@ export default function StampaPicker({
                   )}
                   {p.codiceGestionale && <span className="hint" style={{ marginLeft: 6 }} title="Codice nel gestionale">cod. {p.codiceGestionale}</span>}
                 </div>
+                {p.articoli && aperti.includes(p.id) && (
+                  <ul className="articoli-voce" onClick={(e) => e.stopPropagation()}>
+                    {p.articoli.map((a) => (
+                      <li key={a.ean}>
+                        <span>{a.descrizione}</span>
+                        <span className="hint">{a.ean}{a.giacenza !== undefined ? ` · giac. ${a.giacenza}` : ""}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
               <button type="button" className={`aggiungi ${isSel ? "dentro" : ""}`}
                 title={isSel ? "È fra i selezionati: clic per toglierlo" : "Aggiungi ai selezionati"}
@@ -415,6 +446,71 @@ export default function StampaPicker({
           )}
         </div>
         {selectedProds.length === 0 && <p className="empty">Seleziona i prodotti dall&apos;elenco a sinistra (Shift+clic per più righe): l&apos;anteprima compare a destra.</p>}
+        {selectedProds.length > 0 && daTogliere.length > 0 && (() => {
+          const ids = daTogliere.filter((id) => selected.includes(id));
+          const metti = (set: (u: (prev: Record<string, boolean>) => Record<string, boolean>) => void, v: boolean) =>
+            set((prev) => ({ ...prev, ...Object.fromEntries(ids.map((id) => [id, v])) }));
+          const formatiSpuntati = [...new Set(ids.map((id) => rowFormat[id] ?? applyAll))];
+          return (
+            <div className="blocco-spuntati">
+              <strong>Ai {ids.length} spuntati:</strong>
+              <label>Formato
+                <select value="" onChange={(e) => { const v = e.target.value; if (!v) return; setRowFormat((prev) => ({ ...prev, ...Object.fromEntries(ids.map((id) => [id, v])) })); }}>
+                  <option value="">—</option>
+                  {formats.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+                </select>
+              </label>
+              {layoutScelte.some((l) => formatiSpuntati.includes(l.formatId)) && (
+                <label>Layout
+                  <select value="" onChange={(e) => {
+                    const v = e.target.value;
+                    const lay = layoutScelte.find((l) => l.id === v);
+                    setRowLayout((prev) => ({ ...prev, ...Object.fromEntries(ids
+                      .filter((id) => v === "auto" || (lay && lay.formatId === (rowFormat[id] ?? applyAll)))
+                      .map((id) => [id, v === "auto" ? "" : v])) }));
+                  }}>
+                    <option value="">—</option>
+                    <option value="auto">Automatico</option>
+                    {layoutScelte.filter((l) => formatiSpuntati.includes(l.formatId)).map((l) => (
+                      <option key={l.id} value={l.id}>{l.nome}{formatiSpuntati.length > 1 ? ` (${formats.find((f) => f.id === l.formatId)?.name ?? ""})` : ""}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              <span className="chips">
+                <button type="button" className="chip" onClick={() => metti(setNoPrice, false)}>€ prezzo sì</button>
+                <button type="button" className="chip" onClick={() => metti(setNoPrice, true)}>senza prezzo</button>
+                <button type="button" className="chip" onClick={() => metti(setNoListino, false)}>barrato sì</button>
+                <button type="button" className="chip" onClick={() => metti(setNoListino, true)}>A SOLI</button>
+                <button type="button" className="chip" onClick={() => metti(setNoPhoto, false)}>foto sì</button>
+                <button type="button" className="chip" onClick={() => metti(setNoPhoto, true)}>senza foto</button>
+              </span>
+              <details className="flag-details">
+                <summary className="chip" style={{ opacity: 1 }}>Campi ▾</summary>
+                <div className="flag-popover" style={{ maxHeight: 260, overflowY: "auto", zIndex: 60 }}>
+                  <span className="hint" style={{ fontSize: 11 }}>Spunta = nascosto su tutti gli spuntati</span>
+                  {fields.map((f) => {
+                    const quanti = ids.filter((id) => hiddenFields[id]?.includes(f.id)).length;
+                    return (
+                      <label key={f.id} style={{ fontSize: 12.5, display: "flex", gap: 6, alignItems: "center" }}>
+                        <input type="checkbox" checked={quanti === ids.length} ref={(el) => { if (el) el.indeterminate = quanti > 0 && quanti < ids.length; }}
+                          onChange={(e) => setHiddenFields((prev) => {
+                            const out = { ...prev };
+                            for (const id of ids) {
+                              const cur = out[id] ?? [];
+                              out[id] = e.target.checked ? [...new Set([...cur, f.id])] : cur.filter((x) => x !== f.id);
+                            }
+                            return out;
+                          })} />
+                        {f.label}
+                      </label>
+                    );
+                  })}
+                </div>
+              </details>
+            </div>
+          );
+        })()}
         {selectedProds.length > 0 && (
           <>
             <div className="table-wrap">
@@ -431,7 +527,7 @@ export default function StampaPicker({
                   {selectedProds.map((p) => (
                     <tr key={p.id}>
                       <td>
-                        <input type="checkbox" checked={daTogliere.includes(p.id)} title="Spunta per toglierlo dalla selezione"
+                        <input type="checkbox" checked={daTogliere.includes(p.id)} title="Spunta per cambiare più cartelli insieme, o per toglierli dalla selezione"
                           onChange={(e) => setDaTogliere((prev) => (e.target.checked ? [...prev, p.id] : prev.filter((x) => x !== p.id)))} />
                       </td>
                       <td>
@@ -446,6 +542,14 @@ export default function StampaPicker({
                         >
                           {formats.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
                         </select>
+                        {layoutScelte.some((l) => l.formatId === (rowFormat[p.id] ?? applyAll)) && (
+                          <select value={rowLayout[p.id] ?? ""} title="Il layout di questo cartello: automatico = quello giusto per il tipo di offerta"
+                            onChange={(e) => setRowLayout((prev) => ({ ...prev, [p.id]: e.target.value }))}
+                            style={{ marginTop: 4, minWidth: 150, fontSize: 12 }}>
+                            <option value="">Layout automatico</option>
+                            {layoutScelte.filter((l) => l.formatId === (rowFormat[p.id] ?? applyAll)).map((l) => <option key={l.id} value={l.id}>{l.nome}</option>)}
+                          </select>
+                        )}
                       </td>
                       <td>
                         <input
@@ -586,7 +690,15 @@ export default function StampaPicker({
                   <span>A5 · {doppio ? "ogni cartello 2 volte" : "2 cartelli diversi"} per foglio A4</span>
                 </label>
               )}
-              <button type="button" className="btn" onClick={vaiAllaStampa}
+              <button type="button" className="btn btn-outline" title="Salva i cartelli in un PDF col nome che scegli"
+                onClick={() => {
+                  const proposta = `Cartelli ${new Date().toLocaleDateString("it-IT").replace(/\//g, "-")}`;
+                  const nome = window.prompt("Nome del file PDF:", proposta);
+                  if (nome && nome.trim()) vaiAllaStampa(nome.trim().replace(/[\\/:*?"<>|]+/g, "-").slice(0, 80));
+                }}>
+                Salva in PDF…
+              </button>
+              <button type="button" className="btn" onClick={() => vaiAllaStampa()}
                 title="Apre l'anteprima di stampa: da lì Stampa o Salva come PDF (Ctrl+P)">
                 Stampa {selectedProds.length} {selectedProds.length === 1 ? "cartello" : "cartelli"} →
               </button>

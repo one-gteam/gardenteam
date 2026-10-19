@@ -6,7 +6,7 @@ import { PulsanteAzione } from "@/components/AzioneSenzaRicarica";
 import { importUsersCsv, toggleUserActive, approveRegistration, rejectRegistration } from "@/lib/actions";
 import { scopeUsers, coursesForUser, getProgress, isCourseCompleted, isNewHire, canManageUsers, assignableRolesFor } from "@/lib/logic";
 import { isAcademyAdmin, ruoloEsteso, ROLE_LABELS } from "@/lib/types";
-import RuoloApprovazione from "@/components/RuoloApprovazione";
+import RichiesteRegistrazione from "@/components/RichiesteRegistrazione";
 
 export default async function UsersPage({
   searchParams,
@@ -69,8 +69,9 @@ export default async function UsersPage({
   // la Gestione Ruoli è l'area trasversale (tutto il portale, non solo Academy): stesso perimetro di /scegli
   const showRuoliLink =
     user.role === "system_admin" || user.role === "group_admin" || (user.role === "store_admin" && canManageUsers(db, user));
+  // qui solo le iscrizioni dei corsisti dell'Academy: gli account GT One si approvano in Utenti e ruoli → Richieste
   const pending = db.registrations.filter((r) => {
-    if (r.status !== "pending") return false;
+    if (r.status !== "pending" || r.tipo !== "academy") return false;
     if (user.role === "system_admin") return true;
     if (user.role === "group_admin") return r.tenantId === user.tenantId;
     if (user.role === "store_admin") return r.storeId === user.storeId;
@@ -171,62 +172,8 @@ export default async function UsersPage({
         {approvato && <div className="alert alert-green">✓ Richiesta approvata: il collaboratore è stato creato e ha ricevuto l&apos;email di benvenuto.</div>}
         {rifiutato && <div className="alert alert-amber">Richiesta rifiutata.</div>}
 
-        {pending.length > 0 && (
-          <div className="card" style={{ marginBottom: 20, borderColor: "var(--amber)" }}>
-            <h2>Richieste di registrazione in attesa ({pending.length})</h2>
-            <div className="table-wrap">
-              <table className="data">
-                <thead>
-                  <tr><th>Richiedente</th><th>Punto vendita</th><th>Dati</th><th>Reparto e ruolo</th><th></th></tr>
-                </thead>
-                <tbody>
-                  {pending.map((r) => {
-                    const store = db.stores.find((s) => s.id === r.storeId);
-                    const approve = approveRegistration.bind(null, r.id);
-                    const reject = rejectRegistration.bind(null, r.id);
-                    return (
-                      <tr key={r.id}>
-                        <td>
-                          <strong>{r.lastName} {r.firstName}</strong>
-                          <div style={{ fontSize: 12, color: "var(--muted)" }}>{r.email}</div>
-                        </td>
-                        <td>{store?.name}</td>
-                        <td style={{ fontSize: 12.5 }}>
-                          {r.birthDate ? `Nato/a ${new Date(r.birthDate).toLocaleDateString("it-IT")}` : "—"}
-                          <div style={{ color: "var(--muted)" }}>{r.taxCode || ""}</div>
-                        </td>
-                        <td>
-                          <form action={approve} id={`approve_${r.id}`}>
-                            <select name="departmentId" defaultValue={r.departmentId ?? ""}>
-                              <option value="">— Reparto —</option>
-                              {db.departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-                            </select>
-                          </form>
-                          {r.repartoAltro && (
-                            <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 4 }}>
-                              Ha scelto <strong>Altro</strong>{r.notaAltro ? <> («{r.notaAltro}»)</> : null}: scegli qui sotto il ruolo giusto.
-                            </div>
-                          )}
-                          <RuoloApprovazione formId={`approve_${r.id}`} proposto="student"
-                            ruoli={[{ value: "student", label: ROLE_LABELS.student }, ...assignableRolesFor(user).filter((x) => x !== "system_admin" && x !== "student").map((x) => ({ value: x, label: ROLE_LABELS[x] }))]} />
-                        </td>
-                        <td style={{ whiteSpace: "nowrap" }}>
-                          <button className="btn btn-sm" type="submit" form={`approve_${r.id}`}>✓ Approva</button>{" "}
-                          <form action={reject} style={{ display: "inline" }}>
-                            <button className="btn btn-outline btn-sm" type="submit" style={{ color: "var(--red)", borderColor: "var(--red)" }}>Rifiuta</button>
-                          </form>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "8px 0 0" }}>
-              All&apos;approvazione il collaboratore viene creato come studente neoassunto: i percorsi (es. Onboarding) si assegnano automaticamente.
-            </p>
-          </div>
-        )}
+        {pending.length > 0 && <RichiesteRegistrazione db={db} user={user} richieste={pending}
+          nota="Iscrizioni come corsista dell'Academy (pagina /registrati/academy): all'approvazione la persona entra come studente neoassunto e i percorsi (es. Onboarding) si assegnano da soli." />}
 
         <div className="card table-wrap">
           <table className="data">

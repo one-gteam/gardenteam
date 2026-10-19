@@ -2467,22 +2467,25 @@ Se non hai chiesto tu niente, ignora questa email.`;
 
 export async function registerRequest(formData: FormData) {
   // la parola segreta si indovina a tentoni: 10 errori l'ora per indirizzo
+  // corsista dell'Academy (pagina a parte) o account GT One: cambia dove si torna e chi approva
+  const perAcademy = String(formData.get("tipo") ?? "") === "academy";
+  const paginaReg = perAcademy ? "/registrati/academy" : "/registrati";
   const regole: Regola[] = [{ chiave: `registrati-ip:${await ipChiamante()}`, massimo: 10, minuti: 60 }];
   // ogni tentativo conta (anche quelli giusti, sono pochi): niente raffiche che passano insieme il controllo
   const attesa = await prenota(regole);
-  if (attesa > 0) redirect(`/registrati?errore=troppi&minuti=${attesa}`);
+  if (attesa > 0) redirect(`${paginaReg}?errore=troppi&minuti=${attesa}`);
   const db = await getDb();
   const secret = String(formData.get("secret") ?? "").trim();
   const storeId = String(formData.get("storeId") ?? "");
   const store = db.stores.find((s) => s.id === storeId);
-  if (!store) redirect("/registrati?errore=pv");
+  if (!store) redirect(`${paginaReg}?errore=pv`);
   const tenant = db.tenants.find((t) => t.id === store!.tenantId)!;
   // vale la parola del punto vendita, dell'insegna o quella comune del Consorzio
   const validSecret =
     (store!.secretWord && secret === store!.secretWord) || (tenant.secretWord && secret === tenant.secretWord)
     || (db.settings.secretWord && secret === db.settings.secretWord);
   if (!secret || !validSecret) {
-    redirect("/registrati?errore=segreta");
+    redirect(`${paginaReg}?errore=segreta`);
   }
 
   const firstName = String(formData.get("firstName") ?? "").trim();
@@ -2490,15 +2493,15 @@ export async function registerRequest(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim();
   const birthDate = String(formData.get("birthDate") ?? "");
   const taxCode = String(formData.get("taxCode") ?? "").trim().toUpperCase();
-  if (!firstName || !lastName || !email.includes("@")) redirect("/registrati?errore=dati");
+  if (!firstName || !lastName || !email.includes("@")) redirect(`${paginaReg}?errore=dati`);
   // reparto obbligatorio: uno vero, oppure «Altro» (amministratori, gestori: il ruolo lo dà chi approva)
   const repartoScelto = String(formData.get("departmentId") ?? "");
   const repartoAltro = repartoScelto === "altro";
-  if (!repartoAltro && !db.departments.some((d) => d.id === repartoScelto)) redirect("/registrati?errore=reparto");
+  if (!repartoAltro && !db.departments.some((d) => d.id === repartoScelto)) redirect(`${paginaReg}?errore=reparto`);
   const notaAltro = repartoAltro ? String(formData.get("notaAltro") ?? "").trim().slice(0, 300) : "";
-  if (db.users.some((u) => u.email.toLowerCase() === email.toLowerCase())) redirect("/registrati?errore=esiste");
+  if (db.users.some((u) => u.email.toLowerCase() === email.toLowerCase())) redirect(`${paginaReg}?errore=esiste`);
   if (db.registrations.some((r) => r.email.toLowerCase() === email.toLowerCase() && r.status === "pending"))
-    redirect("/registrati?errore=incorso");
+    redirect(`${paginaReg}?errore=incorso`);
 
   const regGender = String(formData.get("gender") ?? "");
   db.registrations.push({
@@ -2516,6 +2519,7 @@ export async function registerRequest(formData: FormData) {
     taxCode,
     date: new Date().toISOString(),
     status: "pending",
+    tipo: perAcademy ? "academy" : undefined,
   });
   // notifica all'email di approvazione del PV (o dell'insegna)
   const approvalTo = store!.approvalEmail || tenant.approvalEmail;
@@ -2536,7 +2540,7 @@ export async function registerRequest(formData: FormData) {
     });
   }
   await saveDb(db);
-  redirect("/registrati?inviata=1");
+  redirect(`${paginaReg}?inviata=1`);
 }
 
 export async function approveRegistration(regId: string, formData: FormData) {
@@ -2557,7 +2561,7 @@ export async function approveRegistration(regId: string, formData: FormData) {
    */
   const ruoloScelto = String(formData.get("role") ?? "student") as Role;
   if (ruoloScelto === "system_admin" || !(ruoloScelto in ROLE_LABELS) || (ruoloScelto !== "student" && !assignableRolesFor(admin).includes(ruoloScelto))) {
-    redirect("/admin/utenti?errore=ruolo");
+    redirect(reg!.tipo === "academy" ? "/admin/utenti?errore=ruolo" : "/ruoli/richieste?errore=ruolo");
   }
   const scelteAree = (formData.getAll("sites") as string[]).filter((x): x is SiteId => ["academy", "arredo", "zoo", "piante"].includes(x));
   const vuoto = { sites: [], manages: [] } as unknown as User;
@@ -2592,7 +2596,7 @@ export async function approveRegistration(regId: string, formData: FormData) {
   await queueEmail(db, newUser, "benvenuto");
   await notifyNewAssignments(db, newUser);
   await saveDb(db);
-  redirect("/admin/utenti?approvato=1");
+  redirect(reg!.tipo === "academy" ? "/admin/utenti?approvato=1" : "/ruoli/richieste?approvato=1");
 }
 
 export async function rejectRegistration(regId: string) {
@@ -2607,7 +2611,7 @@ export async function rejectRegistration(regId: string) {
   if (!allowed) redirect("/admin/utenti");
   reg!.status = "rejected";
   await saveDb(db);
-  redirect("/admin/utenti?rifiutato=1");
+  redirect(reg!.tipo === "academy" ? "/admin/utenti?rifiutato=1" : "/ruoli/richieste?rifiutato=1");
 }
 
 /* ================== Archivio file (pulizia dello spazio) ================== */

@@ -138,7 +138,7 @@ export default async function ScegliPage() {
                 {richieste.length > 3 ? ` e altre ${richieste.length - 3}` : ""}
               </span>
             </span>
-            <a className="btn btn-sm" href="/admin/utenti">Approva o rifiuta</a>
+            <a className="btn btn-sm" href="/ruoli/richieste">Approva o rifiuta</a>
           </div>
         )}
         {ruoli.length > 0 && (

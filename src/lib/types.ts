@@ -654,6 +654,11 @@ export interface Registration {
   repartoAltro?: boolean;
   /** Con «Altro»: di cosa si occupa, in due parole. */
   notaAltro?: string;
+  /**
+   * Da dove arriva: «academy» = iscrizione come corsista (pagina /registrati/academy,
+   * si approva nel pannello Academy); assente = account GT One (si approva in Utenti e ruoli).
+   */
+  tipo?: "academy";
   birthDate: string;
   taxCode: string;
   date: string;

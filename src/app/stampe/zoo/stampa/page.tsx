@@ -1,4 +1,5 @@
 import { PulsanteAzione } from "@/components/AzioneSenzaRicarica";
+import SalvaPdf from "@/components/stampe/SalvaPdf";
 import SpuntaLista from "@/components/stampe/SpuntaLista";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
@@ -255,6 +256,9 @@ export default async function ZooStampaPage({
             codiceGestionale: gruppo.length === 1 ? giacenze[primo.ean]?.codice : undefined,
             cerca: testoRicerca(gruppo),
             propria: undefined as string | undefined,
+            articoli: gruppo.length > 1
+              ? gruppo.map((g) => ({ ean: g.ean, descrizione: g.descrizione, giacenza: giacenze[g.ean]?.giacenza }))
+              : undefined,
           };
   };
   const voci = vistaSingole
@@ -408,7 +412,7 @@ export default async function ZooStampaPage({
     const cartello = (o: (typeof allOffers)[number]) => (
       <Cartello
         format={formatFor(o.id)}
-        layout={layoutPerOfferta(db, scope, formatFor(o.id).id, academyDb, o, tagsFor(o))}
+        layout={layoutPerOfferta(db, scope, formatFor(o.id).id, academyDb, o, tagsFor(o), sp[`layout_${o.id}`])}
         fields={ZOO_FIELDS}
         values={valuesFor(o)}
         scale={scalePrint}
@@ -429,6 +433,7 @@ export default async function ZooStampaPage({
         <style>{`@page foglioA5 { size: 297mm 210mm; margin: 0; }${altri.length === 0 ? " @page { size: 297mm 210mm; margin: 0; }" : ""}`}</style>
         <div className="no-print" style={{ padding: 14, display: "flex", gap: 10, alignItems: "center", background: "var(--green-50)", flexWrap: "wrap" }}>
           <strong>Anteprima di stampa — {totale} cartelli</strong>
+          {sp.pdf && <SalvaPdf nome={sp.pdf} />}
           <a className="btn btn-outline btn-sm" href={`/stampe/zoo/stampa?${qsBack()}`}>← Torna all&apos;elenco</a>
           <span style={{ fontSize: 12.5, color: "var(--muted)" }}>
             Usa il pulsante Stampa del browser (Ctrl+P) e scegli &quot;Salva come PDF&quot;.
@@ -679,6 +684,8 @@ export default async function ZooStampaPage({
                 initialNoPrice: Object.fromEntries(selectedIds.map((id) => [id, sp[`noprezzo_${id}`] === "1"])),
                 initialNoPhoto: Object.fromEntries(selectedIds.map((id) => [id, sp[`senzafoto_${id}`] === "1"])),
                 initialNoListino: Object.fromEntries(selectedIds.map((id) => [id, sp[`nolistino_${id}`] === "1"])),
+                initialLayouts: Object.fromEntries(selectedIds.map((id) => [id, sp[`layout_${id}`] ?? ""]).filter(([, v]) => v)),
+                layoutScelte: layoutScegliibili(db, scope, academyDb).map((l) => ({ id: l.id, formatId: l.formatId, nome: l.nome })),
                 initialHidden: Object.fromEntries(
                   selectedIds.map((id) => [id, (sp[`nascondi_${id}`] ?? "").split(",").filter(Boolean)])
                 ),

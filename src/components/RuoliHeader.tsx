@@ -4,6 +4,8 @@ import { getDb } from "@/lib/db";
 import { permessoRuolo, ROLE_LABELS, User } from "@/lib/types";
 import { logout } from "@/lib/actions";
 import HeaderMenu from "@/components/HeaderMenu";
+import { canManageUsers } from "@/lib/logic";
+import { richiesteVisibili } from "@/lib/registrazioni-riepilogo";
 
 /**
  * Barra dell'area "Utenti e ruoli": vale per la tabella dei ruoli e per
@@ -11,7 +13,7 @@ import HeaderMenu from "@/components/HeaderMenu";
  * materia — chi c'è e come è strutturato il consorzio — e stanno insieme invece
  * che sparse fra le aree.
  */
-export default async function RuoliHeader({ user, active }: { user: User; active: "ruoli" | "organizzazione" | "permessi" | "email" | "registro" }) {
+export default async function RuoliHeader({ user, active }: { user: User; active: "ruoli" | "organizzazione" | "permessi" | "email" | "registro" | "richieste" }) {
   const db = await getDb();
   // chi ha solo l'incarico "gestisce utenti" non tocca insegne, reparti e parole segrete
   const voci = [
@@ -21,9 +23,9 @@ export default async function RuoliHeader({ user, active }: { user: User; active
       : []),
     { href: "/ruoli/permessi", label: "Permessi", key: "permessi" as const },
     ...(user.role === "system_admin" ? [{ href: "/registro", label: "Registro modifiche", key: "registro" as const }] : []),
-    // le richieste di registrazione si approvano nel pannello Academy: qui il richiamo, quando ce ne sono
-    ...(user.role === "system_admin" && db.registrations.some((r) => r.status === "pending")
-      ? [{ href: "/admin/utenti", label: `🔔 Richieste (${db.registrations.filter((r) => r.status === "pending").length})`, key: "richieste" as const }]
+    // le richieste di account GT One: la voce c'è sempre per chi gestisce utenti, col numero quando ce ne sono
+    ...(canManageUsers(db, user)
+      ? [{ href: "/ruoli/richieste", label: richiesteVisibili(db, user).length ? `🔔 Richieste (${richiesteVisibili(db, user).length})` : "Richieste", key: "richieste" as const }]
       : []),
     // l'email di benvenuto GT One: il Consorzio quella comune, insegna e PV la loro versione
     ...(user.role === "system_admin" || (["group_admin", "store_admin"].includes(user.role) && permessoRuolo(user.role, "modelliEmail"))

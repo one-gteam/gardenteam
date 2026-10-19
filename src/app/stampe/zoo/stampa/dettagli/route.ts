@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
     return {
       id: o.id,
       format,
-      layout: layoutPerOfferta(db, scope, format.id, academyDb, o, tagsPerStampa(db, scope, academyDb, o, sp)),
+      layout: layoutPerOfferta(db, scope, format.id, academyDb, o, tagsPerStampa(db, scope, academyDb, o, sp), sp[`layout_${o.id}`]),
       values: valoriPerStampa(db, scope, academyDb, o, sp, gestionale),
     };
   });

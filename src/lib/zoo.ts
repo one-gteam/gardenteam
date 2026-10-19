@@ -1717,9 +1717,12 @@ export function effectiveZooLayout(
  * altrimenti la scelta automatica di sempre.
  */
 export function layoutPerOfferta(
-  db: ZooDB, scope: Scope, formatId: string, academyDb: DB, offer: ZooOffer, tags: string[]
+  db: ZooDB, scope: Scope, formatId: string, academyDb: DB, offer: ZooOffer, tags: string[],
+  /** Layout scelto per questo cartello in Stampa cartelli (vince su quello del cartello proprio). */
+  sceltoQui?: string,
 ): ZooLayout {
-  const scelto = offer.layoutId ? db.zooLayouts.find((l) => l.id === offer.layoutId) : undefined;
+  const idScelto = sceltoQui || offer.layoutId;
+  const scelto = idScelto ? db.zooLayouts.find((l) => l.id === idScelto) : undefined;
   if (scelto && ownScopeVisible(scope, academyDb, scelto)) {
     if (scelto.formatId === formatId) return conTestataDiScopo(scelto, testataScopoPer(db, scope, academyDb, formatId));
     if ((scelto.tipologie ?? []).length > 0) return effectiveZooLayout(db, scope, formatId, academyDb, scelto.tipologie);
