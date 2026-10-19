@@ -77,6 +77,7 @@ export default async function LayoutPage({
         <div style={{ display: "flex", gap: 14, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 16 }}>
           <div style={{ flex: 1 }}>
             <h1 style={{ margin: 0 }}>Layout cartelli</h1>
+            <div id="editor-barra-posto" />
           </div>
           <form method="get" style={{ display: "flex", gap: 8, alignItems: "end" }}>
             <label className="field" style={{ marginBottom: 0 }}>

@@ -1751,6 +1751,9 @@ img.tt-media.on { animation: sp-kb 12s linear forwards; }
 
 /* Layout: comandi di tutto il layout in una barra in alto, ognuno in una finestrella */
 .editor-barra { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: -6px 0 12px; }
+/* nella riga del titolo: accanto a formato, layout e insegna */
+#editor-barra-posto .editor-barra { margin: 10px 0 0; }
+.editor-barra .editor-pop:last-of-type .editor-pop-corpo { left: auto; right: 0; }
 .editor-barra .panel-layout { display: contents; }
 .editor-pop { position: relative; }
 .editor-pop > summary { list-style: none; cursor: pointer; }
@@ -1764,4 +1767,17 @@ img.tt-media.on { animation: sp-kb 12s linear forwards; }
   .editor-panel > .panel-col-campo > * { break-inside: avoid; }
 }
 /* campi disponibili: sotto il nome, cosa contiene */
-.editor-fields .campo-descr { display: block; font-size: 10.5px; font-weight: 400; color: var(--muted); line-height: 1.25; margin-top: 2px; white-space: normal; }
+.editor-fields .campo-info { display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; margin-left: 5px;
+  border-radius: 99px; border: 1px solid currentColor; font-size: 10px; font-weight: 800; font-style: italic; font-family: Georgia, serif;
+  color: var(--muted); vertical-align: 1px; cursor: help; position: relative; }
+.editor-fields .campo-info:hover::after, .editor-fields .campo-info:focus::after {
+  content: attr(data-descr); position: absolute; left: 50%; bottom: calc(100% + 6px); transform: translateX(-50%); z-index: 60;
+  width: 230px; padding: 7px 9px; border-radius: 7px; background: #1f2a24; color: #fff; font: 400 11.5px/1.35 var(--font-app-sans), sans-serif;
+  font-style: normal; text-align: left; white-space: normal; box-shadow: 0 6px 18px rgba(0,0,0,.25); pointer-events: none; }
+.editor-fields .campo-info:focus { outline: 2px solid var(--green-600, #2f6b4a); outline-offset: 1px; }
+/* l'area del cartello: alta quanto lo schermo lascia */
+.editor-area { height: calc(100vh - 150px); min-height: 560px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; padding: 12px; background: #f4f5f2; }
+/* livelli e allineamenti del campo scelto */
+.editor-livelli { display: grid; gap: 6px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: #fafaf8; margin-bottom: 10px; font-size: 12px; }
+.editor-allinea { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.editor-item.insieme { outline: 2px dashed var(--green-600, #2f6b4a); outline-offset: 1px; }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
+import { createPortal } from "react-dom";
 import type { Cornice, LayoutItem, LayoutMargins, PrintField, PrintFormat, StickerStyle } from "@/lib/stampe";
 import { LAYOUT_FONTS, layoutFontCss } from "@/lib/layout-fonts";
 import { saveLayout } from "@/lib/stampe-actions";
@@ -159,12 +160,22 @@ export default function LayoutEditor({
   const [margins, setMargins] = useState<LayoutMargins>(initialMargins ?? { top: 0, right: 0, bottom: 0, left: 0 });
   const [tipologie, setTipologie] = useState<string[]>(initialTipologie);
   const [selected, setSelected] = useState<number | null>(null);
+  /*
+   * Selezione multipla (Ctrl/Maiusc + clic): `selected` è il campo principale,
+   * quello che si modifica nel pannello; `altri` quelli scelti insieme, che si
+   * allineano, si spostano con le frecce, si eliminano con Canc e cambiano
+   * livello tutti insieme.
+   */
+  const [altri, setAltri] = useState<number[]>([]);
+  const scelto = (i: number) => selected === i || altri.includes(i);
+  const sceltiTutti = selected === null ? [] : [selected, ...altri.filter((i) => i !== selected)];
+  const scegliSolo = (i: number | null) => { setSelected(i); setAltri([]); };
   const [sbloccato, setSbloccato] = useState(false);
   const canEdit = puoModificare && (!bloccato || sbloccato);
   const [saved, setSaved] = useState(false);
   const [pending, startTransition] = useTransition();
   const canvasRef = useRef<HTMLDivElement>(null);
-  const drag = useRef<{ index: number; mode: "move" | "resize"; startX: number; startY: number; orig: LayoutItem } | null>(null);
+  const drag = useRef<{ index: number; mode: "move" | "resize"; startX: number; startY: number; orig: LayoutItem; gruppo: { i: number; x: number; y: number }[] } | null>(null);
   // cronologia per annulla/ripristina: una per foglio, così non si mescolano
   const history = useRef<LayoutItem[][]>([initialItems]);
   const historyPos = useRef(0);
@@ -201,6 +212,16 @@ export default function LayoutEditor({
 
   // zoom di lavoro: il cartello reale è piccolo, ingrandirlo mentre si lavora aiuta a posizionare i campi con precisione
   const [zoom, setZoom] = useState(1.5);
+  const areaRef = useRef<HTMLDivElement>(null);
+  /** Zoom che fa stare il cartello intero nell'area grigia. */
+  const adatta = () => {
+    const el = areaRef.current;
+    if (!el) return;
+    const z = Math.min((el.clientWidth - 28) / (format.w * 2.4), (el.clientHeight - 28) / (format.h * 2.4));
+    setZoom(Math.max(0.6, Math.min(3.2, Math.floor(z * 20) / 20)));
+  };
+  // all'apertura il cartello si adatta allo spazio, che ora è più grande
+  useEffect(() => { adatta(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [format.id]);
   const scale = 2.4 * zoom; // px per mm
   const W = format.w * scale;
   const H = format.h * scale;
@@ -229,8 +250,17 @@ export default function LayoutEditor({
     if (!canEdit) return;
     e.preventDefault();
     e.stopPropagation();
-    setSelected(index);
-    drag.current = { index, mode, startX: e.clientX, startY: e.clientY, orig: { ...activeItems[index] } };
+    // Ctrl/Maiusc + clic: aggiunge o toglie il campo dalla selezione, senza trascinare
+    if (mode === "move" && (e.ctrlKey || e.metaKey || e.shiftKey) && selected !== null && selected !== index) {
+      setAltri((a) => (a.includes(index) ? a.filter((x) => x !== index) : [...a, index]));
+      return;
+    }
+    // trascinando un campo già scelto insieme ad altri si spostano tutti
+    const gruppo = mode === "move" && scelto(index) && sceltiTutti.length > 1
+      ? sceltiTutti.filter((i) => i !== index).map((i) => ({ i, x: activeItems[i].x, y: activeItems[i].y }))
+      : [];
+    if (gruppo.length === 0) scegliSolo(index); else setSelected(index);
+    drag.current = { index, mode, startX: e.clientX, startY: e.clientY, orig: { ...activeItems[index] }, gruppo };
   };
 
   /*
@@ -260,11 +290,16 @@ export default function LayoutEditor({
 
   const onMouseMove = (e: React.MouseEvent) => {
     if (!drag.current) return;
-    const { index, mode, startX, startY, orig } = drag.current;
+    const { index, mode, startX, startY, orig, gruppo } = drag.current;
     const dx = ((e.clientX - startX) / W) * 100;
     const dy = ((e.clientY - startY) / H) * 100;
     setActiveItems((prev) =>
       prev.map((it, i) => {
+        // gli altri del gruppo seguono il campo trascinato dello stesso spostamento
+        const g = gruppo.find((x) => x.i === i);
+        if (g) {
+          return { ...it, x: Math.max(0, Math.min(100 - it.w, +(g.x + dx).toFixed(2))), y: Math.max(0, Math.min(100 - it.h, +(g.y + dy).toFixed(2))) };
+        }
         if (i !== index) return it;
         if (mode === "move") {
           // si aggancia sia il bordo iniziale sia quello finale (extent = larghezza/altezza)
@@ -369,7 +404,13 @@ export default function LayoutEditor({
       return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
     };
     const premuto = (e: KeyboardEvent) => {
-      if (selected === null || dentroUnCampo(e.target)) return;
+      if (dentroUnCampo(e.target)) return;
+      // annulla / ripristina come in Word
+      if ((e.ctrlKey || e.metaKey) && (e.key === "z" || e.key === "Z")) { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
+      if ((e.ctrlKey || e.metaKey) && (e.key === "y" || e.key === "Y")) { e.preventDefault(); redo(); return; }
+      if (selected === null) return;
+      if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); removeSelected(); return; }
+      if (e.key === "Escape") { scegliSolo(null); return; }
       const dx = e.key === "ArrowLeft" ? -1 : e.key === "ArrowRight" ? 1 : 0;
       const dy = e.key === "ArrowUp" ? -1 : e.key === "ArrowDown" ? 1 : 0;
       if (dx === 0 && dy === 0) return;
@@ -377,7 +418,7 @@ export default function LayoutEditor({
       const passo = e.shiftKey ? 2 : 0.4;
       setActiveItems((prev) =>
         prev.map((it, i) => {
-          if (i !== selected) return it;
+          if (!scelto(i)) return it;
           return {
             ...it,
             x: Math.min(100 - it.w, Math.max(0, +(it.x + dx * passo).toFixed(2))),
@@ -397,7 +438,7 @@ export default function LayoutEditor({
       window.removeEventListener("keyup", rilasciato);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected, canEdit, mode, activeItems]);
+  }, [selected, altri, canEdit, mode, activeItems]);
 
   const updateSelected = (patch: Partial<LayoutItem> | { sticker: Partial<StickerStyle> } | { cornice: Partial<Cornice> | undefined }) => {
     if (selected === null) return;
@@ -419,6 +460,10 @@ export default function LayoutEditor({
 
   const selItem = selected !== null ? activeItems[selected] : null;
   const barraRef = useRef<HTMLDivElement>(null);
+  // la barra dei comandi va nella riga del titolo della pagina, accanto a formato/layout/insegna
+  const [postoBarra, setPostoBarra] = useState<HTMLElement | null>(null);
+  useEffect(() => { setPostoBarra(document.getElementById("editor-barra-posto")); }, []);
+  const portaleBarra = (el: React.ReactElement) => (postoBarra ? createPortal(el, postoBarra) : el);
   useEffect(() => {
     const chiudi = (e: MouseEvent) => {
       for (const d of barraRef.current?.querySelectorAll<HTMLDetailsElement>("details.editor-pop[open]") ?? []) {
@@ -469,10 +514,77 @@ export default function LayoutEditor({
 
   const removeSelected = () => {
     if (selected === null) return;
-    const next = activeItems.filter((_, i) => i !== selected);
+    const via = new Set(sceltiTutti);
+    const next = activeItems.filter((_, i) => !via.has(i));
     setActiveItems(next);
     pushHistory(next);
-    setSelected(null);
+    scegliSolo(null);
+  };
+
+  /*
+   * Livelli: nel cartello (e in stampa) i campi si disegnano nell'ordine
+   * dell'elenco, l'ultimo sopra a tutti. «Primo piano» lo porta in fondo
+   * all'elenco, «Secondo piano» in cima; avanti/indietro di un posto.
+   */
+  const cambiaLivello = (verso: "primo" | "avanti" | "indietro" | "fondo") => {
+    if (selected === null) return;
+    const set = new Set(sceltiTutti);
+    const lista = activeItems.map((it, i) => ({ it, i }));
+    let nuova: { it: LayoutItem; i: number }[];
+    if (verso === "primo") nuova = [...lista.filter((x) => !set.has(x.i)), ...lista.filter((x) => set.has(x.i))];
+    else if (verso === "fondo") nuova = [...lista.filter((x) => set.has(x.i)), ...lista.filter((x) => !set.has(x.i))];
+    else {
+      nuova = [...lista];
+      const ordine = verso === "avanti" ? [...nuova.keys()].reverse() : [...nuova.keys()];
+      for (const k of ordine) {
+        if (!set.has(nuova[k].i)) continue;
+        const j = verso === "avanti" ? k + 1 : k - 1;
+        if (j < 0 || j >= nuova.length || set.has(nuova[j].i)) continue;
+        [nuova[k], nuova[j]] = [nuova[j], nuova[k]];
+      }
+    }
+    const next = nuova.map((x) => x.it);
+    const nuovoIndice = (vecchio: number) => nuova.findIndex((x) => x.i === vecchio);
+    setActiveItems(next);
+    pushHistory(next);
+    setSelected(nuovoIndice(selected));
+    setAltri(altri.map(nuovoIndice));
+  };
+
+  /** Allinea i campi scelti insieme: sul primo scelto (il principale) o, per distribuire, fra i due estremi. */
+  const allinea = (come: "sx" | "cx" | "dx" | "alto" | "cy" | "basso" | "distribH" | "distribV" | "largh" | "alt") => {
+    if (sceltiTutti.length < 2 || selected === null) return;
+    const rif = activeItems[selected];
+    const set = sceltiTutti;
+    let next = [...activeItems];
+    if (come === "distribH" || come === "distribV") {
+      const asse = come === "distribH" ? "x" : "y";
+      const dim = come === "distribH" ? "w" : "h";
+      const ordinati = [...set].sort((a, b) => next[a][asse] - next[b][asse]);
+      const inizio = next[ordinati[0]][asse];
+      const fine = next[ordinati[ordinati.length - 1]][asse] + next[ordinati[ordinati.length - 1]][dim];
+      const pieni = ordinati.reduce((t, i) => t + next[i][dim], 0);
+      const spazio = (fine - inizio - pieni) / (ordinati.length - 1);
+      let pos = inizio;
+      for (const i of ordinati) { next[i] = { ...next[i], [asse]: +pos.toFixed(2) }; pos += next[i][dim] + spazio; }
+    } else {
+      next = next.map((it, i) => {
+        if (!set.includes(i) || i === selected) return it;
+        switch (come) {
+          case "sx": return { ...it, x: rif.x };
+          case "dx": return { ...it, x: Math.max(0, rif.x + rif.w - it.w) };
+          case "cx": return { ...it, x: Math.max(0, +(rif.x + rif.w / 2 - it.w / 2).toFixed(2)) };
+          case "alto": return { ...it, y: rif.y };
+          case "basso": return { ...it, y: Math.max(0, rif.y + rif.h - it.h) };
+          case "cy": return { ...it, y: Math.max(0, +(rif.y + rif.h / 2 - it.h / 2).toFixed(2)) };
+          case "largh": return { ...it, w: Math.min(100 - it.x, rif.w) };
+          case "alt": return { ...it, h: Math.min(100 - it.y, rif.h) };
+          default: return it;
+        }
+      });
+    }
+    setActiveItems(next);
+    pushHistory(next);
   };
 
   const layoutUrlBase = `/stampe/${area}/layout?formato=${format.id}&scope=${scopeParam}`;
@@ -568,7 +680,7 @@ export default function LayoutEditor({
   return (
     <div>
     {/* i comandi che valgono per tutto il layout: pulsanti in alto, ognuno apre la sua finestrella */}
-    <div className="editor-barra" ref={barraRef}>
+    {portaleBarra(<div className="editor-barra" ref={barraRef}>
         {/* identità del layout: nome, e come farne una copia */}
         {canEdit && (
           <div className="panel-layout">
@@ -688,7 +800,7 @@ export default function LayoutEditor({
             Stai vedendo il layout del Consorzio: scegli la tua insegna/PV in alto per personalizzarlo.
           </span>
         )}
-    </div>
+    </div>)}
     <div className="layout-editor">
       <div className="card" style={{ padding: 12 }}>
         {/* qual è il campo scelto: sul foglio l'etichetta è piccola e a volte
@@ -759,7 +871,11 @@ export default function LayoutEditor({
               title={[f.nota, usedFields.has(f.id) ? "Già nel cartello (puoi aggiungerlo di nuovo)" : "Aggiungi al cartello"].filter(Boolean).join(" — ")}
             >
               ＋ {f.label}
-              {(f.nota ?? DESCRIZIONI_CAMPI[area][f.id]) && <span className="campo-descr">{f.nota ?? DESCRIZIONI_CAMPI[area][f.id]}</span>}
+              {(f.nota ?? DESCRIZIONI_CAMPI[area][f.id]) && (
+                <span className="campo-info" tabIndex={0} role="note" aria-label={f.nota ?? DESCRIZIONI_CAMPI[area][f.id]}
+                  data-descr={f.nota ?? DESCRIZIONI_CAMPI[area][f.id]}
+                  onClick={(e) => { e.stopPropagation(); e.preventDefault(); (e.currentTarget as HTMLElement).focus(); }}>i</span>
+              )}
             </button>
           ))}
         </div>
@@ -840,7 +956,8 @@ export default function LayoutEditor({
           <div style={{ display: "flex", gap: 4, alignItems: "center", marginLeft: canEdit ? 10 : 0 }}>
             <button type="button" className="btn btn-outline btn-sm" onClick={() => setZoom((z) => Math.max(0.8, +(z - 0.2).toFixed(1)))} title="Rimpicciolisci">－</button>
             <span style={{ fontSize: 12.5, color: "var(--muted)", minWidth: 42, textAlign: "center" }}>{Math.round(zoom * 100)}%</span>
-            <button type="button" className="btn btn-outline btn-sm" onClick={() => setZoom((z) => Math.min(2.6, +(z + 0.2).toFixed(1)))} title="Ingrandisci">＋</button>
+            <button type="button" className="btn btn-outline btn-sm" onClick={() => setZoom((z) => Math.min(3.2, +(z + 0.2).toFixed(1)))} title="Ingrandisci">＋</button>
+            <button type="button" className="btn btn-outline btn-sm" onClick={adatta} title="Il cartello intero nello spazio disponibile">Adatta</button>
           </div>
         </div>
         {mode === "noPhoto" && (
@@ -875,7 +992,7 @@ export default function LayoutEditor({
             )}
           </>
         )}
-        <div style={{ maxHeight: "82vh", overflow: "auto", border: "1px solid var(--line)", borderRadius: 8, padding: 12, background: "#f4f5f2" }}>
+        <div ref={areaRef} className="editor-area">
         <div
           ref={canvasRef}
           className="cartello editor-canvas"
@@ -887,7 +1004,7 @@ export default function LayoutEditor({
           onMouseMove={onMouseMove}
           onMouseUp={endDrag}
           onMouseLeave={endDrag}
-          onMouseDown={() => setSelected(null)}
+          onMouseDown={() => scegliSolo(null)}
         >
           {(margins.top > 0 || margins.right > 0 || margins.bottom > 0 || margins.left > 0) && (
             /*
@@ -915,7 +1032,7 @@ export default function LayoutEditor({
               return (
                 <div
                   key={i}
-                  className={`editor-item ${selected === i ? "selected" : ""}`}
+                  className={`editor-item ${scelto(i) ? "selected" : ""}${altri.includes(i) ? " insieme" : ""}`}
                   style={{ left: `${item.x}%`, top: `${item.y}%`, width: `${item.w}%`, height: `${item.h}%`, cursor: canEdit ? "move" : "default", overflow: "visible", transform: `rotate(${item.sticker.rotation}deg)` }}
                   onMouseDown={(e) => onMouseDown(e, i, "move")}
                 >
@@ -941,7 +1058,7 @@ export default function LayoutEditor({
             };
             if (item.fieldId === ELEMENTO_RIQUADRO) {
               return (
-                <div key={i} className={`editor-item ${selected === i ? "selected" : ""}`} style={stileBase} onMouseDown={(e) => onMouseDown(e, i, "move")}>
+                <div key={i} className={`editor-item ${scelto(i) ? "selected" : ""}${altri.includes(i) ? " insieme" : ""}`} style={stileBase} onMouseDown={(e) => onMouseDown(e, i, "move")}>
                   <CorniceCampo item={item} scale={scale}>
                     {item.testo
                       ? <div style={{ width: "100%", height: "100%", ...stileTestoCartello(item, undefined, item.testo, scale) }}>{testoStampato(item.testo)}</div>
@@ -954,7 +1071,7 @@ export default function LayoutEditor({
             }
             if (item.fieldId === ELEMENTO_QR) {
               return (
-                <div key={i} className={`editor-item ${selected === i ? "selected" : ""}`} style={{ ...stileBase, display: "flex", flexDirection: "column", alignItems: "center" }} onMouseDown={(e) => onMouseDown(e, i, "move")}>
+                <div key={i} className={`editor-item ${scelto(i) ? "selected" : ""}${altri.includes(i) ? " insieme" : ""}`} style={{ ...stileBase, display: "flex", flexDirection: "column", alignItems: "center" }} onMouseDown={(e) => onMouseDown(e, i, "move")}>
                   <QrSvg testo={previewValues[ELEMENTO_QR] || "https://gardenteam.vercel.app/scheda"} colore={item.color} style={{ flex: 1, minHeight: 0, width: "100%", pointerEvents: "none" }} />
                   {item.testo && (
                     <div style={{ flex: "none", fontSize: ((item.size ?? 7) * scale) / 2.4, lineHeight: 1.1, textAlign: "center", color: coloreCampo(item), whiteSpace: "pre-line", padding: `${0.5 * scale}px 0 0` }}>
@@ -974,7 +1091,7 @@ export default function LayoutEditor({
               return (
                 <div
                   key={i}
-                  className={`editor-item ${selected === i ? "selected" : ""}`}
+                  className={`editor-item ${scelto(i) ? "selected" : ""}${altri.includes(i) ? " insieme" : ""}`}
                   style={nascosta ? { ...stileBase, opacity: 0.18, filter: "grayscale(1)" } : stileBase}
                   onMouseDown={(e) => onMouseDown(e, i, "move")}
                   title={eTestata ? (nascosta ? `Testata nascosta per ${testataAmbito!.nome}: in stampa non c'è` : `Testata di ${testataAmbito!.nome}${testataAmbito!.modo === "piena" ? " (in stampa a tutta larghezza)" : ""}`) : undefined}
@@ -1009,7 +1126,7 @@ export default function LayoutEditor({
               return (
                 <div
                   key={i}
-                  className={`editor-item ${selected === i ? "selected" : ""}`}
+                  className={`editor-item ${scelto(i) ? "selected" : ""}${altri.includes(i) ? " insieme" : ""}`}
                   style={{
                     ...stileBase,
                     // il prezzo esce dal riquadro invece di essere tagliato, come in stampa
@@ -1038,7 +1155,7 @@ export default function LayoutEditor({
             return (
               <div
                 key={i}
-                className={`editor-item ${selected === i ? "selected" : ""}`}
+                className={`editor-item ${scelto(i) ? "selected" : ""}${altri.includes(i) ? " insieme" : ""}`}
                 style={{
                   ...stileBase,
                   // campo senza valore d'esempio: si vede il nome del campo, sbiadito,
@@ -1071,7 +1188,39 @@ export default function LayoutEditor({
       <div className="card editor-panel" style={{ padding: 14 }}>
         {/* i comandi del campo selezionato: tutto il pannello, distribuiti su più colonne */}
         <div className="panel-col panel-col-campo">
-        {!selItem && <p className="hint" style={{ margin: 0 }}>Clicca un campo sul foglio per cambiarne carattere, colori, cornice e posizione.</p>}
+        {!selItem && <p className="hint" style={{ margin: 0 }}>Clicca un campo sul foglio per cambiarne carattere, colori, cornice e posizione. Ctrl + clic per sceglierne più d&apos;uno.</p>}
+        {selItem && canEdit && (
+          <div className="panel-campo">
+            <div className="editor-livelli">
+              {sceltiTutti.length > 1 && (
+                <>
+                  <strong>{sceltiTutti.length} campi scelti insieme</strong>
+                  <span className="hint">Si allineano sul primo scelto (bordo verde pieno).</span>
+                  <div className="editor-allinea">
+                    <button type="button" className="mini-btn" title="Allinea a sinistra" onClick={() => allinea("sx")}>⇤ Sx</button>
+                    <button type="button" className="mini-btn" title="Centra in orizzontale" onClick={() => allinea("cx")}>↔ Centro</button>
+                    <button type="button" className="mini-btn" title="Allinea a destra" onClick={() => allinea("dx")}>⇥ Dx</button>
+                    <button type="button" className="mini-btn" title="Allinea in alto" onClick={() => allinea("alto")}>⇡ Alto</button>
+                    <button type="button" className="mini-btn" title="Centra in verticale" onClick={() => allinea("cy")}>↕ Centro</button>
+                    <button type="button" className="mini-btn" title="Allinea in basso" onClick={() => allinea("basso")}>⇣ Basso</button>
+                    <button type="button" className="mini-btn" title="Stessa distanza in orizzontale (almeno 3 campi)" disabled={sceltiTutti.length < 3} onClick={() => allinea("distribH")}>Distribuisci ↔</button>
+                    <button type="button" className="mini-btn" title="Stessa distanza in verticale (almeno 3 campi)" disabled={sceltiTutti.length < 3} onClick={() => allinea("distribV")}>Distribuisci ↕</button>
+                    <button type="button" className="mini-btn" title="Stessa larghezza del primo scelto" onClick={() => allinea("largh")}>Stessa larghezza</button>
+                    <button type="button" className="mini-btn" title="Stessa altezza del primo scelto" onClick={() => allinea("alt")}>Stessa altezza</button>
+                  </div>
+                </>
+              )}
+              <div className="editor-allinea">
+                <span className="hint">Livello:</span>
+                <button type="button" className="mini-btn" title="Sopra a tutto" onClick={() => cambiaLivello("primo")}>⤒ Primo piano</button>
+                <button type="button" className="mini-btn" title="Su di un livello" onClick={() => cambiaLivello("avanti")}>↑ Avanti</button>
+                <button type="button" className="mini-btn" title="Giù di un livello" onClick={() => cambiaLivello("indietro")}>↓ Indietro</button>
+                <button type="button" className="mini-btn" title="Sotto a tutto" onClick={() => cambiaLivello("fondo")}>⤓ Secondo piano</button>
+                <button type="button" className="mini-btn" style={{ color: "var(--red, #b42318)" }} title="Elimina (tasto Canc)" onClick={removeSelected}>✕ Elimina</button>
+              </div>
+            </div>
+          </div>
+        )}
         {selItem?.sticker && canEdit && (
           <div className="panel-campo">
           <Sezione titolo="Sticker selezionato">
