@@ -6,17 +6,20 @@ import { getCurrentUser } from "./auth";
 import { getDb, saveDb } from "./db";
 import { getZooDb, saveZooDb, campagnaInLavorazione, campagnaInCorso, type ZooScopeGiacenze } from "./zoo";
 import { getStampeDb, saveStampeDb } from "./stampe";
+import { indirizzoLetturaValido, leggiQuantitaArredo } from "./arredo-lettura";
 import { registra } from "./registro";
 import { leggiConnettoriFox, scriviConnettoriFox, nuovaChiaveFox } from "./fox-connettore";
 import { permessoRuolo, type DB, type User } from "./types";
 
 /*
  * Area Connettori: i collegamenti fra GT One e i sistemi delle insegne e dei
- * punti vendita, tutti in una pagina. Tre famiglie:
- *  - Zoo, «interroga»: GT One chiede al gestionale giacenze e prezzi per EAN
- *    (per Rosàflor: Linfa). Si accende, si spegne, si prova.
- *  - Arredo, «riceve»: il gestionale del PV manda le quantità del catalogo
- *    online con una chiave (Authorization: Bearer). Si crea, si rigenera, si spegne.
+ * punti vendita, tutti in una pagina. Per Zoo e Arredo due versi:
+ *  - «GT One legge»: il gestionale espone un indirizzo e GT One lo chiama
+ *    (Zoo: giacenze e prezzi per EAN, quando servono; Arredo: le quantità del
+ *    catalogo, ogni mattina). Si accende, si spegne, si prova.
+ *  - «il gestionale invia»: con una chiave (Authorization: Bearer) manda i
+ *    dati a GT One (Zoo: /api/connettori/fox, anche col programma per Fox;
+ *    Arredo: /api/arredo-giacenze). Si crea, si rigenera, si spegne.
  *  - SSO: il sistema dell'insegna fa entrare i suoi collaboratori con un link
  *    firmato con la chiave dell'insegna (come My Rosaflor fa per Rosàflor).
  *  - Zoo, «il gestionale legge»: il gestionale legge le offerte Zoo con una
@@ -289,6 +292,72 @@ export async function togliChiaveArredo(storeId: string): Promise<Esito> {
   registra(user, { area: "connettori", cosa: "Chiave Arredo tolta", oggetto: nomeAmbito(academyDb, "store", storeId) });
   revalidatePath("/connettori");
   revalidatePath("/stampe/arredo/catalogo");
+  return { ok: true };
+}
+
+/* ================== Arredo: quantità del catalogo, GT One legge ================== */
+
+export async function salvaLetturaArredo(storeId: string, fd: FormData): Promise<Esito & { esito?: string }> {
+  const user = await autorizzato("store", storeId);
+  if (!user) return { ok: false, error: NEGATO };
+  const academyDb = await getDb();
+  if (!academyDb.stores.some((s) => s.id === storeId)) return { ok: false, error: "Punto vendita non trovato." };
+  const url = String(fd.get("url") ?? "").trim();
+  if (!indirizzoLetturaValido(url)) return { ok: false, error: "Serve un indirizzo https raggiungibile da internet." };
+  const db = await getStampeDb();
+  let g = db.giacenze.find((x) => x.storeId === storeId);
+  if (!g) { g = { storeId, quantita: {} }; db.giacenze.push(g); }
+  const prima = g.url ?? "";
+  g.url = url;
+  g.urlAttivo = true;
+  // si prova subito: chi lo collega vede se va
+  const esito = await leggiQuantitaArredo(db, g);
+  await saveStampeDb(db);
+  registra(user, { area: "connettori", cosa: prima ? "Lettura Arredo modificata" : "Lettura Arredo collegata", oggetto: nomeAmbito(academyDb, "store", storeId), prima: prima || undefined, dopo: url });
+  revalidatePath("/connettori");
+  revalidatePath("/stampe/arredo/catalogo");
+  return { ok: true, esito };
+}
+
+export async function leggiAdessoArredo(storeId: string): Promise<Esito & { esito?: string }> {
+  const user = await autorizzato("store", storeId);
+  if (!user) return { ok: false, error: NEGATO };
+  const db = await getStampeDb();
+  const g = db.giacenze.find((x) => x.storeId === storeId);
+  if (!g?.url) return { ok: false, error: "Nessun indirizzo per questo punto vendita." };
+  const esito = await leggiQuantitaArredo(db, g);
+  await saveStampeDb(db);
+  revalidatePath("/connettori");
+  revalidatePath("/stampe/arredo/catalogo");
+  return { ok: esito.startsWith("OK"), error: esito.startsWith("OK") ? undefined : esito, esito };
+}
+
+export async function accendiLetturaArredo(storeId: string, acceso: boolean): Promise<Esito> {
+  const user = await autorizzato("store", storeId);
+  if (!user) return { ok: false, error: NEGATO };
+  const db = await getStampeDb();
+  const g = db.giacenze.find((x) => x.storeId === storeId);
+  if (!g?.url) return { ok: false, error: "Nessun indirizzo per questo punto vendita." };
+  g.urlAttivo = acceso;
+  await saveStampeDb(db);
+  const academyDb = await getDb();
+  registra(user, { area: "connettori", cosa: acceso ? "Lettura Arredo accesa" : "Lettura Arredo spenta", oggetto: nomeAmbito(academyDb, "store", storeId) });
+  revalidatePath("/connettori");
+  return { ok: true };
+}
+
+export async function scollegaLetturaArredo(storeId: string): Promise<Esito> {
+  const user = await autorizzato("store", storeId);
+  if (!user) return { ok: false, error: NEGATO };
+  const db = await getStampeDb();
+  const g = db.giacenze.find((x) => x.storeId === storeId);
+  if (!g?.url) return { ok: false, error: "Nessun indirizzo per questo punto vendita." };
+  const prima = g.url;
+  g.url = undefined; g.urlAttivo = undefined; g.provatoIl = undefined; g.esito = undefined;
+  await saveStampeDb(db);
+  const academyDb = await getDb();
+  registra(user, { area: "connettori", cosa: "Lettura Arredo scollegata", oggetto: nomeAmbito(academyDb, "store", storeId), prima });
+  revalidatePath("/connettori");
   return { ok: true };
 }
 

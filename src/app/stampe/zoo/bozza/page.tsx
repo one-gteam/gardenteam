@@ -60,6 +60,11 @@ export default async function ZooBozzaPage({
       nome: `${u.firstName} ${u.lastName}`,
       ambito: academyDb.stores.find((x) => x.id === u.storeId)?.name ?? academyDb.tenants.find((t) => t.id === u.tenantId)?.name ?? "Consorzio",
     }));
+  /*
+   * Note e avviso ai colleghi solo per chi fa il volantino (editor Zoo e chi è
+   * fra i «volantinoEditors»): il caporeparto la bozza la sfoglia e basta.
+   */
+  const perGrafico = isZooEditor(user) || (db.settings.volantinoEditors ?? []).includes(user.id);
   const note = campaign ? db.noteBozza.filter((n) => n.campaignId === campaign.id) : [];
   const noteAperte = note.filter((n) => !n.risolta);
   const notePerPagina = (pageId: string) => note.filter((n) => n.pageId === pageId);
@@ -74,7 +79,9 @@ export default async function ZooBozzaPage({
             <h1 style={{ margin: 0 }}>Bozza del volantino</h1>
             <p className="subtitle" style={{ margin: "4px 0 0" }}>
               {campaign
-                ? <>«{campaign.nome}» — {pages.length} pagine. Sfogliala e lascia le tue note: le vedono tutti, comprese quelle degli altri.</>
+                ? <>«{campaign.nome}» — {pages.length} pagine. {perGrafico
+                  ? "Sfogliala e lascia le note per il grafico, sul volantino intero o sulla singola pagina."
+                  : "Sfogliala per vedere come sarà il volantino, pagina per pagina o in tabella."}</>
                 : "Nessun volantino in lavorazione."}
             </p>
           </div>
@@ -100,17 +107,17 @@ export default async function ZooBozzaPage({
                 excelHref={`/stampe/zoo/crea-volantino/excel?campagna=${campaign.id}`}
                 fotoZipHref={`/stampe/zoo/crea-volantino/foto?campagna=${campaign.id}`}
                 selettorePagine=".bozza-pagine .vol-page"
-                perGrafico={isZooEditor(user) || (db.settings.volantinoEditors ?? []).includes(user.id)}
-                chiaveLink={isZooEditor(user) || (db.settings.volantinoEditors ?? []).includes(user.id) ? campaign.linkGrafico?.chiave : undefined}
+                perGrafico={perGrafico}
+                chiaveLink={perGrafico ? campaign.linkGrafico?.chiave : undefined}
                 nomeFile={`bozza-${campaign.nome.replace(/[^\p{L}\p{N}]+/gu, "-").toLowerCase()}`} />
-              <AvvisaColleghi tipo="bozza" scopeParam={scopeParam} colleghi={colleghiZoo} />
+              {perGrafico && <AvvisaColleghi tipo="bozza" scopeParam={scopeParam} colleghi={colleghiZoo} />}
             </div>
           )}
         </div>
 
         {sp.nota && <div className="alert alert-green">✓ Nota salvata: la vedono anche gli altri.</div>}
 
-        {campaign && (
+        {campaign && perGrafico && (
           <div className="card" style={{ padding: 14, marginBottom: 14 }}>
             <strong>Una nota su tutto il volantino</strong>
             <form action={aggiungiNotaBozza.bind(null, campaign.id, scopeParam)}
@@ -161,7 +168,7 @@ export default async function ZooBozzaPage({
                     <span className="vol-numero">{i + 1}</span>
                     <strong style={{ fontSize: 13 }}>{page.titolo || `Pagina ${i + 1}`}</strong>
                     {page.animale && <span className="pill pill-blue">{page.animale}</span>}
-                    {aperte > 0 && <span className="pill pill-orange">{aperte} note</span>}
+                    {perGrafico && aperte > 0 && <span className="pill pill-orange">{aperte} note</span>}
                   </div>
                   {page.note && <p className="nota-grafico">Note per il grafico: {page.note}</p>}
 
@@ -271,15 +278,15 @@ export default async function ZooBozzaPage({
                     })}
                   </div>
 
-                  <form action={aggiungiNotaBozza.bind(null, campaign!.id, scopeParam)} className="no-print"
+                  {perGrafico && <form action={aggiungiNotaBozza.bind(null, campaign!.id, scopeParam)} className="no-print"
                     style={{ display: "flex", gap: 6, marginTop: 8 }}>
                     <input type="hidden" name="pageId" value={page.id} />
                     <input type="text" name="testo" required placeholder={`Nota su «${page.titolo || `pagina ${i + 1}`}»…`}
                       style={{ flex: 1, minWidth: 0, fontSize: 12 }} />
                     <button className="btn btn-outline btn-sm" type="submit">Aggiungi</button>
-                  </form>
+                  </form>}
 
-                  {notePagina.length > 0 && (
+                  {perGrafico && notePagina.length > 0 && (
                     <ul style={{ margin: "6px 0 0", paddingLeft: 16, fontSize: 12 }}>
                       {notePagina.map((n) => (
                         <li key={n.id} style={{ marginBottom: 3, opacity: n.risolta ? 0.5 : 1 }}>

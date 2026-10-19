@@ -3,7 +3,7 @@ import { getStampeDb, saveStampeDb } from "@/lib/stampe";
 import { segretoUguale } from "@/lib/auth";
 
 /**
- * Le quantità di un punto vendita mandate dal suo gestionale (Linfa o altro).
+ * Le quantità di un punto vendita mandate dal suo gestionale.
  *
  *   POST /api/arredo-giacenze
  *   Authorization: Bearer <chiave del PV, da Stampe → Catalogo online>

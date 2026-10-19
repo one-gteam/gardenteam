@@ -4,7 +4,7 @@ import ColumnTools from "@/components/stampe/ColumnTools";
 import type { DB } from "@/lib/types";
 import type { Scope } from "@/lib/stampe";
 import {
-  type ZooDB, type ZooCampaign, type ZooOffer, zooImageUrl, effectiveParentText, animaliDi, caratteristicheProdottoDi,
+  type ZooDB, type ZooCampaign, type ZooOffer, fotoVolantinoDi, effectiveParentText, animaliDi, caratteristicheProdottoDi,
   chiavePrezzo, datiPrezzoOfferta, migraVolantinoPages, NO_VOLANTINO, marcaEffettiva, nomeDestinazione, type Giacenza,
 } from "@/lib/zoo";
 
@@ -198,7 +198,7 @@ export default function TabellaVolantino({
               const voti = new Set(db.votes.filter((v) => v.tipo === "preferita" && offs.some((o) => o.id === v.offerId)).map((v) => v.userId)).size;
               return (
                 <tr key={parent ? `${parent.id}~${chiavePrezzo(first)}` : first.id}>
-                  <td><FotoMini src={zooImageUrl(product, parent, db)} style={{ width: 44, height: 44, objectFit: "contain", background: "#fff", borderRadius: 6, border: "1px solid #eee" }} /></td>
+                  <td><FotoMini src={fotoVolantinoDi(db, product, parent)[0]} style={{ width: 44, height: 44, objectFit: "contain", background: "#fff", borderRadius: 6, border: "1px solid #eee" }} /></td>
                   <td>
                     <strong style={{ fontSize: 13 }}>{nome}</strong>
                     {descr && <div style={{ fontSize: 11.5, color: "var(--muted)" }}>{descr}</div>}

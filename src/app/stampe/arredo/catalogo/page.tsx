@@ -54,7 +54,7 @@ export default async function CatalogoGestionePage({ searchParams }: { searchPar
   });
   const urlCatalogo = `${base}/catalogo/${tenant.id}${store ? `?pv=${store.id}` : ""}`;
   const quando = giac?.aggiornatoIl ? new Date(giac.aggiornatoIl).toLocaleString("it-IT", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" }) : "";
-  const fonte = { api: "dal gestionale", excel: "da Excel", mano: "a mano" }[giac?.fonte ?? "mano"];
+  const fonte = { api: "dal gestionale", lettura: "dal gestionale", excel: "da Excel", mano: "a mano" }[giac?.fonte ?? "mano"];
 
   return (
     <div>
@@ -111,7 +111,7 @@ export default async function CatalogoGestionePage({ searchParams }: { searchPar
               <>
                 <h3 style={{ marginTop: 0 }}>Quantità di {store.name}</h3>
                 <p className="hint" style={{ margin: "0 0 8px" }}>{quando ? <>Ultimo aggiornamento <strong>{quando}</strong> ({fonte}), {Object.keys(giac?.quantita ?? {}).length} codici.</> : "Nessuna quantità ancora caricata."}{!pref.gestioneQuantita && " L'insegna non ha acceso la gestione quantità: si salvano ma il cliente non le vede."}</p>
-                <div style={{ fontWeight: 600, fontSize: 13, margin: "8px 0 4px" }}>1. Dal gestionale (Linfa o altro)</div>
+                <div style={{ fontWeight: 600, fontSize: 13, margin: "8px 0 4px" }}>1. Dal gestionale (anche da Connettori, dove GT One può leggerle da solo)</div>
                 {giac?.token ? (
                   <div style={{ fontSize: 12.5 }}>
                     <code style={{ display: "block", wordBreak: "break-all", background: "#f6f8f4", padding: 6, borderRadius: 6 }}>{giac.token}</code>

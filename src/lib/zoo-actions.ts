@@ -3285,6 +3285,8 @@ export async function aggiungiNotaBozza(campaignId: string, scopeParam: string, 
   const academyDb = await getDb();
   const scope = resolveScope(user, scopeParam, academyDb);
   const testo = String(formData.get("testo") ?? "").trim().slice(0, 2000);
+  // le note sono per il grafico: le scrive solo chi fa il volantino
+  if (!isZooEditor(user) && !(db.settings.volantinoEditors ?? []).includes(user.id)) redirect(backUrl("/stampe/zoo/bozza", scopeParam));
   if (!db.campaigns.some((c) => c.id === campaignId)) redirect(backUrl("/stampe/zoo/bozza", scopeParam));
   if (!testo) redirect(backUrl("/stampe/zoo/bozza", scopeParam));
   db.noteBozza.push({

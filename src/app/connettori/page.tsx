@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Plug } from "lucide-react";
@@ -8,7 +9,7 @@ import { getStampeDb } from "@/lib/stampe";
 import { permessoRuolo, SITE_NAME } from "@/lib/types";
 import { saveSsoDefaults } from "@/lib/actions";
 import ModuloAutoSalva from "@/components/ModuloAutoSalva";
-import { ConnettoreZoo, ConnettoreArredo, ConnettoreSso, ConnettoreLettura, ConnettoreFox } from "@/components/connettori/ConnettoriClient";
+import { ConnettoreZoo, ConnettoreArredo, ConnettoreSso, ConnettoreLettura, ConnettoreFox, ConnettoreLetturaArredo } from "@/components/connettori/ConnettoriClient";
 import { leggiConnettoriFox } from "@/lib/fox-connettore";
 
 /*
@@ -62,63 +63,56 @@ export default async function ConnettoriPage() {
         </p>
 
         <div className="card" style={{ marginBottom: 14 }}>
-          <h3 style={{ marginTop: 0 }}>Le modalità</h3>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12, fontSize: 13.5 }}>
-            <div>
-              <strong>1 · Offerte Zoo: GT One interroga il gestionale</strong>
-              <p style={{ margin: "4px 0" }}>Il gestionale espone un indirizzo che, dati i codici a barre, risponde con giacenza e prezzo di vendita. GT One lo chiama quando serve (cartelli, Bozza, reparto). Il prezzo diventa il <em>prezzo di partenza</em> dell&apos;insegna; le offerte in percentuale si ricalcolano su quello.</p>
-              <code style={{ fontSize: 11, display: "block", whiteSpace: "pre-wrap", background: "#f6f6f4", padding: 6, borderRadius: 6 }}>{`GET https://…/giacenze/CHIAVE?ean=800…,800…
-→ { "giacenze": { "800…": { "giacenza": 4, "prezzo": 19.9, "codice": "00067973", "al": "2026-10-14" } } }`}</code>
+          <h3 style={{ marginTop: 0 }}>Due modi di collegare il gestionale</h3>
+          <p style={{ margin: "0 0 10px", fontSize: 13.5 }}>
+            Valgono sia per le <strong>Offerte Zoo</strong> (giacenze e prezzo di vendita: il prezzo diventa il prezzo di partenza dell&apos;insegna e le offerte in percentuale si ricalcolano su quello)
+            sia per i <strong>Cartelli Arredo</strong> (le quantità del catalogo online). Basta un modo; se ci sono tutti e due, vale A.
+          </p>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 14, fontSize: 13.5 }}>
+            <div style={{ border: "1px solid var(--line)", borderRadius: 10, padding: 12 }}>
+              <strong style={{ fontSize: 15 }}>A · GT One legge dal vostro gestionale</strong>
+              <p style={{ margin: "4px 0 8px" }}>Il gestionale pubblica un indirizzo internet (https) con i dati. <strong>Qui</strong>: si incolla l&apos;indirizzo e si prova. GT One poi lo legge da solo.</p>
+              <div className="hint" style={{ fontWeight: 700, color: "var(--ink, #222)" }}>Offerte Zoo: chiesto quando serve (cartelli, Bozza)</div>
+              <code style={{ fontSize: 11, display: "block", whiteSpace: "pre-wrap", background: "#f6f6f4", padding: 6, borderRadius: 6, margin: "4px 0 8px" }}>{`GET https://vostro-indirizzo?ean=800…,800…
+→ { "giacenze": { "800…": { "giacenza": 4, "prezzo": 19.9 } } }`}</code>
+              <div className="hint" style={{ fontWeight: 700, color: "var(--ink, #222)" }}>Cartelli Arredo: letto ogni mattina</div>
+              <code style={{ fontSize: 11, display: "block", whiteSpace: "pre-wrap", background: "#f6f6f4", padding: 6, borderRadius: 6, margin: "4px 0 8px" }}>{`GET https://vostro-indirizzo
+→ { "righe": [ { "codice": "AB123", "quantita": 4 } ] }   oppure testo  codice;quantita`}</code>
             </div>
-            <div>
-              <strong>2 · Cartelli Arredo: il gestionale manda le quantità</strong>
-              <p style={{ margin: "4px 0" }}>Per il catalogo online. Il gestionale del punto vendita invia le quantità a GT One con la sua chiave, quando vuole (es. ogni notte). Senza gestionale: Excel o a mano, da Stampe → Catalogo online.</p>
-              <code style={{ fontSize: 11, display: "block", whiteSpace: "pre-wrap", background: "#f6f6f4", padding: 6, borderRadius: 6 }}>{`POST ${origine}/api/arredo-giacenze
+            <div style={{ border: "1px solid var(--line)", borderRadius: 10, padding: 12 }}>
+              <strong style={{ fontSize: 15 }}>B · Il vostro gestionale invia i dati a GT One</strong>
+              <p style={{ margin: "4px 0 8px" }}><strong>Qui</strong>: si crea una chiave e la si dà al gestionale. Il gestionale manda i dati quando vuole (es. ogni ora o ogni notte).</p>
+              <div className="hint" style={{ fontWeight: 700, color: "var(--ink, #222)" }}>Offerte Zoo</div>
+              <code style={{ fontSize: 11, display: "block", whiteSpace: "pre-wrap", background: "#f6f6f4", padding: 6, borderRadius: 6, margin: "4px 0 8px" }}>{`GET  ${origine}/api/connettori/fox   → { "eans": [ … ] }  gli EAN che servono
+POST ${origine}/api/connettori/fox
+Authorization: Bearer gtf_…
+{ "righe": [ { "ean": "800…", "giacenza": 4, "prezzo": 19.9 } ] }`}</code>
+              <div className="hint" style={{ fontWeight: 700, color: "var(--ink, #222)" }}>Cartelli Arredo</div>
+              <code style={{ fontSize: 11, display: "block", whiteSpace: "pre-wrap", background: "#f6f6f4", padding: 6, borderRadius: 6, margin: "4px 0 8px" }}>{`POST ${origine}/api/arredo-giacenze
 Authorization: Bearer gt_…
-{ "righe": [ { "codice": "AB123", "quantita": 4 } ], "modo": "sostituisci" }
-oppure text/csv:  codice;quantita`}</code>
-            </div>
-            <div>
-              <strong>2b · Offerte Zoo: il gestionale legge le offerte</strong>
-              <p style={{ margin: "4px 0" }}>Il verso opposto della modalità 1: con la chiave della colonna «Il gestionale legge» il vostro programma scarica le offerte Zoo del volantino in corso e di quello in preparazione, già con i valori dei cartelli. Serve per stampare i cartelli dal proprio gestionale e per controllare a scaffale la promo del giorno dopo, che nel gestionale arriva solo quando la si carica.</p>
-              <code style={{ fontSize: 11, display: "block", whiteSpace: "pre-wrap", background: "#f6f6f4", padding: 6, borderRadius: 6 }}>{`GET ${origine}/api/zoo/offerte?volantino=si&formato=za5
-Authorization: Bearer gtz_…
-→ { "campagne": [ … ], "offerte": [ { "ean": "800…", "descrizione": "…",
-    "prezzoPromo": "19,79", "prezzoListino": "21,99", "volantino": true,
-    "valori": { "titolo": "…", "prezzoPromo": "€ 19,79", … } } ] }`}</code>
-            </div>
-            <div>
-              <strong>1b · Offerte Zoo: il programma Fox manda giacenze e prezzi</strong>
-              <p style={{ margin: "4px 0" }}>Per chi usa il gestionale <strong>Fox</strong> ma non Linfa. Un programmino Windows, <a href="/connettori/GTOne-Fox.exe" download>GTOne-Fox.exe</a> (20 KB, senza installazione), legge in <strong>sola lettura</strong> la cartella «db» di Fox (ARTICOLI.CSV e BARCODE.CSV, che Fox riscrive da solo) e manda a GT One giacenza e prezzo di vendita dei soli articoli dello Zoo. Il prezzo d&apos;acquisto non viene nemmeno letto. Vale come la modalità 1: prezzo di partenza dell&apos;insegna e giacenze nei cartelli.</p>
-              <ol style={{ margin: "4px 0", paddingLeft: 18, fontSize: 12.5, lineHeight: 1.6 }}>
-                <li>Qui sotto, «＋ Programma Fox» sull&apos;insegna o sul PV: copia la chiave.</li>
-                <li>Copia GTOne-Fox.exe su un PC che vede la cartella di Fox (es. <code>\\server\areabyte\db</code>) e aprilo.</li>
-                <li>Scegli la cartella, incolla la chiave, «Prova la lettura», poi «Invia adesso».</li>
-                <li>«Invio automatico ogni ora…» crea un&apos;attività di Windows per l&apos;utente, senza diritti di amministratore.</li>
-              </ol>
-            </div>
-            <div>
-              <strong>3 · Accesso diretto (SSO): il vostro sistema fa entrare i collaboratori</strong>
-              <p style={{ margin: "4px 0" }}>Intranet, portale del personale o gestionale: un link firmato con la chiave dell&apos;insegna apre GT One senza password. Al primo ingresso crea l&apos;account come corsista dell&apos;insegna (area Formazione); poi fa solo entrare. Non apre mai account da amministratore.</p>
-              <code style={{ fontSize: 11, display: "block", whiteSpace: "pre-wrap", background: "#f6f6f4", padding: 6, borderRadius: 6 }}>{`dati  = { "email": "…", "nome": "…", "cognome": "…", "reparto": "…", "assunzione": "2025-03-01", "iat": secondi Unix adesso }
-body  = base64url(JSON dati)
-firma = base64url(HMAC-SHA256(chiave, body))
-apri  ${origine}/sso?token=body.firma      (vale 90 secondi)`}</code>
+{ "righe": [ { "codice": "AB123", "quantita": 4 } ] }   oppure text/csv  codice;quantita`}</code>
+              <details style={{ fontSize: 13 }}>
+                <summary style={{ cursor: "pointer", fontWeight: 600 }}>Avete il gestionale Fox? C&apos;è lo script pronto</summary>
+                <p style={{ margin: "6px 0" }}>
+                  <a href="/connettori/GTOne-Fox.ps1" download><strong>GTOne-Fox.ps1</strong></a> è un file di testo (si legge col Blocco note): legge in <strong>sola lettura</strong> ARTICOLI.CSV e BARCODE.CSV della cartella «db» di Fox
+                  e manda giacenza e prezzo di vendita dei soli articoli dello Zoo. Il prezzo d&apos;acquisto non viene letto. Niente da installare, niente diritti di amministratore.
+                </p>
+                <ol style={{ margin: "4px 0", paddingLeft: 18, lineHeight: 1.6 }}>
+                  <li>Qui sotto, nella colonna Offerte Zoo → B, «＋ Crea chiave» e copiatela.</li>
+                  <li>Salvate GTOne-Fox.ps1 in una cartella di un PC che vede quella di Fox (es. <code>\\server\areabyte\db</code>).</li>
+                  <li>In quella cartella: tasto destro su uno spazio vuoto con Maiusc premuto → «Apri finestra PowerShell qui», e scrivete<br />
+                    <code>powershell -ExecutionPolicy Bypass -File .\GTOne-Fox.ps1</code></li>
+                  <li>Indicate la cartella di Fox e incollate la chiave: prova la lettura, manda e, se volete, pianifica l&apos;invio ogni ora.</li>
+                </ol>
+                <p className="hint" style={{ margin: "4px 0 0" }}>
+                  C&apos;è anche la versione programma, <a href="/connettori/GTOne-Fox.exe" download>GTOne-Fox.exe</a>, ma non avendo una firma digitale molti antivirus la bloccano: meglio lo script.
+                </p>
+              </details>
             </div>
           </div>
-          <details style={{ marginTop: 10, fontSize: 13 }}>
-            <summary style={{ cursor: "pointer", fontWeight: 600 }}>Come collegare il vostro gestionale alle offerte Zoo (istruzioni per il vostro tecnico)</summary>
-            <ol style={{ margin: "6px 0 0", paddingLeft: 20, lineHeight: 1.7 }}>
-              <li><strong>Chiave.</strong> Qui sotto, nella colonna «Offerte Zoo · il gestionale legge», premete «＋ Crea chiave» sull&apos;insegna (vale per tutti i punti vendita) o sul singolo punto vendita (vede anche le sue offerte proprie). Copiatela e datela solo al gestionale: chi ha la chiave legge le offerte.</li>
-              <li><strong>Richiesta.</strong> <code>GET {origine}/api/zoo/offerte</code> con l&apos;intestazione <code>Authorization: Bearer gtz_…</code>. Parametri facoltativi: <code>campagna=corso</code> (solo il volantino a scaffale) o <code>campagna=lavorazione</code> (quello in preparazione: la promo di domani), <code>volantino=si|no</code>, <code>ean=800…,800…</code> (solo questi codici), <code>formato=za4|za5|za6</code> (i valori del cartello per quel formato), <code>layout=1</code> (anche la grafica dei cartelli), <code>giacenze=0</code> (senza chiedere giacenze e prezzi al vostro gestionale).</li>
-              <li><strong>Risposta</strong> (JSON): <code>campagne</code> (id, nome, dal, al, stato) e <code>offerte</code>: per ognuna <code>ean</code>, <code>descrizione</code>, <code>prezzoPromo</code>, <code>prezzoListino</code>, <code>meccanica</code> («3x2»), <code>sconto</code> (%), <code>condizioni</code>, <code>volantino</code> (vero se va sul volantino), <code>propria</code> (offerta dell&apos;insegna/PV, non del Consorzio) e <code>valori</code>: i campi del cartello già calcolati come in Stampa cartelli (titolo, marca, prezzo, prezzo di partenza, «A SOLI», validità, EAN, condizioni…).</li>
-              <li><strong>Quando.</strong> Quando serve: all&apos;apertura della pagina dei cartelli, o una volta al giorno. Non serve chiamarla di continuo: le offerte cambiano quando il Consorzio prepara il volantino.</li>
-              <li><strong>Prezzi.</strong> Se avete collegato anche la modalità 1 (giacenze e prezzi), il prezzo di partenza dei cartelli è il vostro e le offerte in percentuale sono ricalcolate su quello.</li>
-              <li><strong>Errori.</strong> 401 = manca la chiave; 403 = chiave sbagliata o collegamento spento qui. Ogni creazione, rigenerazione e spegnimento finisce nel Registro modifiche.</li>
-            </ol>
-          </details>
           <p className="hint" style={{ margin: "10px 0 0" }}>
-            Un connettore <strong>spento</strong> resta configurato ma non viene usato: lo Zoo torna ai prezzi del Consorzio e senza giacenze, l&apos;Arredo rifiuta gli invii, l&apos;SSO rimanda al login. Ogni cambiamento finisce nel Registro modifiche.
+            Ogni collegamento si può <strong>spegnere</strong> senza perderlo: lo Zoo torna ai prezzi del Consorzio e senza giacenze, l&apos;Arredo tiene le ultime quantità. Ogni cambiamento finisce nel Registro modifiche.
+            Errori: 401 = manca la chiave, 403 = chiave sbagliata o collegamento spento.
           </p>
         </div>
 
@@ -139,18 +133,19 @@ apri  ${origine}/sso?token=body.firma      (vale 90 secondi)`}</code>
                 <table className="data" style={{ fontSize: 13 }}>
                   <thead>
                     <tr>
-                      <th style={{ width: "22%" }}>Ambito</th>
-                      <th>Offerte Zoo · giacenze e prezzi (GT One interroga)</th>
-                      <th>Offerte Zoo · il gestionale legge</th>
-                      <th>Cartelli Arredo · quantità catalogo (il gestionale manda)</th>
+                      <th style={{ width: "18%" }}>Dove</th>
+                      <th>Offerte Zoo</th>
+                      <th>Cartelli Arredo</th>
                     </tr>
                   </thead>
                   <tbody>
                     <tr>
-                      <td><strong>Tutta l&apos;insegna</strong><div className="hint" style={{ fontSize: 11.5 }}>vale per i PV che non hanno il proprio</div></td>
-                      <td><ConnettoreZoo tipo="tenant" id={t.id} url={zt?.url} nome={zt?.nome} attivo={zt?.attivo !== false} provatoIl={zt?.provatoIl} esito={zt?.esito} />{fox("tenant", t.id)}</td>
-                      <td>{(() => { const l = letturaDi("tenant", t.id); return <ConnettoreLettura tipo="tenant" id={t.id} token={l?.token} attivo={l?.attivo !== false} creataIl={l?.creataIl} />; })()}</td>
-                      <td><span className="hint">La chiave è del singolo punto vendita</span></td>
+                      <td><strong>Tutta l&apos;insegna</strong><div className="hint" style={{ fontSize: 11.5 }}>vale per i punti vendita senza un collegamento proprio</div></td>
+                      <td>
+                        <Modo lettera="A" testo="GT One legge"><ConnettoreZoo tipo="tenant" id={t.id} url={zt?.url} nome={zt?.nome} attivo={zt?.attivo !== false} provatoIl={zt?.provatoIl} esito={zt?.esito} /></Modo>
+                        <Modo lettera="B" testo="Il gestionale invia">{fox("tenant", t.id)}</Modo>
+                      </td>
+                      <td><span className="hint">Si collega punto vendita per punto vendita</span></td>
                     </tr>
                     {negozi.map((st) => {
                       const zs = zooDi("store", st.id);
@@ -159,15 +154,19 @@ apri  ${origine}/sso?token=body.firma      (vale 90 secondi)`}</code>
                         <tr key={st.id}>
                           <td><strong>{st.name}</strong>{st.city && <div className="hint" style={{ fontSize: 11.5 }}>{st.city}</div>}</td>
                           <td>
-                            {zs
-                              ? <ConnettoreZoo tipo="store" id={st.id} url={zs.url} nome={zs.nome} attivo={zs.attivo !== false} provatoIl={zs.provatoIl} esito={zs.esito} />
-                              : zt?.url
-                                ? <div><span className="hint">Usa quello dell&apos;insegna</span> <ConnettoreZoo tipo="store" id={st.id} attivo /></div>
-                                : <ConnettoreZoo tipo="store" id={st.id} attivo />}
-                            {fox("store", st.id)}
+                            <Modo lettera="A" testo="GT One legge">
+                              {zs
+                                ? <ConnettoreZoo tipo="store" id={st.id} url={zs.url} nome={zs.nome} attivo={zs.attivo !== false} provatoIl={zs.provatoIl} esito={zs.esito} />
+                                : zt?.url
+                                  ? <div><span className="hint">Usa quello dell&apos;insegna</span> <ConnettoreZoo tipo="store" id={st.id} attivo /></div>
+                                  : <ConnettoreZoo tipo="store" id={st.id} attivo />}
+                            </Modo>
+                            <Modo lettera="B" testo="Il gestionale invia">{fox("store", st.id)}</Modo>
                           </td>
-                          <td>{(() => { const l = letturaDi("store", st.id); return <ConnettoreLettura tipo="store" id={st.id} token={l?.token} attivo={l?.attivo !== false} creataIl={l?.creataIl} />; })()}</td>
-                          <td><ConnettoreArredo storeId={st.id} token={a?.token} apiAttiva={a?.apiAttiva !== false} aggiornatoIl={a?.aggiornatoIl} fonte={a?.fonte} nQuantita={Object.keys(a?.quantita ?? {}).length} /></td>
+                          <td>
+                            <Modo lettera="A" testo="GT One legge"><ConnettoreLetturaArredo storeId={st.id} url={a?.url} attivo={a?.urlAttivo !== false} provatoIl={a?.provatoIl} esito={a?.esito} /></Modo>
+                            <Modo lettera="B" testo="Il gestionale invia"><ConnettoreArredo storeId={st.id} token={a?.token} apiAttiva={a?.apiAttiva !== false} aggiornatoIl={a?.aggiornatoIl} fonte={a?.fonte} nQuantita={Object.keys(a?.quantita ?? {}).length} /></Modo>
+                          </td>
                         </tr>
                       );
                     })}
@@ -176,6 +175,7 @@ apri  ${origine}/sso?token=body.firma      (vale 90 secondi)`}</code>
               </div>
               <div style={{ padding: "10px 14px", borderTop: "1px solid var(--line)" }}>
                 <div style={{ fontSize: 12, color: "var(--muted)", textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 4 }}>Accesso diretto (SSO) · {t.name}</div>
+                <p className="hint" style={{ margin: "0 0 6px" }}>Il vostro portale (intranet, gestionale) fa entrare i collaboratori in GT One senza password, con un link firmato con questa chiave.</p>
                 <ConnettoreSso tenantId={t.id} chiave={t.ssoSecret} attivo={t.ssoAttivo !== false} storeId={t.ssoStoreId} negozi={negozi.map((n) => ({ id: n.id, nome: n.name }))} />
                 {t.ssoSecret && (
                   <details style={{ marginTop: 8, fontSize: 13 }}>
@@ -184,11 +184,33 @@ apri  ${origine}/sso?token=body.firma      (vale 90 secondi)`}</code>
                       <li>Quando il collaboratore clicca «Formazione» (o simile) sul vostro portale, preparate i suoi dati: <code>email</code>, <code>nome</code>, <code>cognome</code>, e se li avete <code>reparto</code> (col nome di uno dei reparti di GT One) e <code>assunzione</code> (aaaa-mm-gg); più <code>iat</code>, i secondi Unix di adesso.</li>
                       <li><code>body</code> = il JSON in base64url. <code>firma</code> = HMAC-SHA256 di <code>body</code> con la chiave qui sopra, in base64url.</li>
                       <li>Mandate il browser a <code>{origine}/sso?token=</code><code>body</code>.<code>firma</code>. Il link vale 90 secondi: va generato al clic, non salvato.</li>
-                      <li>Alla prima volta GT One crea l&apos;account come corsista di <strong>{t.name}</strong>{t.ssoStoreId ? <> nel PV <strong>{negozi.find((n) => n.id === t.ssoStoreId)?.name}</strong></> : ""}, con l&apos;area Formazione; le volte dopo fa solo entrare. Ruoli e aree in più si danno poi da Utenti e ruoli.</li>
+                      <li>Alla prima volta GT One crea l&apos;account come corsista di <strong>{t.name}</strong>{t.ssoStoreId ? <> nel PV <strong>{negozi.find((n) => n.id === t.ssoStoreId)?.name}</strong></> : ""}, con l&apos;area Formazione; le volte dopo fa solo entrare. Non apre mai account da amministratore. Ruoli e aree in più si danno poi da Utenti e ruoli.</li>
                     </ol>
                   </details>
                 )}
               </div>
+              <details style={{ padding: "10px 14px", borderTop: "1px solid var(--line)", fontSize: 13 }}>
+                <summary style={{ cursor: "pointer", fontWeight: 600 }}>In più: il vostro gestionale scarica le offerte Zoo (per stampare i cartelli dal vostro programma)</summary>
+                <p style={{ margin: "6px 0" }}>
+                  Con questa chiave il gestionale legge le offerte del volantino in corso e di quello in preparazione, già con i valori dei cartelli:
+                  <code> GET {origine}/api/zoo/offerte</code> con <code>Authorization: Bearer gtz_…</code>.
+                  Parametri facoltativi: <code>campagna=corso|lavorazione</code>, <code>volantino=si|no</code>, <code>ean=800…,800…</code>, <code>formato=za4|za5|za6</code>, <code>layout=1</code>, <code>giacenze=0</code>.
+                </p>
+                <table className="data" style={{ fontSize: 13 }}>
+                  <tbody>
+                    <tr>
+                      <td style={{ width: "18%" }}><strong>Tutta l&apos;insegna</strong></td>
+                      <td>{(() => { const l = letturaDi("tenant", t.id); return <ConnettoreLettura tipo="tenant" id={t.id} token={l?.token} attivo={l?.attivo !== false} creataIl={l?.creataIl} />; })()}</td>
+                    </tr>
+                    {negozi.map((st) => (
+                      <tr key={st.id}>
+                        <td><strong>{st.name}</strong></td>
+                        <td>{(() => { const l = letturaDi("store", st.id); return <ConnettoreLettura tipo="store" id={st.id} token={l?.token} attivo={l?.attivo !== false} creataIl={l?.creataIl} />; })()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </details>
             </div>
           );
         })}
@@ -220,6 +242,16 @@ apri  ${origine}/sso?token=body.firma      (vale 90 secondi)`}</code>
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/** Un modo di collegamento dentro la cella: «A · GT One legge» o «B · Il gestionale invia». */
+function Modo({ lettera, testo, children }: { lettera: "A" | "B"; testo: string; children: ReactNode }) {
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: 8, alignItems: "start", padding: "6px 0", borderTop: lettera === "B" ? "1px dashed var(--line)" : undefined }}>
+      <span title={testo} style={{ fontSize: 11, fontWeight: 800, color: "var(--muted)", minWidth: 92, paddingTop: 3 }}>{lettera} · {testo}</span>
+      <div>{children}</div>
     </div>
   );
 }

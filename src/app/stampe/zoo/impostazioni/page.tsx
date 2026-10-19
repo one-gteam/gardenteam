@@ -215,8 +215,8 @@ export default async function ZooImpostazioniPage({
           <div className="card" style={{ padding: 14, marginBottom: 14 }}>
             <h2 style={{ marginTop: 0 }}>Giacenze dal gestionale di {scope.label}</h2>
             <p style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 0 }}>
-              Collegando il servizio giacenze del vostro gestionale (per Rosàflor: Linfa, indirizzo e chiave da
-              <strong> Linfa → /api/giacenze-token</strong>), in Stampa cartelli e in reparto compare la quantità a
+              Collegando il vostro gestionale (l&apos;indirizzo ve lo dà il vostro tecnico; tutti i modi sono in
+              <a href="/connettori"> Connettori</a>), in Stampa cartelli e in reparto compare la quantità a
               magazzino accanto a ogni prodotto: si capisce subito se il cartello va stampato. Stato:{" "}
               {giacenzeUrl
                 ? <span className="pill pill-green">collegato</span>

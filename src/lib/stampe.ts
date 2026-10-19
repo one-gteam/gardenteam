@@ -124,8 +124,15 @@ export interface CatalogoPref {
 export interface GiacenzePV {
   storeId: string;
   aggiornatoIl?: string;
-  fonte?: "api" | "excel" | "mano";
+  fonte?: "api" | "excel" | "mano" | "lettura";
   quantita: Record<string, number>;
+  /** «GT One legge»: l'indirizzo del gestionale con le quantità, letto ogni mattina. */
+  url?: string;
+  /** Spento (false): l'indirizzo resta ma non si legge. */
+  urlAttivo?: boolean;
+  /** Ultima lettura dell'indirizzo e com'è andata. */
+  provatoIl?: string;
+  esito?: string;
   /** La chiave con cui il gestionale manda le quantità (Authorization: Bearer). */
   token?: string;
   /** Spenta (false) dall'area Connettori: la chiave c'è ma gli invii si rifiutano. */
