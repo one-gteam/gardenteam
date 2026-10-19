@@ -145,7 +145,9 @@ export default async function ZooLayoutPage({
         </div>
 
         {sp.permessi === "no" && <div className="alert alert-amber">Questo layout lo modifica chi gestisce le Offerte Zoo per l&apos;ambito scelto.</div>}
-        {sp.copiato && <div className="alert alert-green no-print">✓ Layout copiato sul nuovo formato: controlla le dimensioni dei testi e salva.</div>}
+        {sp.copiato && <div className="alert alert-green no-print">{sp.copiato === "stesso"
+          ? "✓ Layout duplicato: è aperta la copia, modificala pure (quello di partenza resta com'era)."
+          : "✓ Layout copiato sul nuovo formato: è aperta la copia, controlla le dimensioni dei testi e salva."}</div>}
 
         {!isOwnCopy && scope.type !== "system" && (
           <div className="alert alert-amber no-print">
@@ -320,13 +322,14 @@ export default async function ZooLayoutPage({
                               style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "nowrap" }}>
                               <select name="formatId" defaultValue="" style={{ fontSize: 12, width: 160 }} required>
                                 <option value="" disabled>Copia su…</option>
-                                {ZOO_FORMATS.filter((f) => f.id !== l.formatId).map((f) => (
-                                  <option key={f.id} value={f.id}>{f.name}</option>
+                                {/* prima lo stesso formato: un duplicato da modificare */}
+                                {[...ZOO_FORMATS.filter((f) => f.id === l.formatId), ...ZOO_FORMATS.filter((f) => f.id !== l.formatId)].map((f) => (
+                                  <option key={f.id} value={f.id}>{f.id === l.formatId ? `${f.name} (duplica)` : f.name}</option>
                                 ))}
                               </select>
                               <button className="btn btn-outline btn-sm" type="submit"
                                 style={{ whiteSpace: "nowrap", minWidth: 90 }}
-                                title="Crea una copia sul formato scelto, con i corpi del testo riproporzionati">
+                                title="Crea una copia sul formato scelto (lo stesso = duplicato identico), con i corpi del testo riproporzionati">
                                 Copia
                               </button>
                             </form>

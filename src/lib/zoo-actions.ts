@@ -3009,7 +3009,8 @@ export async function copiaZooLayoutSuFormato(layoutId: string, scopeParam: stri
   const destFormatId = String(formData.get("formatId") ?? "");
   const da = ZOO_FORMATS.find((f) => f.id === sorgente?.formatId);
   const a = ZOO_FORMATS.find((f) => f.id === destFormatId);
-  if (!sorgente || !da || !a || da.id === a.id) redirect(backUrl("/stampe/zoo/layout", scopeParam));
+  // stesso formato = duplicato da modificare (le misure restano tali e quali)
+  if (!sorgente || !da || !a) redirect(backUrl("/stampe/zoo/layout", scopeParam));
   /*
    * Fattore unico per larghezza e altezza (il più piccolo dei due): passando da
    * verticale a orizzontale (o viceversa) i riquadri tengono le loro
@@ -3032,19 +3033,21 @@ export async function copiaZooLayoutSuFormato(layoutId: string, scopeParam: stri
       ...(it.radius ? { radius: Math.round(it.radius * k * 10) / 10 } : {}),
       ...(it.sticker ? { sticker: { ...it.sticker, size: Math.round(it.sticker.size * k * 10) / 10 } } : {}),
     }));
+  const nuovoId = `zl_${Date.now()}`;
   db.zooLayouts.push({
     ...sorgente!,
-    id: `zl_${Date.now()}`,
+    id: nuovoId,
     formatId: a!.id,
     scopeType: scope.type,
     scopeId: scope.id,
-    nome: `${sorgente!.nome || "Layout"} (${a!.name})`,
+    nome: da!.id === a!.id ? `${sorgente!.nome || "Layout"} (copia)` : `${sorgente!.nome || "Layout"} (${a!.name})`,
     items: scala(sorgente!.items),
     itemsNoPhoto: sorgente!.itemsNoPhoto ? scala(sorgente!.itemsNoPhoto) : undefined,
   });
   await saveZooDb(db);
   rigeneraZoo();
-  redirect(backUrl("/stampe/zoo/layout", scopeParam, { formato: a!.id, copiato: "1" }));
+  // si apre subito la copia, pronta da modificare
+  redirect(backUrl("/stampe/zoo/layout", scopeParam, { formato: a!.id, layout: nuovoId, copiato: da!.id === a!.id ? "stesso" : "1" }));
 }
 
 /* ================== Promozioni proprie dell'insegna / punto vendita ================== */
