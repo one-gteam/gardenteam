@@ -1671,7 +1671,13 @@ export const ZOO_FORMATS: PrintFormat[] = [
   { id: "za4", name: "A4", w: 210, h: 297 },
   { id: "za5", name: "A5", w: 148, h: 210 },
   { id: "za6", name: "A6 (scaffale)", w: 105, h: 148 },
+  // gli stessi, girati: si sceglie il foglio orizzontale disegnandone il layout
+  { id: "za4o", name: "A4 orizzontale", w: 297, h: 210 },
+  { id: "za5o", name: "A5 orizzontale", w: 210, h: 148 },
+  { id: "za6o", name: "A6 orizzontale", w: 148, h: 105 },
 ];
+
+export { foglioDiStampa } from "./foglio-stampa";
 
 /** Layout cartello zoo salvato per formato+ambito (Consorzio come base). */
 export interface ZooLayout {

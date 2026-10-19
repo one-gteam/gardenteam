@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { Fragment } from "react";
+import type React from "react";
 import BulkCheckbox from "@/components/stampe/BulkCheckbox";
 import { DettagliPadre, PannelloPadre } from "@/components/stampe/DettagliPadre";
 import RigaCoda from "@/components/stampe/RigaCoda";
@@ -27,7 +28,7 @@ import {
   getZooDb, nonConformiDi, layoutPerOfferta, layoutScegliibili, pvPriceFor, isZooHidden,
   campagneStampabili, campagnaInCorso, campagnaInLavorazione, campaignStato,
   effectiveParentText, effectiveParentTag, printedAt, NO_VOLANTINO,
-  ZOO_FIELDS, ZOO_FORMATS, marcaEffettiva, condizioniPer, ownScopeVisible, pvPromoFor, noPrintSets, offertePerStampa, tagsPerLayout, TIPO_SCONTO, TIPO_MECCANICA, TIPO_BARRATO, TIPO_A_SOLI, valoriPerStampa, giacenzePer, tagsPerStampa,
+  ZOO_FIELDS, ZOO_FORMATS, marcaEffettiva, condizioniPer, ownScopeVisible, pvPromoFor, noPrintSets, offertePerStampa, foglioDiStampa, tagsPerLayout, TIPO_SCONTO, TIPO_MECCANICA, TIPO_BARRATO, TIPO_A_SOLI, valoriPerStampa, giacenzePer, tagsPerStampa,
 } from "@/lib/zoo";
 import {
   importPvPricesRighe, markZooPrinted, resetZooPrinted, toggleZooHidden, toggleZooHiddenInline, importZooNoPrintRighe, svuotaZooNoPrint,
@@ -438,41 +439,46 @@ export default async function ZooStampaPage({
       />
     );
     /*
-     * Gli A5 vanno sempre due per foglio A4 orizzontale (148+148 mm stanno nei
-     * 297 dell'A4 girato): hanno una pagina con un nome suo, così nella stessa
-     * stampa gli A4 restano in verticale. Prima uscivano uno per foglio, e il
-     * foglio si girava per tutti solo con la spunta.
+     * Ogni formato va sul suo foglio A4, con quanti cartelli ci stanno
+     * (foglioDiStampa): A4 uno per foglio, A5 due su A4 orizzontale, A6 quattro
+     * su A4 verticale; gli orizzontali girano il foglio. Ogni gruppo di fogli ha
+     * una pagina con un nome suo, così nella stessa stampa verticali e
+     * orizzontali escono ognuno nel suo verso.
      */
     // copie_<id>: quante volte stampare quel cartello (colonna «Copie»)
     const conCopie = selected.flatMap((o) => Array.from({ length: Math.max(1, Math.min(99, Number(sp[`copie_${o.id}`]) || 1)) }, () => o));
-    const a5 = conCopie.filter((o) => formatFor(o.id).id === "za5").flatMap((o) => (doppio ? [o, o] : [o]));
-    const altri = conCopie.filter((o) => formatFor(o.id).id !== "za5");
-    const fogliA5 = Array.from({ length: Math.ceil(a5.length / 2) }, (_, i) => a5.slice(i * 2, i * 2 + 2));
-    const totale = altri.length + a5.length;
+    const gruppi = ZOO_FORMATS.map((f) => {
+      const foglio = foglioDiStampa(f);
+      const per = foglio.colonne * foglio.righe;
+      // gli A5 di serie due volte sullo stesso foglio (spunta «doppio»)
+      const voci = conCopie.filter((o) => formatFor(o.id).id === f.id).flatMap((o) => (f.id === "za5" && doppio ? [o, o] : [o]));
+      const fogli = Array.from({ length: Math.ceil(voci.length / per) }, (_, i) => voci.slice(i * per, i * per + per));
+      return { f, foglio, per, voci, fogli };
+    }).filter((g) => g.voci.length > 0);
+    const totale = gruppi.reduce((t, g) => t + g.voci.length, 0);
+    const nomePagina = (g: (typeof gruppi)[number]) => `foglio_${g.foglio.w}x${g.foglio.h}`;
+    const pagine = [...new Set(gruppi.map((g) => `@page ${nomePagina(g)} { size: ${g.foglio.w}mm ${g.foglio.h}mm; margin: 0; }`))].join(" ");
+    // il primo foglio decide anche la pagina «di serie» (alcuni browser guardano quella)
+    const primo = gruppi[0]?.foglio;
+    const multipli = gruppi.filter((g) => g.per > 1);
     return (
       <div>
-        <style>{`@page foglioA5 { size: 297mm 210mm; margin: 0; }${altri.length === 0 ? " @page { size: 297mm 210mm; margin: 0; }" : ""}`}</style>
+        <style>{`${pagine}${primo ? ` @page { size: ${primo.w}mm ${primo.h}mm; margin: 0; }` : ""}`}</style>
         <div className="no-print" style={{ padding: 14, display: "flex", gap: 10, alignItems: "center", background: "var(--green-50)", flexWrap: "wrap" }}>
           <strong>Anteprima di stampa — {totale} cartelli</strong>
           {sp.pdf && <SalvaPdf nome={sp.pdf} />}
           <a className="btn btn-outline btn-sm" href={`/stampe/zoo/stampa?${qsBack()}`}>← Torna all&apos;elenco</a>
           <span style={{ fontSize: 12.5, color: "var(--muted)" }}>
             Usa il pulsante Stampa del browser (Ctrl+P) e scegli &quot;Salva come PDF&quot;.
-            {fogliA5.length > 0 && ` Gli A5 escono due per foglio A4 orizzontale (${fogliA5.length} ${fogliA5.length === 1 ? "foglio" : "fogli"}${doppio ? ", ogni cartello due volte" : ""}).`}
+            {multipli.map((g) => ` Gli ${g.f.name} escono ${g.per} per foglio A4${g.foglio.w > g.foglio.h ? " orizzontale" : ""} (${g.fogli.length} ${g.fogli.length === 1 ? "foglio" : "fogli"}${g.f.id === "za5" && doppio ? ", ogni cartello due volte" : ""}).`).join("")}
           </span>
         </div>
-        {altri.length > 0 && (
-          <div style={{ display: "flex", flexWrap: "wrap" }}>
-            {altri.map((o, i) => (
-              <div key={`${o.id}_${i}`} style={{ pageBreakInside: "avoid" }}>{cartello(o)}</div>
-            ))}
+        {gruppi.flatMap((g) => g.fogli.map((voci, i) => (
+          <div key={`${g.f.id}_${i}`} className="foglio-stampa"
+            style={{ page: nomePagina(g), width: `${g.foglio.w}mm`, height: `${g.foglio.h}mm`, gridTemplateColumns: `repeat(${g.foglio.colonne}, ${g.f.w}mm)`, gridAutoRows: `${g.f.h}mm` } as React.CSSProperties}>
+            {voci.map((o, j) => <div key={`${o.id}_${j}`}>{cartello(o)}</div>)}
           </div>
-        )}
-        {fogliA5.map((coppia, i) => (
-          <div key={`a5_${i}`} className="foglio-a5">
-            {coppia.map((o, j) => <div key={`${o.id}_${j}`}>{cartello(o)}</div>)}
-          </div>
-        ))}
+        )))}
       </div>
     );
   }

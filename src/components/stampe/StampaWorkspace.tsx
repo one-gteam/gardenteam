@@ -1,5 +1,6 @@
 "use client";
 
+import { foglioDiStampa } from "@/lib/foglio-stampa";
 import { immaginiInLinea } from "@/lib/immagini-in-linea";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -97,14 +98,21 @@ export default function StampaWorkspace({
           const c = pdfLavoro.cartelli[i];
           setPdfStato(`Preparo il PDF… ${i + 1} di ${fogli.length}`);
           const canvas = await html2canvas(fogli[i], { scale: 2, backgroundColor: "#ffffff", useCORS: true });
-          const orient = c.format.w > c.format.h ? "landscape" : "portrait";
+          /*
+           * Ogni cartello va sul foglio A4 del suo formato, quanti ce ne stanno:
+           * A5 due su A4 orizzontale, A6 quattro su A4 verticale (foglioDiStampa).
+           */
+          const foglio = foglioDiStampa(c.format);
+          const per = foglio.colonne * foglio.righe;
+          const orient = foglio.w > foglio.h ? "landscape" : "portrait";
           let voce = docs.get(c.format.id);
           if (!voce) {
             const nomeFormato = c.format.name.replace(/\s*\(.*\)\s*/, "").trim() || c.format.id;
-            voce = { nome: formati.length > 1 ? `${pdfLavoro.nome} - ${nomeFormato}` : pdfLavoro.nome, doc: new jsPDF({ unit: "mm", format: [c.format.w, c.format.h], orientation: orient }), n: 0 };
+            voce = { nome: formati.length > 1 ? `${pdfLavoro.nome} - ${nomeFormato}` : pdfLavoro.nome, doc: new jsPDF({ unit: "mm", format: [foglio.w, foglio.h], orientation: orient }), n: 0 };
             docs.set(c.format.id, voce);
-          } else voce.doc.addPage([c.format.w, c.format.h], orient);
-          voce.doc.addImage(canvas.toDataURL("image/jpeg", 0.93), "JPEG", 0, 0, c.format.w, c.format.h);
+          } else if (voce.n % per === 0) voce.doc.addPage([foglio.w, foglio.h], orient);
+          const posto = voce.n % per;
+          voce.doc.addImage(canvas.toDataURL("image/jpeg", 0.93), "JPEG", (posto % foglio.colonne) * c.format.w, Math.floor(posto / foglio.colonne) * c.format.h, c.format.w, c.format.h);
           voce.n++;
         }
         if (!annullato && docs.size) {

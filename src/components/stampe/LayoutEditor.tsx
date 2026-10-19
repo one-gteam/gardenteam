@@ -94,7 +94,16 @@ function NumeroConLimiti({ valore, min, max, onCommit, style }: {
   };
   return (
     <input type="number" min={min} max={max} step={1} value={testo} style={style}
-      onChange={(e) => setTesto(e.target.value)}
+      onChange={(e) => {
+        setTesto(e.target.value);
+        /*
+         * Le freccette (della casella o della tastiera) danno subito un numero
+         * buono: si applica al volo. Scrivendo a mano, un numero ancora fuori
+         * dai limiti («1» mentre si scrive «12») aspetta l'uscita dal campo.
+         */
+        const n = Number(e.target.value.replace(",", "."));
+        if (e.target.value !== "" && Number.isInteger(n) && n >= min && n <= max && n !== valore) onCommit(n);
+      }}
       onBlur={conferma}
       onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); conferma(); } }} />
   );

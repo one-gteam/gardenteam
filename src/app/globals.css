@@ -957,6 +957,10 @@ label.chip:has(input:checked) { background: var(--green-100); color: var(--green
 
 /* Stampa: due A5 affiancati su un foglio A4 orizzontale (pagina con nome, vedi stampa/page.tsx) */
 .foglio-a5 { display: flex; width: 297mm; height: 210mm; overflow: hidden; }
+/* Stampa cartelli: un foglio A4 con uno o più cartelli (A5 due, A6 quattro…) */
+.foglio-stampa { display: grid; overflow: hidden; align-content: start; }
+@media screen { .foglio-stampa { margin: 12px 0; outline: 1px dashed #bbb; background: #fff; } }
+@media print { .foglio-stampa { break-after: page; break-inside: avoid; } .foglio-stampa:last-child { break-after: auto; } }
 @media screen { .foglio-a5 { margin: 12px 0; outline: 1px dashed #bbb; } }
 @media print { .foglio-a5 { page: foglioA5; break-after: page; break-inside: avoid; } }
 
