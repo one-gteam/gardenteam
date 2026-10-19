@@ -3010,9 +3010,23 @@ export async function copiaZooLayoutSuFormato(layoutId: string, scopeParam: stri
   const da = ZOO_FORMATS.find((f) => f.id === sorgente?.formatId);
   const a = ZOO_FORMATS.find((f) => f.id === destFormatId);
   if (!sorgente || !da || !a || da.id === a.id) redirect(backUrl("/stampe/zoo/layout", scopeParam));
-  const k = a!.w / da!.w;
+  /*
+   * Fattore unico per larghezza e altezza (il più piccolo dei due): passando da
+   * verticale a orizzontale (o viceversa) i riquadri tengono le loro
+   * proporzioni e il testo non esplode. Ogni campo resta centrato nello stesso
+   * punto relativo del foglio; poi si sistema a mano. Fra formati dello stesso
+   * verso (A4 → A5) il risultato è quello di prima.
+   */
+  const k = Math.min(a!.w / da!.w, a!.h / da!.h);
+  const tondo = (n: number) => Math.round(n * 100) / 100;
   const scala = (items: LayoutItem[] | undefined) =>
-    (items ?? []).map((it) => ({
+    (items ?? []).map((it) => {
+      const w = Math.min(100, (it.w * da!.w * k) / a!.w);
+      const h = Math.min(100, (it.h * da!.h * k) / a!.h);
+      const x = Math.max(0, Math.min(100 - w, it.x + it.w / 2 - w / 2));
+      const y = Math.max(0, Math.min(100 - h, it.y + it.h / 2 - h / 2));
+      return { ...it, x: tondo(x), y: tondo(y), w: tondo(w), h: tondo(h) };
+    }).map((it) => ({
       ...it,
       ...(it.size ? { size: Math.round(it.size * k * 10) / 10 } : {}),
       ...(it.radius ? { radius: Math.round(it.radius * k * 10) / 10 } : {}),

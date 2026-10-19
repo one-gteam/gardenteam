@@ -318,7 +318,7 @@ export default async function ZooLayoutPage({
                           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
                             <form action={copiaZooLayoutSuFormato.bind(null, l.id, scopeParam)}
                               style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "nowrap" }}>
-                              <select name="formatId" defaultValue="" style={{ fontSize: 12, width: 130 }} required>
+                              <select name="formatId" defaultValue="" style={{ fontSize: 12, width: 160 }} required>
                                 <option value="" disabled>Copia su…</option>
                                 {ZOO_FORMATS.filter((f) => f.id !== l.formatId).map((f) => (
                                   <option key={f.id} value={f.id}>{f.name}</option>
