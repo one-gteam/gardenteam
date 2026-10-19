@@ -1815,3 +1815,7 @@ img.tt-media.on { animation: sp-kb 12s linear forwards; }
 .distanza-x span { left: 50%; top: -9px; transform: translateX(-50%); }
 .distanza-y span { top: 50%; left: 3px; transform: translateY(-50%); }
 .editor-lucchetto { position: absolute; right: 1px; bottom: 0; font-size: 10px; pointer-events: none; }
+
+/* Layout: «Salva ora / Salvo… / ✓ Salvato» nello stesso pulsante, sempre della stessa larghezza */
+.salva-stato { min-width: 104px; justify-content: center; text-align: center; }
+.salva-stato.salvato { color: var(--green-700, #1f4d33); border-color: var(--green-600, #2f6b4a); background: var(--green-50, #eaf3e2); }

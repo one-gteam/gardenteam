@@ -1005,10 +1005,10 @@ export default function LayoutEditor({
         )}
         {canEdit ? (
           <div className="panel-layout">
-            <button type="button" className="btn btn-outline btn-sm" onClick={doSave} disabled={pending} title="Le modifiche si salvano da sole poco dopo ogni cambiamento">
-              {pending ? "Salvataggio…" : "Salva ora"}
+            <button type="button" className={`btn btn-outline btn-sm salva-stato${saved && !pending ? " salvato" : ""}`} onClick={doSave} disabled={pending} title="Le modifiche si salvano da sole poco dopo ogni cambiamento">
+              {/* lo stato sta dentro al pulsante, a larghezza fissa: prima la scritta «Salvato» accanto spostava la riga */}
+              {pending ? "Salvo…" : saved ? "✓ Salvato" : "Salva ora"}
             </button>
-            {saved && !pending && <span style={{ color: "var(--green-700)", fontWeight: 700, fontSize: 13 }}>✓ Salvato</span>}
           </div>
         ) : (
           <span className="hint" style={{ fontSize: 12.5 }}>
