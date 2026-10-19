@@ -238,7 +238,7 @@ export default async function ZooLayoutPage({
                   <label><input type="radio" name="modo" value="piena" defaultChecked={modoTestata === "piena"} />
                     <span><strong>A tutta larghezza, dal bordo in alto</strong><em>larga quanto il foglio; titolo, prezzi e il resto scendono in proporzione</em></span></label>
                   <label><input type="radio" name="modo" value="nessuna" defaultChecked={modoTestata === "nessuna"} />
-                    <span><strong>Nessuna testata</strong><em>si nasconde anche quella del Consorzio; il cartello sale nello spazio liberato</em></span></label>
+                    <span><strong>Nessuna testata</strong><em>si nasconde anche quella del Consorzio; il suo spazio resta bianco (per i fogli con la testata già stampata)</em></span></label>
                 </fieldset>
                 <input type="file" name="image" accept="image/*" />
                 {db.layoutImages.filter((li) => li.scopeType === scope.type && li.scopeId === scope.id).length > 0 && (

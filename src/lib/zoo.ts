@@ -1806,8 +1806,12 @@ export function conTestataDiScopo(layout: ZooLayout, testata: ZooTestataScopo | 
     const piuInAlto = liberi.reduce((a, b) => (b.it.y < a.it.y ? b : a), liberi[0]);
     const vecchia = piuInAlto.it;
     if (t.modo === "nessuna") {
-      // via la testata: quello che stava sotto sale e si allarga nello spazio liberato
-      return ridistribuisci(items.filter((_, i) => i !== piuInAlto.i), vecchia.y + vecchia.h, vecchia.y);
+      /*
+       * Via la testata e basta: il resto resta dov'è e lo spazio in cima resta
+       * bianco. Serve a chi stampa su fogli con la testata già prestampata;
+       * prima il cartello saliva a occupare il posto e non combaciava più.
+       */
+      return items.filter((_, i) => i !== piuInAlto.i);
     }
     if (t.modo === "piena" && formato) return mettiInCima(items, piuInAlto.i, t.url, altezzaPiena(t.rapporto, formato));
     // la testata dell'insegna ha proporzioni sue: si centra nel riquadro di quella del Consorzio
