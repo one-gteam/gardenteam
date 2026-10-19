@@ -1021,7 +1021,7 @@ export default function LayoutEditor({
           </div>
         {canEdit && ambiti.length > 1 && (
           <div className="panel-layout">
-            <Finestrella titolo="Assegna a un'insegna / punto vendita">
+            <Finestrella titolo="Assegna">
               <p style={{ fontSize: 12, color: "var(--muted)", margin: "0 0 8px" }}>
                 Ne salva una copia per l&apos;ambito scelto: da lì in poi quei cartelli usano questo layout
                 invece di quello del Consorzio. L&apos;originale resta dov&apos;è.

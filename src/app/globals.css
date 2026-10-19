@@ -1757,6 +1757,8 @@ img.tt-media.on { animation: sp-kb 12s linear forwards; }
 .editor-barra { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: -6px 0 12px; }
 /* nella riga del titolo: accanto a formato, layout e insegna */
 #editor-barra-posto .editor-barra { margin: 10px 0 0; }
+/* la barra del layout resta su una riga: andando a capo «Salva ora» spingeva giù tutta la pagina */
+@media (min-width: 900px) { #editor-barra-posto .editor-barra { flex-wrap: nowrap; } #editor-barra-posto .editor-barra > * { flex-shrink: 0; } }
 .editor-barra .panel-layout { display: contents; }
 .editor-pop { position: relative; }
 .editor-pop > summary { list-style: none; cursor: pointer; }
