@@ -74,9 +74,14 @@ export interface StampaPickerProps {
   initialNoPhoto?: Record<string, boolean>;
   /** Layout scelto per il singolo cartello (vuoto = quello automatico) e i layout fra cui scegliere. */
   initialLayouts?: Record<string, string>;
-  layoutScelte?: { id: string; formatId: string; nome: string }[];
+  layoutScelte?: { id: string; formatId: string; nome: string; tipologie?: string[] }[];
   /** Cartelli senza il prezzo di partenza: al suo posto esce «A SOLI». */
   initialNoListino?: Record<string, boolean>;
+  /**
+   * Salva in PDF direttamente (senza aprire l'anteprima di stampa): riceve il
+   * nome del file e i parametri dei cartelli. Senza, si apre l'anteprima.
+   */
+  onPdf?: (nome: string, query: string) => Promise<void>;
   /** Mette i cartelli selezionati in coda ("dopo" o "arrivo") con le loro impostazioni. */
   onQueue?: (stato: "dopo" | "arrivo", vociJson: string) => Promise<{ ok: boolean; n: number }>;
   /**
@@ -126,6 +131,7 @@ export default function StampaPicker({
   initialLayouts,
   layoutScelte = [],
   onQueue,
+  onPdf,
   onChange,
   onPreview,
   onPersonalizza,
@@ -448,8 +454,8 @@ export default function StampaPicker({
         {selectedProds.length === 0 && <p className="empty">Seleziona i prodotti dall&apos;elenco a sinistra (Shift+clic per più righe): l&apos;anteprima compare a destra.</p>}
         {selectedProds.length > 0 && daTogliere.length > 0 && (() => {
           const ids = daTogliere.filter((id) => selected.includes(id));
-          const metti = (set: (u: (prev: Record<string, boolean>) => Record<string, boolean>) => void, v: boolean) =>
-            set((prev) => ({ ...prev, ...Object.fromEntries(ids.map((id) => [id, v])) }));
+          const metti = (set: (u: (prev: Record<string, boolean>) => Record<string, boolean>) => void, v: boolean, solo: string[] = ids) =>
+            set((prev) => ({ ...prev, ...Object.fromEntries(solo.map((id) => [id, v])) }));
           const formatiSpuntati = [...new Set(ids.map((id) => rowFormat[id] ?? applyAll))];
           return (
             <div className="blocco-spuntati">
@@ -468,6 +474,10 @@ export default function StampaPicker({
                     setRowLayout((prev) => ({ ...prev, ...Object.fromEntries(ids
                       .filter((id) => v === "auto" || (lay && lay.formatId === (rowFormat[id] ?? applyAll)))
                       .map((id) => [id, v === "auto" ? "" : v])) }));
+                    const tip = lay?.tipologie ?? [];
+                    const toccati = ids.filter((id) => lay && lay.formatId === (rowFormat[id] ?? applyAll));
+                    if (tip.includes("Promo senza prezzo barrato")) metti(setNoListino, true, toccati);
+                    else if (tip.includes("Promo con prezzo barrato")) metti(setNoListino, false, toccati);
                   }}>
                     <option value="">—</option>
                     <option value="auto">Automatico</option>
@@ -544,7 +554,14 @@ export default function StampaPicker({
                         </select>
                         {layoutScelte.some((l) => l.formatId === (rowFormat[p.id] ?? applyAll)) && (
                           <select value={rowLayout[p.id] ?? ""} title="Il layout di questo cartello: automatico = quello giusto per il tipo di offerta"
-                            onChange={(e) => setRowLayout((prev) => ({ ...prev, [p.id]: e.target.value }))}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setRowLayout((prev) => ({ ...prev, [p.id]: v }));
+                              // il layout dice anche se c'è il barrato: l'interruttore lo segue
+                              const tip = layoutScelte.find((l) => l.id === v)?.tipologie ?? [];
+                              if (tip.includes("Promo senza prezzo barrato")) setNoListino((prev) => ({ ...prev, [p.id]: true }));
+                              else if (tip.includes("Promo con prezzo barrato")) setNoListino((prev) => ({ ...prev, [p.id]: false }));
+                            }}
                             style={{ marginTop: 4, minWidth: 150, fontSize: 12 }}>
                             <option value="">Layout automatico</option>
                             {layoutScelte.filter((l) => l.formatId === (rowFormat[p.id] ?? applyAll)).map((l) => <option key={l.id} value={l.id}>{l.nome}</option>)}
@@ -694,7 +711,15 @@ export default function StampaPicker({
                 onClick={() => {
                   const proposta = `Cartelli ${new Date().toLocaleDateString("it-IT").replace(/\//g, "-")}`;
                   const nome = window.prompt("Nome del file PDF:", proposta);
-                  if (nome && nome.trim()) vaiAllaStampa(nome.trim().replace(/[\\/:*?"<>|]+/g, "-").slice(0, 80));
+                  if (!nome || !nome.trim()) return;
+                  const pulito = nome.trim().replace(/[\\/:*?"<>|]+/g, "-").slice(0, 80);
+                  if (onPdf) {
+                    // il PDF si fa qui e si scarica: niente pagina nuova
+                    void (async () => {
+                      if (onPrint && selected.length > 0) { try { await onPrint(selected); } catch { /* niente */ } }
+                      await onPdf(pulito, buildUrl(false).split("?")[1]);
+                    })();
+                  } else vaiAllaStampa(pulito);
                 }}>
                 Salva in PDF…
               </button>

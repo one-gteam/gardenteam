@@ -1285,11 +1285,24 @@ export function tagsPerLayout(db: ZooDB, scope: Scope, academyDb: DB, o: ZooOffe
  * stampa senza prezzo di partenza, il cartello è un "A SOLI" e va impaginato
  * come tale, non come un prezzo barrato.
  */
+/**
+ * Il cartello esce senza prezzo barrato («A SOLI» al suo posto)? Sì se in
+ * Stampa cartelli è spento «barrato», oppure se per quel cartello è stato
+ * scelto un layout «Promo senza prezzo barrato»: prima il layout cambiava ma
+ * il campo riceveva ancora il prezzo di partenza, e usciva barrato.
+ */
+export function senzaBarratoInStampa(db: ZooDB, o: ZooOffer, sp: Record<string, string | undefined>): boolean {
+  if (sp[`nolistino_${o.id}`] === "1") return true;
+  const scelto = sp[`layout_${o.id}`] ? db.zooLayouts.find((l) => l.id === sp[`layout_${o.id}`]) : undefined;
+  const tip = scelto?.tipologie ?? [];
+  return tip.includes(TIPO_A_SOLI) && !tip.includes(TIPO_BARRATO);
+}
+
 export function tagsPerStampa(
   db: ZooDB, scope: Scope, academyDb: DB, o: ZooOffer, sp: Record<string, string | undefined>
 ): string[] {
   const tags = tagsPerLayout(db, scope, academyDb, o);
-  if (sp[`nolistino_${o.id}`] !== "1" || !tags.includes(TIPO_BARRATO)) return tags;
+  if (!senzaBarratoInStampa(db, o, sp) || !tags.includes(TIPO_BARRATO)) return tags;
   return [...tags.filter((t) => t !== TIPO_BARRATO), TIPO_A_SOLI];
 }
 
@@ -1341,7 +1354,8 @@ export function valoriPerStampa(
    * diventa un "A SOLI", con la dicitura al posto del barrato. Il layout lo
    * segue grazie a tagsPerStampa.
    */
-  if (sp[`nolistino_${o.id}`] === "1") {
+  const senzaBarrato = senzaBarratoInStampa(db, o, sp);
+  if (senzaBarrato) {
     vals.prezzoListino = (vals.prezzoPromo ?? "").trim().startsWith("€") ? "A SOLI" : "";
   }
   /*
@@ -1356,7 +1370,7 @@ export function valoriPerStampa(
    * niente prezzi ma uno sconto → "SCONTO 20%" al posto del prezzo.
    */
   const promoEPrezzo = (vals.prezzoPromo ?? "").trim().startsWith("€");
-  if (promoEPrezzo && !vals.prezzoListino && sp[`nolistino_${o.id}`] !== "1") vals.prezzoListino = "A SOLI";
+  if (promoEPrezzo && !vals.prezzoListino && !senzaBarrato) vals.prezzoListino = "A SOLI";
   // lo sconto si rifà sui prezzi veri del cartello (quelli del PV o scritti a mano)
   const perc = scontoFraPrezzi(vals.prezzoListino ?? "", vals.prezzoPromo ?? "");
   vals.sconto = perc ? `Sconto ${perc}` : "";

@@ -685,7 +685,7 @@ export default async function ZooStampaPage({
                 initialNoPhoto: Object.fromEntries(selectedIds.map((id) => [id, sp[`senzafoto_${id}`] === "1"])),
                 initialNoListino: Object.fromEntries(selectedIds.map((id) => [id, sp[`nolistino_${id}`] === "1"])),
                 initialLayouts: Object.fromEntries(selectedIds.map((id) => [id, sp[`layout_${id}`] ?? ""]).filter(([, v]) => v)),
-                layoutScelte: layoutScegliibili(db, scope, academyDb).map((l) => ({ id: l.id, formatId: l.formatId, nome: l.nome })),
+                layoutScelte: layoutScegliibili(db, scope, academyDb).map((l) => ({ id: l.id, formatId: l.formatId, nome: l.nome, tipologie: l.tipologie })),
                 initialHidden: Object.fromEntries(
                   selectedIds.map((id) => [id, (sp[`nascondi_${id}`] ?? "").split(",").filter(Boolean)])
                 ),
