@@ -130,9 +130,11 @@ export default function Cartello({
             </div>
           );
         }
+        // bollino con testo libero: compare sempre, qualunque sia il prodotto
         const meta = fields.find((f) => f.id === item.fieldId);
-        const value = valori[item.fieldId];
-        if (!meta || !value) return null;
+        const liberoSticker = item.sticker && typeof item.testo === "string" && item.testo.trim() ? item.testo : "";
+        const value = liberoSticker || valori[item.fieldId];
+        if ((!meta && !liberoSticker) || !value) return null;
         // sticker/bollino associato a un campo
         if (item.sticker) {
           return (
@@ -148,6 +150,7 @@ export default function Cartello({
             </div>
           );
         }
+        if (!meta) return null;
         if (isImageField(meta, item.fieldId)) {
           return (
             // eslint-disable-next-line @next/next/no-img-element

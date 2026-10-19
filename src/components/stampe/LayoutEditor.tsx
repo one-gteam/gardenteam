@@ -348,6 +348,13 @@ export default function LayoutEditor({
     if (!canEdit) return;
     e.preventDefault();
     e.stopPropagation();
+    /*
+     * preventDefault (che evita di selezionare il testo mentre si trascina)
+     * lascia il cursore nell'ultima casella del pannello: Canc e le frecce
+     * finivano lì invece che sul campo. Si toglie il fuoco dalla casella.
+     */
+    const attivo = document.activeElement as HTMLElement | null;
+    if (attivo && ["INPUT", "TEXTAREA", "SELECT"].includes(attivo.tagName)) attivo.blur();
     if (spazio) return; // con lo spazio si sposta la vista, non i campi
     // i compagni di gruppo del campo cliccato
     const gid = activeItems[index]?.gruppo;
@@ -1294,7 +1301,7 @@ export default function LayoutEditor({
                   onMouseDown={(e) => onMouseDown(e, i, "move")}
                 >
                   <div style={stileStickerCartello(item, scale)}>
-                    {testoStampato(previewValues[item.fieldId] || meta?.label || "Sticker")}
+                    {testoStampato(typeof item.testo === "string" ? item.testo || "Testo" : previewValues[item.fieldId] || meta?.label || "Sticker")}
                   </div>
                   {canEdit && !item.bloccato && <span className="resize-handle" onMouseDown={(e) => onMouseDown(e, i, "resize")} />}
                   {item.bloccato && <span className="editor-lucchetto" title="Bloccato">🔒</span>}
@@ -1560,11 +1567,23 @@ export default function LayoutEditor({
           <div className="panel-campo">
           <Sezione titolo="Sticker selezionato">
             <label className="field">
-              Campo associato
-              <select value={selItem.fieldId} onChange={(e) => updateSelected({ fieldId: e.target.value })}>
+              Cosa scrive
+              <select value={typeof selItem.testo === "string" ? "__testo" : selItem.fieldId}
+                onChange={(e) => e.target.value === "__testo"
+                  ? updateSelected({ testo: selItem.testo || "Novità" })
+                  : updateSelected({ fieldId: e.target.value, testo: undefined })}>
+                <option value="__testo">Testo libero (sempre uguale)</option>
                 {fields.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
               </select>
             </label>
+            {typeof selItem.testo === "string" && (
+              <label className="field">
+                Testo del bollino
+                <input type="text" value={selItem.testo} maxLength={60} placeholder="es. Nuovo, -20%, Bio"
+                  onChange={(e) => updateSelected({ testo: e.target.value })} />
+                <span className="hint" style={{ fontSize: 11.5 }}>Compare su tutti i cartelli con questo layout. Per andare a capo: due spazi.</span>
+              </label>
+            )}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
               <label className="field">
                 Forma
