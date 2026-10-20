@@ -450,7 +450,9 @@ export default async function ZooStampaPage({
     // copie_<id>: quante volte stampare quel cartello (colonna «Copie»)
     const conCopie = selected.flatMap((o) => Array.from({ length: Math.max(1, Math.min(99, Number(sp[`copie_${o.id}`]) || 1)) }, () => o));
     const gruppi = ZOO_FORMATS.map((f) => {
-      const foglio = foglioDiStampa(f, prefStampa.carta[f.id]);
+      // la carta scelta in Stampa cartelli per questa stampa, altrimenti quella delle Preferenze
+      const cartaQui = sp[`carta_${f.id}`] === "formato" || sp[`carta_${f.id}`] === "a4" ? (sp[`carta_${f.id}`] as "a4" | "formato") : prefStampa.carta[f.id];
+      const foglio = foglioDiStampa(f, cartaQui);
       const per = foglio.colonne * foglio.righe;
       // gli A5 di serie due volte sullo stesso foglio A4 (spunta «doppio»); su carta A5 uno per foglio
       const voci = conCopie.filter((o) => formatFor(o.id).id === f.id).flatMap((o) => (f.id === "za5" && doppio && per > 1 ? [o, o] : [o]));
@@ -717,6 +719,8 @@ export default async function ZooStampaPage({
                 ),
                 onPrint: markZooPrinted.bind(null, scopeParam),
                 conCopie: true,
+                cartaIniziale: Object.fromEntries(ZOO_FORMATS.map((f) => [f.id, sp[`carta_${f.id}`] === "formato" || sp[`carta_${f.id}`] === "a4" ? sp[`carta_${f.id}`] : prefStampa.carta[f.id]]).filter(([, v]) => v)) as Record<string, "a4" | "formato">,
+                misureFormati: Object.fromEntries(ZOO_FORMATS.map((f) => [f.id, { w: f.w, h: f.h }])),
                 initialCopie: Object.fromEntries(selectedIds.map((id) => [id, Number(sp[`copie_${id}`]) || 0]).filter(([, v]) => (v as number) > 1)),
                 initialSelected: selectedIds,
                 initialFormats: Object.fromEntries(

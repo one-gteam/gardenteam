@@ -72,6 +72,10 @@ export interface StampaPickerProps {
   /** Colonna «Copie»: quante volte stampare ogni cartello (copie_<id> nell'indirizzo). */
   conCopie?: boolean;
   initialCopie?: Record<string, number>;
+  /** Carta per formato (A5/A6…): più cartelli per foglio A4 o la carta del formato. Di partenza dalle Preferenze di stampa. */
+  cartaIniziale?: Record<string, "a4" | "formato">;
+  /** Misure dei formati, per sapere quanti ne stanno su un A4. */
+  misureFormati?: Record<string, { w: number; h: number }>;
   /** Prezzi di partenza (barrati) scritti a mano per il singolo cartello. */
   initialListini?: Record<string, string>;
   /** Cartelli da stampare senza foto, anche se l'articolo ce l'ha. */
@@ -131,6 +135,8 @@ export default function StampaPicker({
   onPrint,
   conCopie = false,
   initialCopie,
+  cartaIniziale,
+  misureFormati,
   initialListini,
   initialNoPhoto,
   initialNoListino,
@@ -158,6 +164,7 @@ export default function StampaPicker({
   const [hiddenFields, setHiddenFields] = useState<Record<string, string[]>>(initialHidden);
   const [rowLayout, setRowLayout] = useState<Record<string, string>>(initialLayouts ?? {});
   const [copie, setCopie] = useState<Record<string, number>>(initialCopie ?? {});
+  const [carta, setCarta] = useState<Record<string, "a4" | "formato">>(cartaIniziale ?? {});
   const [copieTutti, setCopieTutti] = useState("");
   const copieDi = (id: string) => Math.max(1, Math.min(99, Math.floor(copie[id] ?? 1)));
   const [aperti, setAperti] = useState<string[]>([]); // voci della lista con gli articoli aperti
@@ -237,6 +244,7 @@ export default function StampaPicker({
       if (conCopie && copieDi(id) > 1) params.set(`copie_${id}`, String(copieDi(id)));
     }
     if (!doppio) params.set("doppio", "0");
+    for (const [fid, c] of Object.entries(carta)) params.set(`carta_${fid}`, c);
     if (print) params.set("print", "1");
     return `${baseUrl}?${params.toString()}`;
   };
@@ -252,14 +260,23 @@ export default function StampaPicker({
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
     const gestiti = (k: string) =>
-      ["sel", "formato", "doppio", "print", "pdf"].includes(k) || /^(formato|prezzo|listino|noprezzo|senzafoto|nolistino|nascondi|layout|copie)_/.test(k);
+      ["sel", "formato", "doppio", "print", "pdf"].includes(k) || /^(formato|prezzo|listino|noprezzo|senzafoto|nolistino|nascondi|layout|copie|carta)_/.test(k);
     for (const k of [...url.searchParams.keys()]) if (gestiti(k)) url.searchParams.delete(k);
     for (const [k, v] of new URLSearchParams(indirizzo)) if (gestiti(k) && v) url.searchParams.set(k, v);
     if (selected.length === 0) url.searchParams.delete("sel");
     if (url.toString() !== window.location.href) window.history.replaceState(null, "", url.toString());
   }, [indirizzo, selected.length]);
 
-  const anyA5 = selected.some((id) => ["a5", "za5"].includes(rowFormat[id] ?? applyAll));
+  /* i formati scelti che su un A4 ne stanno più di uno (A5, A6…): per loro si sceglie la carta */
+  const formatiUsati = [...new Set(selected.map((id) => rowFormat[id] ?? applyAll))];
+  const multipli = formatiUsati.map((fid) => {
+    const m = misureFormati?.[fid];
+    if (!m) return null;
+    const n = (W: number, H: number) => Math.floor((W + 0.5) / m.w) * Math.floor((H + 0.5) / m.h);
+    const per = Math.max(n(210, 297), n(297, 210));
+    return per > 1 ? { fid, per, nome: formats.find((f) => f.id === fid)?.name.replace(/\s*\(.*\)\s*/, "") ?? fid } : null;
+  }).filter(Boolean) as { fid: string; per: number; nome: string }[];
+  const anyA5 = selected.some((id) => ["a5", "za5"].includes(rowFormat[id] ?? applyAll)) && carta.za5 !== "formato";
 
   /** Le impostazioni di un cartello con gli stessi nomi dell'indirizzo di stampa: così la coda le rigioca tali e quali. */
   const impostazioniDi = (id: string): Record<string, string> => {
@@ -766,6 +783,13 @@ export default function StampaPicker({
                 </button>
               )}
               <span style={{ flex: 1 }} />
+              {multipli.map((m) => (
+                <label key={m.fid} className={`interruttore-grande ${carta[m.fid] === "formato" ? "acceso" : ""}`}
+                  title={`Spento: ${m.per} cartelli ${m.nome} per foglio A4. Acceso: la stampante ha la carta ${m.nome}, un cartello per foglio a misura. Di partenza come nelle Preferenze di stampa.`}>
+                  <input type="checkbox" checked={carta[m.fid] === "formato"} onChange={(e) => setCarta((prev) => ({ ...prev, [m.fid]: e.target.checked ? "formato" : "a4" }))} />
+                  <span>{m.nome} · {carta[m.fid] === "formato" ? `carta ${m.nome}, uno per foglio` : `${m.per} per foglio A4`}</span>
+                </label>
+              ))}
               {anyA5 && (
                 <label className={`interruttore-grande ${doppio ? "acceso" : ""}`}
                   title="Gli A5 escono sempre due per foglio A4 orizzontale. Acceso: ogni cartello due volte sullo stesso foglio. Spento: due cartelli diversi per foglio.">

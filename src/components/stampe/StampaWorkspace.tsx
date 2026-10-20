@@ -58,7 +58,7 @@ export default function StampaWorkspace({
    * dallo schermo, si «fotografano» uno per uno e vanno in un PDF, una pagina
    * per cartello nel suo formato. Niente anteprima di stampa da aprire.
    */
-  const [pdfLavoro, setPdfLavoro] = useState<{ nome: string; cartelli: Dettagli["cartelli"] } | null>(null);
+  const [pdfLavoro, setPdfLavoro] = useState<{ nome: string; cartelli: Dettagli["cartelli"]; carta?: Record<string, "a4" | "formato"> } | null>(null);
   const [pdfStato, setPdfStato] = useState("");
   const pdfRef = useRef<HTMLDivElement>(null);
   const salvaPdf = useCallback(async (nome: string, q: string) => {
@@ -71,11 +71,14 @@ export default function StampaWorkspace({
       // le copie scelte nella colonna «Copie»: il cartello si ripete
       const qp = new URLSearchParams(q);
       const cartelli = d.cartelli.flatMap((c) => Array.from({ length: Math.max(1, Math.min(99, Number(qp.get(`copie_${c.id}`)) || 1)) }, () => c));
-      setPdfLavoro({ nome, cartelli });
+      // la carta scelta in Stampa cartelli vince su quella delle Preferenze
+      const carta: Record<string, "a4" | "formato"> = { ...(cartaFormati ?? {}) };
+      for (const [k, v] of qp) if (k.startsWith("carta_") && (v === "a4" || v === "formato")) carta[k.slice(6)] = v;
+      setPdfLavoro({ nome, cartelli, carta });
     } catch {
       setPdfStato("PDF non preparato: riprova.");
     }
-  }, [dettagliUrl]);
+  }, [dettagliUrl, cartaFormati]);
   useEffect(() => {
     if (!pdfLavoro) return;
     let annullato = false;
@@ -104,7 +107,7 @@ export default function StampaWorkspace({
            * Ogni cartello va sul foglio A4 del suo formato, quanti ce ne stanno:
            * A5 due su A4 orizzontale, A6 quattro su A4 verticale (foglioDiStampa).
            */
-          const foglio = foglioDiStampa(c.format, cartaFormati?.[c.format.id]);
+          const foglio = foglioDiStampa(c.format, pdfLavoro.carta?.[c.format.id]);
           const per = foglio.colonne * foglio.righe;
           const orient = foglio.w > foglio.h ? "landscape" : "portrait";
           let voce = docs.get(c.format.id);
