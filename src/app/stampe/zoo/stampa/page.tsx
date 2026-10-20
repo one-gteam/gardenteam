@@ -457,7 +457,7 @@ export default async function ZooStampaPage({
       // gli A5 di serie due volte sullo stesso foglio A4 (spunta «doppio»); su carta A5 uno per foglio
       const voci = conCopie.filter((o) => formatFor(o.id).id === f.id).flatMap((o) => (f.id === "za5" && doppio && per > 1 ? [o, o] : [o]));
       const fogli = Array.from({ length: Math.ceil(voci.length / per) }, (_, i) => voci.slice(i * per, i * per + per));
-      return { f, foglio, per, voci, fogli };
+      return { f, foglio, per, voci, fogli, cartaQui, suA4: foglioDiStampa(f, "a4") };
     }).filter((g) => g.voci.length > 0);
     const totale = gruppi.reduce((t, g) => t + g.voci.length, 0);
     const nomePagina = (g: (typeof gruppi)[number]) => `foglio_${g.foglio.w}x${g.foglio.h}`;
@@ -476,6 +476,20 @@ export default async function ZooStampaPage({
             Usa il pulsante Stampa del browser (Ctrl+P) e scegli &quot;Salva come PDF&quot;.
             {multipli.map((g) => ` Gli ${g.f.name} escono ${g.per} per foglio A4${g.foglio.w > g.foglio.h ? " orizzontale" : ""} (${g.fogli.length} ${g.fogli.length === 1 ? "foglio" : "fogli"}${g.f.id === "za5" && doppio ? ", ogni cartello due volte" : ""}).`).join("")}
           </span>
+          {/* la carta di ogni formato, e il cambio al volo: senza tornare all'elenco */}
+          {gruppi.filter((g) => g.suA4.colonne * g.suA4.righe > 1).map((g) => {
+            const altra = g.per > 1 ? "formato" : "a4";
+            const qs = new URLSearchParams(Object.entries(sp).filter(([, v]) => v !== undefined) as [string, string][]);
+            qs.set(`carta_${g.f.id}`, altra);
+            return (
+              <span key={g.f.id} className="pill pill-blue" style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+                {g.f.name}: {g.per > 1 ? `${g.per} per foglio A4` : `carta ${g.f.name} (${g.f.w}×${g.f.h} mm), uno per foglio`}
+                <a href={`/stampe/zoo/stampa?${qs.toString()}`} style={{ fontWeight: 700 }}>
+                  → {altra === "formato" ? `carta ${g.f.name}` : `${g.suA4.colonne * g.suA4.righe} per A4`}
+                </a>
+              </span>
+            );
+          })}
         </div>
         {gruppi.flatMap((g) => g.fogli.map((voci, i) => (
           <div key={`${g.f.id}_${i}`} className="foglio-stampa"
