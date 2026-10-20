@@ -1384,9 +1384,8 @@ export function valoriPerStampa(
   const pvL = pvListinoFor(db, scope, o.ean, academyDb) || prezzoDaNumero(gestionale?.[o.ean]?.prezzo);
   if (pvL) vals.prezzoListino = `€ ${pvL}`;
   // offerta a percentuale sul loro prezzo di partenza: il promo si rifà su quello (vedi prezziOffertaPer)
-  if (pvL && !pv && !prezzoManuale) {
-    // in percentuale: la percentuale sul loro prezzo; a prezzo fisso: lo stesso sconto del Consorzio
-    const ricalcolato = o.scontoPerc ? prezzoScontato(pvL, o.scontoPerc) : promoInProporzione(pvL, o);
+  if (pvL && !pv && !prezzoManuale && o.scontoPerc) {
+    const ricalcolato = prezzoScontato(pvL, o.scontoPerc);
     if (ricalcolato) {
       vals.prezzoPromo = `€ ${ricalcolato}`;
       const pr = db.products.find((p) => p.id === o.productId);
@@ -2236,19 +2235,6 @@ function numeroPrezzo(v: string): number {
  * rifà sul loro prezzo: 10,99 -15% = 9,34, non il 9,77 calcolato sull'11,49
  * del Consorzio (che sul cartello diventava un -11%).
  */
-/**
- * Il promo sul prezzo di partenza dell'insegna/PV, con lo stesso sconto del
- * Consorzio: offerta «da 13,49 a 10,99» (-18,5%) e il gestionale dell'insegna
- * vende a 12,99 → promo 10,58. Prima restava il 10,99 del Consorzio sopra al
- * barrato dell'insegna, con uno sconto diverso da quello del volantino.
- * Vuoto se l'offerta non ha i due prezzi o se il prezzo di partenza è lo stesso.
- */
-export function promoInProporzione(listinoProprio: string, offer: Pick<ZooOffer, "prezzoPromo" | "prezzoListino">): string {
-  const mio = numeroPrezzo(listinoProprio), suoL = numeroPrezzo(offer.prezzoListino ?? ""), suoP = numeroPrezzo(offer.prezzoPromo ?? "");
-  if (!(mio > 0 && suoL > 0 && suoP > 0) || suoP >= suoL || Math.abs(mio - suoL) < 0.005) return "";
-  return (Math.round(mio * (suoP / suoL) * 100) / 100).toFixed(2).replace(".", ",");
-}
-
 export function prezziOffertaPer(
   db: ZooDB, offer: ZooOffer, scope: Scope, academyDb: DB, gestionale?: Record<string, Giacenza>,
 ): { prezzo: string; listino: string; listinoProprio: boolean } {
@@ -2256,7 +2242,6 @@ export function prezziOffertaPer(
   const pvL = pvListinoFor(db, scope, offer.ean, academyDb) || prezzoDaNumero(gestionale?.[offer.ean]?.prezzo);
   let prezzo = (pv || offer.prezzoPromo || "").trim();
   if (!pv && pvL && offer.scontoPerc) prezzo = prezzoScontato(pvL, offer.scontoPerc) || prezzo;
-  else if (!pv && pvL) prezzo = promoInProporzione(pvL, offer) || prezzo;
   return { prezzo, listino: (pvL || offer.prezzoListino || "").trim(), listinoProprio: Boolean(pvL) };
 }
 
