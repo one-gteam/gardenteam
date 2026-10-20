@@ -32,8 +32,10 @@ interface Dettagli {
  * riga, che si apre di lato e ridisegna il cartello a ogni salvataggio.
  */
 export default function StampaWorkspace({
-  picker, dettagliUrl, fields, scopeParam, scopeLabel, condizioniStandard, layouts,
+  picker, dettagliUrl, fields, scopeParam, scopeLabel, condizioniStandard, layouts, cartaFormati,
 }: {
+  /** Su che carta va ogni formato (Preferenze di stampa): "formato" = un cartello per foglio, a misura. */
+  cartaFormati?: Record<string, "a4" | "formato">;
   /** Layout che si possono scegliere per un cartello proprio. */
   layouts: LayoutScelta[];
   picker: Omit<StampaPickerProps, "onChange" | "onQueue" | "onPersonalizza" | "onDuplica" | "nuovoCartello">;
@@ -102,7 +104,7 @@ export default function StampaWorkspace({
            * Ogni cartello va sul foglio A4 del suo formato, quanti ce ne stanno:
            * A5 due su A4 orizzontale, A6 quattro su A4 verticale (foglioDiStampa).
            */
-          const foglio = foglioDiStampa(c.format);
+          const foglio = foglioDiStampa(c.format, cartaFormati?.[c.format.id]);
           const per = foglio.colonne * foglio.righe;
           const orient = foglio.w > foglio.h ? "landscape" : "portrait";
           let voce = docs.get(c.format.id);
@@ -130,6 +132,7 @@ export default function StampaWorkspace({
       }
     })();
     return () => { annullato = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pdfLavoro]);
   const router = useRouter();
   const ultimaRichiesta = useRef(0);

@@ -14,7 +14,7 @@ import { sanitizeLayoutItems } from "./layout-pulizia";
 import {
   getZooDb, saveZooDb, ZooDB, ZooParent, ZooProduct, campagnaInLavorazione, campagnaInCorso, campaignStato, NO_VOLANTINO,
   formatiDi, descrizioneConFormati, prezziDelPadre, contenutoDa, chiavePrezzo, type PassoVolantinoId,
-  ZOO_FORMATS, PV_PROMO_CODES_DEFAULT, ownScopeVisible, articoloDaNomeFoto, fotoCandidateDi, apiKeyFor, contenutoDaTesto, zooCartelloValues, layoutScegliibili, scontoDaTesto, promoDaTesto, applicaPromoTesto, chiaveGruppoOfferta,
+  ZOO_FORMATS, TIPI_PROMO_STAMPA, PV_PROMO_CODES_DEFAULT, ownScopeVisible, articoloDaNomeFoto, fotoCandidateDi, apiKeyFor, contenutoDaTesto, zooCartelloValues, layoutScegliibili, scontoDaTesto, promoDaTesto, applicaPromoTesto, chiaveGruppoOfferta,
   type ZooOffer,
 } from "./zoo";
 import type { LayoutItem } from "./stampe";
@@ -2995,6 +2995,34 @@ export async function saveZooTestata(scopeParam: string, formData: FormData) {
   await saveZooDb(db);
   rigeneraZoo();
   redirect(backUrl("/stampe/zoo/layout", scopeParam, { formato, testata: url || modo === "nessuna" ? "1" : "0" }));
+}
+
+/** Preferenze di stampa dell'insegna/PV: formato di partenza, carta per formato, layout predefiniti. */
+export async function salvaPrefStampa(scopeParam: string, formData: FormData) {
+  const { db, academyDb, scope } = await requireLayoutZoo(scopeParam);
+  if (scope.type === "system") redirect(backUrl("/stampe/zoo/layout", scopeParam));
+  const visibili = new Set(layoutScegliibili(db, scope, academyDb).map((l) => l.id));
+  const formato = String(formData.get("formato") ?? "");
+  const carta: Record<string, "a4" | "formato"> = {};
+  const layout: Record<string, string> = {};
+  for (const f of ZOO_FORMATS) {
+    const c = String(formData.get(`carta_${f.id}`) ?? "");
+    if (c === "a4" || c === "formato") carta[f.id] = c;
+    for (const t of TIPI_PROMO_STAMPA) {
+      const id = String(formData.get(`layout_${f.id}_${t.id}`) ?? "");
+      const l = id ? db.zooLayouts.find((x) => x.id === id) : undefined;
+      if (l && visibili.has(l.id) && l.formatId === f.id) layout[`${f.id}|${t.id}`] = l.id;
+    }
+  }
+  db.prefStampa = (db.prefStampa ?? []).filter((x) => !(x.scopeType === scope.type && x.scopeId === scope.id));
+  db.prefStampa.push({
+    scopeType: scope.type as "tenant" | "store", scopeId: scope.id,
+    formato: ZOO_FORMATS.some((f) => f.id === formato) ? formato : undefined,
+    carta, layout,
+  });
+  await saveZooDb(db);
+  rigeneraZoo();
+  redirect(backUrl("/stampe/zoo/layout", scopeParam, { formato: String(formData.get("formatoAperto") ?? ""), pref: "1" }));
 }
 
 export async function deleteZooLayoutImage(imageId: string, scopeParam: string, formato: string) {

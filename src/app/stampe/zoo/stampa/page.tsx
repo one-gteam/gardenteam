@@ -28,7 +28,7 @@ import {
   getZooDb, nonConformiDi, layoutPerOfferta, layoutScegliibili, pvPriceFor, isZooHidden,
   campagneStampabili, campagnaInCorso, campagnaInLavorazione, campaignStato,
   effectiveParentText, effectiveParentTag, printedAt, NO_VOLANTINO,
-  ZOO_FIELDS, ZOO_FORMATS, marcaEffettiva, condizioniPer, ownScopeVisible, pvPromoFor, noPrintSets, offertePerStampa, foglioDiStampa, tagsPerLayout, TIPO_SCONTO, TIPO_MECCANICA, TIPO_BARRATO, TIPO_A_SOLI, valoriPerStampa, giacenzePer, tagsPerStampa,
+  ZOO_FIELDS, ZOO_FORMATS, marcaEffettiva, condizioniPer, ownScopeVisible, pvPromoFor, noPrintSets, offertePerStampa, foglioDiStampa, prefStampaPer, tagsPerLayout, TIPO_SCONTO, TIPO_MECCANICA, TIPO_BARRATO, TIPO_A_SOLI, valoriPerStampa, giacenzePer, tagsPerStampa,
 } from "@/lib/zoo";
 import {
   importPvPricesRighe, markZooPrinted, resetZooPrinted, toggleZooHidden, toggleZooHiddenInline, importZooNoPrintRighe, svuotaZooNoPrint,
@@ -407,7 +407,9 @@ export default async function ZooStampaPage({
 
   const selectedIds = (sp.sel ?? "").split(",").filter(Boolean);
   const selected = selectedIds.map((id) => allOffers.find((o) => o.id === id)).filter(Boolean) as typeof allOffers;
-  const globalFormatId = sp.formato ?? ZOO_FORMATS[0].id;
+  // le preferenze di stampa dell'insegna/PV: formato di partenza e carta per formato
+  const prefStampa = prefStampaPer(db, scope, academyDb);
+  const globalFormatId = sp.formato ?? (ZOO_FORMATS.some((f) => f.id === prefStampa.formato) ? prefStampa.formato! : ZOO_FORMATS[0].id);
   const formatFor = (oid: string) => ZOO_FORMATS.find((f) => f.id === (sp[`formato_${oid}`] ?? globalFormatId)) ?? ZOO_FORMATS[0];
 
   const valuesFor = (o: (typeof allOffers)[number]) => valoriPerStampa(db, scope, academyDb, o, sp, giacenze);
@@ -448,10 +450,10 @@ export default async function ZooStampaPage({
     // copie_<id>: quante volte stampare quel cartello (colonna «Copie»)
     const conCopie = selected.flatMap((o) => Array.from({ length: Math.max(1, Math.min(99, Number(sp[`copie_${o.id}`]) || 1)) }, () => o));
     const gruppi = ZOO_FORMATS.map((f) => {
-      const foglio = foglioDiStampa(f);
+      const foglio = foglioDiStampa(f, prefStampa.carta[f.id]);
       const per = foglio.colonne * foglio.righe;
-      // gli A5 di serie due volte sullo stesso foglio (spunta «doppio»)
-      const voci = conCopie.filter((o) => formatFor(o.id).id === f.id).flatMap((o) => (f.id === "za5" && doppio ? [o, o] : [o]));
+      // gli A5 di serie due volte sullo stesso foglio A4 (spunta «doppio»); su carta A5 uno per foglio
+      const voci = conCopie.filter((o) => formatFor(o.id).id === f.id).flatMap((o) => (f.id === "za5" && doppio && per > 1 ? [o, o] : [o]));
       const fogli = Array.from({ length: Math.ceil(voci.length / per) }, (_, i) => voci.slice(i * per, i * per + per));
       return { f, foglio, per, voci, fogli };
     }).filter((g) => g.voci.length > 0);
@@ -690,6 +692,7 @@ export default async function ZooStampaPage({
             </div>
 
             <StampaWorkspace
+              cartaFormati={prefStampa.carta}
               dettagliUrl="/stampe/zoo/stampa/dettagli"
               fields={ZOO_FIELDS}
               scopeParam={scopeParam}

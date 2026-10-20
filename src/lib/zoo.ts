@@ -916,6 +916,55 @@ export interface ZooDB {
   focusManuali: ZooFocusVolantino[];
   unioniVolantino: ZooUnioneVolantino[];
   focusDef: ZooFocusDef[];
+  prefStampa: ZooPrefStampa[];
+}
+
+/**
+ * Preferenze di stampa di un'insegna o di un punto vendita (Layout →
+ * «Preferenze di stampa»): il formato con cui parte Stampa cartelli, su che
+ * carta va ogni formato (più cartelli su un A4, o la carta del formato già
+ * nella stampante) e il layout da usare per tipo di offerta quando ce n'è più
+ * di uno. Il punto vendita eredita quelle dell'insegna e può cambiarle.
+ */
+export type TipoPromoStampa = "barrato" | "asoli" | "sconto" | "meccanica";
+export const TIPI_PROMO_STAMPA: { id: TipoPromoStampa; label: string }[] = [
+  { id: "barrato", label: "Prezzo barrato" },
+  { id: "asoli", label: "«A SOLI»" },
+  { id: "sconto", label: "A sconto" },
+  { id: "meccanica", label: "Meccanica (3x2…)" },
+];
+export interface ZooPrefStampa {
+  scopeType: "tenant" | "store";
+  scopeId: string;
+  formato?: string;
+  /** formatId → "a4" (più per foglio A4, di serie) o "formato" (carta del formato, uno per foglio) */
+  carta?: Record<string, "a4" | "formato">;
+  /** "formatId|tipo" → id del layout */
+  layout?: Record<string, string>;
+}
+
+/** Le preferenze che valgono per un ambito: quelle del punto vendita, poi dell'insegna (per voce). */
+export function prefStampaPer(db: ZooDB, scope: Scope, academyDb: DB): { formato?: string; carta: Record<string, "a4" | "formato">; layout: Record<string, string> } {
+  const out: { formato?: string; carta: Record<string, "a4" | "formato">; layout: Record<string, string> } = { carta: {}, layout: {} };
+  // dal Consorzio verso il punto vendita: il più vicino scrive per ultimo e vince
+  for (const s of [...chainFor(scope, academyDb)].reverse()) {
+    if (s.type === "system") continue;
+    const p = (db.prefStampa ?? []).find((x) => x.scopeType === s.type && x.scopeId === s.id);
+    if (!p) continue;
+    if (p.formato) out.formato = p.formato;
+    Object.assign(out.carta, p.carta ?? {});
+    for (const [k, v] of Object.entries(p.layout ?? {})) { if (v) out.layout[k] = v; else delete out.layout[k]; }
+  }
+  return out;
+}
+
+/** Il tipo di offerta per le preferenze, dalla tipologia del cartello (il più specifico vince). */
+export function tipoPromoDaTags(tags: string[]): TipoPromoStampa | undefined {
+  if (tags.includes(TIPO_SCONTO)) return "sconto";
+  if (tags.includes(TIPO_MECCANICA)) return "meccanica";
+  if (tags.includes(TIPO_BARRATO)) return "barrato";
+  if (tags.includes(TIPO_A_SOLI)) return "asoli";
+  return undefined;
 }
 
 /* ================== Persistenza ================== */
@@ -944,11 +993,11 @@ export async function getZooDb(): Promise<ZooDB> {
     products: [], parents: [], textOverrides: [], tagOverrides: [], offerOverrides: [], printed: [],
     campaigns: [], offers: [],
     votes: [], hidden: [], pvPrices: [], suggestions: [], volantinoLayouts: [], zooLayouts: [],
-    noPrint: [], layoutImages: [], pvPromoCodes: [], pvPromos: [], scopeApiKeys: [], noteBozza: [], coda: [], giacenze: [], letture: [], nonConformi: [], condizioniScopo: [], testate: [], focusManuali: [], unioniVolantino: [], focusDef: [],
+    noPrint: [], layoutImages: [], pvPromoCodes: [], pvPromos: [], scopeApiKeys: [], noteBozza: [], coda: [], giacenze: [], letture: [], nonConformi: [], condizioniScopo: [], testate: [], focusManuali: [], unioniVolantino: [], focusDef: [], prefStampa: [],
   };
   const db = await readDomain<ZooDB>("zoo", empty);
   db.settings = { ...DEFAULT_SETTINGS, ...(db.settings ?? {}) };
-  for (const k of ["products", "parents", "textOverrides", "tagOverrides", "offerOverrides", "printed", "campaigns", "offers", "votes", "hidden", "pvPrices", "suggestions", "volantinoLayouts", "zooLayouts", "noPrint", "layoutImages", "pvPromoCodes", "pvPromos", "scopeApiKeys", "noteBozza", "coda", "giacenze", "letture", "nonConformi", "condizioniScopo", "testate", "focusManuali", "unioniVolantino", "focusDef"] as const) {
+  for (const k of ["products", "parents", "textOverrides", "tagOverrides", "offerOverrides", "printed", "campaigns", "offers", "votes", "hidden", "pvPrices", "suggestions", "volantinoLayouts", "zooLayouts", "noPrint", "layoutImages", "pvPromoCodes", "pvPromos", "scopeApiKeys", "noteBozza", "coda", "giacenze", "letture", "nonConformi", "condizioniScopo", "testate", "focusManuali", "unioniVolantino", "focusDef", "prefStampa"] as const) {
     if (!db[k]) (db as unknown as Record<string, unknown>)[k] = [];
   }
   // i layout salvati prima delle tipologie non hanno il campo: senza questo la
@@ -1755,13 +1804,17 @@ export function effectiveZooLayout(
     const comuni = tip(l).filter((t) => tags.includes(t));
     return comuni.length * 10 + comuni.reduce((max, t) => Math.max(max, specificita(t)), 0);
   };
+  /*
+   * Ambito per ambito, dal più vicino: prima il suo layout fatto per questo tipo
+   * di offerta, poi il suo generico; solo se l'ambito non ne ha nessuno adatto
+   * si sale all'insegna e al Consorzio. Prima un layout specifico del Consorzio
+   * vinceva sul generico dell'insegna, e l'insegna non vedeva il suo.
+   */
   for (const s of chain) {
     const adatti = candidates.filter((l) => di(l, s) && tip(l).length > 0 && tip(l).some((t) => tags.includes(t)));
     if (adatti.length > 0) {
       return conTestata(adatti.reduce((migliore, l) => (punteggio(l) > punteggio(migliore) ? l : migliore), adatti[0]));
     }
-  }
-  for (const s of chain) {
     const generic = candidates.find((l) => di(l, s) && tip(l).length === 0);
     if (generic) return conTestata(generic);
   }
@@ -1788,6 +1841,11 @@ export function layoutPerOfferta(
     if (scelto.formatId === formatId) return conTestataDiScopo(scelto, testataScopoPer(db, scope, academyDb, formatId));
     if ((scelto.tipologie ?? []).length > 0) return effectiveZooLayout(db, scope, formatId, academyDb, scelto.tipologie);
   }
+  // il layout predefinito dell'insegna/PV per questo formato e tipo di offerta (Preferenze di stampa)
+  const tipo = tipoPromoDaTags(tags);
+  const idPref = tipo ? prefStampaPer(db, scope, academyDb).layout[`${formatId}|${tipo}`] : undefined;
+  const pref = idPref ? db.zooLayouts.find((l) => l.id === idPref) : undefined;
+  if (pref && pref.formatId === formatId && ownScopeVisible(scope, academyDb, pref)) return conTestataDiScopo(pref, testataScopoPer(db, scope, academyDb, formatId));
   return effectiveZooLayout(db, scope, formatId, academyDb, tags);
 }
 
