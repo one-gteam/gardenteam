@@ -917,6 +917,8 @@ export interface ZooDB {
   unioniVolantino: ZooUnioneVolantino[];
   focusDef: ZooFocusDef[];
   prefStampa: ZooPrefStampa[];
+  /** Selezioni di Stampa cartelli troppo lunghe per l'indirizzo: si salvano qui e si riaprono con ?ripresa=id. */
+  ripreseStampa: { id: string; userId: string; query: string; at: string }[];
 }
 
 /**
@@ -993,11 +995,11 @@ export async function getZooDb(): Promise<ZooDB> {
     products: [], parents: [], textOverrides: [], tagOverrides: [], offerOverrides: [], printed: [],
     campaigns: [], offers: [],
     votes: [], hidden: [], pvPrices: [], suggestions: [], volantinoLayouts: [], zooLayouts: [],
-    noPrint: [], layoutImages: [], pvPromoCodes: [], pvPromos: [], scopeApiKeys: [], noteBozza: [], coda: [], giacenze: [], letture: [], nonConformi: [], condizioniScopo: [], testate: [], focusManuali: [], unioniVolantino: [], focusDef: [], prefStampa: [],
+    noPrint: [], layoutImages: [], pvPromoCodes: [], pvPromos: [], scopeApiKeys: [], noteBozza: [], coda: [], giacenze: [], letture: [], nonConformi: [], condizioniScopo: [], testate: [], focusManuali: [], unioniVolantino: [], focusDef: [], prefStampa: [], ripreseStampa: [],
   };
   const db = await readDomain<ZooDB>("zoo", empty);
   db.settings = { ...DEFAULT_SETTINGS, ...(db.settings ?? {}) };
-  for (const k of ["products", "parents", "textOverrides", "tagOverrides", "offerOverrides", "printed", "campaigns", "offers", "votes", "hidden", "pvPrices", "suggestions", "volantinoLayouts", "zooLayouts", "noPrint", "layoutImages", "pvPromoCodes", "pvPromos", "scopeApiKeys", "noteBozza", "coda", "giacenze", "letture", "nonConformi", "condizioniScopo", "testate", "focusManuali", "unioniVolantino", "focusDef", "prefStampa"] as const) {
+  for (const k of ["products", "parents", "textOverrides", "tagOverrides", "offerOverrides", "printed", "campaigns", "offers", "votes", "hidden", "pvPrices", "suggestions", "volantinoLayouts", "zooLayouts", "noPrint", "layoutImages", "pvPromoCodes", "pvPromos", "scopeApiKeys", "noteBozza", "coda", "giacenze", "letture", "nonConformi", "condizioniScopo", "testate", "focusManuali", "unioniVolantino", "focusDef", "prefStampa", "ripreseStampa"] as const) {
     if (!db[k]) (db as unknown as Record<string, unknown>)[k] = [];
   }
   // i layout salvati prima delle tipologie non hanno il campo: senza questo la

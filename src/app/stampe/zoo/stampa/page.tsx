@@ -2,6 +2,7 @@ import { PulsanteAzione } from "@/components/AzioneSenzaRicarica";
 import SalvaPdf from "@/components/stampe/SalvaPdf";
 import SpuntaLista from "@/components/stampe/SpuntaLista";
 import IndiceListe from "@/components/stampe/IndiceListe";
+import PulsanteConferma from "@/components/stampe/PulsanteConferma";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
@@ -32,7 +33,7 @@ import {
 } from "@/lib/zoo";
 import {
   importPvPricesRighe, markZooPrinted, resetZooPrinted, toggleZooHidden, toggleZooHiddenInline, importZooNoPrintRighe, svuotaZooNoPrint,
-  toggleZooNoPrint, rimettiInCodaMulti, svuotaStampatiCoda, rimettiInStampaMulti,
+  toggleZooNoPrint, svuotaStampatiCoda, riportaFraSelezionati, eliminaRigheERendiDaStampare, salvaSelezioneStampa, rimettiInStampaMulti,
   rimettiInCodaInline, segnaArrivatoInline, togliNonConformeInline, rimettiInStampaInline,
   creaOffertaPropria, eliminaOffertaPropria, stampaCoda,
 } from "@/lib/zoo-actions";
@@ -52,6 +53,15 @@ export default async function ZooStampaPage({
   const sp = await searchParams;
 
   const db = await getZooDb();
+  /*
+   * Selezione salvata (?ripresa=id): «Riporta fra i selezionati» dalle liste, o
+   * una stampa con troppi cartelli per stare nell'indirizzo. I suoi parametri
+   * valgono come se fossero nell'indirizzo; quelli scritti lì (print, pdf) restano.
+   */
+  if (sp.ripresa) {
+    const r = (db.ripreseStampa ?? []).find((x) => x.id === sp.ripresa && x.userId === user!.id);
+    if (r) for (const [k, v] of new URLSearchParams(r.query)) if (sp[k] === undefined || k === "sel") sp[k] = v;
+  }
   const academyDb = await getDb();
   const scopes = scopesForUser(user, academyDb);
   const scope = resolveScope(user, sp.scope, academyDb);
@@ -596,6 +606,9 @@ export default async function ZooStampaPage({
         {sp.rimessi !== undefined && sp.noprint === undefined && (
           <div className="alert alert-green">✓ {sp.rimessi} cartelli rimessi fra quelli da stampare.</div>
         )}
+        {sp.tolte !== undefined && (
+          <div className="alert alert-green">✓ {sp.tolte} righe tolte dalle liste: i loro cartelli tornano da stampare.</div>
+        )}
         {sp.azzerati !== undefined && (
           <div className="alert alert-green">✓ Azzerato il &quot;già stampato&quot; su {sp.azzerati} cartelli.</div>
         )}
@@ -732,6 +745,7 @@ export default async function ZooStampaPage({
                   visible.map((o) => [o.id, printedAt(db, scope, o.id) ?? ""]).filter(([, v]) => v)
                 ),
                 onPrint: markZooPrinted.bind(null, scopeParam),
+                salvaSelezione: salvaSelezioneStampa,
                 conCopie: true,
                 cartaIniziale: Object.fromEntries(ZOO_FORMATS.map((f) => [f.id, sp[`carta_${f.id}`] === "formato" || sp[`carta_${f.id}`] === "a4" ? sp[`carta_${f.id}`] : prefStampa.carta[f.id]]).filter(([, v]) => v)) as Record<string, "a4" | "formato">,
                 misureFormati: Object.fromEntries(ZOO_FORMATS.map((f) => [f.id, { w: f.w, h: f.h }])),
@@ -805,6 +819,36 @@ export default async function ZooStampaPage({
                           </span>
                         ) : null;
                       })()}
+                      {(() => {
+                        const conta = (chiave: (c: (typeof g.voci)[number]) => string) => [...new Map(g.voci.map((c) => [chiave(c), g.voci.filter((x) => chiave(x) === chiave(c)).length])).entries()];
+                        const utenti = conta((c) => c.userName);
+                        const giorni = conta((c) => new Date(c.creato).toLocaleDateString("it-IT", { timeZone: FUSO }));
+                        return (
+                          <>
+                            {utenti.length > 1 && (
+                              <span style={{ display: "inline-flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+                                <span className="hint">Chi:</span>
+                                {utenti.map(([nome, n]) => <SpuntaLista key={nome} lista={nome} n={n} campo="utente" titolo={`Spunta solo quelli messi da ${nome}`} />)}
+                              </span>
+                            )}
+                            {giorni.length > 1 && (
+                              <span style={{ display: "inline-flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+                                <span className="hint">Quando:</span>
+                                {giorni.map(([giorno, n]) => <SpuntaLista key={giorno} lista={giorno} n={n} campo="giorno" titolo={`Spunta solo quelli messi il ${giorno}`} />)}
+                              </span>
+                            )}
+                          </>
+                        );
+                      })()}
+                      <button className="btn btn-outline btn-sm" type="submit" formAction={riportaFraSelezionati.bind(null, scopeParam, "")}
+                        title="I cartelli spuntati tornano fra i selezionati della scheda Stampa, con le loro impostazioni">
+                        Fra i selezionati →
+                      </button>
+                      <PulsanteConferma azione={eliminaRigheERendiDaStampare.bind(null, scopeParam, "")}
+                        conferma="Togliere dalla lista {n}? Se erano già stampati, tornano «da stampare»."
+                        title="Toglie dalla lista le righe spuntate (servono le spunte)" style={{ color: "var(--red, #b42318)" }}>
+                        Elimina spuntati
+                      </PulsanteConferma>
                       {g.formato.id === "za5" && (
                         <label className="interruttore-grande acceso"
                           title="Gli A5 escono sempre due per foglio A4 orizzontale. Acceso: ogni cartello due volte sullo stesso foglio. Spento: due cartelli diversi per foglio.">
@@ -839,7 +883,7 @@ export default async function ZooStampaPage({
                             <Fragment key={c.id}>
                               <RigaCoda id={c.id} scopeParam={scopeParam} contatoreId={`conta-dopo,conta-${g.formato.id}`} tabella
                                 dati={{ nome: c.nome, marca: c.marca, fornitore: c.fornitore, animale: c.animale, promo: c.promo }}>
-                                <td><input type="checkbox" name="coda" value={c.id} data-lista={c.lista} title="Spunta per stampare solo alcuni" /></td>
+                                <td><input type="checkbox" name="coda" value={c.id} data-lista={c.lista} data-utente={c.userName} data-giorno={new Date(c.creato).toLocaleDateString("it-IT", { timeZone: FUSO })} title="Spunta per stampare solo alcuni" /></td>
                                 <td>
                                   {c.nome}
                                   {c.impostazioni[`senzafoto_${c.offerId}`] === "1" && <span className="pill pill-gray" style={{ marginLeft: 6 }}>senza foto</span>}
@@ -896,12 +940,27 @@ export default async function ZooStampaPage({
                           <label className="hint" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
                             <BulkCheckbox name="coda" /> tutti
                           </label>
-                          <span className="hint">Maiusc+clic per un intervallo; senza spunte rimette in coda tutto il lotto.</span>
+                          <span className="hint">Maiusc+clic per un intervallo; senza spunte vale tutto il lotto.</span>
+                          {(() => {
+                            const utenti = [...new Map(l.voci.map((c) => [c.userName, l.voci.filter((x) => x.userName === c.userName).length])).entries()];
+                            return utenti.length > 1 ? (
+                              <span style={{ display: "inline-flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+                                <span className="hint">Chi:</span>
+                                {utenti.map(([nome, n]) => <SpuntaLista key={nome} lista={nome} n={n} campo="utente" titolo={`Spunta solo quelli mandati in stampa da ${nome}`} />)}
+                              </span>
+                            ) : null;
+                          })()}
                           <button className="btn btn-sm" type="submit" style={{ marginLeft: "auto" }}
-                            formAction={rimettiInCodaMulti.bind(null, scopeParam, "", l.iso)}
-                            title="Riporta fra quelli da stampare i cartelli spuntati, o tutto questo lotto">
-                            Rimetti in coda il lotto
+                            formAction={riportaFraSelezionati.bind(null, scopeParam, l.iso)}
+                            title="I cartelli spuntati (o tutto il lotto) tornano fra i selezionati della scheda Stampa, con le loro impostazioni, pronti da ristampare">
+                            Riporta fra i selezionati →
                           </button>
+                          <PulsanteConferma azione={eliminaRigheERendiDaStampare.bind(null, scopeParam, l.iso)}
+                            conferma="Togliere dalla lista {n} di questo lotto? I cartelli tornano «da stampare», come se non fossero mai stati stampati."
+                            title="Per le prove e gli errori: le righe spariscono e i cartelli tornano da stampare"
+                            style={{ color: "var(--red, #b42318)" }}>
+                            Elimina e torna da stampare
+                          </PulsanteConferma>
                         </div>
                         <div className="table-wrap">
                           <table className="data">
@@ -923,7 +982,7 @@ export default async function ZooStampaPage({
                                 <tr key={c.id}
                                   data-nome={c.nome} data-marca={c.marca} data-fornitore={c.fornitore}
                                   data-animale={c.animale} data-promo={c.promo} data-formato={formatoDiCoda(c).name}>
-                                  <td><input type="checkbox" name="coda" value={c.id} title="Spunta per rimetterlo in coda" /></td>
+                                  <td><input type="checkbox" name="coda" value={c.id} data-utente={c.userName} title="Spunta per scegliere questa riga" /></td>
                                   <td style={{ opacity: 0.8 }}>{c.nome}</td>
                                   <td>{c.marca}</td>
                                   <td>{c.fornitore}</td>

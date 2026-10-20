@@ -74,6 +74,8 @@ export interface StampaPickerProps {
   initialCopie?: Record<string, number>;
   /** Carta per formato (A5/A6…): più cartelli per foglio A4 o la carta del formato. Di partenza dalle Preferenze di stampa. */
   cartaIniziale?: Record<string, "a4" | "formato">;
+  /** Salva i parametri di una stampa troppo lunga per l'indirizzo e ne dà l'id (?ripresa=id). */
+  salvaSelezione?: (query: string) => Promise<string | null>;
   /** Misure dei formati, per sapere quanti ne stanno su un A4. */
   misureFormati?: Record<string, { w: number; h: number }>;
   /** Prezzi di partenza (barrati) scritti a mano per il singolo cartello. */
@@ -137,6 +139,7 @@ export default function StampaPicker({
   initialCopie,
   cartaIniziale,
   misureFormati,
+  salvaSelezione,
   initialListini,
   initialNoPhoto,
   initialNoListino,
@@ -337,7 +340,16 @@ export default function StampaPicker({
 
   /** Prima di aprire l'anteprima di stampa segna i cartelli come già stampati. */
   const vaiAllaStampa = async (nomePdf?: string) => {
-    const url = buildUrl(true) + (nomePdf ? `&pdf=${encodeURIComponent(nomePdf)}` : "");
+    let url = buildUrl(true) + (nomePdf ? `&pdf=${encodeURIComponent(nomePdf)}` : "");
+    /*
+     * Con centinaia di cartelli l'indirizzo supera quello che il server accetta
+     * e l'anteprima di stampa non si apriva: la selezione si salva e si apre
+     * col suo numero.
+     */
+    if (url.length > 6000 && salvaSelezione) {
+      const id = await salvaSelezione(buildUrl(false).split("?")[1]).catch(() => null);
+      if (id) url = `${baseUrl}?scope=${encodeURIComponent(scopeParam)}&ripresa=${id}&print=1${nomePdf ? `&pdf=${encodeURIComponent(nomePdf)}` : ""}`;
+    }
     if (onPrint && selected.length > 0) {
       try { await onPrint(selected, vociStampa()); } catch { /* la stampa non deve fallire per questo */ }
     }

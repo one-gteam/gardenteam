@@ -18,10 +18,23 @@ import {
  * formato_<id>, prezzo_<id>, listino_<id>, noprezzo_<id>, nascondi_<id>.
  */
 export async function GET(req: NextRequest) {
+  return rispondi(Object.fromEntries(req.nextUrl.searchParams.entries()));
+}
+
+/*
+ * Gli stessi parametri nel corpo della richiesta: con centinaia di cartelli
+ * scelti l'indirizzo diventava troppo lungo e il server non rispondeva (il PDF
+ * di 420 cartelli non partiva nemmeno).
+ */
+export async function POST(req: NextRequest) {
+  const testo = (await req.text()).slice(0, 2_000_000);
+  return rispondi(Object.fromEntries(new URLSearchParams(testo).entries()));
+}
+
+async function rispondi(sp: Record<string, string>) {
   const user = await getCurrentUser();
   if (!user || !canAccessArea(user, "zoo")) return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
 
-  const sp = Object.fromEntries(req.nextUrl.searchParams.entries());
   const db = await getZooDb();
   const academyDb = await getDb();
   const scope = resolveScope(user, sp.scope, academyDb);

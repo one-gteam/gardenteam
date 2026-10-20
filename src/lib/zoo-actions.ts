@@ -2309,6 +2309,76 @@ export async function rimettiInCodaMulti(scopeParam: string, formatoId: string, 
   redirect(backUrl("/stampe/zoo/stampa", scopeParam));
 }
 
+/**
+ * Salva una selezione di Stampa cartelli (i parametri dell'indirizzo) e ne
+ * dà l'id: con centinaia di cartelli l'indirizzo diventa troppo lungo per il
+ * server. Si riapre con ?ripresa=id. Se ne tengono poche, per due giorni.
+ */
+function salvaRipresa(db: ZooDB, userId: string, query: string): string {
+  const id = `zr_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  const limite = new Date(Date.now() - 2 * 864e5).toISOString();
+  db.ripreseStampa = [...(db.ripreseStampa ?? []).filter((r) => r.at > limite).slice(-40), { id, userId, query: query.slice(0, 500_000), at: new Date().toISOString() }];
+  return id;
+}
+
+export async function salvaSelezioneStampa(query: string): Promise<string | null> {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const id = salvaRipresa(db, user.id, query);
+  await saveZooDb(db);
+  return id;
+}
+
+/**
+ * Le righe spuntate (o tutto il lotto) di «Già stampati» / «Da stampare più
+ * tardi»: i cartelli tornano fra i selezionati della scheda Stampa, con le
+ * impostazioni con cui erano stati messi (formato, prezzi, layout…), pronti
+ * da ristampare. Le righe della lista restano dove sono.
+ */
+export async function riportaFraSelezionati(scopeParam: string, lotto: string, formData: FormData) {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  const solo = (formData.getAll("coda") as string[]).filter(Boolean);
+  const righe = db.coda.filter((c) => c.scopeType === scope.type && c.scopeId === scope.id
+    && (solo.length > 0 ? solo.includes(c.id) : lotto ? c.stampato === lotto : false));
+  if (righe.length === 0) redirect(backUrl("/stampe/zoo/stampa", scopeParam, { tab: "liste" }));
+  const params = new URLSearchParams({ scope: scopeParam });
+  const ids = [...new Set(righe.map((r) => r.offerId))];
+  params.set("sel", ids.join(","));
+  for (const r of righe) for (const [k, v] of Object.entries(r.impostazioni)) if (v) params.set(k, v);
+  const id = salvaRipresa(db, user.id, params.toString());
+  await saveZooDb(db);
+  redirect(`/stampe/zoo/stampa?scope=${encodeURIComponent(scopeParam)}&ripresa=${id}`);
+}
+
+/**
+ * Toglie le righe spuntate (o tutto il lotto) dalle liste e i loro cartelli
+ * tornano «da stampare», come se non fossero mai stati stampati: per le prove
+ * e per gli errori. Non tocca i cartelli stessi né le loro impostazioni.
+ */
+export async function eliminaRigheERendiDaStampare(scopeParam: string, lotto: string, formData: FormData) {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  const solo = (formData.getAll("coda") as string[]).filter(Boolean);
+  const via = db.coda.filter((c) => c.scopeType === scope.type && c.scopeId === scope.id
+    && (solo.length > 0 ? solo.includes(c.id) : lotto ? c.stampato === lotto : false));
+  if (via.length === 0) redirect(backUrl("/stampe/zoo/stampa", scopeParam, { tab: "liste" }));
+  const idVia = new Set(via.map((c) => c.id));
+  db.coda = db.coda.filter((c) => !idVia.has(c.id));
+  // il «già stampato» va via per quei cartelli, salvo che restino stampati in un'altra riga della lista
+  const ancoraStampati = new Set(db.coda.filter((c) => c.scopeType === scope.type && c.scopeId === scope.id && c.stampato).map((c) => c.offerId));
+  const offerte = new Set(via.map((c) => c.offerId).filter((o) => !ancoraStampati.has(o)));
+  db.printed = db.printed.filter((p) => !(p.scopeType === scope.type && p.scopeId === scope.id && offerte.has(p.offerId)));
+  registra(user, { area: "zoo", cosa: "Righe tolte dalle liste di stampa", oggetto: `${via.length} righe (${offerte.size} cartelli tornano da stampare)`, ambito: scope.label });
+  await saveZooDb(db);
+  rigeneraZoo();
+  redirect(backUrl("/stampe/zoo/stampa", scopeParam, { tab: "liste", tolte: String(via.length) }));
+}
+
 /** Pulisce l'elenco dei cartelli già stampati (restano i cartelli, sparisce lo storico). */
 export async function svuotaStampatiCoda(scopeParam: string) {
   const user = await requireZooUser();

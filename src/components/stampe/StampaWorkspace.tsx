@@ -3,6 +3,7 @@
 import { foglioDiStampa } from "@/lib/foglio-stampa";
 import { immaginiInLinea } from "@/lib/immagini-in-linea";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createRoot } from "react-dom/client";
 import { useRouter } from "next/navigation";
 import type { CardLayout, PrintField, PrintFormat } from "@/lib/stampe";
 import Cartello from "./Cartello";
@@ -60,11 +61,10 @@ export default function StampaWorkspace({
    */
   const [pdfLavoro, setPdfLavoro] = useState<{ nome: string; cartelli: Dettagli["cartelli"]; carta?: Record<string, "a4" | "formato"> } | null>(null);
   const [pdfStato, setPdfStato] = useState("");
-  const pdfRef = useRef<HTMLDivElement>(null);
   const salvaPdf = useCallback(async (nome: string, q: string) => {
     setPdfStato("Preparo il PDF…");
     try {
-      const r = await fetch(`${dettagliUrl}?${q}`);
+      const r = await fetch(dettagliUrl, { method: "POST", body: q, headers: { "content-type": "application/x-www-form-urlencoded" } });
       if (!r.ok) throw new Error(String(r.status));
       const d = (await r.json()) as Dettagli;
       if (!d.cartelli.length) { setPdfStato("Nessun cartello da salvare."); return; }
@@ -82,30 +82,48 @@ export default function StampaWorkspace({
   useEffect(() => {
     if (!pdfLavoro) return;
     let annullato = false;
+    /*
+     * Un cartello alla volta: si disegna a grandezza reale in un riquadro fuori
+     * dallo schermo, si «fotografa», si mette nel PDF e si toglie. Prima si
+     * disegnavano tutti insieme: con centinaia di cartelli il browser si
+     * fermava e il PDF non arrivava.
+     */
+    const posto = document.createElement("div");
+    posto.setAttribute("aria-hidden", "true");
+    Object.assign(posto.style, { position: "fixed", left: "-20000px", top: "0", pointerEvents: "none" });
+    document.body.appendChild(posto);
     (async () => {
       try {
         const [{ jsPDF }, { default: html2canvas }] = await Promise.all([import("jspdf"), import("html2canvas-pro")]);
-        // si aspetta che le foto dei cartelli siano caricate (al massimo 8 secondi)
-        const t0 = Date.now();
-        while (!annullato && Date.now() - t0 < 8000) {
-          const imgs = Array.from(pdfRef.current?.querySelectorAll("img") ?? []);
-          if (imgs.every((i) => i.complete)) break;
-          await new Promise((res) => setTimeout(res, 150));
-        }
         await (document as Document & { fonts?: FontFaceSet }).fonts?.ready;
-        // foto e testate dal bucket: messe come dati, altrimenti html2canvas le salta
-        await immaginiInLinea(pdfRef.current);
-        const fogli = Array.from(pdfRef.current?.querySelectorAll<HTMLElement>("[data-cartello-pdf]") ?? []);
-        // un PDF per formato: in stampa ogni formato va col suo foglio (e la stampante col suo cassetto)
         const docs = new Map<string, { nome: string; doc: InstanceType<typeof jsPDF>; n: number }>();
         const formati = [...new Set(pdfLavoro.cartelli.map((c) => c.format.id))];
-        for (let i = 0; i < fogli.length && !annullato; i++) {
+        const totale = pdfLavoro.cartelli.length;
+        for (let i = 0; i < totale && !annullato; i++) {
           const c = pdfLavoro.cartelli[i];
-          setPdfStato(`Preparo il PDF… ${i + 1} di ${fogli.length}`);
-          const canvas = await html2canvas(fogli[i], { scale: 2, backgroundColor: "#ffffff", useCORS: true });
+          setPdfStato(`Preparo il PDF… ${i + 1} di ${totale}`);
+          const foglioCartello = document.createElement("div");
+          Object.assign(foglioCartello.style, { width: `${c.format.w * 3.7795}px`, height: `${c.format.h * 3.7795}px`, background: "#fff" });
+          posto.appendChild(foglioCartello);
+          const radice = createRoot(foglioCartello);
+          radice.render(<Cartello format={c.format} layout={c.layout} fields={fields} values={c.values} scale={3.7795} />);
+          // si lascia disegnare (due fotogrammi) e si aspettano le foto, al massimo 6 secondi
+          await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)));
+          const t0 = Date.now();
+          while (Date.now() - t0 < 6000 && !Array.from(foglioCartello.querySelectorAll("img")).every((im) => im.complete)) {
+            await new Promise((res) => setTimeout(res, 100));
+          }
+          // foto e testate dal bucket: messe come dati, altrimenti html2canvas le salta
+          await immaginiInLinea(foglioCartello);
+          // gli A4 un po' meno fitti: centinaia di pagine restano maneggevoli (≈150 dpi), gli altri ≈190
+          const canvas = await html2canvas(foglioCartello, { scale: c.format.w * c.format.h > 40000 ? 1.6 : 2, backgroundColor: "#ffffff", useCORS: true });
+          const immagine = canvas.toDataURL("image/jpeg", 0.9);
+          radice.unmount();
+          foglioCartello.remove();
           /*
-           * Ogni cartello va sul foglio A4 del suo formato, quanti ce ne stanno:
-           * A5 due su A4 orizzontale, A6 quattro su A4 verticale (foglioDiStampa).
+           * Ogni cartello va sul foglio del suo formato, quanti ce ne stanno:
+           * A5 due su A4 orizzontale, A6 quattro su A4 verticale, o uno per
+           * foglio sulla carta del formato (foglioDiStampa).
            */
           const foglio = foglioDiStampa(c.format, pdfLavoro.carta?.[c.format.id]);
           const per = foglio.colonne * foglio.righe;
@@ -113,17 +131,17 @@ export default function StampaWorkspace({
           let voce = docs.get(c.format.id);
           if (!voce) {
             const nomeFormato = c.format.name.replace(/\s*\(.*\)\s*/, "").trim() || c.format.id;
-            voce = { nome: formati.length > 1 ? `${pdfLavoro.nome} - ${nomeFormato}` : pdfLavoro.nome, doc: new jsPDF({ unit: "mm", format: [foglio.w, foglio.h], orientation: orient }), n: 0 };
+            voce = { nome: formati.length > 1 ? `${pdfLavoro.nome} - ${nomeFormato}` : pdfLavoro.nome, doc: new jsPDF({ unit: "mm", format: [foglio.w, foglio.h], orientation: orient, compress: true }), n: 0 };
             docs.set(c.format.id, voce);
           } else if (voce.n % per === 0) voce.doc.addPage([foglio.w, foglio.h], orient);
-          const posto = voce.n % per;
-          voce.doc.addImage(canvas.toDataURL("image/jpeg", 0.93), "JPEG", (posto % foglio.colonne) * c.format.w, Math.floor(posto / foglio.colonne) * c.format.h, c.format.w, c.format.h);
+          const casella = voce.n % per;
+          voce.doc.addImage(immagine, "JPEG", (casella % foglio.colonne) * c.format.w, Math.floor(casella / foglio.colonne) * c.format.h, c.format.w, c.format.h);
           voce.n++;
         }
         if (!annullato && docs.size) {
           for (const v of docs.values()) {
             v.doc.save(`${v.nome}.pdf`);
-            await new Promise((res) => setTimeout(res, 400)); // un attimo fra un file e l'altro: il browser li scarica tutti
+            await new Promise((res) => setTimeout(res, 600)); // un attimo fra un file e l'altro: il browser li scarica tutti
           }
           setPdfStato(`✓ Scaricat${docs.size === 1 ? "o" : "i"} ${[...docs.values()].map((v) => `«${v.nome}.pdf» (${v.n})`).join(", ")}`);
         }
@@ -131,6 +149,7 @@ export default function StampaWorkspace({
         console.error("PDF dei cartelli", e);
         setPdfStato(`PDF non riuscito (${e instanceof Error ? e.message.slice(0, 100) : "errore"}).`);
       } finally {
+        posto.remove();
         if (!annullato) setPdfLavoro(null);
       }
     })();
@@ -145,7 +164,7 @@ export default function StampaWorkspace({
     const n = ++ultimaRichiesta.current;
     setCaricamento(true);
     try {
-      const r = await fetch(`${dettagliUrl}?${q}`);
+      const r = await fetch(dettagliUrl, { method: "POST", body: q, headers: { "content-type": "application/x-www-form-urlencoded" } });
       if (!r.ok) throw new Error(String(r.status));
       const d = (await r.json()) as Dettagli;
       if (n === ultimaRichiesta.current) setDati(d);
@@ -211,14 +230,11 @@ export default function StampaWorkspace({
             </div>
           )}
           {pdfStato && <p className="hint" style={{ fontWeight: 700, color: pdfStato.startsWith("✓") ? "var(--green-700)" : undefined }}>{pdfStato}</p>}
-          {/* i cartelli del PDF, a grandezza reale e fuori dallo schermo */}
-          {pdfLavoro && (
-            <div ref={pdfRef} aria-hidden style={{ position: "fixed", left: -20000, top: 0, pointerEvents: "none" }}>
-              {pdfLavoro.cartelli.map((c, i) => (
-                <div key={`${c.id}_${i}`} data-cartello-pdf style={{ width: c.format.w * 3.7795, height: c.format.h * 3.7795, background: "#fff" }}>
-                  <Cartello format={c.format} layout={c.layout} fields={fields} values={c.values} scale={3.7795} />
-                </div>
-              ))}
+          {/* lo stato del PDF anche in un riquadro fisso: con tanti cartelli la riga qui sopra sta fuori dallo schermo */}
+          {pdfStato && (
+            <div className="no-print" role="status" style={{ position: "fixed", right: 16, bottom: 16, zIndex: 90, background: "#fff", border: "1.5px solid var(--green-600, #2f6b4a)", borderRadius: 10, padding: "10px 14px", boxShadow: "0 8px 24px rgba(0,0,0,.18)", fontWeight: 700, fontSize: 13.5, maxWidth: 420, display: "flex", gap: 10, alignItems: "center" }}>
+              <span>{pdfStato}</span>
+              {!pdfLavoro && <button type="button" className="mini-btn" onClick={() => setPdfStato("")}>chiudi</button>}
             </div>
           )}
           {anteprima.length > 0 && (
