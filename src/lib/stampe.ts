@@ -207,6 +207,7 @@ export interface LayoutItem {
   size?: number; // dimensione font: sovrascrive il default del campo per questo elemento
   bold?: boolean; // grassetto: sovrascrive il default del campo per questo elemento
   italic?: boolean; // corsivo (nessun default: solo per elemento)
+  maiuscolo?: boolean; // TUTTO MAIUSCOLO (il testo salvato resta com'è)
   align?: "left" | "center" | "right"; // allineamento del testo nel paragrafo
   valign?: "top" | "middle" | "bottom"; // dove sta il testo dentro al riquadro (default: in alto)
   font?: string; // chiave di LAYOUT_FONTS (vedi lib/layout-fonts): sovrascrive il carattere del campo

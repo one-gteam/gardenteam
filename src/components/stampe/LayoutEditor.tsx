@@ -1844,6 +1844,10 @@ export default function LayoutEditor({
                 <input type="checkbox" checked={selItem.italic ?? false} onChange={(e) => updateSelected({ italic: e.target.checked })} />
                 Corsivo
               </label>
+<label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12.5 }}>
+                <input type="checkbox" checked={selItem.maiuscolo ?? false} onChange={(e) => updateSelected({ maiuscolo: e.target.checked || undefined })} />
+                TUTTO MAIUSCOLO
+              </label>
             </div>
             <label className="field" style={{ marginBottom: 10 }}>
               Allineamento del testo

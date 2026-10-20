@@ -2928,8 +2928,23 @@ async function rapportoImmagine(sorgente: Buffer | string): Promise<number | und
   }
 }
 
+/**
+ * Chi può toccare i layout di questo ambito: chi gestisce l'area oppure il
+ * Grafico del suo livello. La testata e le immagini fisse prima chiedevano il
+ * solo «gestisce», mentre la pagina le mostrava anche al grafico: il
+ * salvataggio veniva rifiutato in silenzio e la testata «non si caricava».
+ */
+async function requireLayoutZoo(scopeParam: string) {
+  const user = await requireZooUser();
+  const db = await getZooDb();
+  const academyDb = await getDb();
+  const scope = resolveScope(user, scopeParam, academyDb);
+  if (!puoModificareLayout(user, "zoo", scope, academyDb)) redirect(backUrl("/stampe/zoo/layout", scopeParam, { permessi: "no" }));
+  return { user, db, academyDb, scope };
+}
+
 export async function saveZooTestata(scopeParam: string, formData: FormData) {
-  const { db, scope } = await requireZooGestione(scopeParam, "/stampe/zoo/layout");
+  const { db, scope } = await requireLayoutZoo(scopeParam);
   if (scope.type === "system") redirect(backUrl("/stampe/zoo/layout", scopeParam));
   const formato = String(formData.get("formato") ?? "");
   const togli = String(formData.get("togli") ?? "") === "1";
@@ -2943,7 +2958,7 @@ export async function saveZooTestata(scopeParam: string, formData: FormData) {
   const scelta = mie.includes(richiesta) ? richiesta : "";
   const file = togli ? null : (formData.get("image") as File | null);
   // per un formato solo (quello aperto) o per tutti
-  const soloFormato = String(formData.get("formati") ?? "") === "questo" && /^za\d$/.test(formato) ? formato : undefined;
+  const soloFormato = String(formData.get("formati") ?? "") === "questo" && ZOO_FORMATS.some((f) => f.id === formato) ? formato : undefined;
   const dellAmbito = db.testate.filter((t) => t.scopeType === scope.type && t.scopeId === scope.id);
   const generale = dellAmbito.find((t) => !t.formatId);
   const precedente = (soloFormato ? dellAmbito.find((t) => t.formatId === soloFormato) : undefined) ?? generale;
@@ -2983,7 +2998,7 @@ export async function saveZooTestata(scopeParam: string, formData: FormData) {
 }
 
 export async function deleteZooLayoutImage(imageId: string, scopeParam: string, formato: string) {
-  const { db, scope } = await requireZooGestione(scopeParam, "/stampe/zoo/layout");
+  const { db, scope } = await requireLayoutZoo(scopeParam);
   db.layoutImages = db.layoutImages.filter(
     (i) => !(i.id === imageId && i.scopeType === scope.type && i.scopeId === scope.id)
   );

@@ -27,7 +27,8 @@ const nextConfig: NextConfig = {
       `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""} https://www.youtube.com https://s.ytimg.com`,
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob: https:",
-      "font-src 'self' data:",
+      // i font caricati da insegne e PV stanno nell'archivio Supabase: senza, il browser li bloccava
+      `font-src 'self' data:${process.env.SUPABASE_URL ? ` ${new URL(process.env.SUPABASE_URL).origin}` : " https://*.supabase.co"}`,
       "media-src 'self' blob: https:",
       "connect-src 'self' https:",
       "frame-src 'self' https:",

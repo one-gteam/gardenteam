@@ -126,6 +126,7 @@ export function stileTestoCartello(
     fontSize: ((item.size ?? meta?.size ?? 11) * scale) / 2.4,
     fontWeight: (item.bold ?? meta?.bold) ? 700 : 400,
     fontStyle: item.italic ? "italic" : "normal",
+    textTransform: item.maiuscolo ? "uppercase" : undefined,
     fontFamily: item.font !== undefined ? layoutFontCss(item.font) : meta?.font === "cn" ? FONT_CN : undefined,
     lineHeight: item.interlinea ?? 1.2,
     color: coloreCampo(item),

@@ -48,6 +48,7 @@ export function sanitizeLayoutItems(raw: unknown, isKnownField: (fieldId: string
       ...(Number.isFinite(Number(i.size)) ? { size: Math.max(4, Math.min(120, Number(i.size))) } : {}),
       ...(typeof i.bold === "boolean" ? { bold: i.bold } : {}),
       ...(typeof i.italic === "boolean" ? { italic: i.italic } : {}),
+      ...(i.maiuscolo === true ? { maiuscolo: true } : {}),
       ...(["left", "center", "right"].includes(i.align as string) ? { align: i.align as "left" | "center" | "right" } : {}),
       ...(["top", "middle", "bottom"].includes(i.valign as string) ? { valign: i.valign as "top" | "middle" | "bottom" } : {}),
       ...(typeof i.font === "string" && (LAYOUT_FONTS.some((f) => f.id === i.font) || /^u_[a-z0-9]{4,24}$/.test(i.font)) ? { font: i.font as string } : {}),
@@ -80,7 +81,7 @@ export function sanitizeLayoutItems(raw: unknown, isKnownField: (fieldId: string
 }
 
 /** Le proprietà di aspetto di un elemento (tutto tranne campo e posizione). */
-export const CHIAVI_STILE = ["color", "sticker", "size", "bold", "italic", "align", "valign", "font", "bg", "radius", "cornice", "prefisso", "interlinea", "spaziatura", "contorno", "ombra"] as const;
+export const CHIAVI_STILE = ["color", "sticker", "size", "bold", "italic", "maiuscolo", "align", "valign", "font", "bg", "radius", "cornice", "prefisso", "interlinea", "spaziatura", "contorno", "ombra"] as const;
 
 /** Opzioni di «Applica a tutti i layout». */
 export interface OpzioniCopia {

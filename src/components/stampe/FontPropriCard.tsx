@@ -1,5 +1,5 @@
 import type { FontProprio } from "@/lib/font-propri";
-import { caricaFont, togliFont } from "@/lib/font-actions";
+import { caricaFont, togliFont, importaGoogleFont } from "@/lib/font-actions";
 import { ModuloInvio, PulsanteAzione } from "@/components/AzioneSenzaRicarica";
 
 /**
@@ -43,6 +43,25 @@ export default function FontPropriCard({ area, scopeParam, scopeLabel, fonts, pr
         <input type="text" name="nome" maxLength={40} placeholder="Nome (facoltativo, es. Recoleta)" style={{ maxWidth: 240, margin: 0 }} />
         <button className="btn btn-sm" type="submit">Carica font</button>
       </ModuloInvio>
+      <div style={{ borderTop: "1px dashed var(--line)", marginTop: 12, paddingTop: 10 }}>
+        <strong style={{ fontSize: 13 }}>Oppure da Google Fonts</strong>
+        <p className="hint" style={{ margin: "2px 0 8px" }}>
+          Scrivete il nome come su <a href="https://fonts.google.com" target="_blank" rel="noreferrer">fonts.google.com</a> e scegliete gli spessori:
+          GT One scarica i file e li tiene nel suo archivio (niente da scaricare a mano, e i cartelli non si collegano a Google).
+        </p>
+        <ModuloInvio azione={importaGoogleFont.bind(null, area, scopeParam)} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <input type="text" name="famiglia" required maxLength={40} placeholder="es. Lato, Open Sans, Montserrat" style={{ maxWidth: 240, margin: 0 }} />
+          {[["300", "Light"], ["400", "Regular"], ["700", "Bold"], ["900", "Black"]].map(([v, n]) => (
+            <label key={v} style={{ display: "inline-flex", gap: 4, alignItems: "center", fontSize: 12.5 }}>
+              <input type="checkbox" name="peso" value={v} defaultChecked={v === "400" || v === "700"} /> {n}
+            </label>
+          ))}
+          <label style={{ display: "inline-flex", gap: 4, alignItems: "center", fontSize: 12.5 }}>
+            <input type="checkbox" name="corsivo" value="1" /> anche corsivo
+          </label>
+          <button className="btn btn-sm" type="submit">Importa</button>
+        </ModuloInvio>
+      </div>
     </div>
   );
 }
