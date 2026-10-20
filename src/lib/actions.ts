@@ -2289,6 +2289,13 @@ export async function loginWithPassword(formData: FormData) {
   }
   await azzera([regole[0].chiave]);
   if (user!.active === false) redirect("/login?disattivato=1");
+  /*
+   * Password temporanea data dall'amministratore: non si entra, si sceglie
+   * subito la propria (link firmato valido un'ora, che smette di valere appena
+   * la password cambia). Così la password che conosce l'amministratore non
+   * resta mai quella in uso.
+   */
+  if (user!.passwordTemporanea) redirect(`/reimposta?primo=1&token=${tokenReimposta(user!.id, user!.passwordHash, 1)}`);
   const store = await cookies();
   store.set(AUTH_COOKIE, valoreSessione(user!.id, user!.passwordHash), OPZIONI_SESSIONE);
   store.delete(RUOLO_COOKIE); // a ogni ingresso si sceglie di nuovo il ruolo
@@ -2362,6 +2369,38 @@ Questa mail te l'ha mandata ${admin.firstName} ${admin.lastName}.`;
 }
 
 /**
+ * Password temporanea data dall'amministratore a una persona del suo ambito
+ * (per chi non riesce a entrare né con la mail né col link). Si genera qui, si
+ * mostra una volta sola a chi l'ha chiesta e non si salva in chiaro da nessuna
+ * parte; al primo ingresso la persona deve sceglierne una sua. Le sessioni
+ * aperte di quella persona finiscono (la firma comprende la password).
+ */
+export async function creaPasswordTemporanea(userId: string): Promise<{ ok: true; password: string } | { ok: false; error: string }> {
+  const admin = await requireUser();
+  const db = await getDb();
+  const target = db.users.find((u) => u.id === userId);
+  if (!target || target.id === admin.id) return { ok: false, error: "Non consentito" };
+  if (!canTouchUser(db, admin, target)) return { ok: false, error: "Fuori dal tuo ambito" };
+  if (target.active === false) return { ok: false, error: "Account cessato: riattivalo prima." };
+  const regole: Regola[] = [{ chiave: `password-temporanea:${admin.id}`, massimo: 10, minuti: 60 }];
+  if (await prenota(regole) > 0) return { ok: false, error: "Troppe password create nell'ultima ora: riprova più tardi." };
+  // lettere e cifre senza quelle che si confondono (0/O, 1/l/I), a gruppi da 4: facile da dettare
+  const alfabeto = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const byte = randomBytes(12);
+  const car = Array.from(byte, (b) => alfabeto[b % alfabeto.length]).join("");
+  const password = `${car.slice(0, 4)}-${car.slice(4, 8)}-${car.slice(8, 12)}`;
+  target.passwordHash = hashPassword(password);
+  target.passwordTemporanea = true;
+  registra(admin, { area: "utenti", cosa: "Password temporanea impostata", oggetto: `${target.firstName} ${target.lastName} (${target.email})` });
+  await saveDb(db);
+  // eventuali blocchi per tentativi sbagliati su quell'email si azzerano
+  await azzera([`login-email:${target.email.toLowerCase()}`]);
+  revalidatePath(`/ruoli/utenti/${userId}`);
+  revalidatePath(`/admin/utenti/${userId}`);
+  return { ok: true, password };
+}
+
+/**
  * Il link per scegliere (o reimpostare) la password, da mandare a mano a chi
  * non riceve la mail. Vale 7 giorni e smette di valere appena la password
  * cambia. Solo per le persone del proprio ambito, al massimo 10 all'ora.
@@ -2423,6 +2462,7 @@ export async function reimpostaPassword(formData: FormData) {
   const user = id ? db.users.find((u) => u.id === id) : undefined;
   if (!user || user.active === false) redirect("/reimposta?errore=scaduto");
   user!.passwordHash = hashPassword(password);
+  user!.passwordTemporanea = undefined;
   await saveDb(db);
   // il link appena usato non vale più: la firma comprende la password di prima
   await azzera([`login-email:${user!.email.toLowerCase()}`]);

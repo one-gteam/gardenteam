@@ -186,6 +186,8 @@ export interface User {
   badges: string[];
   active: boolean; // false = cessato: accesso bloccato
   passwordHash?: string; // "salt:hash" — assente finché l'utente non attiva l'account
+  /** Password data dall'amministratore: al primo ingresso la persona deve sceglierne una sua. */
+  passwordTemporanea?: boolean;
   birthDate?: string;
   taxCode?: string;
   groupIds?: string[]; // gruppi di appartenenza

@@ -7,6 +7,7 @@ import { updateUser, toggleUserActive, reinviaAccesso } from "@/lib/actions";
 import ModuloAutoSalva from "@/components/ModuloAutoSalva";
 import { PulsanteAzione } from "@/components/AzioneSenzaRicarica";
 import LinkAccesso from "@/components/LinkAccesso";
+import PasswordTemporanea from "@/components/PasswordTemporanea";
 import { ROLE_LABELS, userSites, ruoloEsteso, type User } from "@/lib/types";
 import { coursesForUser, getProgress, isCourseCompleted, canManageUsers, scopeUsers, assignableRolesFor, livelloGestioneUtenti } from "@/lib/logic";
 
@@ -157,6 +158,7 @@ export default async function DettaglioUtente({ admin, id, salvato, area }: { ad
                   Non arriva? Parte da <strong>noreply@academy.rosaflor.it</strong>: fai controllare lo spam o la quarantena della posta aziendale, oppure manda il link qui sotto da un&apos;altra casella o con WhatsApp.
                 </p>
                 <div style={{ marginTop: 10 }}><LinkAccesso userId={u.id} nome={u.firstName} email={u.email} /></div>
+                <div style={{ marginTop: 10 }}><PasswordTemporanea userId={u.id} nome={u.firstName} email={u.email} attiva={!!u.passwordTemporanea} /></div>
               </div>
               <PulsanteAzione azione={reinviaAccesso.bind(null, u.id)} className="btn btn-outline" conferma={`Mandare la mail di accesso a ${u.email}?`}>
                 {u.passwordHash ? "Manda mail di accesso" : "Rimanda mail di registrazione"}

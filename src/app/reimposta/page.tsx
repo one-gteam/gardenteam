@@ -18,9 +18,9 @@ const ERRORI: Record<string, string> = {
 export default async function ReimpostaPage({
   searchParams,
 }: {
-  searchParams: Promise<{ token?: string; errore?: string; inviata?: string; minuti?: string }>;
+  searchParams: Promise<{ token?: string; errore?: string; inviata?: string; minuti?: string; primo?: string }>;
 }) {
-  const { token, errore, inviata, minuti } = await searchParams;
+  const { token, errore, inviata, minuti, primo } = await searchParams;
   const db = await getDb();
   const utente = token
     ? (() => {
@@ -62,6 +62,7 @@ export default async function ReimpostaPage({
           <div className="card">
             <h2>Scegli la nuova password</h2>
             <p style={{ fontSize: 14, color: "var(--muted)" }}>
+              {primo && <>Sei entrato con una password temporanea: per continuare scegline una tua, che conosci solo tu.<br /></>}
               Per <strong>{utente.email}</strong>. Almeno 8 caratteri.
             </p>
             <form action={reimpostaPassword}>
