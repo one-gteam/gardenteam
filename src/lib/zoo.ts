@@ -934,7 +934,7 @@ export const TIPI_PROMO_STAMPA: { id: TipoPromoStampa; label: string }[] = [
   { id: "meccanica", label: "Meccanica (3x2…)" },
 ];
 export interface ZooPrefStampa {
-  scopeType: "tenant" | "store";
+  scopeType: "system" | "tenant" | "store";
   scopeId: string;
   formato?: string;
   /** formatId → "a4" (più per foglio A4, di serie) o "formato" (carta del formato, uno per foglio) */
@@ -948,8 +948,8 @@ export function prefStampaPer(db: ZooDB, scope: Scope, academyDb: DB): { formato
   const out: { formato?: string; carta: Record<string, "a4" | "formato">; layout: Record<string, string> } = { carta: {}, layout: {} };
   // dal Consorzio verso il punto vendita: il più vicino scrive per ultimo e vince
   for (const s of [...chainFor(scope, academyDb)].reverse()) {
-    if (s.type === "system") continue;
-    const p = (db.prefStampa ?? []).find((x) => x.scopeType === s.type && x.scopeId === s.id);
+    // il Consorzio dà le preferenze di partenza (scopeId vuoto)
+    const p = (db.prefStampa ?? []).find((x) => x.scopeType === s.type && (s.type === "system" || x.scopeId === s.id));
     if (!p) continue;
     if (p.formato) out.formato = p.formato;
     Object.assign(out.carta, p.carta ?? {});

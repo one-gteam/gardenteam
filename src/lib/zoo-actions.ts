@@ -3000,7 +3000,6 @@ export async function saveZooTestata(scopeParam: string, formData: FormData) {
 /** Preferenze di stampa dell'insegna/PV: formato di partenza, carta per formato, layout predefiniti. */
 export async function salvaPrefStampa(scopeParam: string, formData: FormData) {
   const { db, academyDb, scope } = await requireLayoutZoo(scopeParam);
-  if (scope.type === "system") redirect(backUrl("/stampe/zoo/layout", scopeParam));
   const visibili = new Set(layoutScegliibili(db, scope, academyDb).map((l) => l.id));
   const formato = String(formData.get("formato") ?? "");
   const carta: Record<string, "a4" | "formato"> = {};
@@ -3014,9 +3013,9 @@ export async function salvaPrefStampa(scopeParam: string, formData: FormData) {
       if (l && visibili.has(l.id) && l.formatId === f.id) layout[`${f.id}|${t.id}`] = l.id;
     }
   }
-  db.prefStampa = (db.prefStampa ?? []).filter((x) => !(x.scopeType === scope.type && x.scopeId === scope.id));
+  db.prefStampa = (db.prefStampa ?? []).filter((x) => !(x.scopeType === scope.type && (scope.type === "system" || x.scopeId === scope.id)));
   db.prefStampa.push({
-    scopeType: scope.type as "tenant" | "store", scopeId: scope.id,
+    scopeType: scope.type, scopeId: scope.type === "system" ? "" : scope.id,
     formato: ZOO_FORMATS.some((f) => f.id === formato) ? formato : undefined,
     carta, layout,
   });

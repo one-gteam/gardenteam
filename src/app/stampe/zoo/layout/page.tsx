@@ -181,6 +181,78 @@ export default async function ZooLayoutPage({
             ? { modo: sceltaTestata.modo ?? "riquadro", url: sceltaTestata.url, nome: scope.label } : undefined}
         />
 
+        {/* preferenze di stampa dell'insegna/PV: formato di partenza, carta, layout predefiniti */}
+        {canEdit && (() => {
+          const mie = db.prefStampa.find((x) => x.scopeType === scope.type && (scope.type === "system" || x.scopeId === scope.id));
+          const scegliibili = layoutScegliibili(db, scope, academyDb);
+          const formatiConLayout = ZOO_FORMATS.filter((f) => scegliibili.some((l) => l.formatId === f.id));
+          return (
+            <div className="card" style={{ marginTop: 14, padding: 14 }} id="preferenze-stampa">
+              <h3 style={{ marginTop: 0 }}>Preferenze di stampa di {scope.label}</h3>
+              <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 10px" }}>
+                Valgono in Stampa cartelli per {scope.type === "system" ? "tutte le insegne e i punti vendita, finché non scelgono diversamente" : scope.label}{scope.type === "tenant" ? " e per i suoi punti vendita (che possono cambiarle)" : ""}.
+                Vuoto = come {scope.type === "store" ? "l'insegna" : scope.type === "tenant" ? "il Consorzio" : "di serie"}. Un layout scelto qui vince sulla scelta automatica;
+                sul singolo cartello si può comunque sceglierne un altro.
+              </p>
+              {sp.pref === "1" && <div className="alert alert-green" style={{ marginBottom: 10 }}>✓ Preferenze salvate.</div>}
+              <form action={salvaPrefStampa.bind(null, scopeParam)} style={{ display: "grid", gap: 12 }}>
+                <input type="hidden" name="formatoAperto" value={format.id} />
+                <label className="field" style={{ maxWidth: 280, marginBottom: 0 }}>
+                  Formato con cui parte Stampa cartelli
+                  <select name="formato" defaultValue={mie?.formato ?? ""}>
+                    <option value="">— {scope.type === "store" ? "come l'insegna" : scope.type === "tenant" ? "come il Consorzio" : "A4"} —</option>
+                    {ZOO_FORMATS.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+                  </select>
+                </label>
+                <div className="table-wrap">
+                  <table className="data" style={{ fontSize: 12.5 }}>
+                    <thead>
+                      <tr>
+                        <th>Formato</th>
+                        <th title="Su che carta esce il formato">Carta</th>
+                        {TIPI_PROMO_STAMPA.map((t) => <th key={t.id}>Layout · {t.label}</th>)}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ZOO_FORMATS.map((f) => {
+                        const a4 = foglioDiStampa(f, "a4");
+                        const per = a4.colonne * a4.righe;
+                        const delFormato = scegliibili.filter((l) => l.formatId === f.id);
+                        return (
+                          <tr key={f.id}>
+                            <td><strong>{f.name}</strong></td>
+                            <td>
+                              {per > 1 ? (
+                                <select name={`carta_${f.id}`} defaultValue={mie?.carta?.[f.id] ?? ""} style={{ fontSize: 12 }}>
+                                  <option value="">— {scope.type === "store" ? "come l'insegna" : scope.type === "tenant" ? "come il Consorzio" : `${per} per foglio A4`} —</option>
+                                  <option value="a4">{per} per foglio A4</option>
+                                  <option value="formato">Carta {f.name} (uno per foglio)</option>
+                                </select>
+                              ) : <span className="hint">foglio A4</span>}
+                            </td>
+                            {TIPI_PROMO_STAMPA.map((t) => (
+                              <td key={t.id}>
+                                {delFormato.length > 0 ? (
+                                  <select name={`layout_${f.id}_${t.id}`} defaultValue={mie?.layout?.[`${f.id}|${t.id}`] ?? ""} style={{ fontSize: 12, maxWidth: 190 }}>
+                                    <option value="">Automatico</option>
+                                    {delFormato.map((l) => <option key={l.id} value={l.id}>{l.nome}{l.proprio ? "" : " (Consorzio)"}</option>)}
+                                  </select>
+                                ) : <span className="hint">—</span>}
+                              </td>
+                            ))}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                {formatiConLayout.length === 0 && <p className="hint" style={{ margin: 0 }}>Nessun layout ancora: si sceglie quando ce n&apos;è almeno uno.</p>}
+                <div><button className="btn btn-sm" type="submit">Salva preferenze</button></div>
+              </form>
+            </div>
+          );
+        })()}
+
         {canEdit && (
           <FontPropriCard area="zoo" scopeParam={scopeParam} scopeLabel={scope.label}
             fonts={fontPerAmbito(academyDb, scope)}
@@ -267,78 +339,6 @@ export default async function ZooLayoutPage({
             </div>
           </div>
         )}
-
-        {/* preferenze di stampa dell'insegna/PV: formato di partenza, carta, layout predefiniti */}
-        {canEdit && scope.type !== "system" && (() => {
-          const mie = db.prefStampa.find((x) => x.scopeType === scope.type && x.scopeId === scope.id);
-          const scegliibili = layoutScegliibili(db, scope, academyDb);
-          const formatiConLayout = ZOO_FORMATS.filter((f) => scegliibili.some((l) => l.formatId === f.id));
-          return (
-            <div className="card" style={{ marginTop: 14, padding: 14 }} id="preferenze-stampa">
-              <h3 style={{ marginTop: 0 }}>Preferenze di stampa di {scope.label}</h3>
-              <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 10px" }}>
-                Valgono in Stampa cartelli per {scope.label}{scope.type === "tenant" ? " e per i suoi punti vendita (che possono cambiarle)" : ""}.
-                Vuoto = come {scope.type === "store" ? "l'insegna" : "di serie"}. Un layout scelto qui vince sulla scelta automatica;
-                sul singolo cartello si può comunque sceglierne un altro.
-              </p>
-              {sp.pref === "1" && <div className="alert alert-green" style={{ marginBottom: 10 }}>✓ Preferenze salvate.</div>}
-              <form action={salvaPrefStampa.bind(null, scopeParam)} style={{ display: "grid", gap: 12 }}>
-                <input type="hidden" name="formatoAperto" value={format.id} />
-                <label className="field" style={{ maxWidth: 280, marginBottom: 0 }}>
-                  Formato con cui parte Stampa cartelli
-                  <select name="formato" defaultValue={mie?.formato ?? ""}>
-                    <option value="">— {scope.type === "store" ? "come l'insegna" : "A4"} —</option>
-                    {ZOO_FORMATS.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
-                  </select>
-                </label>
-                <div className="table-wrap">
-                  <table className="data" style={{ fontSize: 12.5 }}>
-                    <thead>
-                      <tr>
-                        <th>Formato</th>
-                        <th title="Su che carta esce il formato">Carta</th>
-                        {TIPI_PROMO_STAMPA.map((t) => <th key={t.id}>Layout · {t.label}</th>)}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {ZOO_FORMATS.map((f) => {
-                        const a4 = foglioDiStampa(f, "a4");
-                        const per = a4.colonne * a4.righe;
-                        const delFormato = scegliibili.filter((l) => l.formatId === f.id);
-                        return (
-                          <tr key={f.id}>
-                            <td><strong>{f.name}</strong></td>
-                            <td>
-                              {per > 1 ? (
-                                <select name={`carta_${f.id}`} defaultValue={mie?.carta?.[f.id] ?? ""} style={{ fontSize: 12 }}>
-                                  <option value="">— {scope.type === "store" ? "come l'insegna" : `${per} per foglio A4`} —</option>
-                                  <option value="a4">{per} per foglio A4</option>
-                                  <option value="formato">Carta {f.name} (uno per foglio)</option>
-                                </select>
-                              ) : <span className="hint">foglio A4</span>}
-                            </td>
-                            {TIPI_PROMO_STAMPA.map((t) => (
-                              <td key={t.id}>
-                                {delFormato.length > 0 ? (
-                                  <select name={`layout_${f.id}_${t.id}`} defaultValue={mie?.layout?.[`${f.id}|${t.id}`] ?? ""} style={{ fontSize: 12, maxWidth: 190 }}>
-                                    <option value="">Automatico</option>
-                                    {delFormato.map((l) => <option key={l.id} value={l.id}>{l.nome}{l.proprio ? "" : " (Consorzio)"}</option>)}
-                                  </select>
-                                ) : <span className="hint">—</span>}
-                              </td>
-                            ))}
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-                {formatiConLayout.length === 0 && <p className="hint" style={{ margin: 0 }}>Nessun layout ancora: si sceglie quando ce n&apos;è almeno uno.</p>}
-                <div><button className="btn btn-sm" type="submit">Salva preferenze</button></div>
-              </form>
-            </div>
-          );
-        })()}
 
         {canEdit && (
           <div className="card" style={{ marginTop: 14, padding: 14 }}>
