@@ -1,3 +1,4 @@
+import CampoPassword from "@/components/CampoPassword";
 import { getDb } from "@/lib/db";
 import { loginWithPassword } from "@/lib/actions";
 import { SITE_NAME } from "@/lib/types";
@@ -58,11 +59,11 @@ export default async function LoginPage({
           <form action={loginWithPassword}>
             <label className="field">
               Email
-              <input type="text" name="email" required placeholder="nome@insegna.it" />
+              <input type="text" inputMode="email" name="email" required placeholder="nome@insegna.it" autoComplete="username" autoCapitalize="off" spellCheck={false} />
             </label>
             <label className="field">
               Password
-              <input type="password" name="password" required />
+              <CampoPassword name="password" autoComplete="current-password" />
             </label>
             <button className="btn" type="submit" style={{ width: "100%" }}>Entra</button>
           </form>

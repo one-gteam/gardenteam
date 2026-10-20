@@ -1,3 +1,4 @@
+import CampoPassword from "@/components/CampoPassword";
 import { getDb } from "@/lib/db";
 import { richiediReimposta, reimpostaPassword } from "@/lib/actions";
 import { idDaTokenReimposta } from "@/lib/auth";
@@ -65,13 +66,15 @@ export default async function ReimpostaPage({
             </p>
             <form action={reimpostaPassword}>
               <input type="hidden" name="token" value={token} />
+              {/* per il browser: a chi appartiene la nuova password, così aggiorna quella salvata */}
+              <input type="email" name="username" value={utente.email} autoComplete="username" readOnly hidden />
               <label className="field">
                 Nuova password
-                <input type="password" name="password" required minLength={8} autoFocus />
+                <CampoPassword name="password" autoComplete="new-password" minLength={8} autoFocus />
               </label>
               <label className="field">
                 Ripetila
-                <input type="password" name="password2" required minLength={8} />
+                <CampoPassword name="password2" autoComplete="new-password" minLength={8} />
               </label>
               <button className="btn" type="submit" style={{ width: "100%" }}>Salva ed entra</button>
             </form>
