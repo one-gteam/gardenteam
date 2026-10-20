@@ -19,11 +19,20 @@ export default function FitText({ style, children }: { style: CSSProperties; chi
     if (!el || !base) return;
     let fs = base;
     el.style.fontSize = `${fs}px`;
+    /*
+     * Si misura col testo appoggiato in alto: centrato (o in basso) la parte
+     * che esce sopra il riquadro non conta nello scrollHeight, e lo stesso
+     * testo veniva rimpicciolito in modo diverso a seconda dell'allineamento
+     * verticale scelto. Dopo la misura l'allineamento torna quello del layout.
+     */
+    const jc = el.style.justifyContent;
+    if (jc) el.style.justifyContent = "flex-start";
     const trabocca = () => el.scrollHeight > el.clientHeight + 1 || el.scrollWidth > el.clientWidth + 1;
     for (let i = 0; i < 40 && fs > base * 0.4 && trabocca(); i++) {
       fs = Math.round(fs * 0.93 * 100) / 100;
       el.style.fontSize = `${fs}px`;
     }
+    if (jc) el.style.justifyContent = jc;
   });
 
   return <div ref={ref} style={style}>{children}</div>;
