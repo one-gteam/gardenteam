@@ -4,6 +4,7 @@ import { foglioDiStampa } from "@/lib/foglio-stampa";
 import { immaginiInLinea } from "@/lib/immagini-in-linea";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { flushSync } from "react-dom";
 import { useRouter } from "next/navigation";
 import type { CardLayout, PrintField, PrintFormat } from "@/lib/stampe";
 import Cartello from "./Cartello";
@@ -106,9 +107,15 @@ export default function StampaWorkspace({
           Object.assign(foglioCartello.style, { width: `${c.format.w * 3.7795}px`, height: `${c.format.h * 3.7795}px`, background: "#fff" });
           posto.appendChild(foglioCartello);
           const radice = createRoot(foglioCartello);
-          radice.render(<Cartello format={c.format} layout={c.layout} fields={fields} values={c.values} scale={3.7795} />);
-          // si lascia disegnare (due fotogrammi) e si aspettano le foto, al massimo 6 secondi
-          await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)));
+          /*
+           * flushSync: il cartello si disegna adesso, non «appena React ha
+           * tempo». Con la pagina piena di righe React rimandava, la foto
+           * partiva sul riquadro ancora vuoto e il PDF usciva bianco.
+           */
+          flushSync(() => radice.render(<Cartello format={c.format} layout={c.layout} fields={fields} values={c.values} scale={3.7795} />));
+          // per sicurezza si aspetta comunque che il cartello ci sia (al massimo 3 secondi), poi le foto (al massimo 6)
+          for (let k = 0; k < 30 && !foglioCartello.querySelector(".cartello"); k++) await new Promise((res) => setTimeout(res, 100));
+          await new Promise((res) => setTimeout(res, 30));
           const t0 = Date.now();
           while (Date.now() - t0 < 6000 && !Array.from(foglioCartello.querySelectorAll("img")).every((im) => im.complete)) {
             await new Promise((res) => setTimeout(res, 100));
