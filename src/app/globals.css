@@ -1837,3 +1837,9 @@ img.tt-media.on { animation: sp-kb 12s linear forwards; }
 .indice-liste { position: sticky; top: 0; z-index: 20; display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
   background: var(--bg, #fafaf7); padding: 8px 0; margin-bottom: 6px; border-bottom: 1px solid var(--line); }
 .indice-liste .chip { cursor: pointer; }
+
+/* Layout → «Come in stampa»: niente aiuti a schermo, solo il cartello */
+.anteprima-pulita { pointer-events: none; }
+.anteprima-pulita .editor-item, .anteprima-pulita .editor-item:hover, .anteprima-pulita .editor-item.selected, .anteprima-pulita .editor-item.insieme { outline: none !important; background: transparent !important; }
+.anteprima-pulita .resize-handle, .anteprima-pulita .editor-lucchetto, .anteprima-pulita .testata-ambito-badge,
+.anteprima-pulita .guida, .anteprima-pulita .guida-smart, .anteprima-pulita .editor-griglia, .anteprima-pulita .distanza, .anteprima-pulita .editor-rettangolo { display: none !important; }

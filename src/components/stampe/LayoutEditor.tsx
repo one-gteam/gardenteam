@@ -205,6 +205,8 @@ export default function LayoutEditor({
    * schermo, in stampa non c'è.
    */
   const [righelli, setRighelli] = useState(true);
+  /* «Come in stampa»: il foglio senza tratteggi, maniglie, righelli, guide e griglia */
+  const [pulito, setPulito] = useState(false);
   const [griglia, setGriglia] = useState<{ attiva: boolean; passo: number }>({ attiva: false, passo: 5 });
   const [guideUtente, setGuideUtente] = useState<{ x: number[]; y: number[] }>({ x: [], y: [] });
   const [guidaInMano, setGuidaInMano] = useState<{ asse: "x" | "y"; indice: number | null; pos: number } | null>(null);
@@ -1208,6 +1210,10 @@ export default function LayoutEditor({
             <button type="button" className="btn btn-outline btn-sm" onClick={adatta} title="Il cartello intero nello spazio disponibile (Ctrl + rotellina per lo zoom, spazio + trascina per spostare la vista)">Adatta</button>
             <button type="button" className={`btn btn-outline btn-sm${righelli ? " attivo" : ""}`} onClick={() => setRighelli((v) => !v)} title="Righelli in cm: trascina da un righello per tirare una guida">Righelli</button>
             <button type="button" className={`btn btn-outline btn-sm${griglia.attiva ? " attivo" : ""}`} onClick={() => setGriglia((g) => ({ ...g, attiva: !g.attiva }))} title="Griglia a schermo: i campi si agganciano al passo">Griglia</button>
+            <button type="button" className={`btn btn-outline btn-sm${pulito ? " attivo" : ""}`} onClick={() => { setPulito((v) => !v); scegliSolo(null); }}
+              title="Il cartello pulito, come uscirà in stampa: senza tratteggi delle caselle, maniglie, righelli e guide. Un altro clic per tornare a modificare">
+              {pulito ? "✎ Torna a modificare" : "👁 Come in stampa"}
+            </button>
             {griglia.attiva && (
               <select value={griglia.passo} onChange={(e) => setGriglia((g) => ({ ...g, passo: Number(e.target.value) }))} style={{ marginTop: 0, width: 80, fontSize: 12 }} title="Passo della griglia">
                 {[2, 5, 10, 20].map((p) => <option key={p} value={p}>{p} mm</option>)}
@@ -1252,7 +1258,7 @@ export default function LayoutEditor({
         )}
         <div ref={areaRef} className={`editor-area${spazio ? " mano" : ""}`}>
         <div className={righelli ? "editor-righelli" : undefined} style={{ width: W + (righelli ? 22 : 0) }}>
-        {righelli && (
+        {righelli && !pulito && (
           <>
             <div className="righello righello-x" style={{ width: W, backgroundSize: `${scale * 10}px 100%, ${scale}px 35%` }}
               title="Trascina in giù per tirare una guida orizzontale"
@@ -1268,7 +1274,7 @@ export default function LayoutEditor({
         )}
         <div
           ref={canvasRef}
-          className="cartello editor-canvas"
+          className={`cartello editor-canvas${pulito ? " anteprima-pulita" : ""}`}
           style={{
             width: W, height: H,
             backgroundImage: format.background ? `url("${format.background}")` : undefined, backgroundSize: "100% 100%",
@@ -1279,7 +1285,7 @@ export default function LayoutEditor({
           onMouseLeave={endDrag}
           onMouseDown={onMouseDownFoglio}
         >
-          {(margins.top > 0 || margins.right > 0 || margins.bottom > 0 || margins.left > 0) && (
+          {!pulito && (margins.top > 0 || margins.right > 0 || margins.bottom > 0 || margins.left > 0) && (
             /*
              * Guide dei margini: linee tratteggiate a cui i campi si agganciano.
              * Sono solo un riferimento visivo — NON spostano i campi da sole (un

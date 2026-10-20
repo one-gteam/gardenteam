@@ -1529,6 +1529,22 @@ export interface Giacenza {
  * pagano M; in un A+B se ne prendono A+B e se ne pagano A. Il prezzo del pezzo
  * è quello del cartello. Vuoto se la meccanica non è di questo tipo o manca il prezzo.
  */
+/**
+ * La descrizione del cartello che ripete il titolo in testa («Nutrimi natural,
+ * 70 g, umido…» sotto il titolo «Nutrimi natural»): sul cartello il nome
+ * uscirebbe due volte. Si toglie solo se è proprio il titolo seguito da una
+ * virgola (o da un trattino); il dato salvato non cambia.
+ */
+export function senzaTitoloInTesta(desc: string, titolo: string): string {
+  const d = (desc ?? "").trim(), t = (titolo ?? "").trim();
+  if (!d || !t || d.length <= t.length) return desc ?? "";
+  if (d.slice(0, t.length).toLowerCase() !== t.toLowerCase()) return desc;
+  const resto = d.slice(t.length);
+  if (!/^\s*[,–-]\s*/.test(resto)) return desc;
+  const pulito = resto.replace(/^\s*[,–-]\s*/, "");
+  return pulito ? pulito.charAt(0).toUpperCase() + pulito.slice(1) : desc;
+}
+
 export function prezziMeccanicaTesto(meccanica: string | undefined, prezzoPezzo: string | undefined): string {
   const m = (meccanica ?? "").toLowerCase().replace(/\s+/g, "");
   const x = /^(\d{1,2})[x×](\d{1,2})$/.exec(m);
@@ -1973,7 +1989,7 @@ export function zooCartelloValues(
      * senza raggruppamento. In quel caso vale la descrizione dell'articolo.
      */
     titolo: offer.titolo || testoPadre("nome") || product?.descrizione || offer.descrizione,
-    descCartello: offer.descCartello ?? testoPadre("descCartello"),
+    descCartello: senzaTitoloInTesta(offer.descCartello ?? testoPadre("descCartello"), offer.titolo || testoPadre("nome")),
     descrizione: testoOfferta("descrizione"),
     descrizioneArticolo: product?.descrizione ?? "",
     // i listini dei fornitori spesso non hanno la marca: meglio il fornitore che un campo vuoto
