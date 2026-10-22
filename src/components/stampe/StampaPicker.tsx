@@ -265,8 +265,9 @@ export default function StampaPicker({
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
     const gestiti = (k: string) =>
-      ["sel", "formato", "doppio", "print", "pdf"].includes(k) || /^(formato|prezzo|listino|noprezzo|senzafoto|nolistino|nascondi|layout|copie|carta)_/.test(k);
-    for (const k of [...url.searchParams.keys()]) if (gestiti(k)) url.searchParams.delete(k);
+      ["sel", "formato", "doppio", "print", "pdf"].includes(k) || /^(formato|prezzo|listino|noprezzo|senzafoto|nolistino|nascondi|layout|copie)_/.test(k);
+    // la carta non resta nell'indirizzo: a ogni apertura riparte dalle Preferenze di stampa
+    for (const k of [...url.searchParams.keys()]) if (gestiti(k) || k.startsWith("carta_")) url.searchParams.delete(k);
     for (const [k, v] of new URLSearchParams(indirizzo)) if (gestiti(k) && v) url.searchParams.set(k, v);
     if (selected.length === 0) url.searchParams.delete("sel");
     if (url.toString() !== window.location.href) window.history.replaceState(null, "", url.toString());

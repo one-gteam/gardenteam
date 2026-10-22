@@ -785,7 +785,8 @@ export default async function ZooStampaPage({
                 onPrint: markZooPrinted.bind(null, scopeParam),
                 salvaSelezione: salvaSelezioneStampa,
                 conCopie: true,
-                cartaIniziale: Object.fromEntries(ZOO_FORMATS.map((f) => [f.id, sp[`carta_${f.id}`] === "formato" || sp[`carta_${f.id}`] === "a4" ? sp[`carta_${f.id}`] : prefStampa.carta[f.id]]).filter(([, v]) => v)) as Record<string, "a4" | "formato">,
+                // sempre dalle Preferenze di stampa: prima una scelta rimasta nell'indirizzo («4 per foglio A4») vinceva su «carta A6»
+                cartaIniziale: Object.fromEntries(ZOO_FORMATS.map((f) => [f.id, prefStampa.carta[f.id]]).filter(([, v]) => v)) as Record<string, "a4" | "formato">,
                 misureFormati: Object.fromEntries(ZOO_FORMATS.map((f) => [f.id, { w: f.w, h: f.h }])),
                 initialCopie: Object.fromEntries(selectedIds.map((id) => [id, Number(sp[`copie_${id}`]) || 0]).filter(([, v]) => (v as number) > 1)),
                 initialSelected: selectedIds,
