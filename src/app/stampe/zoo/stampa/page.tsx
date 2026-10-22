@@ -469,6 +469,43 @@ export default async function ZooStampaPage({
       const fogli = Array.from({ length: Math.ceil(voci.length / per) }, (_, i) => voci.slice(i * per, i * per + per));
       return { f, foglio, per, voci, fogli, cartaQui, suA4: foglioDiStampa(f, "a4") };
     }).filter((g) => g.voci.length > 0);
+    /*
+     * Più formati nella stessa stampa: ognuno va in una finestra sua. Il
+     * browser dà una sola misura di pagina per stampa (quella del primo
+     * formato): gli A6 finivano su pagine A4 e la stampante non li mandava
+     * sulla carta A6. Qui si sceglie il formato, che si apre e si stampa da solo.
+     */
+    const tuttiGruppi = gruppi;
+    const soloFormato = sp.soloformato && gruppi.some((g) => g.f.id === sp.soloformato) ? sp.soloformato : "";
+    if (soloFormato) gruppi.splice(0, gruppi.length, ...gruppi.filter((g) => g.f.id === soloFormato));
+    if (!soloFormato && tuttiGruppi.length > 1) {
+      const linkFormato = (fid: string) => {
+        const qs = sp.ripresa
+          ? new URLSearchParams({ scope: scopeParam, ripresa: sp.ripresa, print: "1" })
+          : new URLSearchParams(Object.entries(sp).filter(([, v]) => v !== undefined) as [string, string][]);
+        qs.set("soloformato", fid);
+        return `/stampe/zoo/stampa?${qs.toString()}`;
+      };
+      return (
+        <div className="container" style={{ paddingTop: 24 }}>
+          <h1 style={{ marginTop: 0 }}>Stampa per formato</h1>
+          <p className="subtitle">
+            Ci sono {tuttiGruppi.length} formati: ognuno si stampa in una finestra sua, con la sua carta.
+            Apri il primo, stampa, poi torna qui per il successivo.
+          </p>
+          <div style={{ display: "grid", gap: 10, maxWidth: 560 }}>
+            {tuttiGruppi.map((g) => (
+              <a key={g.f.id} className="btn" href={linkFormato(g.f.id)} target="_blank" rel="noopener"
+                style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                <span>Stampa {g.f.name} · {g.voci.length} cartelli</span>
+                <span style={{ fontWeight: 400 }}>{g.per > 1 ? `${g.per} per foglio A4` : g.foglio.w === 210 || g.foglio.w === 297 ? "foglio A4" : `carta ${g.f.name}`} ↗</span>
+              </a>
+            ))}
+          </div>
+          <p style={{ marginTop: 16 }}><a className="btn btn-outline btn-sm" href={`/stampe/zoo/stampa?${qsBack()}`}>← Torna all&apos;elenco</a></p>
+        </div>
+      );
+    }
     const totale = gruppi.reduce((t, g) => t + g.voci.length, 0);
     const nomePagina = (g: (typeof gruppi)[number]) => `foglio_${g.foglio.w}x${g.foglio.h}`;
     const pagine = [...new Set(gruppi.map((g) => `@page ${nomePagina(g)} { size: ${g.foglio.w}mm ${g.foglio.h}mm; margin: 0; }`))].join(" ");
@@ -480,7 +517,8 @@ export default async function ZooStampaPage({
         <style>{`${pagine}${primo ? ` @page { size: ${primo.w}mm ${primo.h}mm; margin: 0; }` : ""}`}</style>
         <div className="no-print" style={{ padding: 14, display: "flex", gap: 10, alignItems: "center", background: "var(--green-50)", flexWrap: "wrap" }}>
           <strong>Anteprima di stampa — {totale} cartelli</strong>
-          {sp.pdf && <SalvaPdf nome={sp.pdf} />}
+          {sp.pdf && <SalvaPdf nome={soloFormato ? `${sp.pdf} - ${gruppi[0]?.f.name ?? ""}` : sp.pdf} />}
+          {!sp.pdf && soloFormato && <SalvaPdf nome={`Cartelli ${gruppi[0]?.f.name ?? ""}`} soloStampa />}
           <a className="btn btn-outline btn-sm" href={`/stampe/zoo/stampa?${qsBack()}`}>← Torna all&apos;elenco</a>
           <span style={{ fontSize: 12.5, color: "var(--muted)" }}>
             Usa il pulsante Stampa del browser (Ctrl+P) e scegli &quot;Salva come PDF&quot;.

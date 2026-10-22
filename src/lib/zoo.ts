@@ -1807,16 +1807,20 @@ export function effectiveZooLayout(
     return comuni.length * 10 + comuni.reduce((max, t) => Math.max(max, specificita(t)), 0);
   };
   /*
-   * Ambito per ambito, dal più vicino: prima il suo layout fatto per questo tipo
-   * di offerta, poi il suo generico; solo se l'ambito non ne ha nessuno adatto
-   * si sale all'insegna e al Consorzio. Prima un layout specifico del Consorzio
-   * vinceva sul generico dell'insegna, e l'insegna non vedeva il suo.
+   * Prima il layout fatto per questo tipo di offerta, dal più vicino al
+   * Consorzio; il generico (senza tipo) solo se nessuno ne ha uno adatto. Per
+   * due giorni il generico dell'insegna veniva prima del layout del Consorzio
+   * fatto apposta: un vecchio A6 generico di Rosàflor copriva gli A6 Barrato,
+   * A SOLI, 3X2 e Sconto del Consorzio. Chi vuole il suo lo sceglie nelle
+   * Preferenze di stampa (layoutPerOfferta), che vincono su questa scelta.
    */
   for (const s of chain) {
     const adatti = candidates.filter((l) => di(l, s) && tip(l).length > 0 && tip(l).some((t) => tags.includes(t)));
     if (adatti.length > 0) {
       return conTestata(adatti.reduce((migliore, l) => (punteggio(l) > punteggio(migliore) ? l : migliore), adatti[0]));
     }
+  }
+  for (const s of chain) {
     const generic = candidates.find((l) => di(l, s) && tip(l).length === 0);
     if (generic) return conTestata(generic);
   }

@@ -195,6 +195,8 @@ export default function StampaPicker({
   /* righe spuntate nella tabella dei selezionati: si tolgono in blocco, senza
      cliccare la ✕ una per una quando la lista è lunga */
   const [daTogliere, setDaTogliere] = useState<string[]>([]);
+  // ultima casella cliccata nella tabella dei selezionati: con Maiusc si spunta l'intervallo
+  const ultimaSpunta = useRef<number | null>(null);
   const menuCoda = useRef<HTMLDetailsElement>(null);
   const lastIndex = useRef<number | null>(null);
 
@@ -418,6 +420,7 @@ export default function StampaPicker({
               tabIndex={0}
               className={`prod-item ${isSel ? "active" : ""}`}
               onClick={(e) => toggle(i, e.shiftKey)}
+              onMouseDown={(e) => { if (e.shiftKey) e.preventDefault(); }}
               onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(i, e.shiftKey); } }}
             >
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -620,8 +623,20 @@ export default function StampaPicker({
                   {selectedProds.map((p) => (
                     <tr key={p.id}>
                       <td>
-                        <input type="checkbox" checked={daTogliere.includes(p.id)} title="Spunta per cambiare più cartelli insieme, o per toglierli dalla selezione"
-                          onChange={(e) => setDaTogliere((prev) => (e.target.checked ? [...prev, p.id] : prev.filter((x) => x !== p.id)))} />
+                        <input type="checkbox" checked={daTogliere.includes(p.id)} title="Spunta per cambiare più cartelli insieme, o per toglierli dalla selezione (Maiusc+clic: un intervallo)"
+                          onClick={(e) => {
+                            const i = selectedProds.findIndex((x) => x.id === p.id);
+                            const da = ultimaSpunta.current;
+                            const acceso = (e.currentTarget as HTMLInputElement).checked;
+                            if (e.shiftKey && da !== null && da < selectedProds.length && da !== i) {
+                              const tratto = selectedProds.slice(Math.min(da, i), Math.max(da, i) + 1).map((x) => x.id);
+                              setDaTogliere((prev) => (acceso ? [...new Set([...prev, ...tratto])] : prev.filter((x) => !tratto.includes(x))));
+                            } else {
+                              setDaTogliere((prev) => (acceso ? [...prev, p.id] : prev.filter((x) => x !== p.id)));
+                            }
+                            ultimaSpunta.current = i;
+                          }}
+                          onChange={() => { /* gestito nel clic, per sapere se c'è Maiusc */ }} />
                       </td>
                       <td>
                         <strong>{p.titolo}</strong>
