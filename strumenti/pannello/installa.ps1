@@ -1,4 +1,4 @@
-# GT One: chiavi fuori dalla cartella di rete e copia completa ogni domenica (25/10/2026).
+﻿# GT One: chiavi fuori dalla cartella di rete e copia completa ogni domenica (25/10/2026).
 # Va lanciato UNA volta, da PowerShell «Esegui come amministratore»:
 #   powershell -ExecutionPolicy Bypass -File C:\GTOneDati\installa.ps1
 #
