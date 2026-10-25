@@ -1,10 +1,27 @@
 # Backup e ripristino di GT One / Academy GT
 
+## Il modo più semplice: il «Pannello GT One» (25/10/2026)
+
+Sul desktop del PC AI c'è **Pannello GT One** (`C:\GTOneDati\pannello_gtone.pyw`, copia nel progetto in
+`strumenti\pannello\`). È il gemello dei Pannelli Linfa e my.rosaflor e funziona anche se il sito è giù:
+
+| Scheda | A cosa serve |
+|---|---|
+| **Stato** | Il sito risponde? È in linea l'ultima versione? C'è il backup di stanotte? La copia completa è recente? Le attività pianificate girano? La chiave delle copie c'è? |
+| **Sito: versioni** | Tornare con un clic a una versione precedente se un aggiornamento ha rotto qualcosa, e poi «Rimetti l'ultima». |
+| **Dati** | Backup adesso, copia completa adesso, e rimettere **un'area** (zoo, academy, stampe…) da un backup: prima «Prova (non scrive)», poi «Rimetti l'area dal backup…»; anche i file (foto). |
+| **Chiavetta** | Copia **cifrata** (AES-256, la stessa chiave di my.rosaflor) dell'ultimo backup e dell'ultima copia completa su una chiavetta USB, in `GTOneBackup\<data>\`, riaperta per verifica. Si apre su qualunque PC Windows con «APRI LA COPIA» e la chiave del foglio in cassaforte (impronta 8F0E5DACDC89). La chiave non va mai sulla chiavetta. |
+| **Istruzioni** | Cosa si salva, quando, dove, cosa controllare e cosa fare se va storto, in parole semplici; pulsante per pianificare la copia completa ogni domenica. |
+
+La copia su chiavetta la fa `C:\SicurezzaDati\copia-esterna.mjs chiavetta-gtone <cartella>` (stesso
+programma della copia fuori sede notturna). Prova del 25/10/2026: 156 MB di dati + 72 MB di copia del sito,
+riaperti «come su un altro PC» chiedendo la chiave.
+
 ## Cosa viene salvato, quando, dove
 
 | Cosa | Come | Quando | Dove |
 |---|---|---|---|
-| **Dati** (tabella `app_data` di Supabase: una riga per dominio — `academy`, `zoo`, `stampe`, `articoli`, `tentativi`) | `scripts/backup-database.mjs` | ogni notte alle **01:30** (Utilità di pianificazione di Windows sul server AI) | `\\srvdoc\ai\backup\academy-gt-backup-AAAA-MM-GG-HH-MM\tabelle.json.gz` |
+| **Dati** (tabella `app_data` di Supabase: una riga per dominio — `academy`, `zoo`, `stampe`, `articoli`, `tentativi`) | `scripts/backup-database.mjs` | ogni notte alle **02:30** (attività «GT One - Backup Database» sul PC AI; la cartella prende il nome delle 01:30 UTC) | `\\srvdoc\ai\backup\academy-gt-backup-AAAA-MM-GG-HH-MM\tabelle.json.gz` |
 | **File** (foto prodotti, loghi, sfondi cartelli, copertine corsi, allegati articoli…) | stesso script | stessa notte | `…\storage\academy-gt\…` |
 | **Account di login** (solo elenco: email e date, nessuna password) | stesso script | stessa notte | `…\account-login.json` |
 | **Codice** | `scripts/backup-git.ps1` + i commit normali | ogni notte, se ci sono modifiche non salvate | GitHub (`origin/main`) |
@@ -13,7 +30,7 @@
 - Lo **schema** delle tabelle è in `data/supabase-schema.sql` (non cambia di notte in notte).
 - Il backup prende l'elenco di tabelle e bucket dal database **a ogni esecuzione**: un dominio o un bucket nuovi finiscono nel backup senza toccare nulla.
 
-## Copia completa del sito (codice + chiavi + dati) su `\srvdoci_backup\gtone`
+## Copia completa del sito (codice + chiavi + dati) su `\\srvdoc\ai_backup\gtone`
 
 `scripts\copia-sito.ps1` mette in una cartella sola tutto quello che serve per rimettere in piedi il sito da zero:
 `codice.bundle` (tutto il repository git), `segreti\env.local` (le chiavi: **non condividere**), `dati\` (l'ultimo
@@ -24,7 +41,7 @@ powershell -ExecutionPolicy Bypass -File scripts\copia-sito.ps1
 ```
 
 Conviene pianificarla una volta a settimana sul server AI (Utilità di pianificazione → nuova attività → Azione
-`powershell.exe`, Argomenti `-ExecutionPolicy Bypass -File "\srvdoci\Progetti AI\Academy GTcademy-gt\scripts\copia-sito.ps1"`),
+`powershell.exe`, Argomenti `-ExecutionPolicy Bypass -File "\\srvdoc\ai\Progetti AI\Academy GT\academy-gt\scripts\copia-sito.ps1"`),
 dopo il backup notturno, es. alle 05:00 della domenica.
 
 Prima copia fatta: 6 ottobre 2026 (77,7 MB), bundle riaperto con `git clone` per prova.
