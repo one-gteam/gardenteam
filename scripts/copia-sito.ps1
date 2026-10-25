@@ -1,4 +1,4 @@
-# Copia completa del sito GT One / Academy GT in \\srvdoc\ai_backup\gtone\<data>:
+﻿# Copia completa del sito GT One / Academy GT in \\srvdoc\ai_backup\gtone\<data>:
 #   codice.bundle      tutto il repository git (ogni ramo, ogni commit)
 #   segreti\env.local  le chiavi (Supabase, segreti dei cookie, Zoho…): NON condividere
 #   dati\              l'ultimo backup notturno di database + file (tabelle.json.gz, storage\)
@@ -28,8 +28,12 @@ if ($nonSalvate) {
     git diff HEAD | Out-File -Encoding utf8 (Join-Path $dest "modifiche-non-salvate.diff")
 }
 
-# 2. segreti
-Copy-Item (Join-Path $progetto ".env.local") (Join-Path $dest "segreti\env.local")
+# 2. segreti: dal 25/10/2026 le chiavi stanno sul disco locale del PC AI (C:\GTOneDati\segreti),
+#    non più nella cartella di rete; se manca la copia locale si prova quella vecchia.
+$chiavi = "C:\GTOneDati\segreti\.env.local"
+if (-not (Test-Path -LiteralPath $chiavi)) { $chiavi = Join-Path $progetto ".env.local" }
+if (-not (Test-Path -LiteralPath $chiavi)) { throw "Non trovo le chiavi di GT One (C:\GTOneDati\segreti\.env.local)." }
+Copy-Item -LiteralPath $chiavi (Join-Path $dest "segreti\env.local")
 
 # 3. dati: l'ultimo backup notturno (database + file)
 $ultimo = Get-ChildItem "\\srvdoc\ai\backup" -Directory -Filter "academy-gt-backup-*" | Sort-Object Name | Select-Object -Last 1

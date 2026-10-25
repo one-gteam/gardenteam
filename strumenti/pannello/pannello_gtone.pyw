@@ -373,12 +373,19 @@ def controlli():
     for t in info_attivita():
         if t["stato"] == "manca":
             if t["nome"] == ATTIVITA_COPIA:
-                righe.append(("ko", "Attività «%s»: non pianificata (scheda Istruzioni → «Pianifica la copia completa ogni domenica»)" % t["nome"]))
+                righe.append(("ko", "Attività «%s»: non pianificata (lancia C:\\GTOneDati\\installa.ps1 come amministratore, o scheda Istruzioni → «Pianifica…»)" % t["nome"]))
             else:
                 righe.append(("ko", "Attività «%s»: non c'è" % t["nome"]))
         else:
             ok = t["esito"] in ("0", "267009", "267011") and t["stato"] != "Disabled"
             righe.append(("ok" if ok else "ko", "Attività «%s»: %s, ultima %s, esito %s" % (t["nome"], t["stato"], t["ultima"] or "mai", t["esito"])))
+    # le chiavi del sito: sul disco locale, non nella cartella di rete (come my.rosaflor e Linfa)
+    if not os.path.exists(ENV_LOCALE):
+        righe.append(("ko", "Chiavi del sito: non c'è la copia locale %s" % ENV_LOCALE))
+    elif con_timeout(lambda: os.path.exists(ENV_RETE), 8, False):
+        righe.append(("ko", "Le chiavi del sito sono ancora nella cartella di rete: lancia C:\\GTOneDati\\installa.ps1 come amministratore."))
+    else:
+        righe.append(("ok", "Chiavi del sito: solo sul disco locale (%s)" % ENV_LOCALE))
     k = impronta_chiave()
     righe.append(("ok" if k else "ko", "Chiave delle copie cifrate: %s" % ("impronta " + k if k else "NON trovata in " + CHIAVE_COPIA)))
     r = ultima_riga(LOG_COPIA)

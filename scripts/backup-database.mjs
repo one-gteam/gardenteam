@@ -18,9 +18,10 @@
 //   1. npm install (nella cartella del progetto, se non già fatto)
 //   2. node --env-file=.env.local scripts/backup-database.mjs
 //   3. Pianificato con l'Utilità di pianificazione di Windows sul server AI
-//      ogni giorno:
+//      ogni giorno («GT One - Backup Database», 2:30):
 //      Azione = "node.exe"
-//      Argomenti = --env-file=".env.local" "scripts\backup-database.mjs"
+//      Argomenti = --env-file="C:\GTOneDati\segreti\.env.local" "scripts\backup-database.mjs"
+//      (dal 25/10/2026 le chiavi stanno sul disco locale, non nella cartella di rete)
 //      Directory di partenza = "\\srvdoc\ai\Progetti AI\Academy GT\academy-gt"
 //
 // Tabelle e bucket vengono elencati dal database a ogni esecuzione (non

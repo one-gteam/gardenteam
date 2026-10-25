@@ -13,6 +13,13 @@ Sul desktop del PC AI c'è **Pannello GT One** (`C:\GTOneDati\pannello_gtone.pyw
 | **Chiavetta** | Copia **cifrata** (AES-256, la stessa chiave di my.rosaflor) dell'ultimo backup e dell'ultima copia completa su una chiavetta USB, in `GTOneBackup\<data>\`, riaperta per verifica. Si apre su qualunque PC Windows con «APRI LA COPIA» e la chiave del foglio in cassaforte (impronta 8F0E5DACDC89). La chiave non va mai sulla chiavetta. |
 | **Istruzioni** | Cosa si salva, quando, dove, cosa controllare e cosa fare se va storto, in parole semplici; pulsante per pianificare la copia completa ogni domenica. |
 
+**Le chiavi** (`.env.local`: Supabase, segreti dei cookie, Zoho, Vercel) dal 25/10/2026 stanno sul disco
+locale del PC AI, in `C:\GTOneDati\segreti\.env.local` (solo amministratori e AI\admin), non più nella cartella
+di rete, come per Linfa e my.rosaflor. Lo spostamento lo fa `C:\GTOneDati\installa.ps1` (da lanciare una volta come
+amministratore; copia in `strumenti\pannello\`): fa leggere al backup notturno la copia locale, crea «GT One - Copia
+completa» ogni domenica alle 05:00, toglie la copia dalla rete se identica e fa approvare i cambi al guardiano.
+Da allora i comandi a mano si lanciano con `--env-file="C:\GTOneDati\segreti\.env.local"` al posto di `--env-file=.env.local`.
+
 La copia su chiavetta la fa `C:\SicurezzaDati\copia-esterna.mjs chiavetta-gtone <cartella>` (stesso
 programma della copia fuori sede notturna). Prova del 25/10/2026: 156 MB di dati + 72 MB di copia del sito,
 riaperti «come su un altro PC» chiedendo la chiave.
