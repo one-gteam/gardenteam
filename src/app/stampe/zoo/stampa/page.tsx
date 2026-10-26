@@ -29,7 +29,7 @@ import {
   getZooDb, nonConformiDi, layoutPerOfferta, layoutScegliibili, pvPriceFor, isZooHidden,
   campagneStampabili, campagnaInCorso, campagnaInLavorazione, campaignStato,
   effectiveParentText, effectiveParentTag, printedAt, NO_VOLANTINO,
-  ZOO_FIELDS, ZOO_FORMATS, marcaEffettiva, condizioniPer, ownScopeVisible, pvPromoFor, noPrintSets, offertePerStampa, foglioDiStampa, prefStampaPer, tagsPerLayout, TIPO_SCONTO, TIPO_MECCANICA, TIPO_BARRATO, TIPO_A_SOLI, valoriPerStampa, giacenzePer, tagsPerStampa,
+  ZOO_FIELDS, ZOO_FORMATS, marcaEffettiva, condizioniPer, ownScopeVisible, pvPromoFor, noPrintSets, offertePerStampa, foglioDiStampa, prefStampaPer, campagnaPerStampa, etichettaPeriodo, tagsPerLayout, TIPO_SCONTO, TIPO_MECCANICA, TIPO_BARRATO, TIPO_A_SOLI, valoriPerStampa, giacenzePer, tagsPerStampa,
 } from "@/lib/zoo";
 import {
   importPvPricesRighe, markZooPrinted, resetZooPrinted, toggleZooHidden, toggleZooHiddenInline, importZooNoPrintRighe, svuotaZooNoPrint,
@@ -75,8 +75,8 @@ export default async function ZooStampaPage({
    * Di default si apre quello in corso, che è il caso di tutti i giorni.
    */
   const stampabili = campagneStampabili(db);
-  const campaign =
-    stampabili.find((c) => c.id === sp.campagna) ?? campagnaInCorso(db) ?? campagnaInLavorazione(db);
+  // quello scelto, altrimenti quello in corso oggi secondo le date
+  const campaign = campagnaPerStampa(db, sp.campagna);
   /*
    * Si stampano le offerte del volantino del Consorzio più quelle proprie di
    * questa insegna/PV, che vivono fuori dal volantino comune ma vanno a scaffale
@@ -84,11 +84,6 @@ export default async function ZooStampaPage({
    */
   const allOffers = offertePerStampa(db, scope, academyDb, campaign);
   const offerteProprie = allOffers.filter((o) => o.scopeType);
-  const etichettaPeriodo = (c: (typeof stampabili)[number]) => {
-    const p = campaignStato(c) === "lavorazione" ? "in preparazione" : "in corso";
-    const d = (x: string) => (x ? new Date(`${x}T00:00:00`).toLocaleDateString("it-IT") : "—");
-    return `${c.nome} (${p}: ${d(c.dal)} → ${d(c.al)})`;
-  };
   /** L'offerta finisce sul volantino? (pagina assegnata e non scartata) */
   const inVolantino = (o: (typeof allOffers)[number]) =>
     Boolean(o.selezionata) || (Boolean(o.paginaId) && o.paginaId !== NO_VOLANTINO);
@@ -587,8 +582,9 @@ export default async function ZooStampaPage({
           {/* periodo e ambito cambiano al volo: niente pulsanti da premere dopo */}
           <form method="get">
             {Object.entries(sp).map(([k, v]) => (k !== "scope" && k !== "campagna" && v ? <input key={k} type="hidden" name={k} value={v} /> : null))}
-            {stampabili.length > 1 && (
-              <label className="field">
+            {/* sempre in vista, anche con un periodo solo: chi stampa vede quali offerte sta stampando */}
+            {stampabili.length > 0 && (
+              <label className="field" title={stampabili.length > 1 ? "Le offerte in corso o quelle del periodo successivo (i cartelli si preparano prima che partano)" : "Per ora c'è solo questo periodo: quando il Consorzio carica il successivo, si sceglie qui"}>
                 Periodo promozionale
                 <AutoSubmitSelect name="campagna" defaultValue={campaign?.id ?? ""}
                   options={stampabili.map((c) => ({ value: c.id, label: etichettaPeriodo(c) }))} />

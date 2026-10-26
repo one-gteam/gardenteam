@@ -24,7 +24,7 @@ import { DettagliPadre, PannelloPadre } from "@/components/stampe/DettagliPadre"
 import {
   getZooDb, zooImageUrl, effectiveParentText, campagnaInLavorazione, campagnaInCorso, campaignStato,
   fotoDaAbbinare, promoDaTesto, chiavePrezzo, animaliDi, caratteristicheProdottoDi, migraVolantinoPages, prezzoUnitaDi,
-  NO_VOLANTINO, marcaEffettiva, prezziDelPadre, nomeDestinazione, type ZooProduct, type ZooOffer, type ZooParent,
+  NO_VOLANTINO, marcaEffettiva, prezziDelPadre, nomeDestinazione, etichettaPeriodo, type ZooProduct, type ZooOffer, type ZooParent,
 } from "@/lib/zoo";
 import {
   interpretaPromoScritte, avviaAssociaConAI, chiudiAvvisoAssocia,
@@ -264,6 +264,29 @@ export default async function OfferteInCorso({ user, sp }: { user: User; sp: Rec
                 </p>
                 <form action={importZooOffers.bind(null, scopeParam)} style={{ display: "grid", gap: 8 }}>
                   <input type="file" name="file" accept=".xlsx,.xls,.csv" required />
+                  {/* a quale periodo vanno le offerte: quello in lavorazione o un periodo nuovo (il successivo) */}
+                  <fieldset className="periodo-import" style={{ border: "1px solid var(--line)", borderRadius: 8, padding: "8px 10px", display: "grid", gap: 6 }}>
+                    <legend style={{ fontSize: 12.5, fontWeight: 700, padding: "0 4px" }}>Periodo promozionale delle offerte</legend>
+                    <label style={{ fontSize: 12.5 }}>
+                      <input type="radio" name="periodo" value="questo" defaultChecked />{" "}
+                      aggiungi a <strong>{campaign.nome}</strong> ({etichettaPeriodo(campaign).split(" — ")[1]})
+                    </label>
+                    <label style={{ fontSize: 12.5 }}>
+                      <input type="radio" name="periodo" value="nuovo" />{" "}
+                      <strong>è il periodo successivo</strong>: apri un periodo nuovo per queste offerte
+                    </label>
+                    <div className="periodo-nuovo" style={{ display: "grid", gap: 6, gridTemplateColumns: "2fr 1fr 1fr", paddingLeft: 20 }}>
+                      <label className="field" style={{ marginBottom: 0 }}>Nome<input type="text" name="nome" placeholder="es. Offerte Dicembre" /></label>
+                      <label className="field" style={{ marginBottom: 0 }}>Dal<input type="date" name="dal" /></label>
+                      <label className="field" style={{ marginBottom: 0 }}>Al<input type="date" name="al" /></label>
+                      <label style={{ fontSize: 12, gridColumn: "1 / -1" }}>
+                        <input type="checkbox" name="ereditaSchema" value="1" defaultChecked /> parti dallo schema delle pagine del volantino di adesso
+                      </label>
+                      <span className="hint" style={{ gridColumn: "1 / -1", fontSize: 11.5 }}>
+                        «{campaign.nome}» resta in corso e stampabile (in Stampa cartelli si sceglie il periodo); Crea volantino, Bozza e Scelta offerte passano al periodo nuovo.
+                      </span>
+                    </div>
+                  </fieldset>
                   <label style={{ fontSize: 12.5 }}>
                     <input type="checkbox" name="sostituisci" value="1" /> sostituisci le offerte già caricate
                   </label>
@@ -402,6 +425,9 @@ export default async function OfferteInCorso({ user, sp }: { user: User; sp: Rec
         {sp.nuovo && <div className="alert alert-green">✓ Nuovo volantino aperto: le pagine ripartono pulite.</div>}
 
         {sp.riaperto && <div className="alert alert-green">✓ Volantino riaperto: puoi modificarlo di nuovo.</div>}
+        {sp.errore === "periodo" && (
+          <div className="alert alert-amber">Per aprire il periodo successivo servono il nome e le due date (la fine dopo l&apos;inizio): niente è stato importato.</div>
+        )}
         {sp.errore === "giaaperto" && (
           <div className="alert alert-amber">
             C&apos;è già un volantino in lavorazione: chiudilo prima di aprirne un altro.

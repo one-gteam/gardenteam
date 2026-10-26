@@ -1292,9 +1292,40 @@ export function campagneStampabili(db: ZooDB): ZooCampaign[] {
 
 /* ================== Stampa cartelli: offerte, tag e valori ================== */
 
-/** Il periodo promozionale scelto per la stampa, o quello in corso, o quello in preparazione. */
+/** Oggi (ora italiana) come AAAA-MM-GG, per confrontarlo con le date dei periodi. */
+export function oggiIso(): string {
+  return new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Rome" });
+}
+
+/**
+ * Dove sta un periodo rispetto a oggi, dalle sue date: «in corso» se oggi è fra
+ * dal e al, «prossimo» se comincia dopo, «finito» se è già terminato. Senza
+ * date si guarda lo stato (in preparazione = prossimo).
+ */
+export function quandoPeriodo(c: ZooCampaign, oggi = oggiIso()): "in corso" | "prossimo" | "finito" {
+  if (c.dal && c.al) return oggi < c.dal ? "prossimo" : oggi > c.al ? "finito" : "in corso";
+  if (c.dal) return oggi < c.dal ? "prossimo" : "in corso";
+  return campaignStato(c) === "lavorazione" ? "prossimo" : "in corso";
+}
+
+/** «Offerte Novembre — in corso, 22/10 → 15/11» per i menu di scelta del periodo. */
+export function etichettaPeriodo(c: ZooCampaign): string {
+  const d = (x?: string) => (x ? new Date(`${x}T00:00:00`).toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit" }) : "—");
+  const q = quandoPeriodo(c);
+  return `${c.nome} — ${q === "prossimo" ? `prossimo, dal ${d(c.dal)}` : q}${c.dal || c.al ? ` (${d(c.dal)} → ${d(c.al)})` : ""}`;
+}
+
+/**
+ * Il periodo promozionale per la stampa: quello scelto; altrimenti quello in
+ * corso OGGI secondo le date (anche se è ancora «in lavorazione», come succede
+ * quando il volantino parte prima che si apra il successivo); altrimenti il
+ * chiuso più recente, poi quello in preparazione.
+ */
 export function campagnaPerStampa(db: ZooDB, id?: string): ZooCampaign | undefined {
-  return campagneStampabili(db).find((c) => c.id === id) ?? campagnaInCorso(db) ?? campagnaInLavorazione(db);
+  const tutte = campagneStampabili(db);
+  return tutte.find((c) => c.id === id)
+    ?? tutte.find((c) => quandoPeriodo(c) === "in corso")
+    ?? campagnaInCorso(db) ?? campagnaInLavorazione(db);
 }
 
 /**

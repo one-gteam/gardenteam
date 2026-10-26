@@ -15,7 +15,7 @@ import {
   getZooDb, saveZooDb, ZooDB, ZooParent, ZooProduct, campagnaInLavorazione, campagnaInCorso, campaignStato, NO_VOLANTINO,
   formatiDi, descrizioneConFormati, prezziDelPadre, contenutoDa, chiavePrezzo, type PassoVolantinoId,
   ZOO_FORMATS, TIPI_PROMO_STAMPA, PV_PROMO_CODES_DEFAULT, ownScopeVisible, articoloDaNomeFoto, fotoCandidateDi, apiKeyFor, contenutoDaTesto, zooCartelloValues, layoutScegliibili, scontoDaTesto, promoDaTesto, applicaPromoTesto, chiaveGruppoOfferta,
-  type ZooOffer,
+  type ZooOffer, type ZooCampaign,
 } from "./zoo";
 import type { LayoutItem } from "./stampe";
 import { groupAndDescribe, groupAndDescribeBatched, type AiGroup } from "./zoo-ai";
@@ -1369,11 +1369,17 @@ export async function importZooOffers(scopeParam: string, formData: FormData) {
   const db = await getZooDb();
 
   /*
-   * L'import alimenta il volantino IN LAVORAZIONE, non ne apre uno nuovo: aprire
-   * il volantino successivo è una decisione esplicita ("Nuovo volantino"), perché
-   * archivia quello precedente. Così si possono caricare più Excel sullo stesso
-   * volantino (es. un fornitore alla volta) senza spezzarlo in campagne diverse.
+   * L'import alimenta il volantino IN LAVORAZIONE. Col periodo in corso e il file
+   * del successivo già pronto si sceglie «È il periodo successivo»: il periodo in
+   * lavorazione passa a in corso (stampabile), quello prima va in archivio, e le
+   * offerte vanno in un periodo nuovo. Prima le nuove offerte finivano mescolate
+   * a quelle in corso, se non si ricordava di premere «Chiudi» e «Nuovo volantino».
    */
+  if (String(formData.get("periodo") ?? "") === "nuovo") {
+    const nomeNuovo = String(formData.get("nome") ?? "").trim();
+    if (!nomeNuovo || !dal || !al || al < dal) redirect(backUrl("/stampe/zoo/prodotti", scopeParam, { errore: "periodo" }));
+    apriPeriodoSuccessivo(db, nomeNuovo, dal, al, String(formData.get("ereditaSchema") ?? "") === "1");
+  }
   let campaign = campagnaInLavorazione(db);
   if (!campaign) {
     for (const c of db.campaigns) c.attiva = false;
@@ -1383,9 +1389,12 @@ export async function importZooOffers(scopeParam: string, formData: FormData) {
     };
     db.campaigns.push(campaign);
   } else {
-    if (String(formData.get("nome") ?? "").trim()) campaign.nome = nome;
-    if (dal) campaign.dal = dal;
-    if (al) campaign.al = al;
+    // nome e date valgono solo per il periodo nuovo: aggiungendo a quello in lavorazione non lo si rinomina
+    if (!formData.get("periodo")) {
+      if (String(formData.get("nome") ?? "").trim()) campaign.nome = nome;
+      if (dal) campaign.dal = dal;
+      if (al) campaign.al = al;
+    }
     // "sostituisci": riparte da zero sulle offerte di questo volantino
     if (String(formData.get("sostituisci") ?? "") === "1") {
       const vecchie = new Set(db.offers.filter((o) => o.campaignId === campaign!.id).map((o) => o.id));
@@ -1584,6 +1593,49 @@ export async function riapriVolantino(campaignId: string, scopeParam: string) {
     await saveZooDb(db);
   }
   redirect(backUrl("/stampe/zoo/prodotti", scopeParam, { riaperto: "1" }));
+}
+
+/**
+ * Apre il periodo promozionale successivo: quello in lavorazione passa a
+ * «chiuso» (in corso a scaffale, cartelli ancora stampabili), quello chiuso
+ * prima va in archivio, e se ne apre uno nuovo in lavorazione. Lo schema delle
+ * pagine del volantino si può ereditare come punto di partenza.
+ */
+function apriPeriodoSuccessivo(db: ZooDB, nome: string, dal: string, al: string, ereditaSchema: boolean): ZooCampaign {
+  const inLavorazione = campagnaInLavorazione(db);
+  const inCorso = campagnaInCorso(db);
+  if (inCorso && inCorso !== inLavorazione) {
+    inCorso.stato = "archiviata";
+    inCorso.archiviataIl = new Date().toISOString();
+    inCorso.attiva = false;
+  }
+  if (inLavorazione) {
+    inLavorazione.stato = "chiusa";
+    inLavorazione.chiusaIl = new Date().toISOString();
+    inLavorazione.attiva = false;
+  }
+  const modello = inLavorazione ?? inCorso;
+  const id = `zc_${Date.now()}`;
+  const nuovo: ZooCampaign = {
+    id, nome, dal, al, attiva: true, stato: "lavorazione",
+    schede: db.settings.schedeDefault.map((s, i) => ({ id: `s${i}`, nome: s })),
+  };
+  db.campaigns.push(nuovo);
+  if (ereditaSchema && modello) {
+    const vecchio = db.volantinoLayouts.find((l) => l.campaignId === modello.id);
+    if (vecchio) {
+      // solo la griglia e le parti grafiche: le offerte del volantino vecchio no
+      const pulite = JSON.parse(JSON.stringify(vecchio.pages)) as typeof vecchio.pages;
+      for (const pg of pulite) {
+        pg.blocks = (pg.blocks ?? []).map((b) => {
+          const { offerIds: _o, descrizione: _d, prezzo: _p, ...resto } = b;
+          return resto;
+        });
+      }
+      db.volantinoLayouts.push({ campaignId: id, pages: pulite });
+    }
+  }
+  return nuovo;
 }
 
 /**
