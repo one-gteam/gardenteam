@@ -7,9 +7,9 @@ import type { PassoVolantino } from "@/lib/zoo";
 
 /**
  * I passi del volantino in lavorazione, in fila: chiunque apre Offerte in corso
- * vede a che punto si è e cosa manca. I passi misurabili si spuntano da soli
- * (offerte caricate, pagine assegnate, foto, focus); gli altri li segna il
- * Consorzio a mano, e a mano può anche forzare o riaprire quelli automatici.
+ * vede a che punto si è e cosa manca. Ogni passo è «da fare» finché il
+ * Consorzio non lo segna «fatto» col suo pulsante; quelli misurabili (offerte,
+ * scelta, foto, focus) dicono «pronto da segnare» quando i conti tornano.
  * Cliccando un passo se ne apre il dettaglio: cosa manca e dove si sistema.
  */
 export default function AvanzamentoVolantino({
@@ -45,13 +45,14 @@ export default function AvanzamentoVolantino({
               <span style={{ fontWeight: 700, fontSize: 12.5 }}>{p.fatto ? p.nomeFatto : p.nome}</span>
               <span className="hint" style={{ display: "block", fontSize: 11 }}>
                 {p.dettaglio}
-                {p.segnato && <> · segnato da {p.segnato.da} il {new Date(p.segnato.il).toLocaleDateString("it-IT")}</>}
+                {p.pronto && <> · <strong>pronto da segnare</strong></>}
+                {p.segnato && p.fatto && <> · segnato da {p.segnato.da} il {new Date(p.segnato.il).toLocaleDateString("it-IT")}</>}
               </span>
             </span>
             {puoSegnare && (
-              <PulsanteAzione azione={segnaPassoVolantino.bind(null, campaignId, p.id, !p.fatto)} className="mini-btn"
-                title={p.fatto ? "Riapri questo passo" : "Segna come fatto"}>
-                {p.fatto ? "riapri" : "fatto"}
+              <PulsanteAzione azione={segnaPassoVolantino.bind(null, campaignId, p.id, !p.fatto)} className={`mini-btn passo-stato${p.fatto ? " fatto" : ""}`}
+                title={p.fatto ? "Fatto: clic per riaprirlo (torna «da fare»)" : "Da fare: clic quando è finito, diventa «fatto»"}>
+                {p.fatto ? "✓ fatto" : "da fare"}
               </PulsanteAzione>
             )}
           </li>

@@ -28,7 +28,7 @@ import {
 } from "@/lib/zoo";
 import {
   interpretaPromoScritte, avviaAssociaConAI, chiudiAvvisoAssocia,
-  importZooOffers, updateCampaignDates, associaNuoviConAI, finalizeZooPhotoUpload,
+  importZooOffers, updateCampaignDates, riprendiTestiPrecedenti, associaNuoviConAI, finalizeZooPhotoUpload,
   createZooParent, associaConAI, rigeneraTestiAI, saveParentTexts, setParentImage,
   toggleParentCaratteristica, scioglieParent, chiudiVolantino, riapriVolantino, nuovoVolantino,
   svuotaOfferteVolantino, rimuoviOfferteMarginiamo, updateParentFieldInline, updateOfferFieldInline,
@@ -297,6 +297,15 @@ export default async function OfferteInCorso({ user, sp }: { user: User; sp: Rec
                   </label>
                   <button className="btn btn-sm" type="submit">Importa offerte</button>
                 </form>
+                <p className="hint" style={{ margin: "10px 0 4px", fontSize: 12 }}>
+                  Gli articoli già visti in un volantino precedente ritrovano il loro padre e i testi di allora (anche quelli
+                  corretti a mano, e le correzioni delle insegne): dal file arrivano solo prezzi e promo. Per un volantino
+                  caricato prima di questa regola:
+                </p>
+                <PulsanteAzione azione={riprendiTestiPrecedenti.bind(null, campaign.id)} className="btn btn-outline btn-sm"
+                  conferma={`Riprendere i testi dai volantini precedenti per le offerte di «${campaign.nome}»? Si saltano quelle già corrette in questo volantino.`}>
+                  Riprendi i testi dai volantini precedenti
+                </PulsanteAzione>
               </div>
             </details>
           )}
@@ -382,7 +391,7 @@ export default async function OfferteInCorso({ user, sp }: { user: User; sp: Rec
         {sp.divisi !== undefined && <div className="alert alert-green">✓ {sp.divisi} padri divisi per prezzo: controlla nomi e descrizioni delle nuove righe.</div>}
         {sp.importate !== undefined && (
           <div className="alert alert-green">
-            ✓ Importate {sp.importate} offerte ({sp.nuovi ?? 0} prodotti nuovi aggiunti al database base).
+            ✓ Importate {sp.importate} offerte ({sp.nuovi ?? 0} prodotti nuovi aggiunti al database base{sp.testiripresi ? `; ${sp.testiripresi} con i testi del volantino precedente` : ""}).
             {sp.senzaprezzo && ` ${sp.senzaprezzo} senza prezzo promo (vedi condizioni): da completare a mano.`}
             {sp.esclusemarginiamo && ` ${sp.esclusemarginiamo} righe "marginiamo" escluse dalle offerte.`}
             {sp.aggiornate && ` ${sp.aggiornate} erano già in offerta (anche a mano): aggiornate, non duplicate.`}

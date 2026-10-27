@@ -1335,6 +1335,64 @@ export async function toggleZooHiddenBulk(back: string, scopeParam: string, form
 
 /* ================== 2. Import Excel offerte mensili ================== */
 
+/**
+ * L'ultima offerta del Consorzio dello stesso articolo in un volantino
+ * precedente (le offerte stanno in ordine di caricamento). Serve a riprendere
+ * i testi già scritti o corretti a mano: dal nuovo Excel arrivano solo prezzi e promo.
+ */
+function offertaPrecedenteDi(db: ZooDB, campaignId: string): Map<string, ZooOffer> {
+  const m = new Map<string, ZooOffer>();
+  for (const o of db.offers) if (o.campaignId !== campaignId && !o.scopeType && o.productId) m.set(o.productId, o);
+  return m;
+}
+
+/**
+ * Testi dell'offerta presi dal volantino prima: descrizione (quella corretta a
+ * mano resta), titolo, descrizione del cartello e marca, e le correzioni delle
+ * insegne/PV alla descrizione. Ritorna se ha cambiato qualcosa.
+ */
+function riprendiTesti(db: ZooDB, prima: ZooOffer, nuova: ZooOffer): boolean {
+  let cambiato = false;
+  if (prima.descrizione && prima.descrizione !== nuova.descrizione) { nuova.descrizione = prima.descrizione; cambiato = true; }
+  for (const k of ["titolo", "descCartello", "marca"] as const) {
+    if (prima[k] && !nuova[k]) { nuova[k] = prima[k]; cambiato = true; }
+  }
+  for (const ov of db.offerOverrides.filter((x) => x.offerId === prima.id && x.field === "descrizione")) {
+    if (!db.offerOverrides.some((x) => x.offerId === nuova.id && x.field === "descrizione" && x.scopeType === ov.scopeType && x.scopeId === ov.scopeId)) {
+      db.offerOverrides.push({ ...ov, offerId: nuova.id });
+      cambiato = true;
+    }
+  }
+  return cambiato;
+}
+
+/**
+ * «Riprendi i testi dai volantini precedenti» per un volantino già caricato:
+ * le offerte di articoli già visti tornano coi testi di allora. Tocca solo le
+ * offerte che nel volantino nuovo nessuno ha ancora corretto (descrizione
+ * uguale a quella dell'Excel non si può sapere: si salta chi ha già correzioni
+ * delle insegne o un titolo proprio).
+ */
+export async function riprendiTestiPrecedenti(campaignId: string): Promise<{ ok: boolean; error?: string }> {
+  const user = await requireZooUser();
+  if (!isZooEditor(user)) return { ok: false, error: "Solo chi cura lo Zoo per il Consorzio." };
+  const db = await getZooDb();
+  const prima = offertaPrecedenteDi(db, campaignId);
+  let n = 0;
+  for (const o of db.offers) {
+    if (o.campaignId !== campaignId || o.scopeType || !o.productId) continue;
+    const p = prima.get(o.productId);
+    if (!p) continue;
+    if (o.titolo || db.offerOverrides.some((x) => x.offerId === o.id)) continue;
+    if (riprendiTesti(db, p, o)) n++;
+  }
+  if (!n) return { ok: true, error: "Niente da riprendere: i testi sono già quelli dei volantini precedenti." };
+  registra(user, { area: "zoo", cosa: "Testi ripresi dai volantini precedenti", oggetto: db.campaigns.find((c) => c.id === campaignId)?.nome ?? "volantino", dopo: `${n} offerte` });
+  await saveZooDb(db);
+  revalidatePath("/stampe/zoo/prodotti");
+  return { ok: true, error: `Ripresi i testi di ${n} offerte (descrizione, titolo, cartello, correzioni delle insegne).` };
+}
+
 export async function importZooOffers(scopeParam: string, formData: FormData) {
   const user = await requireZooUser();
   if (!isZooEditor(user)) redirect("/stampe/zoo/prodotti");
@@ -1404,6 +1462,9 @@ export async function importZooOffers(scopeParam: string, formData: FormData) {
   }
   const campaignId = campaign.id;
   const escludiMarginiamo = String(formData.get("escludimarginiamo") ?? "") === "1";
+  // gli articoli già visti in un volantino prima: si riprendono i loro testi
+  const precedenti = offertaPrecedenteDi(db, campaignId);
+  let nTestiRipresi = 0;
 
   let nOffers = 0;
   let nNew = 0;
@@ -1464,6 +1525,9 @@ export async function importZooOffers(scopeParam: string, formData: FormData) {
       condizioni: row.condizioni,
       nuovo,
     };
+    // articolo già in un volantino prima: testi di allora (anche quelli corretti a mano), prezzi e promo dal file
+    const prima = precedenti.get(product.id);
+    if (prima && riprendiTesti(db, prima, offerta)) nTestiRipresi++;
     // promo scritta a parole ("20 alle casse", "3x2"): tradotta in tipologia e prezzo, senza AI
     if (!row.prezzoPromo && row.condizioni) applicaPromoTesto(offerta, row.condizioni);
     if (!offerta.prezzoPromo && !scontoDaTesto(offerta.meccanica ?? "") && !offerta.meccanica) nSenzaPrezzo++;
@@ -1476,6 +1540,7 @@ export async function importZooOffers(scopeParam: string, formData: FormData) {
     ...(nMarginiamo ? { esclusemarginiamo: String(nMarginiamo) } : {}),
     importate: String(nOffers), nuovi: String(nNew), ...(nSenzaPrezzo ? { senzaprezzo: String(nSenzaPrezzo) } : {}),
     ...(nAggiornate ? { aggiornate: String(nAggiornate) } : {}),
+    ...(nTestiRipresi ? { testiripresi: String(nTestiRipresi) } : {}),
   }));
 }
 

@@ -139,9 +139,9 @@ export default async function ZooDashboardPage() {
       <StampeHeader user={user} active="dashboard" area="zoo" />
       <div className="container">
         <div className="testata-compatta">
-          <h1 style={{ margin: 0, fontSize: 24 }}>Dashboard</h1>
+          <h1 style={{ margin: 0, fontSize: 24 }}>{campaign.nome}</h1>
           <span className="hint" style={{ flex: 1 }}>
-            <strong>{campaign.nome}</strong> · dal {dataIt(campaign.dal)} al {dataIt(campaign.al)}
+            dal {dataIt(campaign.dal)} al {dataIt(campaign.al)}
             {gInizio !== undefined && gInizio > 0 && <> · <strong>esce tra {gInizio} {gInizio === 1 ? "giorno" : "giorni"}</strong></>}
             {gInizio !== undefined && gInizio <= 0 && gFine !== undefined && gFine >= 0 && <> · in corso, finisce tra {gFine} {gFine === 1 ? "giorno" : "giorni"}</>}
           </span>

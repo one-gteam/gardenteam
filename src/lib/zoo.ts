@@ -154,6 +154,8 @@ export interface ZooUnioneVolantino {
 
 export type PassoVolantinoId = "offerte" | "scelta" | "foto" | "testi" | "focus" | "impaginazione";
 export interface PassoVolantino {
+  /** Secondo i conti sarebbe fatto, ma nessuno l'ha ancora segnato. */
+  pronto?: boolean;
   id: PassoVolantinoId;
   /** Come si chiama il passo da fare ("Foto") e una volta fatto ("Foto caricate"). */
   nome: string;
@@ -2654,9 +2656,18 @@ export function passiVolantino(db: ZooDB, campaign: ZooCampaign): PassoVolantino
     { id: "focus", nome: "Focus", nomeFatto: "Focus completati", dettaglio: scelte.length ? (senzaFocus ? `${senzaFocus} voci a volantino senza focus` : "tutte le voci a volantino hanno un focus") : "prima scegli le offerte", fatto: scelte.length > 0 && senzaFocus === 0 },
     { id: "impaginazione", nome: "Impaginazione", nomeFatto: "Impaginazione completata", dettaglio: pagine.length ? `${pagine.length} pagine · ${collocate} offerte collocate su ${scelte.length} a volantino` : "nessuna pagina ancora (Crea Volantino)", fatto: false },
   ];
+  /*
+   * Un passo è fatto solo quando qualcuno lo segna («da fare» → «fatto»): prima
+   * quelli misurabili si spuntavano da soli (offerte caricate, foto…) e il
+   * pulsante «fatto» sembrava già premuto. Il conteggio automatico resta come
+   * suggerimento («pronto da segnare»).
+   */
   const passi: PassoVolantino[] = auto.map((p) => {
     const mano = campaign.passi?.[p.id];
-    return { ...p, fatto: mano ? mano.fatto : p.fatto, segnato: mano ? { da: mano.da, il: mano.il } : undefined, voci: dettagli[p.id]?.voci, link: dettagli[p.id]?.link };
+    return {
+      ...p, fatto: mano ? mano.fatto : false, pronto: !mano?.fatto && p.fatto,
+      segnato: mano ? { da: mano.da, il: mano.il } : undefined, voci: dettagli[p.id]?.voci, link: dettagli[p.id]?.link,
+    };
   });
   const primo = passi.find((p) => !p.fatto);
   if (primo) primo.prossimo = true;

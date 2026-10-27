@@ -1843,3 +1843,7 @@ img.tt-media.on { animation: sp-kb 12s linear forwards; }
 .anteprima-pulita .editor-item, .anteprima-pulita .editor-item:hover, .anteprima-pulita .editor-item.selected, .anteprima-pulita .editor-item.insieme { outline: none !important; background: transparent !important; }
 .anteprima-pulita .resize-handle, .anteprima-pulita .editor-lucchetto, .anteprima-pulita .testata-ambito-badge,
 .anteprima-pulita .guida, .anteprima-pulita .guida-smart, .anteprima-pulita .editor-griglia, .anteprima-pulita .distanza, .anteprima-pulita .editor-rettangolo { display: none !important; }
+
+/* Dashboard Zoo: il pulsante del passo dice lo stato («da fare» / «✓ fatto») */
+.passo-stato { white-space: nowrap; }
+.passo-stato.fatto { background: var(--green-50, #eaf3e2); border-color: var(--green-600, #2f6b4a); color: var(--green-700, #1f4d33); font-weight: 700; }
