@@ -5,7 +5,7 @@ import StampeHeader from "@/components/stampe/StampeHeader";
 import { canAccessArea, isZooEditor, scopesForUser, resolveScope } from "@/lib/stampe";
 import { getDb } from "@/lib/db";
 import {
-  condizioniPer, getZooDb, hiddenEntriesFor, pvPromoCodesFor, giacenzeUrlFor } from "@/lib/zoo";
+  condizioniPer, getZooDb, hiddenEntriesFor, pvPromoCodesFor, giacenzeUrlFor, REGOLE_PADRE_DI_SERIE } from "@/lib/zoo";
 import InlineEdit from "@/components/stampe/InlineEdit";
 import ImportExcel from "@/components/stampe/ImportExcel";
 import {
@@ -117,6 +117,15 @@ export default async function ZooImpostazioniPage({
                     Es. «Promozione valida dal 17 settembre al 18 ottobre», costruita dalle date del volantino in
                     corso. In alternativa si può posizionare il campo <strong>Validità</strong> in un riquadro suo,
                     dalla pagina Layout.
+                  </span>
+                </label>
+                <label className="field" style={{ marginBottom: 0, gridColumn: "1 / -1" }}>
+                  Regole per creare i PADRI (guidano «Associa con l&apos;AI»: quali articoli vanno insieme)
+                  <textarea name="regolePadre" rows={14} defaultValue={db.settings.regolePadre ?? REGOLE_PADRE_DI_SERIE} />
+                  <span className="hint">
+                    Le legge Claude ogni volta che raggruppa gli articoli. Oltre a queste, il programma controlla da solo che
+                    un articolo nuovo entri in un padre già esistente solo se ha lo stesso prezzo dei suoi articoli nel volantino
+                    in lavorazione. Svuotando il campo tornano le regole di serie.
                   </span>
                 </label>
                 <label className="field" style={{ marginBottom: 0 }}>

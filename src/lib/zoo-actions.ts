@@ -2673,6 +2673,7 @@ export async function saveZooSettings(scopeParam: string, formData: FormData) {
     .split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
   db.settings.condizioniConValidita = String(formData.get("condizioniConValidita") ?? "") === "1";
   db.settings.istruzioniVolantino = String(formData.get("istruzioniVolantino") ?? db.settings.istruzioniVolantino);
+  if (formData.get("regolePadre") !== null) db.settings.regolePadre = String(formData.get("regolePadre")).trim() || undefined;
   db.settings.istruzioniCartello = String(formData.get("istruzioniCartello") ?? db.settings.istruzioniCartello);
   await saveZooDb(db);
   redirect(backUrl("/stampe/zoo/impostazioni", scopeParam, { salvate: "1" }));

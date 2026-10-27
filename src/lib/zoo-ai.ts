@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { ZooProduct, ZooSettings, chiavePrezzo, type ZooParent, type ZooOffer } from "./zoo";
+import { ZooProduct, ZooSettings, chiavePrezzo, REGOLE_PADRE_DI_SERIE, type ZooParent, type ZooOffer } from "./zoo";
 
 /* ================== Integrazione Claude API (Associa con AI) ==================
  * La chiave API è impostata dall'amministratore di sistema nelle Impostazioni Zoo.
@@ -146,7 +146,7 @@ function buildPrompt(products: ZooProduct[], settings: ZooSettings, singleGroup:
   return [
     singleGroup
       ? "Questi articoli sono varianti (gusto/formato) dello STESSO prodotto. Restituisci UN SOLO gruppo che li contiene tutti."
-      : "Raggruppa questi articoli zoo/pet in prodotti \"padre\": stesse linee di prodotto che differiscono solo per gusto, formato o taglia vanno nello stesso gruppo. Non unire marche o linee diverse.",
+      : ["Raggruppa questi articoli zoo/pet in prodotti \"padre\" seguendo queste REGOLE DEL PADRE:", settings.regolePadre?.trim() || REGOLE_PADRE_DI_SERIE].join("\n"),
     "",
     "Per ogni gruppo genera CINQUE campi. Anche con una descrizione di partenza povera (es. solo \"Tonnetto\"),",
     "usa marca/fornitore/categoria dell'articolo per scrivere comunque un testo commerciale completo: non limitarti",

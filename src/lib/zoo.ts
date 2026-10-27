@@ -669,6 +669,8 @@ export interface ZooSettings {
   tipologieProdotto: string[]; // tipi di prodotto (Multipack, Giochi, Tappetini…): colonna «Tipologia» in Prodotti
   schedeDefault: string[]; // struttura standard delle schede del volantino
   istruzioniVolantino: string; // regole di scrittura testi volantino (guida anche l'AI)
+  /** Regole per creare i padri (quali articoli vanno insieme): guidano «Associa con l'AI». */
+  regolePadre?: string;
   istruzioniCartello: string; // regole di scrittura testi cartelli
   apiKey?: string; // chiave API Claude — impostabile SOLO dall'amministratore di sistema
   formatoRegole: { caratteristica: string; formatId: string }[]; // formato consigliato per caratteristica
@@ -973,6 +975,9 @@ export function tipoPromoDaTags(tags: string[]): TipoPromoStampa | undefined {
 
 /* ================== Persistenza ================== */
 
+/** Le regole per creare i padri di serie (Impostazioni → Regole per creare i padri, modificabili). */
+export const REGOLE_PADRE_DI_SERIE = "Un prodotto PADRE raccoglie gli articoli che vanno sullo stesso cartello e nella stessa voce del volantino.\n\nQUANDO STANNO NELLO STESSO PADRE (tutte insieme)\n1- stessa marca e stessa linea di prodotto (es. Nutrimi natural, Schesir complete, Royal Canin Kitten)\n2- cambiano solo gusto, variante o colore (es. pollo / manzo / salmone; rosso / blu)\n3- stesso prezzo nel volantino: stesso prezzo promo, stesso prezzo di partenza, stessa meccanica (3x2…) o sconto\n4- stesso formato o peso, oppure formati diversi solo se hanno lo stesso prezzo\n\nQUANDO NO (padri diversi)\n- marche diverse, anche se il prodotto è simile\n- linee diverse della stessa marca (es. snack e crocchette, Adult e Kitten, Hairball e Sterilised)\n- prezzo diverso: formati o pesi con prezzi diversi vanno in padri diversi, con il formato nel titolo o nella descrizione (es. «Schesir 85 g» e «Schesir 400 g»)\n- nel dubbio, padri diversi: unire dopo è più facile che dividere\n\nARTICOLI GIÀ IN UN PADRE\n- gli articoli che hanno già un padre (da un volantino precedente) restano dove sono, con i testi del padre\n- un articolo nuovo va in un padre esistente solo se è un gusto o una variante della stessa linea e ha lo stesso prezzo dei suoi articoli nel volantino; i testi del padre non si cambiano\n\nTESTI DEL PADRE\n- titolo e descrizione seguono le istruzioni dei testi del volantino e dei cartelli (qui sotto)\n- con più gusti: «in varie specialità»; con più formati allo stesso prezzo: «in vari formati»\n- almeno un animale (Cane, Gatto, Roditori, Uccelli, Pesci, Rettili) e una caratteristica (Umido, Secco, Snack, Accessori, Igiene) quando pertinenti";
+
 const CATEGORIE_ANIMALI_DEFAULT = ["Cane", "Gatto", "Roditori", "Uccelli", "Pesci", "Rettili"];
 const CARATTERISTICHE_PRODOTTO_DEFAULT = ["Umido", "Secco", "Snack", "Accessori", "Igiene"];
 
@@ -983,6 +988,7 @@ const DEFAULT_SETTINGS: ZooSettings = {
   labels: ["SOTTOCOSTO", "NOVITÀ", "ESCLUSIVA", "FORMATO CONVENIENZA", "PREZZO WOW"],
   tipologieProdotto: ["Multipack", "Giochi", "Tappetini", "Guinzagli e collari", "Ciotole", "Cucce e trasportini"],
   schedeDefault: ["Copertina", "Cane", "Gatto", "Altri animali", "Accessori e igiene", "Retro"],
+  regolePadre: REGOLE_PADRE_DI_SERIE,
   istruzioniVolantino:
     "Testi brevi e commerciali (max 2 righe). Evidenziare il vantaggio per l'animale e il risparmio. Niente punto finale. Es: \"Croccantini ricchi di pollo fresco per cani adulti di taglia media\".",
   istruzioniCartello:
