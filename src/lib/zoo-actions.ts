@@ -488,16 +488,27 @@ export async function associaConAI(back: string, scopeParam: string, formData: F
   const selected = db.products.filter((p) => ids.includes(p.id)
     && (scopeAi.type === "system" ? isZooEditor(user) : p.scopeType === scopeAi.type && p.scopeId === scopeAi.id));
   if (selected.length === 0) redirect(backUrl(back, scopeParam));
+  /*
+   * All'AI vanno solo gli articoli ancora senza padre: quelli che un padre ce
+   * l'hanno (raggruppati in un volantino prima) restano come sono, testi
+   * compresi. Prima si mandavano tutti e si scartavano dopo: con «seleziona
+   * tutto» i lotti da 160 ripartivano sempre dai primi, già raggruppati, e gli
+   * articoli nuovi non venivano mai raggiunti.
+   */
+  const senzaPadre = selected.filter((p) => !p.parentId);
+  const giaNelPadre = selected.length - senzaPadre.length;
+  if (senzaPadre.length === 0) redirect(backUrl(back, scopeParam, { ai: "1", padri: "0", giapadre: String(giaNelPadre) }));
   const chiave = apiKeyFor(db, scopeAi) || process.env.ANTHROPIC_API_KEY;
-  const { groups, usedAi, error, restanti } = await groupAndDescribeBatched(chiave, selected, db.settings);
+  const { groups, usedAi, error, restanti } = await groupAndDescribeBatched(chiave, senzaPadre, db.settings);
   // con la chiave ma l'AI in errore non si creano padri di bozza: si dice il motivo
   if (chiave && !usedAi) redirect(backUrl(back, scopeParam, { ai: "0", padri: "0", aierr: (error ?? "L'AI non ha risposto").slice(0, 120) }));
   // si applica su una lettura fresca: la chiamata all'AI dura minuti, nel frattempo altri scrivono
   const fresco = await getZooDb();
-  const created = applyGroups(fresco, groups, usedAi, new Set(selected.map((p) => p.id)));
+  const created = applyGroups(fresco, groups, usedAi, new Set(senzaPadre.map((p) => p.id)));
   await saveZooDb(fresco);
   redirect(backUrl(back, scopeParam, {
     ai: usedAi ? "1" : "0", padri: String(created),
+    ...(giaNelPadre ? { giapadre: String(giaNelPadre) } : {}),
     ...(restanti ? { restanti: String(restanti) } : {}),
     ...(error ? { aierr: error.slice(0, 120) } : {}),
   }));
