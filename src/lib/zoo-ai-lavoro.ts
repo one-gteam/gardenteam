@@ -1,5 +1,5 @@
 import { getZooDb, saveZooDb, type ZooDB, type ZooParent } from "./zoo";
-import { groupAndDescribe, type AiGroup } from "./zoo-ai";
+import { groupAndDescribe, candidatiPadri, type AiGroup } from "./zoo-ai";
 
 /*
  * "Associa tutti con l'AI" in background: il pulsante risponde subito, il
@@ -54,6 +54,16 @@ function applicaGruppi(db: ZooDB, groups: AiGroup[], ammessi: Set<string>): numb
     // solo articoli ancora senza padre: nel frattempo qualcuno può averli raggruppati a mano
     const figli = db.products.filter((p) => g.eans.includes(p.ean) && !p.parentId && ammessi.has(p.id));
     if (figli.length === 0) continue;
+    // gusto o formato nuovo di una linea che c'era: nel padre esistente, i suoi testi non si toccano
+    const esistente = g.padreEsistente ? db.parents.find((x) => x.id === g.padreEsistente) : undefined;
+    if (esistente) {
+      for (const c of figli) c.parentId = esistente.id;
+      for (const c of g.contenuti ?? []) {
+        const figlio = figli.find((f) => f.ean === c.ean);
+        if (figlio && !figlio.contenuto && c.quantita > 0 && (c.unita === "kg" || c.unita === "l")) figlio.contenuto = { quantita: c.quantita, unita: c.unita };
+      }
+      continue;
+    }
     const id = `zp_${Date.now()}_${creati}_${Math.random().toString(36).slice(2, 5)}`;
     const padre: ZooParent = {
       id,
@@ -128,7 +138,7 @@ export async function eseguiAssociazione(apiKey: string, productIds: string[]): 
       const snapshot = await getZooDb();
       const lotto = snapshot.products.filter((p) => ids.includes(p.id) && !p.parentId);
       if (lotto.length > 0) {
-        const res = await groupAndDescribe(apiKey, lotto, snapshot.settings);
+        const res = await groupAndDescribe(apiKey, lotto, snapshot.settings, false, candidatiPadri(snapshot, lotto));
         if (!res.usedAi) {
           // chiave rifiutata, credito finito, modello non disponibile: meglio fermarsi che riempire il database di bozze
           errore = res.error ?? "L'AI non ha risposto";

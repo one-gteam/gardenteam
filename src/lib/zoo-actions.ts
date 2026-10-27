@@ -423,12 +423,21 @@ function applicaContenuti(children: ZooProduct[], contenuti?: { ean: string; qua
   }
 }
 
-function applyGroups(db: ZooDB, groups: AiGroup[], usedAi: boolean, ammessi?: Set<string>): number {
+function applyGroups(db: ZooDB, groups: AiGroup[], usedAi: boolean, ammessi?: Set<string>, conta?: { aggiunti: number }): number {
   let created = 0;
   for (const g of groups) {
     // solo gli articoli su cui si stava lavorando (non altri con lo stesso EAN), ancora senza padre
     const children = db.products.filter((p) => g.eans.includes(p.ean) && !p.parentId && (!ammessi || ammessi.has(p.id)));
     if (children.length === 0) continue;
+    // gusto o formato nuovo di una linea che c'era: nel padre esistente, i suoi testi non si toccano
+    const esistente = g.padreEsistente ? db.parents.find((x) => x.id === g.padreEsistente) : undefined;
+    if (esistente) {
+      for (const c of children) c.parentId = esistente.id;
+      applicaContenuti(children, g.contenuti);
+      if (!esistente.image) esistente.image = children.find((c) => c.image)?.image;
+      if (conta) conta.aggiunti += children.length;
+      continue;
+    }
     const id = `zp_${Date.now()}_${created}_${Math.random().toString(36).slice(2, 5)}`;
     const parent: ZooParent = {
       id,
@@ -499,15 +508,17 @@ export async function associaConAI(back: string, scopeParam: string, formData: F
   const giaNelPadre = selected.length - senzaPadre.length;
   if (senzaPadre.length === 0) redirect(backUrl(back, scopeParam, { ai: "1", padri: "0", giapadre: String(giaNelPadre) }));
   const chiave = apiKeyFor(db, scopeAi) || process.env.ANTHROPIC_API_KEY;
-  const { groups, usedAi, error, restanti } = await groupAndDescribeBatched(chiave, senzaPadre, db.settings);
+  const { groups, usedAi, error, restanti } = await groupAndDescribeBatched(chiave, senzaPadre, db.settings, { catalogo: db });
   // con la chiave ma l'AI in errore non si creano padri di bozza: si dice il motivo
   if (chiave && !usedAi) redirect(backUrl(back, scopeParam, { ai: "0", padri: "0", aierr: (error ?? "L'AI non ha risposto").slice(0, 120) }));
   // si applica su una lettura fresca: la chiamata all'AI dura minuti, nel frattempo altri scrivono
   const fresco = await getZooDb();
-  const created = applyGroups(fresco, groups, usedAi, new Set(senzaPadre.map((p) => p.id)));
+  const conta = { aggiunti: 0 };
+  const created = applyGroups(fresco, groups, usedAi, new Set(senzaPadre.map((p) => p.id)), conta);
   await saveZooDb(fresco);
   redirect(backUrl(back, scopeParam, {
     ai: usedAi ? "1" : "0", padri: String(created),
+    ...(conta.aggiunti ? { aipadri: String(conta.aggiunti) } : {}),
     ...(giaNelPadre ? { giapadre: String(giaNelPadre) } : {}),
     ...(restanti ? { restanti: String(restanti) } : {}),
     ...(error ? { aierr: error.slice(0, 120) } : {}),
@@ -1980,13 +1991,15 @@ export async function associaNuoviConAI(scopeParam: string) {
   const orphans = db.products.filter((p) => !p.parentId && inVolantino.has(p.id));
   if (orphans.length === 0) redirect(backUrl("/stampe/zoo/prodotti", scopeParam, { padri: "0" }));
   const chiaveNuovi = db.settings.apiKey || process.env.ANTHROPIC_API_KEY;
-  const { groups, usedAi, error, restanti } = await groupAndDescribeBatched(chiaveNuovi, orphans, db.settings);
+  const { groups, usedAi, error, restanti } = await groupAndDescribeBatched(chiaveNuovi, orphans, db.settings, { catalogo: db });
   if (chiaveNuovi && !usedAi) redirect(backUrl("/stampe/zoo/prodotti", scopeParam, { padri: "0", ai: "0", aierr: (error ?? "L'AI non ha risposto").slice(0, 120) }));
   const freschi = await getZooDb();
-  const created = applyGroups(freschi, groups, usedAi, new Set(orphans.map((p) => p.id)));
+  const contaNuovi = { aggiunti: 0 };
+  const created = applyGroups(freschi, groups, usedAi, new Set(orphans.map((p) => p.id)), contaNuovi);
   await saveZooDb(freschi);
   redirect(backUrl("/stampe/zoo/prodotti", scopeParam, {
     padri: String(created), ai: usedAi ? "1" : "0",
+    ...(contaNuovi.aggiunti ? { aipadri: String(contaNuovi.aggiunti) } : {}),
     ...(restanti ? { restanti: String(restanti) } : {}),
     ...(error ? { aierr: error.slice(0, 120) } : {}),
   }));

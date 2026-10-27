@@ -402,6 +402,7 @@ export default async function OfferteInCorso({ user, sp }: { user: User; sp: Rec
             ✓ Creati {sp.padri} prodotti padre {sp.ai === "1" ? "con l'AI" : "con raggruppamento automatico (testi bozza)"}.
             {sp.restanti && ` Ne restano ${sp.restanti} da raggruppare: si lavora a lotti, ripeti l'operazione per continuare.`}
             {sp.giapadre && ` ${sp.giapadre} dei selezionati avevano già un padre: lasciati come sono, testi compresi.`}
+            {sp.aipadri && ` ${sp.aipadri} articoli nuovi aggiunti a padri che c'erano già (gusti o formati nuovi), senza toccarne i testi.`}
             {sp.aierr && <span style={{ color: "#a33" }}> Nota AI: {sp.aierr}</span>}
           </div>
         )}

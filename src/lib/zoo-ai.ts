@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { ZooProduct, ZooSettings } from "./zoo";
+import { ZooProduct, ZooSettings, type ZooParent } from "./zoo";
 
 /* ================== Integrazione Claude API (Associa con AI) ==================
  * La chiave API è impostata dall'amministratore di sistema nelle Impostazioni Zoo.
@@ -14,6 +14,56 @@ export interface AiGroup {
   eans: string[];
   /** Contenuto di ogni articolo (per il prezzo al chilo/litro): ean → quantità in kg o l. */
   contenuti?: { ean: string; quantita: number; unita: "kg" | "l" }[];
+  /**
+   * Id di un padre GIÀ esistente a cui aggiungere questi articoli (un gusto o un
+   * formato nuovo di una linea che c'era): nome e testi del padre non si toccano.
+   * Vuoto = padre nuovo.
+   */
+  padreEsistente?: string;
+}
+
+/** Un padre già nel catalogo da proporre a Claude, con qualche articolo d'esempio. */
+export interface PadreCandidato { id: string; nome: string; marca: string; esempi: string[] }
+
+const PAROLE_VUOTE = new Set(["per", "con", "the", "and", "gusto", "gusti", "varie", "vari", "specialita", "specialità", "formato", "formati", "adult", "adulto", "cane", "cani", "gatto", "gatti", "pz", "conf"]);
+function parole(t: string): string[] {
+  return (t ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/\d+[.,]?\d*\s*(kg|g|gr|ml|l|lt|cl|pz|x)?\b/g, " ").replace(/[^a-z]+/g, " ")
+    .split(" ").filter((w) => w.length > 2 && !PAROLE_VUOTE.has(w));
+}
+
+/**
+ * I padri già esistenti che potrebbero accogliere questi articoli: stessa marca
+ * o stesso fornitore di almeno un loro articolo, e qualche parola del nome in
+ * comune. Al massimo 3 per articolo e `massimo` in tutto, i più simili prima.
+ */
+export function candidatiPadri(
+  db: { parents: ZooParent[]; products: ZooProduct[] }, articoli: ZooProduct[], massimo = 60,
+): PadreCandidato[] {
+  const figliDi = new Map<string, ZooProduct[]>();
+  for (const p of db.products) if (p.parentId) figliDi.set(p.parentId, [...(figliDi.get(p.parentId) ?? []), p]);
+  const punti = new Map<string, number>();
+  for (const a of articoli) {
+    const mie = new Set(parole(a.descrizione));
+    const marca = (a.marca || "").toLowerCase().trim(), forn = (a.fornitore || "").toLowerCase().trim();
+    const voti: [string, number][] = [];
+    for (const par of db.parents) {
+      const figli = figliDi.get(par.id) ?? [];
+      if (!figli.length || figli.some((f) => f.scopeType !== a.scopeType || f.scopeId !== a.scopeId)) continue;
+      const stessaDitta = figli.some((f) => (marca && (f.marca || "").toLowerCase().trim() === marca) || (forn && (f.fornitore || "").toLowerCase().trim() === forn));
+      if (!stessaDitta) continue;
+      const loro = new Set([...parole(par.nome), ...figli.slice(0, 6).flatMap((f) => parole(f.descrizione))]);
+      const comuni = [...mie].filter((w) => loro.has(w)).length;
+      if (comuni >= 1) voti.push([par.id, comuni]);
+    }
+    voti.sort((x, y) => y[1] - x[1]);
+    for (const [id, v] of voti.slice(0, 3)) punti.set(id, Math.max(punti.get(id) ?? 0, v));
+  }
+  return [...punti.entries()].sort((x, y) => y[1] - x[1]).slice(0, massimo).map(([id]) => {
+    const par = db.parents.find((x) => x.id === id)!;
+    const figli = figliDi.get(id) ?? [];
+    return { id, nome: par.nome, marca: figli[0]?.marca || figli[0]?.fornitore || "", esempi: figli.slice(0, 3).map((f) => f.descrizione) };
+  });
 }
 
 const GROUPS_SCHEMA = {
@@ -29,6 +79,7 @@ const GROUPS_SCHEMA = {
           descCartello: { type: "string" },
           caratteristiche: { type: "array", items: { type: "string" } },
           eans: { type: "array", items: { type: "string" }, description: "EAN degli articoli che appartengono a questo padre" },
+          padreEsistente: { type: "string", description: "Id di un padre gia' esistente (dall'elenco PADRI ESISTENTI) a cui aggiungere questi articoli; stringa vuota per un padre nuovo" },
           contenuti: {
             type: "array",
             description: "Per ogni articolo, quanto contiene la confezione, gia' convertito in chili o litri (multipack = totale). Solo gli articoli di cui si capisce il contenuto.",
@@ -44,7 +95,7 @@ const GROUPS_SCHEMA = {
             },
           },
         },
-        required: ["nome", "descVolantino", "descCartello", "caratteristiche", "eans", "contenuti"],
+        required: ["nome", "descVolantino", "descCartello", "caratteristiche", "eans", "contenuti", "padreEsistente"],
         additionalProperties: false,
       },
     },
@@ -57,7 +108,17 @@ function productLine(p: ZooProduct): string {
   return `EAN ${p.ean} | ${p.codice} | ${p.marca} | ${p.fornitore} | ${p.categoria ?? ""} | ${p.descrizione}`;
 }
 
-function buildPrompt(products: ZooProduct[], settings: ZooSettings, singleGroup: boolean): string {
+function buildPrompt(products: ZooProduct[], settings: ZooSettings, singleGroup: boolean, candidati: PadreCandidato[] = []): string {
+  const esistenti = candidati.length && !singleGroup ? [
+    "",
+    "PADRI ESISTENTI. Nel catalogo ci sono già questi prodotti padre (id | titolo | marca | articoli d'esempio).",
+    "Se alcuni degli articoli qui sotto sono varianti (gusto, formato, taglia) della STESSA linea di uno di questi padri,",
+    "fai un gruppo con padreEsistente = quell'id: lascia nome, descVolantino e descCartello vuoti e caratteristiche [],",
+    "gli articoli si aggiungono a quel padre e i suoi testi restano. Solo se è proprio la stessa linea di prodotto:",
+    "nel dubbio, o se è un'altra linea della stessa marca, crea un padre nuovo con padreEsistente = \"\".",
+    ...candidati.map((c) => `PADRE ${c.id} | ${c.nome} | ${c.marca} | ${c.esempi.join("; ")}`),
+    "",
+  ] : [];
   return [
     singleGroup
       ? "Questi articoli sono varianti (gusto/formato) dello STESSO prodotto. Restituisci UN SOLO gruppo che li contiene tutti."
@@ -87,6 +148,7 @@ function buildPrompt(products: ZooProduct[], settings: ZooSettings, singleGroup:
     "   la quantità già convertita in chili (kg) o litri (l): 70 g → 0.07 kg, 4x85 g → 0.34 kg, 250 ml → 0.25 l.",
     "   Serve per il prezzo al chilo/litro sul cartello. Gli articoli senza contenuto leggibile (accessori, pezzi) non vanno elencati.",
     "",
+    ...esistenti,
     "Articoli:",
     ...products.map(productLine),
   ].join("\n");
@@ -146,14 +208,22 @@ export async function groupAndDescribe(
   apiKey: string | undefined,
   products: ZooProduct[],
   settings: ZooSettings,
-  singleGroup = false
+  singleGroup = false,
+  /** Padri già nel catalogo a cui Claude può aggiungere gli articoli (vedi candidatiPadri). */
+  candidati: PadreCandidato[] = [],
 ): Promise<{ groups: AiGroup[]; usedAi: boolean; error?: string }> {
   if (apiKey) {
     try {
-      const groups = await callClaude(apiKey, buildPrompt(products, settings, singleGroup));
-      // sicurezza: tieni solo EAN realmente selezionati
+      const groups = await callClaude(apiKey, buildPrompt(products, settings, singleGroup, candidati));
+      // sicurezza: tieni solo EAN realmente selezionati, e solo padri esistenti fra quelli proposti
       const validEans = new Set(products.map((p) => p.ean));
-      for (const g of groups) g.eans = g.eans.filter((e) => validEans.has(e));
+      const validi = new Map(candidati.map((c) => [c.id, c]));
+      for (const g of groups) {
+        g.eans = g.eans.filter((e) => validEans.has(e));
+        if (g.padreEsistente && !validi.has(g.padreEsistente)) g.padreEsistente = "";
+        // un padre nuovo senza titolo (Claude l'ha lasciato vuoto pensando a un esistente): il nome dell'articolo
+        if (!g.padreEsistente && !g.nome.trim()) g.nome = products.find((p) => g.eans.includes(p.ean))?.descrizione.split(/\s+/).slice(0, 4).join(" ") ?? "Nuovo padre";
+      }
       return { groups: groups.filter((g) => g.eans.length > 0), usedAi: true };
     } catch (e) {
       return {
@@ -177,7 +247,7 @@ export async function groupAndDescribeBatched(
   apiKey: string | undefined,
   products: ZooProduct[],
   settings: ZooSettings,
-  opts: { batchSize?: number; maxProducts?: number } = {}
+  opts: { batchSize?: number; maxProducts?: number; catalogo?: { parents: ZooParent[]; products: ZooProduct[] } } = {}
 ): Promise<{ groups: AiGroup[]; usedAi: boolean; error?: string; restanti: number }> {
   const batchSize = opts.batchSize ?? 40;
   const maxProducts = opts.maxProducts ?? 160;
@@ -186,7 +256,8 @@ export async function groupAndDescribeBatched(
   let usedAi = toProcess.length > 0;
   let error: string | undefined;
   for (let i = 0; i < toProcess.length; i += batchSize) {
-    const res = await groupAndDescribe(apiKey, toProcess.slice(i, i + batchSize), settings);
+    const lotto = toProcess.slice(i, i + batchSize);
+    const res = await groupAndDescribe(apiKey, lotto, settings, false, opts.catalogo ? candidatiPadri(opts.catalogo, lotto) : []);
     groups.push(...res.groups);
     if (!res.usedAi) usedAi = false;
     if (res.error && !error) error = res.error;
