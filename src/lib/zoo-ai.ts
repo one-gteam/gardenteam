@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { ZooProduct, ZooSettings, type ZooParent } from "./zoo";
+import { ZooProduct, ZooSettings, chiavePrezzo, type ZooParent, type ZooOffer } from "./zoo";
 
 /* ================== Integrazione Claude API (Associa con AI) ==================
  * La chiave API è impostata dall'amministratore di sistema nelle Impostazioni Zoo.
@@ -22,8 +22,25 @@ export interface AiGroup {
   padreEsistente?: string;
 }
 
-/** Un padre già nel catalogo da proporre a Claude, con qualche articolo d'esempio. */
-export interface PadreCandidato { id: string; nome: string; marca: string; esempi: string[] }
+/** Un padre già nel catalogo da proporre a Claude, con qualche articolo d'esempio e il prezzo nel volantino. */
+export interface PadreCandidato { id: string; nome: string; marca: string; esempi: string[]; prezzo?: string }
+
+/**
+ * Il prezzo di ogni articolo nel volantino che si sta preparando: la chiave
+ * per confrontarlo (promo|partenza|meccanica|sconto, come chiavePrezzo) e il
+ * testo da far leggere a Claude. In un padre stanno articoli con lo stesso prezzo.
+ */
+export type PrezziVolantino = Map<string, { chiave: string; testo: string }>;
+export function prezziDelVolantino(offers: ZooOffer[], campaignId: string | undefined): PrezziVolantino {
+  const m: PrezziVolantino = new Map();
+  if (!campaignId) return m;
+  for (const o of offers) {
+    if (o.campaignId !== campaignId || o.scopeType || !o.productId) continue;
+    const testo = [o.prezzoPromo && `€ ${o.prezzoPromo}`, o.prezzoListino && `da € ${o.prezzoListino}`, o.meccanica, o.scontoPerc && `-${o.scontoPerc}%`].filter(Boolean).join(" ") || "senza prezzo";
+    m.set(o.productId, { chiave: chiavePrezzo(o), testo });
+  }
+  return m;
+}
 
 const PAROLE_VUOTE = new Set(["per", "con", "the", "and", "gusto", "gusti", "varie", "vari", "specialita", "specialità", "formato", "formati", "adult", "adulto", "cane", "cani", "gatto", "gatti", "pz", "conf"]);
 function parole(t: string): string[] {
@@ -38,7 +55,7 @@ function parole(t: string): string[] {
  * comune. Al massimo 3 per articolo e `massimo` in tutto, i più simili prima.
  */
 export function candidatiPadri(
-  db: { parents: ZooParent[]; products: ZooProduct[] }, articoli: ZooProduct[], massimo = 60,
+  db: { parents: ZooParent[]; products: ZooProduct[] }, articoli: ZooProduct[], massimo = 60, prezzi?: PrezziVolantino,
 ): PadreCandidato[] {
   const figliDi = new Map<string, ZooProduct[]>();
   for (const p of db.products) if (p.parentId) figliDi.set(p.parentId, [...(figliDi.get(p.parentId) ?? []), p]);
@@ -52,6 +69,10 @@ export function candidatiPadri(
       if (!figli.length || figli.some((f) => f.scopeType !== a.scopeType || f.scopeId !== a.scopeId)) continue;
       const stessaDitta = figli.some((f) => (marca && (f.marca || "").toLowerCase().trim() === marca) || (forn && (f.fornitore || "").toLowerCase().trim() === forn));
       if (!stessaDitta) continue;
+      // stesso prezzo nel volantino: se gli articoli del padre ci sono e costano diverso, non è il suo padre
+      const mio = prezzi?.get(a.id)?.chiave;
+      const loroPrezzi = new Set(figli.map((f) => prezzi?.get(f.id)?.chiave).filter(Boolean));
+      if (mio && loroPrezzi.size && !loroPrezzi.has(mio)) continue;
       const loro = new Set([...parole(par.nome), ...figli.slice(0, 6).flatMap((f) => parole(f.descrizione))]);
       const comuni = [...mie].filter((w) => loro.has(w)).length;
       if (comuni >= 1) voti.push([par.id, comuni]);
@@ -62,7 +83,8 @@ export function candidatiPadri(
   return [...punti.entries()].sort((x, y) => y[1] - x[1]).slice(0, massimo).map(([id]) => {
     const par = db.parents.find((x) => x.id === id)!;
     const figli = figliDi.get(id) ?? [];
-    return { id, nome: par.nome, marca: figli[0]?.marca || figli[0]?.fornitore || "", esempi: figli.slice(0, 3).map((f) => f.descrizione) };
+    const conPrezzo = figli.find((f) => prezzi?.get(f.id));
+    return { id, nome: par.nome, marca: figli[0]?.marca || figli[0]?.fornitore || "", esempi: figli.slice(0, 3).map((f) => f.descrizione), prezzo: conPrezzo ? prezzi!.get(conPrezzo.id)!.testo : undefined };
   });
 }
 
@@ -104,11 +126,12 @@ const GROUPS_SCHEMA = {
   additionalProperties: false,
 } as const;
 
-function productLine(p: ZooProduct): string {
-  return `EAN ${p.ean} | ${p.codice} | ${p.marca} | ${p.fornitore} | ${p.categoria ?? ""} | ${p.descrizione}`;
+function productLine(p: ZooProduct, prezzi?: PrezziVolantino): string {
+  const prezzo = prezzi?.get(p.id)?.testo;
+  return `EAN ${p.ean} | ${p.codice} | ${p.marca} | ${p.fornitore} | ${p.categoria ?? ""} | ${p.descrizione}${prezzo ? ` | prezzo nel volantino: ${prezzo}` : ""}`;
 }
 
-function buildPrompt(products: ZooProduct[], settings: ZooSettings, singleGroup: boolean, candidati: PadreCandidato[] = []): string {
+function buildPrompt(products: ZooProduct[], settings: ZooSettings, singleGroup: boolean, candidati: PadreCandidato[] = [], prezzi?: PrezziVolantino): string {
   const esistenti = candidati.length && !singleGroup ? [
     "",
     "PADRI ESISTENTI. Nel catalogo ci sono già questi prodotti padre (id | titolo | marca | articoli d'esempio).",
@@ -116,7 +139,8 @@ function buildPrompt(products: ZooProduct[], settings: ZooSettings, singleGroup:
     "fai un gruppo con padreEsistente = quell'id: lascia nome, descVolantino e descCartello vuoti e caratteristiche [],",
     "gli articoli si aggiungono a quel padre e i suoi testi restano. Solo se è proprio la stessa linea di prodotto:",
     "nel dubbio, o se è un'altra linea della stessa marca, crea un padre nuovo con padreEsistente = \"\".",
-    ...candidati.map((c) => `PADRE ${c.id} | ${c.nome} | ${c.marca} | ${c.esempi.join("; ")}`),
+    "Nello stesso padre stanno articoli con lo STESSO prezzo nel volantino: un padre esistente col prezzo diverso non va usato.",
+    ...candidati.map((c) => `PADRE ${c.id} | ${c.nome} | ${c.marca} | ${c.esempi.join("; ")}${c.prezzo ? ` | prezzo nel volantino: ${c.prezzo}` : ""}`),
     "",
   ] : [];
   return [
@@ -150,7 +174,8 @@ function buildPrompt(products: ZooProduct[], settings: ZooSettings, singleGroup:
     "",
     ...esistenti,
     "Articoli:",
-    ...products.map(productLine),
+    ...(prezzi?.size ? ["(Anche fra gli articoli nuovi: nello stesso gruppo solo articoli con lo stesso prezzo nel volantino.)"] : []),
+    ...products.map((p) => productLine(p, prezzi)),
   ].join("\n");
 }
 
@@ -211,10 +236,12 @@ export async function groupAndDescribe(
   singleGroup = false,
   /** Padri già nel catalogo a cui Claude può aggiungere gli articoli (vedi candidatiPadri). */
   candidati: PadreCandidato[] = [],
+  /** Prezzi degli articoli nel volantino in lavorazione: nello stesso padre lo stesso prezzo. */
+  prezzi?: PrezziVolantino,
 ): Promise<{ groups: AiGroup[]; usedAi: boolean; error?: string }> {
   if (apiKey) {
     try {
-      const groups = await callClaude(apiKey, buildPrompt(products, settings, singleGroup, candidati));
+      const groups = await callClaude(apiKey, buildPrompt(products, settings, singleGroup, candidati, prezzi));
       // sicurezza: tieni solo EAN realmente selezionati, e solo padri esistenti fra quelli proposti
       const validEans = new Set(products.map((p) => p.ean));
       const validi = new Map(candidati.map((c) => [c.id, c]));
@@ -247,7 +274,7 @@ export async function groupAndDescribeBatched(
   apiKey: string | undefined,
   products: ZooProduct[],
   settings: ZooSettings,
-  opts: { batchSize?: number; maxProducts?: number; catalogo?: { parents: ZooParent[]; products: ZooProduct[] } } = {}
+  opts: { batchSize?: number; maxProducts?: number; catalogo?: { parents: ZooParent[]; products: ZooProduct[] }; prezzi?: PrezziVolantino } = {}
 ): Promise<{ groups: AiGroup[]; usedAi: boolean; error?: string; restanti: number }> {
   const batchSize = opts.batchSize ?? 40;
   const maxProducts = opts.maxProducts ?? 160;
@@ -257,10 +284,26 @@ export async function groupAndDescribeBatched(
   let error: string | undefined;
   for (let i = 0; i < toProcess.length; i += batchSize) {
     const lotto = toProcess.slice(i, i + batchSize);
-    const res = await groupAndDescribe(apiKey, lotto, settings, false, opts.catalogo ? candidatiPadri(opts.catalogo, lotto) : []);
+    const res = await groupAndDescribe(apiKey, lotto, settings, false, opts.catalogo ? candidatiPadri(opts.catalogo, lotto, 60, opts.prezzi) : [], opts.prezzi);
     groups.push(...res.groups);
     if (!res.usedAi) usedAi = false;
     if (res.error && !error) error = res.error;
   }
   return { groups, usedAi, error, restanti: products.length - toProcess.length };
+}
+
+/**
+ * Gli articoli che si possono davvero aggiungere a un padre esistente: quelli
+ * con lo stesso prezzo dei suoi articoli nel volantino (o tutti, se il padre in
+ * questo volantino non ha articoli con un prezzo). Gli altri restano senza padre.
+ */
+export function stessoPrezzoDelPadre(
+  db: { products: ZooProduct[] }, padreId: string, figli: ZooProduct[], prezzi?: PrezziVolantino,
+): { si: ZooProduct[]; no: ZooProduct[] } {
+  if (!prezzi?.size) return { si: figli, no: [] };
+  const loro = new Set(db.products.filter((p) => p.parentId === padreId).map((p) => prezzi.get(p.id)?.chiave).filter(Boolean));
+  if (!loro.size) return { si: figli, no: [] };
+  const si: ZooProduct[] = [], no: ZooProduct[] = [];
+  for (const f of figli) { const k = prezzi.get(f.id)?.chiave; (k && !loro.has(k) ? no : si).push(f); }
+  return { si, no };
 }

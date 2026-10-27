@@ -1,5 +1,5 @@
 import { getZooDb, saveZooDb, type ZooDB, type ZooParent } from "./zoo";
-import { groupAndDescribe, candidatiPadri, type AiGroup } from "./zoo-ai";
+import { groupAndDescribe, candidatiPadri, prezziDelVolantino, stessoPrezzoDelPadre, type AiGroup, type PrezziVolantino } from "./zoo-ai";
 
 /*
  * "Associa tutti con l'AI" in background: il pulsante risponde subito, il
@@ -48,7 +48,7 @@ export function lavoroAttivo(l?: LavoroAi): boolean {
   return Date.now() - new Date(l.battito ?? l.inizio).getTime() < LAVORO_SCADUTO_MS;
 }
 
-function applicaGruppi(db: ZooDB, groups: AiGroup[], ammessi: Set<string>): number {
+function applicaGruppi(db: ZooDB, groups: AiGroup[], ammessi: Set<string>, prezzi?: PrezziVolantino): number {
   let creati = 0;
   for (const g of groups) {
     // solo articoli ancora senza padre: nel frattempo qualcuno può averli raggruppati a mano
@@ -57,9 +57,11 @@ function applicaGruppi(db: ZooDB, groups: AiGroup[], ammessi: Set<string>): numb
     // gusto o formato nuovo di una linea che c'era: nel padre esistente, i suoi testi non si toccano
     const esistente = g.padreEsistente ? db.parents.find((x) => x.id === g.padreEsistente) : undefined;
     if (esistente) {
-      for (const c of figli) c.parentId = esistente.id;
+      // solo quelli con lo stesso prezzo dei suoi articoli nel volantino; gli altri restano senza padre
+      const { si } = stessoPrezzoDelPadre(db, esistente.id, figli, prezzi);
+      for (const c of si) c.parentId = esistente.id;
       for (const c of g.contenuti ?? []) {
-        const figlio = figli.find((f) => f.ean === c.ean);
+        const figlio = si.find((f) => f.ean === c.ean);
         if (figlio && !figlio.contenuto && c.quantita > 0 && (c.unita === "kg" || c.unita === "l")) figlio.contenuto = { quantita: c.quantita, unita: c.unita };
       }
       continue;
@@ -138,7 +140,8 @@ export async function eseguiAssociazione(apiKey: string, productIds: string[]): 
       const snapshot = await getZooDb();
       const lotto = snapshot.products.filter((p) => ids.includes(p.id) && !p.parentId);
       if (lotto.length > 0) {
-        const res = await groupAndDescribe(apiKey, lotto, snapshot.settings, false, candidatiPadri(snapshot, lotto));
+        const prezzi = prezziDelVolantino(snapshot.offers, snapshot.campaigns.find((c) => c.stato === "lavorazione")?.id);
+        const res = await groupAndDescribe(apiKey, lotto, snapshot.settings, false, candidatiPadri(snapshot, lotto, 60, prezzi), prezzi);
         if (!res.usedAi) {
           // chiave rifiutata, credito finito, modello non disponibile: meglio fermarsi che riempire il database di bozze
           errore = res.error ?? "L'AI non ha risposto";
@@ -146,7 +149,7 @@ export async function eseguiAssociazione(apiKey: string, productIds: string[]): 
         }
         await salvaInOrdine(async () => {
           const db = await getZooDb();
-          padri += applicaGruppi(db, res.groups, new Set(ids));
+          padri += applicaGruppi(db, res.groups, new Set(ids), prezziDelVolantino(db.offers, db.campaigns.find((c) => c.stato === "lavorazione")?.id));
           fatti += ids.length;
           db.settings.aiLavoro = { ...(db.settings.aiLavoro as LavoroAi), fatti, padri, battito: new Date().toISOString() };
           await saveZooDb(db);
