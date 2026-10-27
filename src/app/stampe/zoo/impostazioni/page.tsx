@@ -123,9 +123,9 @@ export default async function ZooImpostazioniPage({
                   Regole per creare i PADRI (guidano «Associa con l&apos;AI»: quali articoli vanno insieme)
                   <textarea name="regolePadre" rows={14} defaultValue={db.settings.regolePadre ?? REGOLE_PADRE_DI_SERIE} />
                   <span className="hint">
-                    Le legge Claude ogni volta che raggruppa gli articoli. Oltre a queste, il programma controlla da solo che
-                    un articolo nuovo entri in un padre già esistente solo se ha lo stesso prezzo dei suoi articoli nel volantino
-                    in lavorazione. Svuotando il campo tornano le regole di serie.
+                    Le legge Claude ogni volta che raggruppa gli articoli. I prezzi diversi dentro un padre non sono un problema:
+                    Scelta offerte, Crea Volantino, Bozza, Stampa cartelli e In reparto lo dividono da soli in una voce e un
+                    cartello per prezzo. Svuotando il campo tornano le regole di serie.
                   </span>
                 </label>
                 <label className="field" style={{ marginBottom: 0 }}>

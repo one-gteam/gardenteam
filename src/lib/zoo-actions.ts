@@ -18,7 +18,7 @@ import {
   type ZooOffer, type ZooCampaign,
 } from "./zoo";
 import type { LayoutItem } from "./stampe";
-import { groupAndDescribe, groupAndDescribeBatched, prezziDelVolantino, stessoPrezzoDelPadre, type AiGroup, type PrezziVolantino } from "./zoo-ai";
+import { groupAndDescribe, groupAndDescribeBatched, stessoPrezzoDelPadre, type AiGroup, type PrezziVolantino } from "./zoo-ai";
 import { uploadPublicFile, publicUrlFor, listStorageFiles } from "./supabase";
 import { sendMail } from "./mailer";
 
@@ -510,9 +510,12 @@ export async function associaConAI(back: string, scopeParam: string, formData: F
   const giaNelPadre = selected.length - senzaPadre.length;
   if (senzaPadre.length === 0) redirect(backUrl(back, scopeParam, { ai: "1", padri: "0", giapadre: String(giaNelPadre) }));
   const chiave = apiKeyFor(db, scopeAi) || process.env.ANTHROPIC_API_KEY;
-  // i prezzi del volantino in lavorazione: nello stesso padre lo stesso prezzo
-  const prezzi = prezziDelVolantino(db.offers, campagnaInLavorazione(db)?.id);
-  const { groups, usedAi, error, restanti } = await groupAndDescribeBatched(chiave, senzaPadre, db.settings, { catalogo: db, prezzi });
+  /*
+   * Il prezzo non decide il padre: articoli dello stesso padre con prezzi diversi
+   * si dividono da soli in voci del volantino e cartelli (padre + prezzo).
+   */
+  const prezzi = undefined;
+  const { groups, usedAi, error, restanti } = await groupAndDescribeBatched(chiave, senzaPadre, db.settings, { catalogo: db });
   // con la chiave ma l'AI in errore non si creano padri di bozza: si dice il motivo
   if (chiave && !usedAi) redirect(backUrl(back, scopeParam, { ai: "0", padri: "0", aierr: (error ?? "L'AI non ha risposto").slice(0, 120) }));
   // si applica su una lettura fresca: la chiamata all'AI dura minuti, nel frattempo altri scrivono
@@ -1996,8 +1999,9 @@ export async function associaNuoviConAI(scopeParam: string) {
   const orphans = db.products.filter((p) => !p.parentId && inVolantino.has(p.id));
   if (orphans.length === 0) redirect(backUrl("/stampe/zoo/prodotti", scopeParam, { padri: "0" }));
   const chiaveNuovi = db.settings.apiKey || process.env.ANTHROPIC_API_KEY;
-  const prezziNuovi = prezziDelVolantino(db.offers, campaign?.id);
-  const { groups, usedAi, error, restanti } = await groupAndDescribeBatched(chiaveNuovi, orphans, db.settings, { catalogo: db, prezzi: prezziNuovi });
+  // il prezzo non decide il padre (vedi associaConAI)
+  const prezziNuovi = undefined;
+  const { groups, usedAi, error, restanti } = await groupAndDescribeBatched(chiaveNuovi, orphans, db.settings, { catalogo: db });
   if (chiaveNuovi && !usedAi) redirect(backUrl("/stampe/zoo/prodotti", scopeParam, { padri: "0", ai: "0", aierr: (error ?? "L'AI non ha risposto").slice(0, 120) }));
   const freschi = await getZooDb();
   const contaNuovi = { aggiunti: 0, prezzoDiverso: 0 };

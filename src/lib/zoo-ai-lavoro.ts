@@ -1,5 +1,5 @@
 import { getZooDb, saveZooDb, type ZooDB, type ZooParent } from "./zoo";
-import { groupAndDescribe, candidatiPadri, prezziDelVolantino, stessoPrezzoDelPadre, type AiGroup, type PrezziVolantino } from "./zoo-ai";
+import { groupAndDescribe, candidatiPadri, stessoPrezzoDelPadre, type AiGroup, type PrezziVolantino } from "./zoo-ai";
 
 /*
  * "Associa tutti con l'AI" in background: il pulsante risponde subito, il
@@ -140,8 +140,8 @@ export async function eseguiAssociazione(apiKey: string, productIds: string[]): 
       const snapshot = await getZooDb();
       const lotto = snapshot.products.filter((p) => ids.includes(p.id) && !p.parentId);
       if (lotto.length > 0) {
-        const prezzi = prezziDelVolantino(snapshot.offers, snapshot.campaigns.find((c) => c.stato === "lavorazione")?.id);
-        const res = await groupAndDescribe(apiKey, lotto, snapshot.settings, false, candidatiPadri(snapshot, lotto, 60, prezzi), prezzi);
+        // il prezzo non decide il padre: le voci e i cartelli si dividono da soli per prezzo
+        const res = await groupAndDescribe(apiKey, lotto, snapshot.settings, false, candidatiPadri(snapshot, lotto));
         if (!res.usedAi) {
           // chiave rifiutata, credito finito, modello non disponibile: meglio fermarsi che riempire il database di bozze
           errore = res.error ?? "L'AI non ha risposto";
@@ -149,7 +149,7 @@ export async function eseguiAssociazione(apiKey: string, productIds: string[]): 
         }
         await salvaInOrdine(async () => {
           const db = await getZooDb();
-          padri += applicaGruppi(db, res.groups, new Set(ids), prezziDelVolantino(db.offers, db.campaigns.find((c) => c.stato === "lavorazione")?.id));
+          padri += applicaGruppi(db, res.groups, new Set(ids));
           fatti += ids.length;
           db.settings.aiLavoro = { ...(db.settings.aiLavoro as LavoroAi), fatti, padri, battito: new Date().toISOString() };
           await saveZooDb(db);
