@@ -18,6 +18,7 @@ const SQUADRE = ["Zoo", "Comunicazione"];
 import { salvaDeadlineGrafico } from "@/lib/zoo-actions";
 import ProgrammaIncontro from "@/components/stampe/ProgrammaIncontro";
 import AvvisaDeadline from "@/components/stampe/AvvisaDeadline";
+import AvvisaColleghi from "@/components/stampe/AvvisaColleghi";
 import ModuloAutoSalva from "@/components/ModuloAutoSalva";
 import { PulsanteAzione } from "@/components/AzioneSenzaRicarica";
 import { userSites } from "@/lib/types";
@@ -102,6 +103,19 @@ export default async function ZooDashboardPage() {
   const gruppiSquadra = academyDb.groups.filter((g) => !g.tenantId && /^squadra\b/i.test(g.name.trim()))
     .map((g) => ({ id: g.id, nome: g.name, membri: academyDb.users.filter((u) => u.active !== false && (u.groupIds ?? []).includes(g.id)) }));
   const nomiSquadre = gruppiSquadra.length ? gruppiSquadra.map((g) => g.nome) : SQUADRE;
+  /* per l'avviso «offerte caricate»: chi può vedere lo Zoo, e le squadre coi loro indirizzi */
+  const inSquadra = new Set([
+    ...gruppiSquadra.flatMap((g) => g.membri.map((u) => u.id)),
+    ...Object.values(ricordatiSquadre).flat(),
+  ]);
+  const colleghiAvviso = academyDb.users
+    // chi vede lo Zoo, più chi sta in una squadra (anche senza l'area: l'avviso è per loro)
+    .filter((u) => u.active !== false && u.email && (userSites(u).includes("zoo") || inSquadra.has(u.id)))
+    .map((u) => ({
+      email: u.email, nome: `${u.firstName} ${u.lastName}`,
+      ambito: academyDb.stores.find((x) => x.id === u.storeId)?.name ?? academyDb.tenants.find((t) => t.id === u.tenantId)?.name ?? "Consorzio",
+    }))
+    .sort((a, b) => a.nome.localeCompare(b.nome, "it"));
   const ricordatiSquadre: Record<string, string[]> = { ...squadre };
   for (const g of gruppiSquadra) if (g.membri.length) ricordatiSquadre[g.nome] = g.membri.map((u) => u.id);
   const ultimoAvviso = campaign.avvisiDeadline?.at(-1);
@@ -145,6 +159,14 @@ export default async function ZooDashboardPage() {
             {gInizio !== undefined && gInizio > 0 && <> · <strong>esce tra {gInizio} {gInizio === 1 ? "giorno" : "giorni"}</strong></>}
             {gInizio !== undefined && gInizio <= 0 && gFine !== undefined && gFine >= 0 && <> · in corso, finisce tra {gFine} {gFine === 1 ? "giorno" : "giorni"}</>}
           </span>
+          {/* avviso alla squadra (o a chi si sceglie) che le offerte del volantino sono caricate */}
+          {editor && (
+            <AvvisaColleghi tipo="offerte" scopeParam="system:" colleghi={colleghiAvviso} spuntatiDiSerie={false}
+              etichetta="✉ Avvisa: offerte caricate"
+              squadre={(gruppiSquadra.length
+                ? gruppiSquadra.map((g) => ({ nome: g.nome, email: g.membri.map((u) => u.email).filter(Boolean) }))
+                : Object.entries(ricordatiSquadre).map(([nome, ids]) => ({ nome, email: ids.map((id) => academyDb.users.find((u) => u.id === id)?.email ?? "").filter(Boolean) })))} />
+          )}
           {/* consegna al grafico: la data e quanto manca */}
           <span className={`dash-deadline${gDeadline !== undefined && gDeadline <= 3 ? " vicina" : ""}`}>
             <strong>Invio al grafico</strong>
