@@ -103,6 +103,8 @@ export default async function ZooDashboardPage() {
   const gruppiSquadra = academyDb.groups.filter((g) => !g.tenantId && /^squadra\b/i.test(g.name.trim()))
     .map((g) => ({ id: g.id, nome: g.name, membri: academyDb.users.filter((u) => u.active !== false && (u.groupIds ?? []).includes(g.id)) }));
   const nomiSquadre = gruppiSquadra.length ? gruppiSquadra.map((g) => g.nome) : SQUADRE;
+  const ricordatiSquadre: Record<string, string[]> = { ...squadre };
+  for (const g of gruppiSquadra) if (g.membri.length) ricordatiSquadre[g.nome] = g.membri.map((u) => u.id);
   /* per l'avviso «offerte caricate»: chi può vedere lo Zoo, e le squadre coi loro indirizzi */
   const inSquadra = new Set([
     ...gruppiSquadra.flatMap((g) => g.membri.map((u) => u.id)),
@@ -116,8 +118,6 @@ export default async function ZooDashboardPage() {
       ambito: academyDb.stores.find((x) => x.id === u.storeId)?.name ?? academyDb.tenants.find((t) => t.id === u.tenantId)?.name ?? "Consorzio",
     }))
     .sort((a, b) => a.nome.localeCompare(b.nome, "it"));
-  const ricordatiSquadre: Record<string, string[]> = { ...squadre };
-  for (const g of gruppiSquadra) if (g.membri.length) ricordatiSquadre[g.nome] = g.membri.map((u) => u.id);
   const ultimoAvviso = campaign.avvisiDeadline?.at(-1);
   const gDeadline = giorniA(campaign.deadlineGrafico);
   const minuti = (i: { inizio: string; fine?: string; ultimo: string }) => Math.max(0, Math.round((Date.parse(i.fine ?? i.ultimo) - Date.parse(i.inizio)) / 60000));
