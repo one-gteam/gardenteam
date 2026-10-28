@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import InlineEdit from "./InlineEdit";
 import InlineSelect from "./InlineSelect";
 import ParentQuickEdit from "./ParentQuickEdit";
+import SpostaArticolo, { type PadreScelta } from "./SpostaArticolo";
+import { useRouter } from "next/navigation";
 import {
   updateParentFieldInline, updateProductFieldInline, setParentTagScoped, toggleParentCaratteristicaInline, moveProductToParent,
-  setParentImageFromFile, segnalaProblemaInline, setParentImage, rigeneraTestiAI, scioglieParent, togliFotoInline,
+  setParentImageFromFile, segnalaProblemaInline, setParentImage, rigeneraTestiAI, scioglieParent, togliFotoInline, dividiPadriPerFormato,
 } from "@/lib/zoo-actions";
 
 interface Valore { value: string; custom: boolean }
@@ -25,10 +27,12 @@ interface Dettaglio {
     animale: Valore; caratt: Valore; caratteristiche: string[]; animaliConsorzio: string[]; carattConsorzio: string[]; image: string;
   };
   articoli: Articolo[];
-  padri: { id: string; nome: string }[];
+  padri: PadreScelta[];
   settings: { caratteristiche: string[]; categorieAnimali: string[]; caratteristicheProdotto: string[] };
   fotoDisponibili: string[];
   fotoBaseUrl: string;
+  /** Il padre mescola formati o tipologie (3 kg e 12 kg, Puppy e Adult): si può dividere. */
+  misto: boolean;
 }
 
 const EVENTO = "zoo:dettagli";
@@ -68,6 +72,24 @@ export function PannelloPadre({ parentId, scopeParam, back }: { parentId: string
   const [segnalazione, setSegnalazione] = useState("");
   const [esitoSegnalazione, setEsitoSegnalazione] = useState("");
   const [pending, startTransition] = useTransition();
+  const [esitoSposta, setEsitoSposta] = useState("");
+  const router = useRouter();
+  /*
+   * La riga del pannello è larga quanto tutta la tabella, che scorre di lato:
+   * il pannello resta fermo a sinistra e largo quanto la parte visibile, così
+   * la destra non finisce fuori vista.
+   */
+  const scatola = useRef<HTMLDivElement>(null);
+  const [larghezza, setLarghezza] = useState<number | undefined>(undefined);
+  useEffect(() => {
+    const wrap = scatola.current?.closest(".table-wrap") as HTMLElement | null;
+    if (!wrap) return;
+    const misura = () => setLarghezza(wrap.clientWidth);
+    misura();
+    const ro = new ResizeObserver(misura);
+    ro.observe(wrap);
+    return () => ro.disconnect();
+  }, [aperto, dati]);
 
   const carica = async () => {
     try {
@@ -96,13 +118,16 @@ export function PannelloPadre({ parentId, scopeParam, back }: { parentId: string
   const chiudi = () => window.dispatchEvent(new CustomEvent(EVENTO, { detail: { parentId, aperto: false } }));
 
   if (!dati) {
-    return <div style={{ padding: 10, fontSize: 12.5, color: "var(--muted)" }}>{errore || "Carico il dettaglio…"}</div>;
+    return <div ref={scatola} style={{ padding: 10, fontSize: 12.5, color: "var(--muted)" }}>{errore || "Carico il dettaglio…"}</div>;
   }
   const { parent, consortium, gestione, scopeType, articoli, settings } = dati;
   const consorzio = scopeType === "system";
 
   return (
-    <div style={{ padding: "10px 12px", background: "#f5f8fc", borderTop: "2px solid #274b7a", borderBottom: "2px solid #274b7a" }}>
+    <div ref={scatola} style={{
+      padding: "10px 12px", background: "#f5f8fc", borderTop: "2px solid #274b7a", borderBottom: "2px solid #274b7a",
+      position: "sticky", left: 0, boxSizing: "border-box", ...(larghezza ? { width: larghezza, maxWidth: larghezza } : {}),
+    }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 10, flexWrap: "wrap" }}>
         <strong style={{ fontSize: 14 }}>
           Prodotto padre: {parent.nome.value}
@@ -111,7 +136,8 @@ export function PannelloPadre({ parentId, scopeParam, back }: { parentId: string
         <button type="button" className="btn btn-outline btn-sm" onClick={chiudi}>✕ Chiudi</button>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: 16 }}>
+      {/* minmax(0, 1fr): senza, la tabella degli articoli allargava la colonna e la destra finiva tagliata */}
+      <div className="pannello-padre-griglia">
         <div>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img loading="lazy" decoding="async" src={parent.image} alt="" style={{ width: "100%", borderRadius: 8, background: "#fff", border: "1px solid #e4e4e4" }} />
@@ -216,6 +242,14 @@ export function PannelloPadre({ parentId, scopeParam, back }: { parentId: string
               <form action={scioglieParent.bind(null, back, parent.id, scopeParam)}>
                 <button className="btn btn-outline btn-sm" type="submit">Sciogli raggruppamento</button>
               </form>
+              {dati.misto && (
+                <form action={dividiPadriPerFormato.bind(null, back, scopeParam, parent.id)}>
+                  <button className="btn btn-outline btn-sm" type="submit"
+                    title="Gli articoli hanno pesi/formati o tipologie diversi: ognuno diventa un padre suo, con gli stessi testi">
+                    ✂ Dividi per formato e tipologia
+                  </button>
+                </form>
+              )}
             </div>
           )}
 
@@ -225,7 +259,7 @@ export function PannelloPadre({ parentId, scopeParam, back }: { parentId: string
             <div className="table-wrap" style={{ marginTop: 4 }}>
               <table className="data" style={{ fontSize: 11.5 }}>
                 <thead>
-                  <tr><th></th><th>Articolo</th><th>EAN · codice</th><th>Marca</th><th title="Quanto contiene la confezione: serve per il prezzo al chilo/litro">Contenuto</th><th>Prezzo base</th><th>Ultima promo</th><th>€/kg · l</th></tr>
+                  <tr><th></th><th>Articolo</th><th>EAN · codice</th><th>Marca</th><th title="Quanto contiene la confezione: serve per il prezzo al chilo/litro">Contenuto</th><th>Prezzo base</th><th>Ultima promo</th><th>€/kg · l</th>{consortium && <th title="Sposta l'articolo in un altro prodotto padre">Padre</th>}</tr>
                 </thead>
                 <tbody>
                   {articoli.map((a) => (
@@ -265,21 +299,32 @@ export function PannelloPadre({ parentId, scopeParam, back }: { parentId: string
                           : <span style={{ color: "var(--muted)" }}>—</span>}
                       </td>
                       <td style={{ whiteSpace: "nowrap" }}>{a.offerta?.prezzoUnita || "—"}</td>
+                      {consortium && (
+                        <td>
+                          <SpostaArticolo parentId={parent.id} animale={parent.animale.value || parent.animaliConsorzio[0] || ""}
+                            padri={dati.padri} disabled={pending}
+                            onScegli={(nuovo) => startTransition(async () => {
+                              const dove = nuovo ? dati.padri.find((p) => p.id === nuovo)?.nome ?? "" : "";
+                              const r = await moveProductToParent(back, scopeParam, a.id, nuovo);
+                              if (!r.ok) { setEsitoSposta("Spostamento non riuscito: riprova"); return; }
+                              setEsitoSposta(nuovo ? `✓ «${a.descrizione}» spostato in «${dove}»` : `✓ «${a.descrizione}» tolto dal padre`);
+                              await carica();
+                              router.refresh();
+                            })} />
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
+            {esitoSposta && <div style={{ fontSize: 11.5, marginTop: 4, color: esitoSposta.startsWith("✓") ? "var(--green-700)" : "#a33" }}>{esitoSposta}</div>}
           </div>
 
           {consortium && (
             <ParentQuickEdit
-              parentId={parent.id}
-              articoli={articoli.map((c) => ({ id: c.id, ean: c.ean, descrizione: c.descrizione }))}
-              padri={dati.padri}
               foto={dati.fotoDisponibili}
               fotoBaseUrl={dati.fotoBaseUrl}
-              onMove={moveProductToParent.bind(null, back, scopeParam)}
               onSetImage={setParentImageFromFile.bind(null, parent.id)}
             />
           )}

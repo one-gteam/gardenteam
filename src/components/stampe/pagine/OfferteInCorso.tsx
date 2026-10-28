@@ -19,7 +19,6 @@ import InlineSelect from "@/components/stampe/InlineSelect";
 import InlineMulti from "@/components/stampe/InlineMulti";
 import ColumnTools from "@/components/stampe/ColumnTools";
 import AvvisaColleghi from "@/components/stampe/AvvisaColleghi";
-import ParentQuickEdit from "@/components/stampe/ParentQuickEdit";
 import { DettagliPadre, PannelloPadre } from "@/components/stampe/DettagliPadre";
 import {
   getZooDb, zooImageUrl, effectiveParentText, campagnaInLavorazione, campagnaInCorso, campaignStato,

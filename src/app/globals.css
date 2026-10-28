@@ -182,6 +182,9 @@ table.data th {
 table.data td { padding: 10px; border-bottom: 1px solid var(--line); }
 table.data tr:last-child td { border-bottom: none; }
 .table-wrap { overflow-x: auto; }
+/* il dettaglio del padre aperto in tabella: la seconda colonna può stringersi, la tabella articoli scorre dentro */
+.pannello-padre-griglia { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; }
+@media (max-width: 900px) { .pannello-padre-griglia { grid-template-columns: minmax(0, 1fr); } }
 
 /* maniglia per allargare/stringere la colonna, sul bordo destro dell'intestazione
    (vedi ColumnTools.tsx: il resize del CSS non funziona sulle celle di tabella) */

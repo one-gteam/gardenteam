@@ -18,7 +18,7 @@ import {
   type ZooOffer, type ZooCampaign,
 } from "./zoo";
 import type { LayoutItem } from "./stampe";
-import { groupAndDescribe, groupAndDescribeBatched, stessoPrezzoDelPadre, type AiGroup, type PrezziVolantino } from "./zoo-ai";
+import { groupAndDescribe, groupAndDescribeBatched, prezziDelVolantino, stessoPrezzoDelPadre, partiPerFormato, padriMisti, type AiGroup, type PrezziVolantino } from "./zoo-ai";
 import { uploadPublicFile, publicUrlFor, listStorageFiles } from "./supabase";
 import { sendMail } from "./mailer";
 
@@ -511,11 +511,12 @@ export async function associaConAI(back: string, scopeParam: string, formData: F
   if (senzaPadre.length === 0) redirect(backUrl(back, scopeParam, { ai: "1", padri: "0", giapadre: String(giaNelPadre) }));
   const chiave = apiKeyFor(db, scopeAi) || process.env.ANTHROPIC_API_KEY;
   /*
-   * Il prezzo non decide il padre: articoli dello stesso padre con prezzi diversi
-   * si dividono da soli in voci del volantino e cartelli (padre + prezzo).
+   * Il prezzo non decide da solo il padre (voci e cartelli si dividono per prezzo),
+   * ma Claude lo legge come indizio: un prezzo diverso spesso è un formato diverso.
    */
   const prezzi = undefined;
-  const { groups, usedAi, error, restanti } = await groupAndDescribeBatched(chiave, senzaPadre, db.settings, { catalogo: db });
+  const indizi = prezziDelVolantino(db.offers, campagnaInLavorazione(db)?.id);
+  const { groups, usedAi, error, restanti } = await groupAndDescribeBatched(chiave, senzaPadre, db.settings, { catalogo: db, prezzi: indizi });
   // con la chiave ma l'AI in errore non si creano padri di bozza: si dice il motivo
   if (chiave && !usedAi) redirect(backUrl(back, scopeParam, { ai: "0", padri: "0", aierr: (error ?? "L'AI non ha risposto").slice(0, 120) }));
   // si applica su una lettura fresca: la chiamata all'AI dura minuti, nel frattempo altri scrivono
@@ -1306,6 +1307,55 @@ export async function scioglieParent(back: string, parentId: string, scopeParam:
   redirect(backUrl(back, scopeParam));
 }
 
+/**
+ * Divide i padri che mescolano formati o tipologie (3 kg e 12 kg, Puppy e
+ * Adult): la parte con più articoli resta nel padre (stesso id, quindi le
+ * scelte già fatte nel volantino restano), le altre diventano padri nuovi con
+ * gli stessi testi, foto e caratteristiche. Al titolo si aggiunge il formato o
+ * la tipologia quando non c'è già. `soloId` = un padre solo (dal dettaglio);
+ * altrimenti i padri spuntati, o tutti quelli misti se non ne è spuntato nessuno.
+ */
+export async function dividiPadriPerFormato(back: string, scopeParam: string, soloId: string, formData?: FormData) {
+  const user = await requireZooUser();
+  if (!isZooEditor(user)) redirect(backUrl(back, scopeParam));
+  const db = await getZooDb();
+  const spuntati = soloId ? [soloId] : ((formData?.getAll("selpadre") as string[] | undefined) ?? []).filter(Boolean);
+  const misti = new Set(padriMisti(db));
+  const daDividere = (spuntati.length ? spuntati : [...misti]).filter((id) => misti.has(id));
+  const conTitolo = (nome: string, aggiunta: string) =>
+    !aggiunta || nome.toLowerCase().includes(aggiunta.toLowerCase()) ? nome : `${nome} ${aggiunta}`;
+  let nuovi = 0;
+  for (const id of daDividere) {
+    const par = db.parents.find((p) => p.id === id);
+    if (!par) continue;
+    const parti = partiPerFormato(db.products.filter((p) => p.parentId === id));
+    const nomeDi = par.nome;
+    parti.forEach((parte, i) => {
+      if (i === 0) { par.nome = conTitolo(nomeDi, parte.aggiunta); return; }
+      const figlio = parte.articoli.find((a) => a.image);
+      const nuovo = {
+        ...par,
+        id: `zp_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}${i}`,
+        nome: conTitolo(nomeDi, parte.aggiunta),
+        caratteristiche: [...par.caratteristiche],
+        image: figlio?.image ?? par.image,
+        fotoVolantino: undefined,
+      };
+      db.parents.push(nuovo);
+      for (const a of parte.articoli) a.parentId = nuovo.id;
+      // le personalizzazioni di insegne e PV valgono anche per il padre nuovo
+      for (const o of db.textOverrides.filter((x) => x.parentId === id)) {
+        db.textOverrides.push({ ...o, parentId: nuovo.id, value: o.field === "nome" ? conTitolo(o.value, parte.aggiunta) : o.value });
+      }
+      for (const o of db.tagOverrides.filter((x) => x.parentId === id)) db.tagOverrides.push({ ...o, parentId: nuovo.id });
+      nuovi++;
+    });
+    for (const o of db.textOverrides.filter((x) => x.parentId === id && x.field === "nome")) o.value = conTitolo(o.value, parti[0].aggiunta);
+  }
+  if (nuovi) { await saveZooDb(db); rigeneraZoo(); }
+  redirect(backUrl(back, scopeParam, { divisi: String(daDividere.length), padrinuovi: String(nuovi) }));
+}
+
 /** Nasconde/mostra fornitore, marchio o singolo articolo per l'ambito corrente. */
 export async function toggleZooHidden(scopeParam: string, kind: "fornitore" | "marca" | "articolo", value: string, back: string) {
   const user = await requireZooUser();
@@ -2001,7 +2051,7 @@ export async function associaNuoviConAI(scopeParam: string) {
   const chiaveNuovi = db.settings.apiKey || process.env.ANTHROPIC_API_KEY;
   // il prezzo non decide il padre (vedi associaConAI)
   const prezziNuovi = undefined;
-  const { groups, usedAi, error, restanti } = await groupAndDescribeBatched(chiaveNuovi, orphans, db.settings, { catalogo: db });
+  const { groups, usedAi, error, restanti } = await groupAndDescribeBatched(chiaveNuovi, orphans, db.settings, { catalogo: db, prezzi: prezziDelVolantino(db.offers, campaign?.id) });
   if (chiaveNuovi && !usedAi) redirect(backUrl("/stampe/zoo/prodotti", scopeParam, { padri: "0", ai: "0", aierr: (error ?? "L'AI non ha risposto").slice(0, 120) }));
   const freschi = await getZooDb();
   const contaNuovi = { aggiunti: 0, prezzoDiverso: 0 };

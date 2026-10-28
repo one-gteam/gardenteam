@@ -7,6 +7,7 @@ import {
   contenutoDa, testoContenuto, prezzoUnitaDi,
 } from "@/lib/zoo";
 import { listStorageFiles, publicUrlFor } from "@/lib/supabase";
+import { partiPerFormato } from "@/lib/zoo-ai";
 
 /**
  * Dettaglio di un prodotto padre per il pannello che si apre in tabella
@@ -71,15 +72,26 @@ export async function GET(req: NextRequest) {
       image: zooImageUrl(undefined, parent) === "/immagini/mancante.jpg" && figli[0] ? zooImageUrl(figli[0]) : zooImageUrl(undefined, parent),
     },
     articoli,
-    padri: db.parents
-      .map((p) => ({ id: p.id, nome: effectiveParentText(db, scope, p, "nome", academyDb).value }))
-      .sort((a, b) => a.nome.localeCompare(b.nome, "it")),
+    // per «Sposta» sulla riga dell'articolo: con l'animale (elenco diviso) e quanti articoli ha già
+    padri: (() => {
+      const quanti = new Map<string, number>();
+      for (const p of db.products) if (p.parentId) quanti.set(p.parentId, (quanti.get(p.parentId) ?? 0) + 1);
+      return db.parents
+        .map((p) => ({
+          id: p.id,
+          nome: effectiveParentText(db, scope, p, "nome", academyDb).value,
+          animale: effectiveParentTag(db, scope, p, "animale", academyDb).value || animaliDi(db, p.caratteristiche)[0] || "",
+          n: quanti.get(p.id) ?? 0,
+        }))
+        .sort((a, b) => a.nome.localeCompare(b.nome, "it"));
+    })(),
     settings: {
       caratteristiche: db.settings.caratteristiche,
       categorieAnimali: db.settings.categorieAnimali,
       caratteristicheProdotto: db.settings.caratteristicheProdotto,
     },
     fotoDisponibili,
+    misto: partiPerFormato(figli).length > 1,
     fotoBaseUrl: publicUrlFor("zoo-foto/__ph__").slice(0, -6),
   });
 }

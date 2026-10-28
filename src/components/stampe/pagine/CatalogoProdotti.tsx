@@ -12,7 +12,6 @@ import InlineEdit from "@/components/stampe/InlineEdit";
 import InlineSelect from "@/components/stampe/InlineSelect";
 import InlineMulti from "@/components/stampe/InlineMulti";
 import ColumnTools from "@/components/stampe/ColumnTools";
-import ParentQuickEdit from "@/components/stampe/ParentQuickEdit";
 import PhotoMatcher from "@/components/stampe/PhotoMatcher";
 import { PulsanteAzione } from "@/components/AzioneSenzaRicarica";
 import { ignoraZooFoto, ripristinaZooFotoIgnorate } from "@/lib/zoo-focus-actions";
@@ -26,7 +25,8 @@ import {
   importZooProducts, finalizeZooPhotoUpload, confirmZooPhotoTargets, createZooParent, associaConAI,
   rigeneraTestiAI, saveParentTexts, setParentImage, toggleParentCaratteristica, scioglieParent, toggleZooHidden, toggleZooHiddenInline,
   toggleZooHiddenBulk, updateParentFieldInline, updateProductFieldInline, setParentTagInline, moveProductToParent,
-  setParentImageFromFile, mergeParentsForm, promuoviProdottoAConsorzio, adottaProdotto, staccaZooFoto, setTipologiaInline, setParentAnimaliInline, setAnimaliArticolo } from "@/lib/zoo-actions";
+  setParentImageFromFile, mergeParentsForm, dividiPadriPerFormato, promuoviProdottoAConsorzio, adottaProdotto, staccaZooFoto, setTipologiaInline, setParentAnimaliInline, setAnimaliArticolo } from "@/lib/zoo-actions";
+import { padriMisti } from "@/lib/zoo-ai";
 
 // "Associa con AI" può richiedere più dei 10s di default per un lotto di articoli.
 export const maxDuration = 60;
@@ -61,6 +61,8 @@ export default async function CatalogoProdotti({ user, sp }: { user: User; sp: R
   const scope = resolveScope(user, sp.scope, academyDb);
   const scopeParam = `${scope.type}:${scope.id}`;
   const consortium = isZooEditor(user);
+  // padri con pesi/formati o tipologie mescolati: il pulsante «Dividi per formato e tipologia»
+  const nMisti = consortium ? padriMisti(db).length : 0;
   // gestione dell'area in questo ambito: articoli propri, adozione, AI sui propri
   const gestione = gestisceArea(user, "zoo", scope, academyDb);
 
@@ -314,6 +316,11 @@ export default async function CatalogoProdotti({ user, sp }: { user: User; sp: R
         {sp.importati !== undefined && <div className="alert alert-green">✓ Import Excel: {sp.importati} articoli elaborati.</div>}
         {sp.foto !== undefined && <div className="alert alert-green">✓ {sp.foto} foto caricate, {sp.abbinate} abbinate in automatico per EAN/codice.</div>}
         {sp.abbinatenome !== undefined && <div className="alert alert-green">✓ {sp.abbinatenome} foto abbinate per nome.</div>}
+        {sp.divisi !== undefined && (
+          <div className="alert alert-green">
+            ✓ {sp.divisi} padri divisi per formato e tipologia: {sp.padrinuovi} padri nuovi, con gli stessi testi e il formato nel titolo. Controlla i titoli e i testi se serve.
+          </div>
+        )}
         {sp.padri !== undefined && (
           <div className="alert alert-green">
             ✓ Creati {sp.padri} prodotti padre {sp.ai === "1" ? "con l'AI (testi volantino e cartello generati)" : "con raggruppamento automatico (testi bozza da rivedere)"}.
@@ -528,6 +535,12 @@ export default async function CatalogoProdotti({ user, sp }: { user: User; sp: R
                   <button className="btn btn-sm" formAction={associaConAI.bind(null, BACK, scopeParam)} type="submit" style={{ background: "#6d3fa7" }}>
                     Associa con AI (raggruppa + genera testi)
                   </button>
+                  {!vistaArticoli && nMisti > 0 && (
+                    <button className="btn btn-outline btn-sm" formAction={dividiPadriPerFormato.bind(null, BACK, scopeParam, "")} type="submit"
+                      title="Padri con pesi o formati diversi (3 kg e 12 kg) o tipologie diverse (Puppy e Adult): ognuna diventa un padre suo, con gli stessi testi. Spunta dei padri per dividere solo quelli, se no si dividono tutti.">
+                      ✂ Dividi per formato e tipologia ({nMisti} padri misti)
+                    </button>
+                  )}
                   {!vistaArticoli && (
                     <button className="btn btn-outline btn-sm" formAction={mergeParentsForm.bind(null, BACK, scopeParam)} type="submit"
                       title="Spunta due o più prodotti padre: gli articoli passeranno tutti sotto il primo spuntato">

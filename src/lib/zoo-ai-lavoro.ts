@@ -1,5 +1,5 @@
 import { getZooDb, saveZooDb, type ZooDB, type ZooParent } from "./zoo";
-import { groupAndDescribe, candidatiPadri, stessoPrezzoDelPadre, type AiGroup, type PrezziVolantino } from "./zoo-ai";
+import { groupAndDescribe, candidatiPadri, prezziDelVolantino, stessoPrezzoDelPadre, type AiGroup, type PrezziVolantino } from "./zoo-ai";
 
 /*
  * "Associa tutti con l'AI" in background: il pulsante risponde subito, il
@@ -140,8 +140,9 @@ export async function eseguiAssociazione(apiKey: string, productIds: string[]): 
       const snapshot = await getZooDb();
       const lotto = snapshot.products.filter((p) => ids.includes(p.id) && !p.parentId);
       if (lotto.length > 0) {
-        // il prezzo non decide il padre: le voci e i cartelli si dividono da soli per prezzo
-        const res = await groupAndDescribe(apiKey, lotto, snapshot.settings, false, candidatiPadri(snapshot, lotto));
+        // il prezzo come indizio per Claude (prezzo diverso = spesso formato diverso), non come filtro
+        const indizi = prezziDelVolantino(snapshot.offers, snapshot.campaigns.find((c) => c.stato === "lavorazione")?.id);
+        const res = await groupAndDescribe(apiKey, lotto, snapshot.settings, false, candidatiPadri(snapshot, lotto, 60, indizi), indizi);
         if (!res.usedAi) {
           // chiave rifiutata, credito finito, modello non disponibile: meglio fermarsi che riempire il database di bozze
           errore = res.error ?? "L'AI non ha risposto";

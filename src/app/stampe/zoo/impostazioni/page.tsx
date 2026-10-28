@@ -123,9 +123,10 @@ export default async function ZooImpostazioniPage({
                   Regole per creare i PADRI (guidano «Associa con l&apos;AI»: quali articoli vanno insieme)
                   <textarea name="regolePadre" rows={14} defaultValue={db.settings.regolePadre ?? REGOLE_PADRE_DI_SERIE} />
                   <span className="hint">
-                    Le legge Claude ogni volta che raggruppa gli articoli. I prezzi diversi dentro un padre non sono un problema:
-                    Scelta offerte, Crea Volantino, Bozza, Stampa cartelli e In reparto lo dividono da soli in una voce e un
-                    cartello per prezzo. Svuotando il campo tornano le regole di serie.
+                    Le legge Claude ogni volta che raggruppa gli articoli. In più il programma divide da solo un gruppo che
+                    mescola pesi o formati diversi (3 kg e 12 kg) o tipologie diverse (Puppy e Adult), e aggiunge il formato
+                    al titolo. I prezzi diversi dentro un padre restano ammessi: Scelta offerte, Crea Volantino, Bozza, Stampa
+                    cartelli e In reparto lo dividono in una voce e un cartello per prezzo. Svuotando il campo tornano le regole di serie.
                   </span>
                 </label>
                 <label className="field" style={{ marginBottom: 0 }}>
