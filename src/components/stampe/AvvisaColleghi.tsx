@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { avvisaColleghi } from "@/lib/zoo-actions";
 
 /**
@@ -10,7 +10,7 @@ import { avvisaColleghi } from "@/lib/zoo-actions";
  * mano, perché non tutti quelli da coinvolgere hanno per forza un account.
  */
 export default function AvvisaColleghi({
-  tipo, scopeParam, colleghi, squadre = [], spuntatiDiSerie = true, etichetta,
+  tipo, scopeParam, colleghi, squadre = [], spuntatiDiSerie = true, etichetta, sempreAperto = false,
 }: {
   tipo: "offerte" | "bozza";
   scopeParam: string;
@@ -21,8 +21,22 @@ export default function AvvisaColleghi({
   spuntatiDiSerie?: boolean;
   /** Testo del pulsante, se diverso da quello di serie. */
   etichetta?: string;
+  /** Il modulo è già dentro un altro elenco (il menu Strumenti): niente pulsante né pannello sopra. */
+  sempreAperto?: boolean;
 }) {
-  const [aperto, setAperto] = useState(false);
+  const [apertoQui, setAperto] = useState(false);
+  const aperto = sempreAperto || apertoQui;
+  const contenitore = useRef<HTMLSpanElement>(null);
+
+  // il pannello sopra la pagina si chiude con un clic fuori o con Esc
+  useEffect(() => {
+    if (!apertoQui || sempreAperto) return;
+    const fuori = (e: MouseEvent) => { if (!contenitore.current?.contains(e.target as Node)) setAperto(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setAperto(false); };
+    document.addEventListener("mousedown", fuori);
+    document.addEventListener("keydown", esc);
+    return () => { document.removeEventListener("mousedown", fuori); document.removeEventListener("keydown", esc); };
+  }, [apertoQui, sempreAperto]);
   const [esito, setEsito] = useState("");
   const [errore, setErrore] = useState("");
   const [pending, startTransition] = useTransition();
@@ -52,24 +66,25 @@ export default function AvvisaColleghi({
     for (const c of sue) c.checked = !tutteGia;
   };
 
-  if (!aperto) {
-    return (
-      <span>
-        <button type="button" className="btn btn-outline btn-sm" onClick={() => setAperto(true)}>{testo.bottone}</button>
-        {esito && <span className="pill pill-green" style={{ marginLeft: 8 }}>✓ {esito}</span>}
-      </span>
-    );
-  }
-
-  // fra un mese: una scadenza proposta è meglio di un campo vuoto che resta vuoto
+  // fra una settimana: una scadenza proposta è meglio di un campo vuoto che resta vuoto
   const traUnaSettimana = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
 
   return (
-    <div className="card" style={{ padding: 14, marginTop: 10 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-        <strong>{testo.titolo}</strong>
-        <button type="button" className="btn btn-outline btn-sm" style={{ marginLeft: "auto" }} onClick={() => setAperto(false)}>✕ Chiudi</button>
-      </div>
+    <span className="avvisa-colleghi" ref={contenitore}>
+      {!sempreAperto && (
+        <button type="button" className={`btn btn-sm ${aperto ? "" : "btn-outline"}`} onClick={() => setAperto(!aperto)} aria-expanded={aperto}>
+          {testo.bottone}
+        </button>
+      )}
+      {esito && <span className="pill pill-green">✓ {esito}</span>}
+      {aperto && (
+    <div className={sempreAperto ? "avvisa-pannello" : "card avvisa-pannello"} style={{ padding: sempreAperto ? 0 : 14 }}>
+      {!sempreAperto && (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+          <strong>{testo.titolo}</strong>
+          <button type="button" className="btn btn-outline btn-sm" style={{ marginLeft: "auto" }} onClick={() => setAperto(false)}>✕ Chiudi</button>
+        </div>
+      )}
       {errore && <div className="alert alert-amber">{errore}</div>}
       <form action={invia}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 10 }}>
@@ -114,5 +129,7 @@ export default function AvvisaColleghi({
         </button>
       </form>
     </div>
+      )}
+    </span>
   );
 }

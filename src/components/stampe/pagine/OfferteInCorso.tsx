@@ -237,98 +237,6 @@ export default async function OfferteInCorso({ user, sp }: { user: User; sp: Rec
             <a className={`pill ${VISTA === "catalogo" ? "pill-blue" : "pill-gray"}`} href={`/stampe/zoo/prodotti?vista=catalogo&scope=${scopeParam}`}>Tutto il catalogo</a>
           </div>
           <span style={{ flex: 1 }} />
-          {campaign && (
-            <a className="btn btn-outline btn-sm" href={`/stampe/zoo/excel?singole=1&scope=${scopeParam}${sp.volantino === "si" ? "&volantino=1" : ""}`}
-              title="Tutte le offerte del volantino in lavorazione, una riga per articolo (con filtro «a volantino»: solo quelle scelte)">
-              ⬇ Excel offerte{sp.volantino === "si" ? " a volantino" : ""}
-            </a>
-          )}
-          {consortium && (
-            <a className="btn btn-outline btn-sm" href={`/stampe/zoo/prodotti?vista=catalogo&scope=${scopeParam}&abbina=1`}
-              title="Importare l'Excel dei prodotti e abbinare le foto si fa dal catalogo">
-              Excel prodotti / Abbina foto{nDaAbbinare > 0 ? ` (${nDaAbbinare})` : ""}
-            </a>
-          )}
-          {consortium && campaign && (
-            <details className="strumento" open={sp.importate !== undefined}>
-              <summary className="btn btn-outline btn-sm">Carica l&apos;Excel delle offerte</summary>
-              <div className="card" style={{ marginTop: 10, padding: 14 }}>
-                <strong>Carica l&apos;Excel delle offerte</strong>
-                <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "4px 0 8px" }}>
-                  L&apos;Excel si confronta con il database per EAN: dati e foto già presenti si riusano, i prodotti
-                  nuovi entrano nel database. Colonne: EAN, DESCRIZIONE PROMO, PREZZO PROMO, PREZZO LISTINO, CONDIZIONI (+ MARCA/FORNITORE per i
-                  prodotti nuovi). Riconosce anche i listini multi-fornitore con l&apos;intestazione (FORNITORE, EAN,
-                  NR. ARTICOLO FORNITORE, TESTO BREVE, PREZZO DI VENDITA…) ripetuta prima di ogni fornitore. Puoi
-                  caricare più file sullo stesso volantino.{" "}
-                  <a href={`/stampe/zoo/excel?offerte=1&scope=${scopeParam}`}>Scarica il modello</a>
-                </p>
-                <form action={importZooOffers.bind(null, scopeParam)} style={{ display: "grid", gap: 8 }}>
-                  <input type="file" name="file" accept=".xlsx,.xls,.csv" required />
-                  {/* a quale periodo vanno le offerte: quello in lavorazione o un periodo nuovo (il successivo) */}
-                  <fieldset className="periodo-import" style={{ border: "1px solid var(--line)", borderRadius: 8, padding: "8px 10px", display: "grid", gap: 6 }}>
-                    <legend style={{ fontSize: 12.5, fontWeight: 700, padding: "0 4px" }}>Periodo promozionale delle offerte</legend>
-                    <label style={{ fontSize: 12.5 }}>
-                      <input type="radio" name="periodo" value="questo" defaultChecked />{" "}
-                      aggiungi a <strong>{campaign.nome}</strong> ({etichettaPeriodo(campaign).split(" — ")[1]})
-                    </label>
-                    <label style={{ fontSize: 12.5 }}>
-                      <input type="radio" name="periodo" value="nuovo" />{" "}
-                      <strong>è il periodo successivo</strong>: apri un periodo nuovo per queste offerte
-                    </label>
-                    <div className="periodo-nuovo" style={{ display: "grid", gap: 6, gridTemplateColumns: "2fr 1fr 1fr", paddingLeft: 20 }}>
-                      <label className="field" style={{ marginBottom: 0 }}>Nome<input type="text" name="nome" placeholder="es. Offerte Dicembre" /></label>
-                      <label className="field" style={{ marginBottom: 0 }}>Dal<input type="date" name="dal" /></label>
-                      <label className="field" style={{ marginBottom: 0 }}>Al<input type="date" name="al" /></label>
-                      <label style={{ fontSize: 12, gridColumn: "1 / -1" }}>
-                        <input type="checkbox" name="ereditaSchema" value="1" defaultChecked /> parti dallo schema delle pagine del volantino di adesso
-                      </label>
-                      <span className="hint" style={{ gridColumn: "1 / -1", fontSize: 11.5 }}>
-                        «{campaign.nome}» resta in corso e stampabile (in Stampa cartelli si sceglie il periodo); Crea volantino, Bozza e Scelta offerte passano al periodo nuovo.
-                      </span>
-                    </div>
-                  </fieldset>
-                  <label style={{ fontSize: 12.5 }}>
-                    <input type="checkbox" name="sostituisci" value="1" /> sostituisci le offerte già caricate
-                  </label>
-                  <label style={{ fontSize: 12.5 }}>
-                    <input type="checkbox" name="escludimarginiamo" value="1" defaultChecked />{" "}
-                    escludi le righe &quot;marginiamo&quot; (nessuna promo dal fornitore, decide il PV): non entrano
-                    come offerta, l&apos;articolo resta comunque nel database
-                  </label>
-                  <button className="btn btn-sm" type="submit">Importa offerte</button>
-                </form>
-                <p className="hint" style={{ margin: "10px 0 4px", fontSize: 12 }}>
-                  Gli articoli già visti in un volantino precedente ritrovano il loro padre e i testi di allora (anche quelli
-                  corretti a mano, e le correzioni delle insegne): dal file arrivano solo prezzi e promo. Per un volantino
-                  caricato prima di questa regola:
-                </p>
-                <PulsanteAzione azione={riprendiTestiPrecedenti.bind(null, campaign.id)} className="btn btn-outline btn-sm"
-                  conferma={`Riprendere i testi dai volantini precedenti per le offerte di «${campaign.nome}»? Si saltano quelle già corrette in questo volantino.`}>
-                  Riprendi i testi dai volantini precedenti
-                </PulsanteAzione>
-              </div>
-            </details>
-          )}
-          {consortium && campaign && (
-            <details className="strumento" open={sp.foto !== undefined}>
-              <summary className="btn btn-outline btn-sm">Caricamento foto</summary>
-              <div className="card" style={{ marginTop: 10, padding: 14 }}>
-                <strong>Caricamento foto</strong>
-                <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "4px 0 8px" }}>
-                  Puoi selezionare anche centinaia di foto insieme (caricate direttamente, niente limiti di
-                  dimensione): se il nome del file contiene l&apos;EAN o il codice fornitore, l&apos;abbinamento è
-                  automatico. Ogni articolo ha la sua foto; nel padre si sceglie quella di riferimento.
-                </p>
-                <PhotoUploader back={BACK} scopeParam={scopeParam} finalize={finalizeZooPhotoUpload} />
-                {nDaAbbinare > 0 && (
-                  <p className="hint" style={{ marginTop: 6 }}>
-                    Le foto senza EAN o codice nel nome ({nDaAbbinare}) si abbinano, o si ignorano, dal{" "}
-                    <a href={`/stampe/zoo/prodotti?vista=catalogo&scope=${scopeParam}&abbina=1`}>catalogo</a>.
-                  </p>
-                )}
-              </div>
-            </details>
-          )}
           {consortium && campaign && (
             <details className="strumento" open={sp.aggiunta !== undefined && sp.aggiunta !== "ok"}>
               <summary className="btn btn-outline btn-sm">+ Offerta a mano</summary>
@@ -353,7 +261,111 @@ export default async function OfferteInCorso({ user, sp }: { user: User; sp: Rec
               </div>
             </details>
           )}
-          {consortium && campaign && <AvvisaColleghi tipo="offerte" scopeParam={scopeParam} colleghi={colleghiZoo} />}
+          {(campaign || consortium) && (
+            <details className="strumento strumenti-menu" open={sp.importate !== undefined || sp.foto !== undefined}>
+              <summary className="btn btn-outline btn-sm">🛠 Strumenti ▾</summary>
+              <div className="card">
+              {campaign && (
+                <a className="voce" href={`/stampe/zoo/excel?singole=1&scope=${scopeParam}${sp.volantino === "si" ? "&volantino=1" : ""}`}
+                  title="Tutte le offerte del volantino in lavorazione, una riga per articolo (con filtro «a volantino»: solo quelle scelte)">
+                  ⬇ Excel offerte{sp.volantino === "si" ? " a volantino" : ""}
+                </a>
+              )}
+              {consortium && (
+                <a className="voce" href={`/stampe/zoo/prodotti?vista=catalogo&scope=${scopeParam}&abbina=1`}
+                  title="Importare l'Excel dei prodotti e abbinare le foto si fa dal catalogo">
+                  Excel prodotti / Abbina foto{nDaAbbinare > 0 ? ` (${nDaAbbinare})` : ""}
+                </a>
+              )}
+              {consortium && campaign && (
+                <details className="voce-aperta" open={sp.importate !== undefined}>
+                  <summary>Carica l&apos;Excel delle offerte</summary>
+                  <div className="voce-corpo">
+                    <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "4px 0 8px" }}>
+                      L&apos;Excel si confronta con il database per EAN: dati e foto già presenti si riusano, i prodotti
+                      nuovi entrano nel database. Colonne: EAN, DESCRIZIONE PROMO, PREZZO PROMO, PREZZO LISTINO, CONDIZIONI (+ MARCA/FORNITORE per i
+                      prodotti nuovi). Riconosce anche i listini multi-fornitore con l&apos;intestazione (FORNITORE, EAN,
+                      NR. ARTICOLO FORNITORE, TESTO BREVE, PREZZO DI VENDITA…) ripetuta prima di ogni fornitore. Puoi
+                      caricare più file sullo stesso volantino.{" "}
+                      <a href={`/stampe/zoo/excel?offerte=1&scope=${scopeParam}`}>Scarica il modello</a>
+                    </p>
+                    <form action={importZooOffers.bind(null, scopeParam)} style={{ display: "grid", gap: 8 }}>
+                      <input type="file" name="file" accept=".xlsx,.xls,.csv" required />
+                      {/* a quale periodo vanno le offerte: quello in lavorazione o un periodo nuovo (il successivo) */}
+                      <fieldset className="periodo-import" style={{ border: "1px solid var(--line)", borderRadius: 8, padding: "8px 10px", display: "grid", gap: 6 }}>
+                        <legend style={{ fontSize: 12.5, fontWeight: 700, padding: "0 4px" }}>Periodo promozionale delle offerte</legend>
+                        <label style={{ fontSize: 12.5 }}>
+                          <input type="radio" name="periodo" value="questo" defaultChecked />{" "}
+                          aggiungi a <strong>{campaign.nome}</strong> ({etichettaPeriodo(campaign).split(" — ")[1]})
+                        </label>
+                        <label style={{ fontSize: 12.5 }}>
+                          <input type="radio" name="periodo" value="nuovo" />{" "}
+                          <strong>è il periodo successivo</strong>: apri un periodo nuovo per queste offerte
+                        </label>
+                        <div className="periodo-nuovo" style={{ display: "grid", gap: 6, gridTemplateColumns: "2fr 1fr 1fr", paddingLeft: 20 }}>
+                          <label className="field" style={{ marginBottom: 0 }}>Nome<input type="text" name="nome" placeholder="es. Offerte Dicembre" /></label>
+                          <label className="field" style={{ marginBottom: 0 }}>Dal<input type="date" name="dal" /></label>
+                          <label className="field" style={{ marginBottom: 0 }}>Al<input type="date" name="al" /></label>
+                          <label style={{ fontSize: 12, gridColumn: "1 / -1" }}>
+                            <input type="checkbox" name="ereditaSchema" value="1" defaultChecked /> parti dallo schema delle pagine del volantino di adesso
+                          </label>
+                          <span className="hint" style={{ gridColumn: "1 / -1", fontSize: 11.5 }}>
+                            «{campaign.nome}» resta in corso e stampabile (in Stampa cartelli si sceglie il periodo); Crea volantino, Bozza e Scelta offerte passano al periodo nuovo.
+                          </span>
+                        </div>
+                      </fieldset>
+                      <label style={{ fontSize: 12.5 }}>
+                        <input type="checkbox" name="sostituisci" value="1" /> sostituisci le offerte già caricate
+                      </label>
+                      <label style={{ fontSize: 12.5 }}>
+                        <input type="checkbox" name="escludimarginiamo" value="1" defaultChecked />{" "}
+                        escludi le righe &quot;marginiamo&quot; (nessuna promo dal fornitore, decide il PV): non entrano
+                        come offerta, l&apos;articolo resta comunque nel database
+                      </label>
+                      <button className="btn btn-sm" type="submit">Importa offerte</button>
+                    </form>
+                    <p className="hint" style={{ margin: "10px 0 4px", fontSize: 12 }}>
+                      Gli articoli già visti in un volantino precedente ritrovano il loro padre e i testi di allora (anche quelli
+                      corretti a mano, e le correzioni delle insegne): dal file arrivano solo prezzi e promo. Per un volantino
+                      caricato prima di questa regola:
+                    </p>
+                    <PulsanteAzione azione={riprendiTestiPrecedenti.bind(null, campaign.id)} className="btn btn-outline btn-sm"
+                      conferma={`Riprendere i testi dai volantini precedenti per le offerte di «${campaign.nome}»? Si saltano quelle già corrette in questo volantino.`}>
+                      Riprendi i testi dai volantini precedenti
+                    </PulsanteAzione>
+                  </div>
+                </details>
+              )}
+              {consortium && campaign && (
+                <details className="voce-aperta" open={sp.foto !== undefined}>
+                  <summary>Caricamento foto</summary>
+                  <div className="voce-corpo">
+                    <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "4px 0 8px" }}>
+                      Puoi selezionare anche centinaia di foto insieme (caricate direttamente, niente limiti di
+                      dimensione): se il nome del file contiene l&apos;EAN o il codice fornitore, l&apos;abbinamento è
+                      automatico. Ogni articolo ha la sua foto; nel padre si sceglie quella di riferimento.
+                    </p>
+                    <PhotoUploader back={BACK} scopeParam={scopeParam} finalize={finalizeZooPhotoUpload} />
+                    {nDaAbbinare > 0 && (
+                      <p className="hint" style={{ marginTop: 6 }}>
+                        Le foto senza EAN o codice nel nome ({nDaAbbinare}) si abbinano, o si ignorano, dal{" "}
+                        <a href={`/stampe/zoo/prodotti?vista=catalogo&scope=${scopeParam}&abbina=1`}>catalogo</a>.
+                      </p>
+                    )}
+                  </div>
+                </details>
+              )}
+              {consortium && campaign && (
+                <details className="voce-aperta">
+                  <summary>✉ Avvisa i colleghi che le offerte sono caricate</summary>
+                  <div className="voce-corpo">
+                    <AvvisaColleghi tipo="offerte" scopeParam={scopeParam} colleghi={colleghiZoo} sempreAperto />
+                  </div>
+                </details>
+              )}
+              </div>
+            </details>
+          )}
           <form method="get" style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <label style={{ fontSize: 12.5, fontWeight: 700 }}>
               Insegna / PV{" "}

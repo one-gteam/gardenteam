@@ -159,16 +159,19 @@ export default async function ZooDashboardPage() {
             {gInizio !== undefined && gInizio > 0 && <> · <strong>esce tra {gInizio} {gInizio === 1 ? "giorno" : "giorni"}</strong></>}
             {gInizio !== undefined && gInizio <= 0 && gFine !== undefined && gFine >= 0 && <> · in corso, finisce tra {gFine} {gFine === 1 ? "giorno" : "giorni"}</>}
           </span>
-          {/* avviso alla squadra (o a chi si sceglie) che le offerte del volantino sono caricate */}
-          {editor && (
-            <AvvisaColleghi tipo="offerte" scopeParam="system:" colleghi={colleghiAvviso} spuntatiDiSerie={false}
-              etichetta="✉ Avvisa: offerte caricate"
-              squadre={(gruppiSquadra.length
-                ? gruppiSquadra.map((g) => ({ nome: g.nome, email: g.membri.map((u) => u.email).filter(Boolean) }))
-                : Object.entries(ricordatiSquadre).map(([nome, ids]) => ({ nome, email: ids.map((id) => academyDb.users.find((u) => u.id === id)?.email ?? "").filter(Boolean) })))} />
-          )}
           {/* consegna al grafico: la data e quanto manca */}
           <span className={`dash-deadline${gDeadline !== undefined && gDeadline <= 3 ? " vicina" : ""}`}>
+            {/* avviso alla squadra (o a chi si sceglie) che le offerte del volantino sono caricate */}
+            {editor && (
+              <>
+                <AvvisaColleghi tipo="offerte" scopeParam="system:" colleghi={colleghiAvviso} spuntatiDiSerie={false}
+                  etichetta="✉ Avvisa: offerte caricate"
+                  squadre={(gruppiSquadra.length
+                    ? gruppiSquadra.map((g) => ({ nome: g.nome, email: g.membri.map((u) => u.email).filter(Boolean) }))
+                    : Object.entries(ricordatiSquadre).map(([nome, ids]) => ({ nome, email: ids.map((id) => academyDb.users.find((u) => u.id === id)?.email ?? "").filter(Boolean) })))} />
+                <span className="dash-sep" />
+              </>
+            )}
             <strong>Invio al grafico</strong>
             {editor ? (
               <ModuloAutoSalva azione={salvaDeadlineGrafico.bind(null, campaign.id)} style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
