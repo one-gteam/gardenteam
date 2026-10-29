@@ -50,18 +50,32 @@ export function tipologiaDi(descrizione: string): string {
 }
 
 /**
+ * Raggruppa per formato e tipologia. Un articolo senza formato leggibile
+ * («MONGE FRESH ADULT TROTA 400» accanto a «… POLLO400GR») non fa una parte a
+ * sé: va con la parte più grande della sua tipologia che il formato ce l'ha.
+ */
+function perFormatoETipologia<T>(voci: T[], prodotto: (v: T) => ZooProduct | undefined): { formato: string; tip: string; voci: T[] }[] {
+  const parti = new Map<string, { formato: string; tip: string; voci: T[] }>();
+  for (const v of voci) {
+    const p = prodotto(v);
+    const formato = p ? formatoDi(p) : "", tip = p ? tipologiaDi(p.descrizione) : "", k = `${formato}|${tip}`;
+    if (!parti.has(k)) parti.set(k, { formato, tip, voci: [] });
+    parti.get(k)!.voci.push(v);
+  }
+  for (const [k, senza] of [...parti].filter(([, x]) => !x.formato)) {
+    const dove = [...parti.values()].filter((x) => x.formato && x.tip === senza.tip).sort((a, b) => b.voci.length - a.voci.length)[0];
+    if (dove) { dove.voci.push(...senza.voci); parti.delete(k); }
+  }
+  return [...parti.values()];
+}
+
+/**
  * Gli articoli di un padre divisi per formato e tipologia, la parte più grande
  * per prima. Una parte sola = il padre rispetta le regole. `aggiunta` è quello
  * che distingue la parte nel titolo («Puppy/Junior 3 kg»).
  */
 export function partiPerFormato(figli: ZooProduct[]): { aggiunta: string; articoli: ZooProduct[] }[] {
-  const parti = new Map<string, { formato: string; tip: string; articoli: ZooProduct[] }>();
-  for (const f of figli) {
-    const formato = formatoDi(f), tip = tipologiaDi(f.descrizione), k = `${formato}|${tip}`;
-    if (!parti.has(k)) parti.set(k, { formato, tip, articoli: [] });
-    parti.get(k)!.articoli.push(f);
-  }
-  const lista = [...parti.values()];
+  const lista = perFormatoETipologia(figli, (f) => f).map((x) => ({ formato: x.formato, tip: x.tip, articoli: x.voci }));
   const formati = new Set(lista.map((x) => x.formato)), tipologie = new Set(lista.map((x) => x.tip));
   return lista
     .sort((a, b) => b.articoli.length - a.articoli.length)
@@ -195,20 +209,13 @@ function productLine(p: ZooProduct, prezzi?: PrezziVolantino): string {
  */
 function dividiPerFormato(g: AiGroup, products: ZooProduct[], candidati: PadreCandidato[]): AiGroup[] {
   const perEan = new Map(products.map((p) => [p.ean, p]));
-  const parti = new Map<string, { formato: string; tip: string; eans: string[] }>();
-  for (const e of g.eans) {
-    const p = perEan.get(e);
-    const formato = p ? formatoDi(p) : "", tip = p ? tipologiaDi(p.descrizione) : "";
-    const k = `${formato}|${tip}`;
-    if (!parti.has(k)) parti.set(k, { formato, tip, eans: [] });
-    parti.get(k)!.eans.push(e);
-  }
-  if (parti.size <= 1) return [g];
-  const formati = new Set([...parti.values()].map((x) => x.formato));
-  const tipologie = new Set([...parti.values()].map((x) => x.tip));
+  const parti = perFormatoETipologia(g.eans, (e) => perEan.get(e));
+  if (parti.length <= 1) return [g];
+  const formati = new Set(parti.map((x) => x.formato));
+  const tipologie = new Set(parti.map((x) => x.tip));
   const cand = candidati.find((c) => c.id === g.padreEsistente);
   const base = g.nome.trim() || cand?.nome || "";
-  return [...parti.values()].map(({ formato, tip, eans }) => {
+  return parti.map(({ formato, tip, voci: eans }) => {
     const aggiunta = [
       tipologie.size > 1 && tip && !base.toLowerCase().includes(tip.toLowerCase()) ? tip : "",
       formati.size > 1 && formato && !base.toLowerCase().includes(formato.toLowerCase()) ? formato : "",
