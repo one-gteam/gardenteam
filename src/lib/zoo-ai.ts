@@ -30,13 +30,18 @@ export function formatoDi(p: ZooProduct): string {
   return testoContenuto(p.contenuto ?? contenutoDa(p.descrizione));
 }
 
-/** La tipologia (età o esigenza) scritta nella descrizione: «Puppy/Junior», «Adult»…; "" se non c'è. */
+/**
+ * La tipologia (età o esigenza) scritta nella descrizione: «Puppy/Junior», «Kitten»,
+ * «Sterilised»…; "" = adult o non scritta. Adult non è una tipologia a parte: un
+ * articolo senza età è quasi sempre per adulti («Stuzzy Paté con Tonno» con
+ * «Stuzzy Paté Adult»), e «Adult Sterilised» va con «Sterilised».
+ */
 const TIPOLOGIE: [string, RegExp][] = [
-  ["Puppy/Junior", /\b(puppy|junior|cucciol[oi]|starter)\b/],
-  ["Kitten", /\b(kitten|gattin[oi])\b/],
-  ["Adult", /\b(adult|adulto|adulti)\b/],
-  ["Senior", /\b(senior|mature|anzian[oi])\b|\b(7|11)\s*\+/],
-  ["Sterilised", /\b(sterili[sz]ed|sterilizzat[oi])\b/],
+  ["Puppy/Junior", /\b(puppy|junior|jun|cucciol[oi]|starter)\b/],
+  ["Kitten", /\b(kitten|gattin[oi]|babycat)\b/],
+  // «7+», «11+», «+7» sì; «3+1» (la promo) no
+  ["Senior", /\b(senior|mature|anzian[oi]|ageing)\b|\b(7|8|9|10|11|12|15)\s*\+(?!\s*\d)|\+\s*(7|11)\b/],
+  ["Sterilised", /\b(sterili[sz]ed|sterilizzat[oi]|steril|ster|st)\b/],
   ["Light", /\b(light|weight control)\b/],
 ];
 export function tipologiaDi(descrizione: string): string {
