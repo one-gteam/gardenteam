@@ -20,6 +20,7 @@ import InlineMulti from "@/components/stampe/InlineMulti";
 import ColumnTools from "@/components/stampe/ColumnTools";
 import AvvisaColleghi from "@/components/stampe/AvvisaColleghi";
 import { DettagliPadre, PannelloPadre } from "@/components/stampe/DettagliPadre";
+import ElencoArticoli from "@/components/stampe/ElencoArticoli";
 import {
   getZooDb, zooImageUrl, effectiveParentText, campagnaInLavorazione, campagnaInCorso, campaignStato,
   fotoDaAbbinare, promoDaTesto, chiavePrezzo, animaliDi, caratteristicheProdottoDi, migraVolantinoPages, prezzoUnitaDi,
@@ -893,12 +894,7 @@ export default async function OfferteInCorso({ user, sp }: { user: User; sp: Rec
                           </td>
                           <td style={{ fontSize: 12 }}>
                             {offs.length > 1 ? (
-                              <details>
-                                <summary style={{ cursor: "pointer", color: "#274b7a" }}>{offs.length} articoli</summary>
-                                <ul style={{ margin: "4px 0 0", paddingLeft: 16, fontSize: 11 }}>
-                                  {offs.map((o) => <li key={o.id}>{o.descrizione} · EAN {o.ean}</li>)}
-                                </ul>
-                              </details>
+                              <ElencoArticoli articoli={offs.map((o) => ({ id: o.id, descrizione: o.descrizione, ean: o.ean }))} />
                             ) : (
                               first.ean
                             )}

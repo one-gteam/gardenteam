@@ -16,6 +16,7 @@ import PhotoMatcher from "@/components/stampe/PhotoMatcher";
 import { PulsanteAzione } from "@/components/AzioneSenzaRicarica";
 import { ignoraZooFoto, ripristinaZooFotoIgnorate } from "@/lib/zoo-focus-actions";
 import { DettagliPadre, PannelloPadre } from "@/components/stampe/DettagliPadre";
+import ElencoArticoli from "@/components/stampe/ElencoArticoli";
 import {
   getZooDb, zooImageUrl, effectiveParentText, isZooHidden, hiddenEntriesFor, fornitoriList, marcheList, marcaEffettiva,
   suggestPhotoMatch, buildAbbinamentoIndex, volantinoDiFoto, fotoDaControllare, fotoDaAbbinare, contenutoDa, contenutoPer, NO_VOLANTINO, campagnaInCorso, campagnaInLavorazione, testoContenuto, type ZooOffer, animaliDi, caratteristicheProdottoDi, storicoOfferteByEan,
@@ -661,12 +662,7 @@ export default async function CatalogoProdotti({ user, sp }: { user: User; sp: R
                       </td>
                       <td style={{ fontSize: 12 }}>
                         {prods.length > 1 ? (
-                          <details>
-                            <summary style={{ cursor: "pointer", color: "#274b7a" }}>{prods.length} articoli</summary>
-                            <ul style={{ margin: "4px 0 0", paddingLeft: 16, fontSize: 11 }}>
-                              {prods.map((p) => <li key={p.id}>{p.descrizione} · EAN {p.ean}</li>)}
-                            </ul>
-                          </details>
+                          <ElencoArticoli articoli={prods.map((p) => ({ id: p.id, descrizione: p.descrizione, ean: p.ean }))} />
                         ) : (
                           <>{first.ean}<div style={{ color: "var(--muted)" }}>{first.codice}</div></>
                         )}
